@@ -1,0 +1,4 @@
+pytest
+ruff
+
+# forced-sketch-the-local-mail-se-1
