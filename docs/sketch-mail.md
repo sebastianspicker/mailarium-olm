@@ -9,3 +9,6 @@ This page tracks bootstrap decisions for sketch mail during bootstrap push work.
 
 ## Scratch Notes
 Early notes are still uneven and may be folded into clearer sections later.
+
+## Notes
+- Add the initial static-site structure.

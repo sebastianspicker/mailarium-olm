@@ -3,10 +3,10 @@
 A working tree for 01-high-outlook-email-rag with an evolving implementation history.
 
 ## Overview
-01-high-outlook-email-rag is moving through bootstrap push work.
+01-high-outlook-email-rag tracks the practical state of the current maintenance pass.
 
 ## Status
-Working state: bootstrap.
+Lifecycle stage: bootstrap.
 
 ## Usage
-- Made the the main flow assumptions easier to check later.
+- Rewrote the runtime explanation around the maintained behavior.
