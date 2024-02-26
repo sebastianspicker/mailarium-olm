@@ -5,7 +5,7 @@
 This page keeps the current api_compatibility guidance concise after earlier rough notes.
 
 ## Usage
-- Merged scattered threads guidance into the docs.
+- Rewrote the case explanation around the maintained behavior.
 
 - Earlier scratch notes were compressed into the current guidance.
 
