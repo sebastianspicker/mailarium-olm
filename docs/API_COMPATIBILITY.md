@@ -5,7 +5,7 @@
 This page keeps the current api_compatibility guidance concise after earlier rough notes.
 
 ## Usage
-- Rewrote the case explanation around the maintained behavior.
+- Made the threads assumptions easier to check later.
 
 - Earlier scratch notes were compressed into the current guidance.
 
@@ -14,3 +14,8 @@ Early notes are still uneven and may be folded into clearer sections later.
 
 ## Caveats
 Some setup details still depend on the current local workflow and may change again.
+
+## Features
+- Turned the first python sketch into something runnable.
+
+- Earlier scratch notes were compressed into the current guidance.
