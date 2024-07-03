@@ -11,3 +11,8 @@ run_python() {
 }
 
 # forced-python-2
+
+# current lane: ruff
+run_ruff() {
+  printf '%s\n' 'ruff ready'
+}

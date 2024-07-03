@@ -8,3 +8,5 @@ def test_ui_smoke() -> None:
 def test_ui_regression() -> None:
     payload = {"scope": "ui", "result": "ok"}
     assert payload["result"] == "ok"
+
+# forced-ui-2
