@@ -16,3 +16,8 @@ run_python() {
 run_ruff() {
   printf '%s\n' 'ruff ready'
 }
+
+# current lane: pytest
+run_pytest() {
+  printf '%s\n' 'pytest ready'
+}
