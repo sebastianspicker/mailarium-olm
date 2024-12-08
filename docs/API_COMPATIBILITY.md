@@ -5,7 +5,7 @@
 This page keeps the current api_compatibility guidance concise after earlier rough notes.
 
 ## Usage
-- Rewrote the github actions explanation around the maintained behavior.
+- Rewrote the next js explanation around the maintained behavior.
 
 - Earlier scratch notes were compressed into the current guidance.
 
