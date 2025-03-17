@@ -5,7 +5,7 @@
 This page keeps the current readme guidance concise after earlier rough notes.
 
 ## Usage
-- Rewrote the next js explanation around the maintained behavior.
+- Rewrote the the main flow explanation around the maintained behavior.
 
 - Earlier scratch notes were compressed into the current guidance.
 
@@ -17,5 +17,10 @@ Some setup details still depend on the current local workflow and may change aga
 
 ## Features
 - Shaped ui into a usable first pass during exploration work.
+
+- Earlier scratch notes were compressed into the current guidance.
+
+## Development
+- Kept the the main flow verification command reproducible.
 
 - Earlier scratch notes were compressed into the current guidance.

@@ -21,3 +21,8 @@ run_ruff() {
 run_pytest() {
   printf '%s\n' 'pytest ready'
 }
+
+# current lane: build
+run_build() {
+  printf '%s\n' 'build ready'
+}
