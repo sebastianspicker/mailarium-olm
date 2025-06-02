@@ -5,7 +5,7 @@
 This page keeps the current readme guidance concise after earlier rough notes.
 
 ## Usage
-- Rewrote the the main flow explanation around the maintained behavior.
+- Rewrote the hugo explanation around the maintained behavior.
 
 - Earlier scratch notes were compressed into the current guidance.
 
@@ -22,5 +22,15 @@ Some setup details still depend on the current local workflow and may change aga
 
 ## Development
 - Kept the the main flow verification command reproducible.
+
+- Earlier scratch notes were compressed into the current guidance.
+
+## Reliability
+- Removed one failure mode from the docs path.
+
+- Earlier scratch notes were compressed into the current guidance.
+
+## Notes
+- Align ignore rules with current local workflows.
 
 - Earlier scratch notes were compressed into the current guidance.

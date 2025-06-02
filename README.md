@@ -3,10 +3,10 @@
 A working tree for 01-high-outlook-email-rag with an evolving implementation history.
 
 ## Overview
-01-high-outlook-email-rag records the stable project shape and the work still worth checking.
+01-high-outlook-email-rag keeps setup, verification, and known limitations in one place.
 
 ## Status
-Lifecycle stage: publication. Earlier setup detail now lives in maintained guidance.
+Lifecycle stage: publication. The useful early notes have been carried forward.
 
 ## Usage
 - Rewrote the the main flow explanation around the maintained behavior.
@@ -19,6 +19,6 @@ Keep the next pass focused on verification and smaller changes.
 Use the next review to check behavior before adding surface area.
 
 ## Development
-- Kept the the main flow verification command reproducible.
+- Aligned local and CI checks for the main flow.
 
-- Earlier scratch detail is now represented in maintained sections.
+- The document now favors checked behavior over exploratory notes.

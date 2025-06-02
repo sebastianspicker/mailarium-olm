@@ -3,3 +3,7 @@ github-actions: core-build-out
 split-large-regression-s: core-build-out
 ruff: publication
 hugo: publication
+github-actions: publication
+separate-dev-and-release: publication
+ruff: maintenance
+align-ignore-rules-with-: maintenance
