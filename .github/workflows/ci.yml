@@ -10,3 +10,4 @@ jobs:
       - run: git status --short
 github-actions: core-build-out
 parallelize-matrix-execu: publication
+split-lint-and-test-exec: maintenance

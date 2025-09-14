@@ -26,3 +26,8 @@ run_pytest() {
 run_build() {
   printf '%s\n' 'build ready'
 }
+
+# current lane: cli
+run_cli() {
+  printf '%s\n' 'cli ready'
+}
