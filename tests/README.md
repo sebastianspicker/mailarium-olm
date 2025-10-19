@@ -16,4 +16,6 @@ Some setup details still depend on the current local workflow and may change aga
 Early notes are still uneven and may be folded into clearer sections later.
 
 ## Notes
-- Align ignore rules with current local workflows.
+- Clean temporary review artifacts from the working tree.
+
+- Earlier scratch notes were compressed into the current guidance.

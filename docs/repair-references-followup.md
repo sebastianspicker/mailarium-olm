@@ -2,10 +2,10 @@
 
 
 ## Context
-This page tracks publication decisions for repair references followup during release push work.
+This page tracks maintenance decisions for repair references followup during maintenance burst work.
 
 ## Reliability
-- Removed one failure mode from the docs path.
+- Closed a concrete docs edge found during maintenance work.
 
 ## Caveats
 Some setup details still depend on the current local workflow and may change again.

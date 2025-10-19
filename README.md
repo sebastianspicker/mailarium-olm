@@ -6,7 +6,7 @@ A working tree for 01-high-outlook-email-rag with an evolving implementation his
 01-high-outlook-email-rag records the stable project shape and the work still worth checking.
 
 ## Status
-Lifecycle stage: maintenance. Earlier setup detail now lives in maintained guidance.
+Lifecycle stage: maintenance. The useful early notes have been carried forward.
 
 ## Usage
 - Rewrote the react explanation around the maintained behavior.
@@ -22,3 +22,8 @@ Use the next review to check behavior before adding surface area.
 - Aligned local and CI checks for the main flow.
 
 - The document now favors checked behavior over exploratory notes.
+
+## Notes
+- Clean temporary review artifacts from the working tree.
+
+- The older setup fragments have been reduced to the useful parts.
