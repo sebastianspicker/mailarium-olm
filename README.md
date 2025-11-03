@@ -3,15 +3,15 @@
 A working tree for 01-high-outlook-email-rag with an evolving implementation history.
 
 ## Overview
-01-high-outlook-email-rag records the stable project shape and the work still worth checking.
+01-high-outlook-email-rag keeps setup, verification, and known limitations in one place.
 
 ## Status
 Lifecycle stage: maintenance. The useful early notes have been carried forward.
 
 ## Usage
-- Rewrote the react explanation around the maintained behavior.
+- Merged scattered the main flow guidance into the docs.
 
-- The older setup fragments have been reduced to the useful parts.
+- Earlier scratch detail is now represented in maintained sections.
 
 ## Current Focus
 Prefer narrow maintenance work over broad rewrites.
