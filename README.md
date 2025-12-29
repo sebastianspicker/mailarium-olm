@@ -6,7 +6,7 @@ A working tree for 01-high-outlook-email-rag with an evolving implementation his
 01-high-outlook-email-rag keeps setup, verification, and known limitations in one place.
 
 ## Status
-Lifecycle stage: maintenance. The useful early notes have been carried forward.
+Lifecycle stage: maintenance. Maintenance guidance now reflects the stable shape.
 
 ## Usage
 - Merged scattered the main flow guidance into the docs.
@@ -19,9 +19,9 @@ Keep the next pass focused on verification and smaller changes.
 Use the next review to check behavior before adding surface area.
 
 ## Development
-- Aligned local and CI checks for the main flow.
+- Reduced surprise in the ruff release checks.
 
-- The document now favors checked behavior over exploratory notes.
+- Earlier scratch detail is now represented in maintained sections.
 
 ## Notes
 - Clean temporary review artifacts from the working tree.

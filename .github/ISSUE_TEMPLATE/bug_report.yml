@@ -15,3 +15,5 @@ add-snapshot-coverage-fo: maintenance
 github-actions: maintenance
 # forced-github-actions-15:maintenance
 # forced-github-actions-16:maintenance
+# forced-ruff-17:maintenance
+# forced-ruff-18:maintenance
