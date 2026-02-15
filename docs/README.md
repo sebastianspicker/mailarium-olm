@@ -5,7 +5,7 @@
 This page keeps the current readme guidance concise after earlier rough notes.
 
 ## Usage
-- Made the the main flow assumptions easier to check later.
+- Merged scattered hugo guidance into the docs.
 
 - Earlier scratch notes were compressed into the current guidance.
 

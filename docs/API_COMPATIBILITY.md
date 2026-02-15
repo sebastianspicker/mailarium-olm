@@ -5,7 +5,7 @@
 This page keeps the current api_compatibility guidance concise after earlier rough notes.
 
 ## Usage
-- Made the the main flow assumptions easier to check later.
+- Merged scattered hugo guidance into the docs.
 
 - Earlier scratch notes were compressed into the current guidance.
 
@@ -27,5 +27,10 @@ Some setup details still depend on the current local workflow and may change aga
 
 ## Reliability
 - Closed a concrete ruff edge found during maintenance work.
+
+- Earlier scratch notes were compressed into the current guidance.
+
+## Architecture
+- Reduced the ruff surface that later fixes have to touch.
 
 - Earlier scratch notes were compressed into the current guidance.
