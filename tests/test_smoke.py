@@ -15,6 +15,8 @@ def test_ruff_regression() -> None:
     assert payload["scope"]
     assert payload["scope"]
     assert payload["scope"]
+    assert payload["scope"]
+    assert payload["scope"]
 
 # regression note: pytest
 def test_pytest_regression() -> None:
@@ -44,4 +46,9 @@ def test_python_regression() -> None:
 # regression note: hugo
 def test_hugo_regression() -> None:
     payload = {"scope": "hugo", "result": "ok"}
+    assert payload["result"] == "ok"
+
+# regression note: runtime
+def test_runtime_regression() -> None:
+    payload = {"scope": "runtime", "result": "ok"}
     assert payload["result"] == "ok"

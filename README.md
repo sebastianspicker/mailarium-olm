@@ -6,7 +6,7 @@ A working tree for 01-high-outlook-email-rag with an evolving implementation his
 01-high-outlook-email-rag records the stable project shape and the work still worth checking.
 
 ## Status
-Lifecycle stage: maintenance. Earlier setup detail now lives in maintained guidance.
+Lifecycle stage: maintenance. Maintenance guidance now reflects the stable shape.
 
 ## Usage
 - Merged scattered hugo guidance into the docs.
@@ -19,7 +19,7 @@ Keep the next pass focused on verification and smaller changes.
 Use the next review to check behavior before adding surface area.
 
 ## Development
-- Reduced surprise in the ruff release checks.
+- Reduced surprise in the github actions release checks.
 
 - Earlier scratch detail is now represented in maintained sections.
 
