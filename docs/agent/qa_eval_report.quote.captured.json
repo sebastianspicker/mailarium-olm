@@ -1,0 +1,215 @@
+{
+  "questions_path": "docs/agent/qa_eval_questions.quote.json",
+  "results_path": "docs/agent/qa_eval_results.quote.captured.json",
+  "total_cases": 2,
+  "cases": [
+    {
+      "id": "quote-201",
+      "bucket": "quote_attribution",
+      "question": "Who was being quoted in the figures reply?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The quoted speaker was bob@example.com.",
+      "expected_support_uids": [
+        "uid-quote-1"
+      ],
+      "expected_top_uid": "uid-quote-1",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [
+        "bob@example.com"
+      ],
+      "triage_tags": [
+        "quote_attribution"
+      ],
+      "notes": "Captured AQ13 fixture mirroring the reply_context_from speaker-attribution path."
+    },
+    {
+      "id": "quote-202",
+      "bucket": "quote_attribution",
+      "question": "Who was being quoted in the multi-party vendor thread?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The quoted speaker was bob@example.com even though the block mentioned multiple recipients.",
+      "expected_support_uids": [
+        "uid-quote-2"
+      ],
+      "expected_top_uid": "uid-quote-2",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [
+        "bob@example.com"
+      ],
+      "triage_tags": [
+        "quote_attribution"
+      ],
+      "notes": "Captured AQ13 fixture covering the quoted_from_header heuristic in a multi-party block."
+    }
+  ],
+  "results": [
+    {
+      "id": "quote-201",
+      "bucket": "quote_attribution",
+      "question": "Who was being quoted in the figures reply?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "uid-quote-1",
+      "candidate_uids": [
+        "uid-quote-1"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "uid-quote-1"
+      ],
+      "matched_support_uids_top_3": [
+        "uid-quote-1"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "observed_quoted_speaker_emails": [
+        "bob@example.com"
+      ],
+      "matched_quoted_speaker_emails": [
+        "bob@example.com"
+      ],
+      "quote_attribution_precision": 1.0,
+      "quote_attribution_coverage": 1.0,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "quote-202",
+      "bucket": "quote_attribution",
+      "question": "Who was being quoted in the multi-party vendor thread?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "uid-quote-2",
+      "candidate_uids": [
+        "uid-quote-2"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "uid-quote-2"
+      ],
+      "matched_support_uids_top_3": [
+        "uid-quote-2"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "observed_quoted_speaker_emails": [
+        "bob@example.com"
+      ],
+      "matched_quoted_speaker_emails": [
+        "bob@example.com"
+      ],
+      "quote_attribution_precision": 1.0,
+      "quote_attribution_coverage": 1.0,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    }
+  ],
+  "summary": {
+    "total_cases": 2,
+    "bucket_counts": {
+      "quote_attribution": 2
+    },
+    "top_1_correctness": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit_top_3": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_recall": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "evidence_precision": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "top_uid_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "ambiguity_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "confidence_calibration_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_support_uid_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_answer_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "weak_evidence_explained": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "quote_attribution_precision": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "quote_attribution_coverage": {
+      "scorable": 2,
+      "average": 1.0
+    }
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 0,
+    "categories": {},
+    "ranked_categories": []
+  },
+  "source_counts": {
+    "captured": 2
+  }
+}

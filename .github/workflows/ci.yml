@@ -1,14 +1,44 @@
-name: verify
+name: CI
+
 on:
   push:
     branches: [dev]
+  pull_request:
+    branches: [dev]
+
+permissions:
+  contents: read
+
 jobs:
-  verify:
+  checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
-      - run: git status --short
-github-actions: core-build-out
-parallelize-matrix-execu: publication
-split-lint-and-test-exec: maintenance
-publish-summary-output-f: maintenance
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check .
+      - name: Format check
+        run: ruff format --check .
+      - name: Type Check
+        run: mypy src
+      - name: Test with coverage
+        run: pytest -q --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+      - name: Streamlit smoke
+        run: python scripts/streamlit_smoke.py
+      - name: Security Scan
+        run: bandit -r src -q -ll -ii
+      - name: Dependency Audit
+        run: python -m pip_audit -r requirements.txt --ignore-vuln CVE-2026-4539  # pygments 2.19.2, no fix available yet

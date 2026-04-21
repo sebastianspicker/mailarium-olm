@@ -1,0 +1,243 @@
+{
+  "questions_path": "docs/agent/qa_eval_questions.inferred_thread.live.json",
+  "results_path": null,
+  "total_cases": 2,
+  "cases": [
+    {
+      "id": "inferred-live-401",
+      "bucket": "thread_process",
+      "question": "Which inferred-only thread does the June 3 mobiles Arbeiten reply from the Personalrat belong to?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "sender": "personalrat@hfmt-koeln.de",
+        "subject": "Einbuchen von Arbeitszeiten"
+      },
+      "expected_answer": "The reply belongs to inferred thread aq23-mobiles-arbeiten.",
+      "expected_support_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "expected_top_uid": "0fb188fe6e5f4a71b07e11dea219da65",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": "aq23-mobiles-arbeiten",
+      "expected_thread_group_source": "inferred",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Live AQ23 case on a real parsed message with canonical conversation removed and deterministic inferred-thread enrichment."
+    },
+    {
+      "id": "inferred-live-402",
+      "bucket": "thread_process",
+      "question": "Which inferred-only thread does Lara Langer's mobiles Arbeiten reply belong to?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "sender": "lara.langer@hfmt-koeln.de",
+        "subject": "Einbuchen von Arbeitszeiten"
+      },
+      "expected_answer": "The reply belongs to inferred thread aq23-mobiles-arbeiten.",
+      "expected_support_uids": [
+        "ee31c3d0b228d083b968abc6d3d0389c"
+      ],
+      "expected_top_uid": "ee31c3d0b228d083b968abc6d3d0389c",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": "aq23-mobiles-arbeiten",
+      "expected_thread_group_source": "inferred",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Live AQ23 case on a second real parsed message in the same deterministically enriched inferred-only thread."
+    }
+  ],
+  "results": [
+    {
+      "id": "inferred-live-401",
+      "bucket": "thread_process",
+      "question": "Which inferred-only thread does the June 3 mobiles Arbeiten reply from the Personalrat belong to?",
+      "status": "labeled",
+      "source": "live",
+      "count": 2,
+      "top_uid": "0fb188fe6e5f4a71b07e11dea219da65",
+      "candidate_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "attachment_candidate_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "matched_support_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "matched_support_uids_top_3": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "aq23-mobiles-arbeiten",
+      "observed_thread_group_source": "inferred",
+      "thread_group_id_match": true,
+      "thread_group_source_match": true,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "inferred-live-402",
+      "bucket": "thread_process",
+      "question": "Which inferred-only thread does Lara Langer's mobiles Arbeiten reply belong to?",
+      "status": "labeled",
+      "source": "live",
+      "count": 3,
+      "top_uid": "ee31c3d0b228d083b968abc6d3d0389c",
+      "candidate_uids": [
+        "ee31c3d0b228d083b968abc6d3d0389c"
+      ],
+      "attachment_candidate_uids": [
+        "ee31c3d0b228d083b968abc6d3d0389c"
+      ],
+      "matched_support_uids": [
+        "ee31c3d0b228d083b968abc6d3d0389c"
+      ],
+      "matched_support_uids_top_3": [
+        "ee31c3d0b228d083b968abc6d3d0389c"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "aq23-mobiles-arbeiten",
+      "observed_thread_group_source": "inferred",
+      "thread_group_id_match": true,
+      "thread_group_source_match": true,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": ""
+    }
+  ],
+  "summary": {
+    "total_cases": 2,
+    "bucket_counts": {
+      "thread_process": 2
+    },
+    "top_1_correctness": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit_top_3": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_recall": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "evidence_precision": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "top_uid_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "ambiguity_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "confidence_calibration_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_support_uid_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_answer_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_ocr_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "weak_evidence_explained": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "quote_attribution_precision": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "quote_attribution_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "thread_group_id_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "thread_group_source_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 0,
+    "categories": {},
+    "ranked_categories": []
+  },
+  "source_counts": {
+    "live": 2
+  },
+  "live_backend": "sqlite_fallback"
+}

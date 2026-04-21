@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "description": "First labeled core evaluation set for email_answer_context, derived from real messages in .example/my-export.olm.",
+  "cases": [
+    {
+      "id": "fact-101",
+      "bucket": "fact_lookup",
+      "status": "labeled",
+      "question": "Who sent the HARICA certificate mail?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "pki@hfmt-koeln.de sent the HARICA certificate reply.",
+      "expected_support_uids": [
+        "31692630078d4d3689505120c1b61631"
+      ],
+      "expected_top_uid": "31692630078d4d3689505120c1b61631",
+      "expected_ambiguity": "clear",
+      "notes": "Real reply in _wichtig: subject AW: Zertifikat Harica."
+    },
+    {
+      "id": "fact-102",
+      "bucket": "fact_lookup",
+      "status": "labeled",
+      "question": "Which folder contains the Apple Support notes import message?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The Apple Support notes import message is in the memo folder.",
+      "expected_support_uids": [
+        "099aa2e0070e2a4b9d8dfeaf41a68a02"
+      ],
+      "expected_top_uid": "099aa2e0070e2a4b9d8dfeaf41a68a02",
+      "expected_ambiguity": "clear",
+      "notes": "Real original in memo: Notizen und Dateien in die Notizen-App importieren - Apple Support (DE)."
+    },
+    {
+      "id": "fact-103",
+      "bucket": "fact_lookup",
+      "status": "labeled",
+      "question": "Which message mentioned the Windows 11 TPM constraint?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The Windows 11 TPM constraint message is Microsoft: So schalten wir den TPM-Zwang in Windows 11 ab - Golem.de.",
+      "expected_support_uids": [
+        "05cfd57c33128f29ea8ad85c30281dc6"
+      ],
+      "expected_top_uid": "05cfd57c33128f29ea8ad85c30281dc6",
+      "expected_ambiguity": "clear",
+      "notes": "Real original in _wichtig from 2021-10-07."
+    },
+    {
+      "id": "fact-104",
+      "bucket": "fact_lookup",
+      "status": "labeled",
+      "question": "Who announced that the Zammad test version was created?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "lukas.jacobs@hfmt-koeln.de announced the Zammad test version.",
+      "expected_support_uids": [
+        "addd6fad46c354177e7b59e32bb9b86a"
+      ],
+      "expected_top_uid": "addd6fad46c354177e7b59e32bb9b86a",
+      "expected_ambiguity": "clear",
+      "notes": "Real original in _wichtig: Zammad Testversion."
+    },
+    {
+      "id": "thread-101",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "When did the Zammad Reboot 2026 thread begin?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "The earliest labeled message in the Zammad Reboot 2026 thread is from 2025-11-26T06:19:41.",
+      "expected_support_uids": [
+        "75731355ee4f0fa764eb6ef7e7fdb127"
+      ],
+      "expected_top_uid": "75731355ee4f0fa764eb6ef7e7fdb127",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "retrieval_recall"
+      ],
+      "notes": "Core thread anchor from Sent Items."
+    },
+    {
+      "id": "thread-102",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "The core labeled Zammad Reboot 2026 conversation contains the sampled Sent Items replies and follow-ups from 2025-11-26 through 2025-12-04.",
+      "expected_support_uids": [
+        "75731355ee4f0fa764eb6ef7e7fdb127",
+        "5cb183c64ca1e16abbd16f3ecf3ab3c5",
+        "c4a2f3b2e20e5debeb2e0bd8f27bef1a",
+        "b8728432d394abbb746ea2d4c8e68bfd",
+        "9a31ad73441aa3312b5a57c804f3c4d2",
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "expected_top_uid": "75731355ee4f0fa764eb6ef7e7fdb127",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Thread-membership core set from the sampled conversation."
+    },
+    {
+      "id": "attach-101",
+      "bucket": "attachment_lookup",
+      "status": "labeled",
+      "question": "Which email had attachments and discussed Configurator 2 Blueprints?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The MDM email from 2025-05-27 discussed Configurator 2 Blueprints and had attachments.",
+      "expected_support_uids": [
+        "34148ff0e46e7077ba649601058133d0"
+      ],
+      "expected_top_uid": "34148ff0e46e7077ba649601058133d0",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Attachment-bearing original in _wichtig."
+    },
+    {
+      "id": "attach-102",
+      "bucket": "attachment_lookup",
+      "status": "labeled",
+      "question": "Which email had the manual attachment for zammad agent manual?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The Sent Items original zammad agent manual email had the manual attachment.",
+      "expected_support_uids": [
+        "9d5eecd15bba2b424fbad161a4155c39"
+      ],
+      "expected_top_uid": "9d5eecd15bba2b424fbad161a4155c39",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Attachment-bearing original in Sent Items with body Md im Anhang."
+    },
+    {
+      "id": "ambig-101",
+      "bucket": "ambiguity_stress",
+      "status": "labeled",
+      "question": "What did the HP scan attachment say?",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The system can identify the scan email but not recover readable body text from it.",
+      "expected_support_uids": [
+        "891648cc4954152190a269112d54912e"
+      ],
+      "expected_top_uid": "891648cc4954152190a269112d54912e",
+      "expected_ambiguity": "insufficient",
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Real scan mail with attachment and empty/weak recoverable body."
+    },
+    {
+      "id": "ambig-102",
+      "bucket": "ambiguity_stress",
+      "status": "labeled",
+      "question": "Which source-shell message discussed zammad DNS and certificate?",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The source-shell message AW: zammad DNS und Zertifikat matches, but the visible body remains weak.",
+      "expected_support_uids": [
+        "2606da536f3e533033cd6c2a8544f3a3"
+      ],
+      "expected_top_uid": "2606da536f3e533033cd6c2a8544f3a3",
+      "expected_ambiguity": "insufficient",
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Real source-shell reply in _wichtig."
+    }
+  ]
+}

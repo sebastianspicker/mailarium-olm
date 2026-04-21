@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "description": "Live DB-backed inferred-thread evaluation subset built from real parsed messages with deterministic inferred-thread enrichment.",
+  "cases": [
+    {
+      "id": "inferred-live-401",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "Which inferred-only thread does the June 3 mobiles Arbeiten reply from the Personalrat belong to?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "sender": "personalrat@hfmt-koeln.de",
+        "subject": "Einbuchen von Arbeitszeiten"
+      },
+      "expected_answer": "The reply belongs to inferred thread aq23-mobiles-arbeiten.",
+      "expected_support_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "expected_top_uid": "0fb188fe6e5f4a71b07e11dea219da65",
+      "expected_ambiguity": "clear",
+      "expected_thread_group_id": "aq23-mobiles-arbeiten",
+      "expected_thread_group_source": "inferred",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Live AQ23 case on a real parsed message with canonical conversation removed and deterministic inferred-thread enrichment."
+    },
+    {
+      "id": "inferred-live-402",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "Which inferred-only thread does Lara Langer's mobiles Arbeiten reply belong to?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "sender": "lara.langer@hfmt-koeln.de",
+        "subject": "Einbuchen von Arbeitszeiten"
+      },
+      "expected_answer": "The reply belongs to inferred thread aq23-mobiles-arbeiten.",
+      "expected_support_uids": [
+        "ee31c3d0b228d083b968abc6d3d0389c"
+      ],
+      "expected_top_uid": "ee31c3d0b228d083b968abc6d3d0389c",
+      "expected_ambiguity": "clear",
+      "expected_thread_group_id": "aq23-mobiles-arbeiten",
+      "expected_thread_group_source": "inferred",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Live AQ23 case on a second real parsed message in the same deterministically enriched inferred-only thread."
+    }
+  ]
+}

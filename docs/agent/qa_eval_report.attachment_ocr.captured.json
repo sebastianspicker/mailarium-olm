@@ -1,0 +1,270 @@
+{
+  "questions_path": "docs/agent/qa_eval_questions.attachment_ocr.json",
+  "results_path": "docs/agent/qa_eval_results.attachment_ocr.captured.json",
+  "total_cases": 2,
+  "cases": [
+    {
+      "id": "attach-ocr-101",
+      "bucket": "attachment_lookup",
+      "question": "What did the scanned invoice attachment say?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The scanned invoice attachment was recovered through OCR-backed text evidence.",
+      "expected_support_uids": [
+        "uid-att-ocr-1"
+      ],
+      "expected_top_uid": "uid-att-ocr-1",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "attachment_extraction",
+        "attachment_ocr"
+      ],
+      "notes": "Captured OCR-positive attachment case."
+    },
+    {
+      "id": "attach-ocr-102",
+      "bucket": "attachment_lookup",
+      "question": "What did the scanned archive cover sheet say?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The system identified the scanned archive attachment, but OCR text was not recovered.",
+      "expected_support_uids": [
+        "uid-att-ocr-2"
+      ],
+      "expected_top_uid": "uid-att-ocr-2",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "attachment_extraction",
+        "attachment_ocr"
+      ],
+      "notes": "Captured OCR-negative attachment case."
+    }
+  ],
+  "results": [
+    {
+      "id": "attach-ocr-101",
+      "bucket": "attachment_lookup",
+      "question": "What did the scanned invoice attachment say?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "uid-att-ocr-1",
+      "candidate_uids": [
+        "uid-att-ocr-1"
+      ],
+      "attachment_candidate_uids": [
+        "uid-att-ocr-1"
+      ],
+      "matched_support_uids": [
+        "uid-att-ocr-1"
+      ],
+      "matched_support_uids_top_3": [
+        "uid-att-ocr-1"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": true,
+      "attachment_ocr_text_evidence_success": true,
+      "weak_evidence_explained": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "attach-ocr-102",
+      "bucket": "attachment_lookup",
+      "question": "What did the scanned archive cover sheet say?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "uid-att-ocr-2",
+      "candidate_uids": [
+        "uid-att-ocr-2"
+      ],
+      "attachment_candidate_uids": [
+        "uid-att-ocr-2"
+      ],
+      "matched_support_uids": [
+        "uid-att-ocr-2"
+      ],
+      "matched_support_uids_top_3": [
+        "uid-att-ocr-2"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": false,
+      "attachment_ocr_text_evidence_success": false,
+      "weak_evidence_explained": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": null
+    }
+  ],
+  "summary": {
+    "total_cases": 2,
+    "bucket_counts": {
+      "attachment_lookup": 2
+    },
+    "top_1_correctness": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit_top_3": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_recall": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "evidence_precision": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "top_uid_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "ambiguity_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "confidence_calibration_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_answer_success": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_text_evidence_success": {
+      "scorable": 2,
+      "passed": 1,
+      "failed": 1
+    },
+    "attachment_ocr_text_evidence_success": {
+      "scorable": 2,
+      "passed": 1,
+      "failed": 1
+    },
+    "weak_evidence_explained": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "quote_attribution_precision": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "quote_attribution_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "thread_group_id_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "thread_group_source_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    }
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 1,
+    "categories": {
+      "attachment_extraction": {
+        "category": "attachment_extraction",
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "attach-ocr-102"
+        ],
+        "drivers": [
+          "weak_attachment_text_evidence",
+          "weak_attachment_ocr_evidence"
+        ]
+      }
+    },
+    "ranked_categories": [
+      {
+        "category": "attachment_extraction",
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "attach-ocr-102"
+        ],
+        "drivers": [
+          "weak_attachment_text_evidence",
+          "weak_attachment_ocr_evidence"
+        ]
+      }
+    ]
+  },
+  "source_counts": {
+    "captured": 2
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "description": "Live long-thread evaluation subset for packed answer survival under constrained JSON budgets.",
+  "cases": [
+    {
+      "id": "long-thread-501",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "Which message anchors the packed Physics Reimagined thread answer?",
+      "evidence_mode": "hybrid",
+      "filters": {
+        "subject": "Physics Reimagined"
+      },
+      "expected_answer": "The packed Physics Reimagined thread answer is anchored on uid 309cc5b9aacd86073355e1e3cdcc5e84.",
+      "expected_support_uids": [
+        "309cc5b9aacd86073355e1e3cdcc5e84"
+      ],
+      "expected_top_uid": "309cc5b9aacd86073355e1e3cdcc5e84",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "long_thread"
+      ],
+      "notes": "Real six-message Physics Reimagined thread under a constrained live JSON budget."
+    },
+    {
+      "id": "long-thread-502",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "Which message anchors the packed quick and dirty thread answer?",
+      "evidence_mode": "hybrid",
+      "filters": {
+        "subject": "quick and dirty",
+        "folder": "Sent Items"
+      },
+      "expected_answer": "The packed quick and dirty thread answer is anchored on uid 06a9f338e135c8acd077a57769d0f390.",
+      "expected_support_uids": [
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "expected_top_uid": "06a9f338e135c8acd077a57769d0f390",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "long_thread"
+      ],
+      "notes": "Real five-message Sent Items conversation under a constrained live JSON budget."
+    }
+  ]
+}

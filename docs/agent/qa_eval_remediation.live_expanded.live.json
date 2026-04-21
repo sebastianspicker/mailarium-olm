@@ -1,0 +1,163 @@
+{
+  "total_cases": 24,
+  "bucket_counts": {
+    "ambiguity_stress": 5,
+    "attachment_lookup": 6,
+    "fact_lookup": 7,
+    "thread_process": 6
+  },
+  "top_1_correctness": {
+    "scorable": 24,
+    "passed": 23,
+    "failed": 1
+  },
+  "support_uid_hit_top_3": {
+    "scorable": 24,
+    "passed": 24,
+    "failed": 0
+  },
+  "confidence_calibration_match": {
+    "scorable": 24,
+    "passed": 9,
+    "failed": 15
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 22,
+    "ranked_categories": [
+      {
+        "category": "retrieval_recall",
+        "priority_score": 29,
+        "flagged_cases": 9,
+        "failed_cases": 2,
+        "weak_cases": 7,
+        "case_ids": [
+          "fact-101",
+          "fact-102",
+          "fact-103",
+          "fact-104",
+          "fact-105",
+          "fact-106",
+          "thread-101",
+          "thread-103",
+          "thread-104"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "top_uid_mismatch",
+          "ambiguity_or_confidence_mismatch"
+        ],
+        "recommended_track": "retrieval_quality",
+        "recommended_next_step": "define and implement retrieval-quality remediation after AQ20"
+      },
+      {
+        "category": "attachment_extraction",
+        "priority_score": 15,
+        "flagged_cases": 5,
+        "failed_cases": 0,
+        "weak_cases": 5,
+        "case_ids": [
+          "attach-101",
+          "attach-102",
+          "attach-103",
+          "attach-104",
+          "attach-106"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "ambiguity_or_confidence_mismatch",
+          "weak_attachment_text_evidence"
+        ],
+        "recommended_track": "AQ21",
+        "recommended_next_step": "improve OCR and strong-text attachment evidence"
+      },
+      {
+        "category": "weak_message_handling",
+        "priority_score": 15,
+        "flagged_cases": 5,
+        "failed_cases": 0,
+        "weak_cases": 5,
+        "case_ids": [
+          "ambig-101",
+          "ambig-102",
+          "ambig-103",
+          "ambig-104",
+          "ambig-105"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "ambiguity_or_confidence_mismatch",
+          "weak_evidence_not_explained"
+        ],
+        "recommended_track": "weak_message_followup",
+        "recommended_next_step": "improve weak-evidence phrasing and recovery on live cases"
+      },
+      {
+        "category": "final_rendering",
+        "priority_score": 12,
+        "flagged_cases": 3,
+        "failed_cases": 3,
+        "weak_cases": 0,
+        "case_ids": [
+          "fact-101",
+          "fact-105",
+          "fact-106"
+        ],
+        "drivers": [
+          "ambiguity_or_confidence_mismatch"
+        ],
+        "recommended_track": "answer_rendering_tuning",
+        "recommended_next_step": "tighten answer rendering after retrieval quality improves"
+      },
+      {
+        "category": "quote_attribution",
+        "priority_score": 7,
+        "flagged_cases": 2,
+        "failed_cases": 1,
+        "weak_cases": 1,
+        "case_ids": [
+          "attach-105",
+          "thread-105"
+        ],
+        "drivers": [
+          "ambiguity_or_confidence_mismatch",
+          "weak_attachment_text_evidence",
+          "evidence_precision_below_one"
+        ],
+        "recommended_track": "AQ22",
+        "recommended_next_step": "improve quote-attribution recall while preserving precision"
+      },
+      {
+        "category": "inferred_threading",
+        "priority_score": 3,
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "thread-102"
+        ],
+        "drivers": [
+          "evidence_precision_below_one"
+        ],
+        "recommended_track": "AQ23",
+        "recommended_next_step": "validate and improve inferred-thread impact on live data"
+      }
+    ]
+  },
+  "immediate_next_targets": [
+    {
+      "category": "retrieval_recall",
+      "recommended_track": "retrieval_quality",
+      "recommended_next_step": "define and implement retrieval-quality remediation after AQ20"
+    },
+    {
+      "category": "attachment_extraction",
+      "recommended_track": "AQ21",
+      "recommended_next_step": "improve OCR and strong-text attachment evidence"
+    },
+    {
+      "category": "weak_message_handling",
+      "recommended_track": "weak_message_followup",
+      "recommended_next_step": "improve weak-evidence phrasing and recovery on live cases"
+    }
+  ]
+}

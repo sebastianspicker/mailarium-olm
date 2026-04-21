@@ -1,0 +1,361 @@
+{
+  "questions_path": "docs/agent/qa_eval_questions.investigation.live.json",
+  "results_path": null,
+  "total_cases": 2,
+  "cases": [
+    {
+      "id": "investigation-101",
+      "bucket": "investigation_case",
+      "question": "Which messages belong to the quick and dirty conversation?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "max_results": 5
+      },
+      "expected_answer": "The quick and dirty conversation is represented by two messages in the sampled live corpus.",
+      "expected_support_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410"
+      ],
+      "expected_top_uid": "cd4214c127dd1914ba7a60bbc29b3410",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "case_scope": {
+        "date_from": null,
+        "date_to": null,
+        "case_label": "quick-and-dirty-review",
+        "target_person": {
+          "name": "Alex Example",
+          "email": null,
+          "role_hint": null
+        },
+        "comparator_actors": [],
+        "suspected_actors": [
+          {
+            "name": "Morgan Manager",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility",
+          "exclusion"
+        ],
+        "analysis_goal": "internal_review",
+        "context_notes": null,
+        "trigger_events": [],
+        "org_context": null
+      },
+      "expected_case_bundle_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "triage_tags": [
+        "investigation_bundle_completeness",
+        "long_thread"
+      ],
+      "notes": "Case-scoped live investigation probe over the quick and dirty conversation."
+    },
+    {
+      "id": "investigation-102",
+      "bucket": "investigation_case",
+      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "max_results": 5
+      },
+      "expected_answer": "The Zammad Reboot 2026 conversation spans five messages in the sampled live corpus.",
+      "expected_support_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "expected_top_uid": "3cda29cdadc3ba0cd2ad54525da8ce5b",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "case_scope": {
+        "date_from": null,
+        "date_to": null,
+        "case_label": "zammad-reboot-2026-review",
+        "target_person": {
+          "name": "Pat Example",
+          "email": null,
+          "role_hint": null
+        },
+        "comparator_actors": [],
+        "suspected_actors": [
+          {
+            "name": "Taylor Lead",
+            "email": "lead@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "retaliation",
+          "unequal_treatment"
+        ],
+        "analysis_goal": "neutral_chronology",
+        "context_notes": null,
+        "trigger_events": [],
+        "org_context": null
+      },
+      "expected_case_bundle_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "triage_tags": [
+        "investigation_bundle_completeness"
+      ],
+      "notes": "Case-scoped live investigation probe over the sampled Zammad Reboot 2026 conversation."
+    }
+  ],
+  "results": [
+    {
+      "id": "investigation-101",
+      "bucket": "investigation_case",
+      "question": "Which messages belong to the quick and dirty conversation?",
+      "status": "labeled",
+      "source": "live",
+      "count": 1,
+      "top_uid": "cd4214c127dd1914ba7a60bbc29b3410",
+      "candidate_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410"
+      ],
+      "matched_support_uids_top_3": [
+        "cd4214c127dd1914ba7a60bbc29b3410"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": true,
+      "long_thread_structure_preserved": true,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAH44TQnVHUhqsamMnapNeIg=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "case_bundle_present": true,
+      "investigation_blocks_present": true,
+      "case_bundle_support_uid_hit": true,
+      "case_bundle_support_uid_recall": 1.0,
+      "multi_source_source_types_match": true,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "investigation-102",
+      "bucket": "investigation_case",
+      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "status": "labeled",
+      "source": "live",
+      "count": 1,
+      "top_uid": "3cda29cdadc3ba0cd2ad54525da8ce5b",
+      "candidate_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "matched_support_uids_top_3": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAI95EDRW3Ui2kZkswqY5hVc=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "case_bundle_present": true,
+      "investigation_blocks_present": true,
+      "case_bundle_support_uid_hit": true,
+      "case_bundle_support_uid_recall": 1.0,
+      "multi_source_source_types_match": true,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    }
+  ],
+  "summary": {
+    "total_cases": 2,
+    "bucket_counts": {
+      "investigation_case": 2
+    },
+    "top_1_correctness": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit_top_3": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_recall": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "evidence_precision": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "top_uid_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "ambiguity_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "confidence_calibration_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_support_uid_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_answer_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_ocr_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "weak_evidence_explained": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "quote_attribution_precision": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "quote_attribution_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "thread_group_id_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "thread_group_source_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "long_thread_answer_present": {
+      "scorable": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "long_thread_structure_preserved": {
+      "scorable": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "case_bundle_present": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "investigation_blocks_present": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "case_bundle_support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "case_bundle_support_uid_recall": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "multi_source_source_types_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 0,
+    "categories": {},
+    "ranked_categories": []
+  },
+  "source_counts": {
+    "live": 2
+  },
+  "live_backend": "sqlite_fallback",
+  "investigation_corpus_readiness": {
+    "live_backend": "sqlite_fallback",
+    "case_scope_case_count": 2,
+    "expected_case_bundle_uid_count": 2,
+    "corpus_populated": true,
+    "supports_case_analysis": true,
+    "known_blockers": [],
+    "total_emails": 392,
+    "emails_with_segments_count": 368,
+    "attachment_email_count": 151
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "description": "Captured quote-attribution evaluation subset for email_answer_context heuristics.",
+  "cases": [
+    {
+      "id": "quote-201",
+      "bucket": "quote_attribution",
+      "status": "labeled",
+      "question": "Who was being quoted in the figures reply?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The quoted speaker was bob@example.com.",
+      "expected_support_uids": [
+        "uid-quote-1"
+      ],
+      "expected_top_uid": "uid-quote-1",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [
+        "bob@example.com"
+      ],
+      "triage_tags": [
+        "quote_attribution"
+      ],
+      "notes": "Captured AQ13 fixture mirroring the reply_context_from speaker-attribution path."
+    },
+    {
+      "id": "quote-202",
+      "bucket": "quote_attribution",
+      "status": "labeled",
+      "question": "Who was being quoted in the multi-party vendor thread?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The quoted speaker was bob@example.com even though the block mentioned multiple recipients.",
+      "expected_support_uids": [
+        "uid-quote-2"
+      ],
+      "expected_top_uid": "uid-quote-2",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [
+        "bob@example.com"
+      ],
+      "triage_tags": [
+        "quote_attribution"
+      ],
+      "notes": "Captured AQ13 fixture covering the quoted_from_header heuristic in a multi-party block."
+    }
+  ]
+}

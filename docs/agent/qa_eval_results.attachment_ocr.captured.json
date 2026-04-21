@@ -1,0 +1,46 @@
+{
+  "attach-ocr-101": {
+    "count": 1,
+    "candidates": [],
+    "attachment_candidates": [
+      {
+        "uid": "uid-att-ocr-1",
+        "score": 0.92,
+        "attachment": {
+          "extraction_state": "ocr_text_extracted",
+          "evidence_strength": "strong_text",
+          "text_available": true,
+          "ocr_used": true,
+          "failure_reason": null
+        }
+      }
+    ],
+    "answer_quality": {
+      "top_candidate_uid": "uid-att-ocr-1",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  },
+  "attach-ocr-102": {
+    "count": 1,
+    "candidates": [],
+    "attachment_candidates": [
+      {
+        "uid": "uid-att-ocr-2",
+        "score": 0.83,
+        "attachment": {
+          "extraction_state": "ocr_failed",
+          "evidence_strength": "weak_reference",
+          "text_available": false,
+          "ocr_used": true,
+          "failure_reason": "ocr_failed"
+        }
+      }
+    ],
+    "answer_quality": {
+      "top_candidate_uid": "uid-att-ocr-2",
+      "confidence_label": "medium",
+      "ambiguity_reason": null
+    }
+  }
+}

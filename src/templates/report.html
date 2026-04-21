@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  :root { --primary: #2563eb; --bg: #f8fafc; --card: #fff; --text: #1e293b; --muted: #64748b; --border: #e2e8f0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: var(--primary); }
+  h2 { font-size: 1.3rem; margin: 2rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--primary); }
+  .subtitle { color: var(--muted); margin-bottom: 2rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .metric { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; text-align: center; }
+  .metric .value { font-size: 2rem; font-weight: 700; color: var(--primary); }
+  .metric .label { font-size: 0.85rem; color: var(--muted); margin-top: 0.3rem; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+  th { background: var(--primary); color: #fff; text-align: left; padding: 0.6rem 0.8rem; font-weight: 600; font-size: 0.85rem; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  tr:nth-child(even) { background: #f1f5f9; }
+  .bar-container { display: flex; align-items: center; gap: 0.5rem; }
+  .bar { height: 16px; background: var(--primary); border-radius: 3px; min-width: 2px; }
+  .bar-label { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.8rem; text-align: center; }
+  .empty { color: var(--muted); font-style: italic; padding: 1rem 0; }
+</style>
+</head>
+<body>
+
+<h1>{{ title }}</h1>
+<p class="subtitle">Generated {{ generated_at }}</p>
+
+{# ── Overview Metrics ────────────────────────────── #}
+<div class="metrics">
+  <div class="metric">
+    <div class="value">{{ overview.total_emails | default(0) }}</div>
+    <div class="label">Total Emails</div>
+  </div>
+  <div class="metric">
+    <div class="value">{{ overview.unique_senders | default(0) }}</div>
+    <div class="label">Unique Senders</div>
+  </div>
+  <div class="metric">
+    <div class="value">{{ overview.unique_folders | default(0) }}</div>
+    <div class="label">Folders</div>
+  </div>
+  <div class="metric">
+    <div class="value">{{ overview.date_range_start | default('—') }}</div>
+    <div class="label">Earliest Email</div>
+  </div>
+  <div class="metric">
+    <div class="value">{{ overview.date_range_end | default('—') }}</div>
+    <div class="label">Latest Email</div>
+  </div>
+</div>
+
+{# ── Top Senders ──────────────────────────────────── #}
+{% if top_senders %}
+<h2>Top Senders</h2>
+<div class="card">
+<table>
+  <thead><tr><th>#</th><th>Sender</th><th>Name</th><th>Count</th><th></th></tr></thead>
+  <tbody>
+  {% for s in top_senders %}
+  <tr>
+    <td>{{ loop.index }}</td>
+    <td>{{ s.sender_email }}</td>
+    <td>{{ s.sender_name | default('—') }}</td>
+    <td>{{ s.message_count }}</td>
+    <td>
+      <div class="bar-container">
+        <div class="bar" style="width: {{ (s.message_count / top_senders_max * 200) | int }}px"></div>
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{# ── Folder Distribution ──────────────────────────── #}
+{% if folders %}
+<h2>Folder Distribution</h2>
+<div class="card">
+<table>
+  <thead><tr><th>Folder</th><th>Email Count</th><th></th></tr></thead>
+  <tbody>
+  {% for folder, count in folders %}
+  <tr>
+    <td>{{ folder }}</td>
+    <td>{{ count }}</td>
+    <td>
+      <div class="bar-container">
+        <div class="bar" style="width: {{ (count / folders_max * 200) | int }}px"></div>
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{# ── Monthly Volume ───────────────────────────────── #}
+{% if monthly_volume %}
+<h2>Monthly Volume</h2>
+<div class="card">
+<table>
+  <thead><tr><th>Month</th><th>Count</th><th></th></tr></thead>
+  <tbody>
+  {% for row in monthly_volume %}
+  <tr>
+    <td>{{ row.period }}</td>
+    <td>{{ row.count }}</td>
+    <td>
+      <div class="bar-container">
+        <div class="bar" style="width: {{ (row.count / monthly_volume_max * 200) | int }}px"></div>
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{# ── Top Entities ─────────────────────────────────── #}
+{% if top_entities %}
+<h2>Top Entities</h2>
+<div class="card">
+<table>
+  <thead><tr><th>Entity</th><th>Type</th><th>Mentions</th><th>Emails</th></tr></thead>
+  <tbody>
+  {% for e in top_entities %}
+  <tr>
+    <td>{{ e.entity_text }}</td>
+    <td>{{ e.entity_type }}</td>
+    <td>{{ e.total_mentions }}</td>
+    <td>{{ e.email_count }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{# ── Response Times ───────────────────────────────── #}
+{% if response_times %}
+<h2>Response Times</h2>
+<div class="card">
+<table>
+  <thead><tr><th>Replier</th><th>Avg Response (hours)</th><th>Reply Count</th></tr></thead>
+  <tbody>
+  {% for r in response_times %}
+  <tr>
+    <td>{{ r.sender }}</td>
+    <td>{{ "%.1f" | format(r.avg_response_hours) }}</td>
+    <td>{{ r.response_count }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<div class="footer">
+  Email Archive Report &middot; Generated by Email RAG
+</div>
+
+</body>
+</html>

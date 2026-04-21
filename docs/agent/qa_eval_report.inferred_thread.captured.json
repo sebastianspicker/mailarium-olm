@@ -1,0 +1,278 @@
+{
+  "questions_path": "docs/agent/qa_eval_questions.inferred_thread.json",
+  "results_path": "docs/agent/qa_eval_results.inferred_thread.captured.json",
+  "total_cases": 2,
+  "cases": [
+    {
+      "id": "inferred-301",
+      "bucket": "thread_process",
+      "question": "Which inferred-only thread does the follow-up belong to?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The follow-up belongs to inferred thread thread-inferred-1.",
+      "expected_support_uids": [
+        "uid-inf-2"
+      ],
+      "expected_top_uid": "uid-inf-2",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": "thread-inferred-1",
+      "expected_thread_group_source": "inferred",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Captured AQ14 fixture for inferred-only grouping."
+    },
+    {
+      "id": "inferred-302",
+      "bucket": "thread_process",
+      "question": "Which inferred-only root message is grouped with the follow-up?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The original and follow-up are grouped under inferred thread thread-inferred-1.",
+      "expected_support_uids": [
+        "uid-inf-1",
+        "uid-inf-2"
+      ],
+      "expected_top_uid": "uid-inf-2",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": "thread-inferred-1",
+      "expected_thread_group_source": "inferred",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Captured AQ14 fixture for inferred-only thread membership."
+    }
+  ],
+  "results": [
+    {
+      "id": "inferred-301",
+      "bucket": "thread_process",
+      "question": "Which inferred-only thread does the follow-up belong to?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 2,
+      "top_uid": "uid-inf-2",
+      "candidate_uids": [
+        "uid-inf-2",
+        "uid-inf-1"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "uid-inf-2"
+      ],
+      "matched_support_uids_top_3": [
+        "uid-inf-2"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.5,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "thread-inferred-1",
+      "observed_thread_group_source": "inferred",
+      "thread_group_id_match": true,
+      "thread_group_source_match": true,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "inferred-302",
+      "bucket": "thread_process",
+      "question": "Which inferred-only root message is grouped with the follow-up?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 2,
+      "top_uid": "uid-inf-2",
+      "candidate_uids": [
+        "uid-inf-2",
+        "uid-inf-1"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "uid-inf-1",
+        "uid-inf-2"
+      ],
+      "matched_support_uids_top_3": [
+        "uid-inf-1",
+        "uid-inf-2"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "thread-inferred-1",
+      "observed_thread_group_source": "inferred",
+      "thread_group_id_match": true,
+      "thread_group_source_match": true,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    }
+  ],
+  "summary": {
+    "total_cases": 2,
+    "bucket_counts": {
+      "thread_process": 2
+    },
+    "top_1_correctness": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit_top_3": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_recall": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "evidence_precision": {
+      "scorable": 2,
+      "average": 0.75
+    },
+    "top_uid_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "ambiguity_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "confidence_calibration_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_support_uid_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_answer_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_ocr_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "weak_evidence_explained": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "quote_attribution_precision": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "quote_attribution_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "thread_group_id_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "thread_group_source_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "long_thread_answer_present": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "long_thread_structure_preserved": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    }
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 1,
+    "categories": {
+      "inferred_threading": {
+        "category": "inferred_threading",
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "inferred-301"
+        ],
+        "drivers": [
+          "evidence_precision_below_one"
+        ]
+      }
+    },
+    "ranked_categories": [
+      {
+        "category": "inferred_threading",
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "inferred-301"
+        ],
+        "drivers": [
+          "evidence_precision_below_one"
+        ]
+      }
+    ]
+  },
+  "source_counts": {
+    "captured": 2
+  },
+  "live_backend": null
+}

@@ -1,0 +1,40 @@
+<!-- Source Email Appendix -->
+<div class="page-break"></div>
+<h2 id="source-emails">Source Email Appendix</h2>
+{% if source_emails %}
+{% for email in source_emails %}
+<div class="email-card" id="appendix-{{ email.appendix_number }}">
+  <div class="email-card-header">
+    <strong>{{ email.appendix_number }}</strong> &mdash;
+    <strong>From:</strong> {{ email.sender_name }} &lt;{{ email.sender_email }}&gt; &middot;
+    <strong>Date:</strong> {{ email.date_formatted }}<br>
+    <strong>Subject:</strong> {{ email.subject }}
+    {% if email.to %}<br><strong>To:</strong> {{ email.to }}{% endif %}
+    {% if email.cc %}<br><strong>CC:</strong> {{ email.cc }}{% endif %}
+    {% if email.bcc %}<br><strong>BCC:</strong> {{ email.bcc }}{% endif %}
+    {% if email.folder %}<br><strong>Folder:</strong> {{ email.folder }}{% endif %}
+    {% if email.evidence_refs_str %}<br><strong>Evidence:</strong> {{ email.evidence_refs_str }}{% endif %}
+    <br><strong>UID:</strong> <span style="font-family:monospace;font-size:10px">{{ email.uid }}</span> &middot;
+    <strong>SHA-256:</strong> <span style="font-family:monospace;font-size:9px">{{ email.content_sha256_display }}</span>
+  </div>
+  {% for q in email.evidence_quotes %}
+  <div class="evidence-quote-banner">
+    <span class="quote-ref">{{ q.evidence_number }}</span>
+    <span class="badge badge-{{ q.category }}">{{ q.category }}</span>
+    &ldquo;<span class="quote-text">{{ q.quote }}</span>&rdquo;
+  </div>
+  {% endfor %}
+  <div class="email-card-body">{{ email.body_text }}</div>
+  {% if email.has_attachments %}
+  <div class="attachment-bar">
+    <strong>Attachments ({{ email.attachment_count }}):</strong>
+    {% for att in email.attachment_list %}
+      {{ att.name }}{% if att.mime_type %} ({{ att.mime_type }}){% endif %}{% if att.size_display %} — {{ att.size_display }}{% endif %}{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p>No source emails found.</p>
+{% endif %}

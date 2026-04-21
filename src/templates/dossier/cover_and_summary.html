@@ -1,0 +1,81 @@
+<!-- Cover Page -->
+<div class="cover">
+  <h1>{{ title }}</h1>
+  {% if case_reference %}<div class="case-ref">{{ case_reference }}</div>{% endif %}
+  <div class="meta-line">Generated: {{ generated_at }}</div>
+  {% if custodian %}<div class="meta-line">Custodian: {{ custodian }}</div>{% endif %}
+  {% if prepared_by %}<div class="meta-line">Prepared by: {{ prepared_by }}</div>{% endif %}
+  <div class="meta-line">Evidence Items: {{ evidence_count }} | Source Emails: {{ email_count }}</div>
+  {% if dossier_hash %}<div class="hash">Dossier Integrity Hash (SHA-256): {{ dossier_hash }}</div>{% endif %}
+</div>
+
+<!-- Summary Stats -->
+<div class="stats-grid">
+  <div class="stat-box">
+    <div class="stat-value">{{ evidence_count }}</div>
+    <div class="stat-label">Evidence Items</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-value">{{ email_count }}</div>
+    <div class="stat-label">Source Emails</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-value">{{ verified_count }}</div>
+    <div class="stat-label">Verified Quotes</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-value">{{ category_count }}</div>
+    <div class="stat-label">Categories</div>
+  </div>
+</div>
+
+{% if has_evidence %}
+<!-- Executive Summary -->
+<div id="executive-summary" style="margin-bottom: 24px;">
+  <h2>Executive Summary</h2>
+  <p>This dossier contains <strong>{{ evidence_count }}</strong> evidence items from
+  <strong>{{ email_count }}</strong> source emails, spanning <strong>{{ date_earliest }}</strong>
+  to <strong>{{ date_latest }}</strong>. Evidence from <strong>{{ unique_sender_count }}</strong>
+  sender(s). Most prevalent category: <strong>{{ dominant_category }}</strong>
+  ({{ dominant_count }} items). <strong>{{ verified_count }}</strong> of {{ evidence_count }}
+  quotes verified against source emails.</p>
+
+  {% if category_breakdown %}
+  <h3>Category Breakdown</h3>
+  <table class="custody-table" style="max-width: 400px;">
+    <thead><tr><th>Category</th><th style="text-align:right">Count</th></tr></thead>
+    <tbody>
+    {% for cb in category_breakdown %}
+    <tr><td><span class="badge badge-{{ cb.category }}">{{ cb.category }}</span></td><td style="text-align:right">{{ cb.count }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if has_glossary %}
+  <h3>Category Definitions</h3>
+  <table class="custody-table">
+    <thead><tr><th>Category</th><th>Definition</th></tr></thead>
+    <tbody>
+    {% for g in glossary_items %}
+    <tr><td><span class="badge badge-{{ g.category }}">{{ g.category }}</span></td><td>{{ g.definition }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<!-- Verification Banner -->
+{% if all_verified %}
+<div class="verification-banner banner-ok">&#10003; All {{ evidence_count }} evidence quotes verified against source emails.</div>
+{% else %}
+<div class="verification-banner banner-warn">&#9888; {{ verified_count }} of {{ evidence_count }} quotes verified — {{ unverified_count }} unverified.</div>
+{% endif %}
+
+<!-- Scope Statement -->
+<div style="background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px 16px; margin-bottom: 20px; font-size: 12px;">
+  <strong>Scope:</strong> This dossier draws from an archive of <strong>{{ archive_total }}</strong> emails
+  ({{ archive_earliest }} to {{ archive_latest }}).
+  {{ scope_filter_text }}
+</div>
+{% endif %}

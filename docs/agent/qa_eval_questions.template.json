@@ -1,0 +1,353 @@
+{
+  "version": 1,
+  "description": "Initial 25-case evaluation template for email_answer_context. Fill expected_answer / expected_support_uids / expected_top_uid after a live corpus review.",
+  "cases": [
+    {
+      "id": "fact-001",
+      "bucket": "fact_lookup",
+      "status": "todo",
+      "question": "Who asked for the updated budget?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Simple sender lookup from message body."
+    },
+    {
+      "id": "fact-002",
+      "bucket": "fact_lookup",
+      "status": "todo",
+      "question": "When was the printer replacement first mentioned?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Tests first-mention retrieval."
+    },
+    {
+      "id": "fact-003",
+      "bucket": "fact_lookup",
+      "status": "todo",
+      "question": "Which folder contains the message about the Apple TV test?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Metadata-heavy lookup."
+    },
+    {
+      "id": "fact-004",
+      "bucket": "fact_lookup",
+      "status": "todo",
+      "question": "Who confirmed the Zammad meeting time?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Single-message confirmation lookup."
+    },
+    {
+      "id": "fact-005",
+      "bucket": "fact_lookup",
+      "status": "todo",
+      "question": "Which email mentioned Windows 11 rollout planning?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "email_type": "original"
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Original-message filter plus topic lookup."
+    },
+    {
+      "id": "fact-006",
+      "bucket": "fact_lookup",
+      "status": "todo",
+      "question": "Who sent the note about the HDMI cable test?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Short subject / sender match."
+    },
+    {
+      "id": "fact-007",
+      "bucket": "fact_lookup",
+      "status": "todo",
+      "question": "Which message asked to add a user to HFMT-V?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Tests direct phrase retrieval."
+    },
+    {
+      "id": "thread-001",
+      "bucket": "thread_process",
+      "status": "todo",
+      "question": "How did the budget discussion evolve over time?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "TODO(human): summarize thread evolution",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Checks timeline usefulness."
+    },
+    {
+      "id": "thread-002",
+      "bucket": "thread_process",
+      "status": "todo",
+      "question": "Who replied to the notebook upgrade request?",
+      "evidence_mode": "hybrid",
+      "filters": {
+        "email_type": "reply"
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Reply identification."
+    },
+    {
+      "id": "thread-003",
+      "bucket": "thread_process",
+      "status": "todo",
+      "question": "What happened after the printer issue was reported?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Process chronology with follow-ups."
+    },
+    {
+      "id": "thread-004",
+      "bucket": "thread_process",
+      "status": "todo",
+      "question": "Which forwarded message contained the original event details?",
+      "evidence_mode": "forensic",
+      "filters": {
+        "email_type": "forward"
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Forwarded-message recovery."
+    },
+    {
+      "id": "thread-005",
+      "bucket": "thread_process",
+      "status": "todo",
+      "question": "Who was quoted before the final reply in the access thread?",
+      "evidence_mode": "forensic",
+      "filters": {
+        "email_type": "reply"
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "ambiguous",
+      "notes": "Low-recall quoted-speaker case."
+    },
+    {
+      "id": "thread-006",
+      "bucket": "thread_process",
+      "status": "todo",
+      "question": "Which messages belong to the same conversation about room access?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Conversation grouping quality."
+    },
+    {
+      "id": "thread-007",
+      "bucket": "thread_process",
+      "status": "todo",
+      "question": "When did the meeting planning thread end?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Timeline end marker."
+    },
+    {
+      "id": "attach-001",
+      "bucket": "attachment_lookup",
+      "status": "todo",
+      "question": "Which attachment contains the budget spreadsheet?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Attachment-filename and attachment-text retrieval."
+    },
+    {
+      "id": "attach-002",
+      "bucket": "attachment_lookup",
+      "status": "todo",
+      "question": "What did the attached PDF say about the contract clause?",
+      "evidence_mode": "forensic",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Attachment-content question."
+    },
+    {
+      "id": "attach-003",
+      "bucket": "attachment_lookup",
+      "status": "todo",
+      "question": "Which email had the scanned signature as an attachment?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "ambiguous",
+      "notes": "May surface image-only or weak extraction cases."
+    },
+    {
+      "id": "attach-004",
+      "bucket": "attachment_lookup",
+      "status": "todo",
+      "question": "Which attachment mentioned room allocations?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "clear",
+      "notes": "Attachment text retrieval."
+    },
+    {
+      "id": "attach-005",
+      "bucket": "attachment_lookup",
+      "status": "todo",
+      "question": "Did the attachment include a device inventory list?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "insufficient",
+      "notes": "Useful for explicit weak-evidence handling if extraction is missing."
+    },
+    {
+      "id": "ambig-001",
+      "bucket": "ambiguity_stress",
+      "status": "todo",
+      "question": "Which message was about the digital workplace?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "ambiguous",
+      "notes": "Close-subject ambiguity case."
+    },
+    {
+      "id": "ambig-002",
+      "bucket": "ambiguity_stress",
+      "status": "todo",
+      "question": "What did the image-only message say?",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "TODO(human): likely bounded summary only",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "insufficient",
+      "notes": "Tests M8 summary handling."
+    },
+    {
+      "id": "ambig-003",
+      "bucket": "ambiguity_stress",
+      "status": "todo",
+      "question": "Which source-shell message discussed the scanned form?",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "TODO(human): likely bounded summary only",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "insufficient",
+      "notes": "Tests source-shell summary handling."
+    },
+    {
+      "id": "ambig-004",
+      "bucket": "ambiguity_stress",
+      "status": "todo",
+      "question": "Which reply actually contained authored text instead of only metadata?",
+      "evidence_mode": "forensic",
+      "filters": {
+        "email_type": "reply"
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "ambiguous",
+      "notes": "Metadata-only reply stress case."
+    },
+    {
+      "id": "ambig-005",
+      "bucket": "ambiguity_stress",
+      "status": "todo",
+      "question": "Which email confirmed the device test appointment?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "ambiguous",
+      "notes": "Close confirmations across similar subjects."
+    },
+    {
+      "id": "ambig-006",
+      "bucket": "ambiguity_stress",
+      "status": "todo",
+      "question": "Was there enough evidence to answer who approved the forwarded event chain?",
+      "evidence_mode": "forensic",
+      "filters": {
+        "email_type": "forward"
+      },
+      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_support_uids": [],
+      "expected_top_uid": null,
+      "expected_ambiguity": "insufficient",
+      "notes": "Tests honesty on weak forwarded evidence."
+    }
+  ]
+}

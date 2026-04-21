@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "description": "Captured inferred-thread evaluation subset for inferred-only answer-path grouping.",
+  "cases": [
+    {
+      "id": "inferred-301",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "Which inferred-only thread does the follow-up belong to?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The follow-up belongs to inferred thread thread-inferred-1.",
+      "expected_support_uids": [
+        "uid-inf-2"
+      ],
+      "expected_top_uid": "uid-inf-2",
+      "expected_ambiguity": "clear",
+      "expected_thread_group_id": "thread-inferred-1",
+      "expected_thread_group_source": "inferred",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Captured AQ14 fixture for inferred-only grouping."
+    },
+    {
+      "id": "inferred-302",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "Which inferred-only root message is grouped with the follow-up?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The original and follow-up are grouped under inferred thread thread-inferred-1.",
+      "expected_support_uids": [
+        "uid-inf-1",
+        "uid-inf-2"
+      ],
+      "expected_top_uid": "uid-inf-2",
+      "expected_ambiguity": "clear",
+      "expected_thread_group_id": "thread-inferred-1",
+      "expected_thread_group_source": "inferred",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Captured AQ14 fixture for inferred-only thread membership."
+    }
+  ]
+}

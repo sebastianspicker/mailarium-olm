@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ thread_subject }}</title>
+<style>
+  /* Reset & base */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #222;
+    background: #fff;
+    padding: 20px 30px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* Thread header */
+  .thread-header {
+    border-bottom: 3px solid #0078d4;
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+  }
+  .thread-header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #0078d4;
+    margin-bottom: 4px;
+  }
+  .thread-meta {
+    font-size: 12px;
+    color: #666;
+  }
+
+  /* Single email block */
+  .email-block {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    background: #fafafa;
+  }
+  .email-header {
+    background: #f0f0f0;
+    padding: 12px 16px;
+    border-bottom: 1px solid #ddd;
+    font-size: 13px;
+  }
+  .email-header table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .email-header td {
+    padding: 2px 0;
+    vertical-align: top;
+  }
+  .email-header .label {
+    font-weight: 600;
+    color: #555;
+    width: 60px;
+    white-space: nowrap;
+    padding-right: 10px;
+  }
+  .email-header .value {
+    color: #222;
+    word-break: break-word;
+  }
+  .email-header .subject-row .value {
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  /* Email body */
+  .email-body {
+    padding: 16px;
+    background: #fff;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* Attachments */
+  .attachments {
+    padding: 8px 16px;
+    background: #f7f7f7;
+    border-top: 1px solid #eee;
+    font-size: 12px;
+    color: #555;
+  }
+  .attachments .att-icon { margin-right: 4px; }
+  .attachment-item {
+    display: inline-block;
+    background: #e8e8e8;
+    border-radius: 3px;
+    padding: 2px 8px;
+    margin: 2px 4px 2px 0;
+    font-size: 12px;
+  }
+
+  /* Email type badge */
+  .email-type-badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+    font-weight: 500;
+  }
+  .badge-reply { background: #e3f2fd; color: #1565c0; }
+  .badge-forward { background: #fff3e0; color: #e65100; }
+  .badge-original { background: #e8f5e9; color: #2e7d32; }
+
+  /* Footer */
+  .export-footer {
+    margin-top: 30px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+    font-size: 11px;
+    color: #999;
+    text-align: center;
+  }
+
+  /* Print styles */
+  @media print {
+    body { padding: 0; font-size: 12px; }
+    .email-block { break-inside: avoid; border: 1px solid #ccc; }
+    .thread-header { border-bottom-color: #333; }
+    .thread-header h1 { color: #333; }
+    .export-footer { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="thread-header">
+  <h1>{{ thread_subject }}</h1>
+  <div class="thread-meta">
+    {{ email_count }} email{{ 's' if email_count != 1 else '' }}
+    {% if date_range %} &middot; {{ date_range }}{% endif %}
+  </div>
+</div>
+
+{% for email in emails %}
+<div class="email-block">
+  <div class="email-header">
+    <table>
+      <tr>
+        <td class="label">From:</td>
+        <td class="value">
+          {{ email.sender_name or '' }}
+          {% if email.sender_email %}&lt;{{ email.sender_email }}&gt;{% endif %}
+        </td>
+      </tr>
+      {% if email.to %}
+      <tr>
+        <td class="label">To:</td>
+        <td class="value">{{ email.to | join(', ') }}</td>
+      </tr>
+      {% endif %}
+      {% if email.cc %}
+      <tr>
+        <td class="label">CC:</td>
+        <td class="value">{{ email.cc | join(', ') }}</td>
+      </tr>
+      {% endif %}
+      {% if email.bcc %}
+      <tr>
+        <td class="label">BCC:</td>
+        <td class="value">{{ email.bcc | join(', ') }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td class="label">Date:</td>
+        <td class="value">{{ email.date or '(unknown)' }}</td>
+      </tr>
+      <tr class="subject-row">
+        <td class="label">Subject:</td>
+        <td class="value">
+          {{ email.subject or '(no subject)' }}
+          {% if email.email_type == 'reply' %}
+            <span class="email-type-badge badge-reply">Reply</span>
+          {% elif email.email_type == 'forward' %}
+            <span class="email-type-badge badge-forward">Forward</span>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="email-body">{{ email.body_text or '(no body text available)' }}</div>
+
+  {% if email.has_attachments and email.attachment_count and email.attachment_count > 0 %}
+  <div class="attachments">
+    <span class="att-icon">&#128206;</span>
+    {{ email.attachment_count }} attachment{{ 's' if email.attachment_count != 1 else '' }}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<div class="export-footer">
+  Exported from Outlook Email RAG
+</div>
+
+</body>
+</html>

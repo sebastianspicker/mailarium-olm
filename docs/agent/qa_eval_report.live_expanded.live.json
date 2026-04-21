@@ -1,0 +1,2051 @@
+{
+  "questions_path": "docs/agent/qa_eval_questions.live_expanded.json",
+  "results_path": null,
+  "total_cases": 24,
+  "cases": [
+    {
+      "id": "fact-101",
+      "bucket": "fact_lookup",
+      "question": "Who sent the HARICA certificate mail?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "pki@hfmt-koeln.de sent the HARICA certificate reply.",
+      "expected_support_uids": [
+        "31692630078d4d3689505120c1b61631"
+      ],
+      "expected_top_uid": "31692630078d4d3689505120c1b61631",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [],
+      "notes": "Real reply in _wichtig: subject AW: Zertifikat Harica."
+    },
+    {
+      "id": "fact-102",
+      "bucket": "fact_lookup",
+      "question": "Which folder contains the Apple Support notes import message?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The Apple Support notes import message is in the memo folder.",
+      "expected_support_uids": [
+        "099aa2e0070e2a4b9d8dfeaf41a68a02"
+      ],
+      "expected_top_uid": "099aa2e0070e2a4b9d8dfeaf41a68a02",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [],
+      "notes": "Real original in memo: Notizen und Dateien in die Notizen-App importieren - Apple Support (DE)."
+    },
+    {
+      "id": "fact-103",
+      "bucket": "fact_lookup",
+      "question": "Which message mentioned the Windows 11 TPM constraint?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The Windows 11 TPM constraint message is Microsoft: So schalten wir den TPM-Zwang in Windows 11 ab - Golem.de.",
+      "expected_support_uids": [
+        "05cfd57c33128f29ea8ad85c30281dc6"
+      ],
+      "expected_top_uid": "05cfd57c33128f29ea8ad85c30281dc6",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [],
+      "notes": "Real original in _wichtig from 2021-10-07."
+    },
+    {
+      "id": "fact-104",
+      "bucket": "fact_lookup",
+      "question": "Who announced that the Zammad test version was created?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "lukas.jacobs@hfmt-koeln.de announced the Zammad test version.",
+      "expected_support_uids": [
+        "addd6fad46c354177e7b59e32bb9b86a"
+      ],
+      "expected_top_uid": "addd6fad46c354177e7b59e32bb9b86a",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [],
+      "notes": "Real original in _wichtig: Zammad Testversion."
+    },
+    {
+      "id": "fact-105",
+      "bucket": "fact_lookup",
+      "question": "Who sent the IT Besprechnung 07.05.2025 email?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "atosa.amini@hfmt-koeln.de sent the IT Besprechnung 07.05.2025 email.",
+      "expected_support_uids": [
+        "a7ec62d7fd950e1d165cb342c73d5a40"
+      ],
+      "expected_top_uid": "a7ec62d7fd950e1d165cb342c73d5a40",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [],
+      "notes": "Real attachment-bearing message in _wichtig from 2025-05-08."
+    },
+    {
+      "id": "fact-106",
+      "bucket": "fact_lookup",
+      "question": "Who sent the Workshop KI message?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "petra.john@hfmt-koeln.de sent the Workshop KI message.",
+      "expected_support_uids": [
+        "6162747c4462d7d3a6378cea35508b11"
+      ],
+      "expected_top_uid": "6162747c4462d7d3a6378cea35508b11",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [],
+      "notes": "Real message in _wichtig from 2024-10-22."
+    },
+    {
+      "id": "thread-101",
+      "bucket": "thread_process",
+      "question": "When did the Zammad Reboot 2026 thread begin?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "In the current 400-message live eval corpus slice, the retained Zammad Reboot 2026 thread anchor is from 2025-12-04T14:31:04.",
+      "expected_support_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "expected_top_uid": "3cda29cdadc3ba0cd2ad54525da8ce5b",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "retrieval_recall"
+      ],
+      "notes": "Live corpus alignment: the fixed 400-message sqlite slice retains only one sampled Zammad Reboot 2026 message."
+    },
+    {
+      "id": "thread-102",
+      "bucket": "thread_process",
+      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "In the current 400-message live eval corpus slice, the retained Zammad Reboot 2026 conversation sample contains the 2025-12-04 Sent Items reply.",
+      "expected_support_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "expected_top_uid": "3cda29cdadc3ba0cd2ad54525da8ce5b",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Live corpus alignment: only one sampled Zammad Reboot 2026 thread member is present in the fixed sqlite eval slice."
+    },
+    {
+      "id": "thread-103",
+      "bucket": "thread_process",
+      "question": "When did the Physics Reimagined thread begin?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "The Physics Reimagined thread began on 2022-06-28T16:04:50.",
+      "expected_support_uids": [
+        "851423b922b15b17597f39449d6cdfdf"
+      ],
+      "expected_top_uid": "851423b922b15b17597f39449d6cdfdf",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "retrieval_recall",
+        "long_thread"
+      ],
+      "notes": "Real six-message conversation in _wichtig/beitraege-forschung."
+    },
+    {
+      "id": "thread-104",
+      "bucket": "thread_process",
+      "question": "Which messages belong to the quick and dirty conversation?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "The quick and dirty conversation contains the five Sent Items replies from 2025-12-04 through 2025-12-05.",
+      "expected_support_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410",
+        "5a6141808a00c479473d9409b414c591",
+        "f32d49d0f5d1498454926f6621ce31a1",
+        "b624c1dd78dd21e9e81077194ebad06a",
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "expected_top_uid": "cd4214c127dd1914ba7a60bbc29b3410",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "retrieval_recall",
+        "long_thread"
+      ],
+      "notes": "Real five-message conversation in Sent Items with attachments."
+    },
+    {
+      "id": "attach-101",
+      "bucket": "attachment_lookup",
+      "question": "Which email had attachments and discussed Configurator 2 Blueprints?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The MDM email from 2025-05-27 discussed Configurator 2 Blueprints and had attachments.",
+      "expected_support_uids": [
+        "34148ff0e46e7077ba649601058133d0"
+      ],
+      "expected_top_uid": "34148ff0e46e7077ba649601058133d0",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Attachment-bearing original in _wichtig."
+    },
+    {
+      "id": "attach-102",
+      "bucket": "attachment_lookup",
+      "question": "Which email had the manual attachment for zammad agent manual?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The Sent Items original zammad agent manual email had the manual attachment.",
+      "expected_support_uids": [
+        "9d5eecd15bba2b424fbad161a4155c39"
+      ],
+      "expected_top_uid": "9d5eecd15bba2b424fbad161a4155c39",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Attachment-bearing original in Sent Items with body Md im Anhang."
+    },
+    {
+      "id": "attach-103",
+      "bucket": "attachment_lookup",
+      "question": "Which Personalrat email in the mobiles Arbeiten thread had attachments?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The Personalrat reply in the mobiles Arbeiten thread had attachments.",
+      "expected_support_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "expected_top_uid": "0fb188fe6e5f4a71b07e11dea219da65",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Real attachment-bearing reply from personalrat@hfmt-koeln.de in _wichtig."
+    },
+    {
+      "id": "attach-104",
+      "bucket": "attachment_lookup",
+      "question": "Which forwarded email opened the Videographie-Manual attachment thread?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The forwarded Videographie-Manual email from 2023-04-21 opened the thread.",
+      "expected_support_uids": [
+        "abf4e4dad69a6302154c1a7a0449062b"
+      ],
+      "expected_top_uid": "abf4e4dad69a6302154c1a7a0449062b",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Real forwarded attachment-bearing message in _wichtig/beitraege-forschung."
+    },
+    {
+      "id": "ambig-101",
+      "bucket": "ambiguity_stress",
+      "question": "What did the HP scan attachment say?",
+      "status": "labeled",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The system can identify the scan email but not recover readable body text from it.",
+      "expected_support_uids": [
+        "891648cc4954152190a269112d54912e"
+      ],
+      "expected_top_uid": "891648cc4954152190a269112d54912e",
+      "expected_ambiguity": "insufficient",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Real scan mail with attachment and empty/weak recoverable body."
+    },
+    {
+      "id": "ambig-102",
+      "bucket": "ambiguity_stress",
+      "question": "Which source-shell message discussed zammad DNS and certificate?",
+      "status": "labeled",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The source-shell message AW: zammad DNS und Zertifikat matches, but the visible body remains weak.",
+      "expected_support_uids": [
+        "2606da536f3e533033cd6c2a8544f3a3"
+      ],
+      "expected_top_uid": "2606da536f3e533033cd6c2a8544f3a3",
+      "expected_ambiguity": "insufficient",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Real source-shell reply in _wichtig."
+    },
+    {
+      "id": "ambig-103",
+      "bucket": "ambiguity_stress",
+      "question": "Which image-only message was titled Schreibtisch?",
+      "status": "labeled",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The image-only message titled Schreibtisch matches, but the message has no recoverable authored text.",
+      "expected_support_uids": [
+        "c0bb0c8460f910d672cc662bd97e53c8"
+      ],
+      "expected_top_uid": "c0bb0c8460f910d672cc662bd97e53c8",
+      "expected_ambiguity": "insufficient",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Real image-only message in _wichtig from 2022-10-13."
+    },
+    {
+      "id": "ambig-104",
+      "bucket": "ambiguity_stress",
+      "question": "Which image-only message was titled Manual?",
+      "status": "labeled",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The image-only message titled Manual matches, but the message has no recoverable authored text.",
+      "expected_support_uids": [
+        "f067af29aa8b9a8852de7ead6e735803"
+      ],
+      "expected_top_uid": "f067af29aa8b9a8852de7ead6e735803",
+      "expected_ambiguity": "insufficient",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Real image-only message in _wichtig from 2020-11-30."
+    },
+    {
+      "id": "quote-301",
+      "bucket": "thread_process",
+      "question": "Which message said here is our trace in the LoLa with EAMT thread?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {
+        "subject": "LoLa with EAMT"
+      },
+      "expected_answer": "The quoted-trace message is RE: LoLa with EAMT this week from 2023-03-22T11:51:44.",
+      "expected_support_uids": [
+        "1b024147f347e29e4ef502440228566a"
+      ],
+      "expected_top_uid": "1b024147f347e29e4ef502440228566a",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "quote_attribution"
+      ],
+      "notes": "Real quote-heavy LoLa thread with nested From/On quoted blocks."
+    },
+    {
+      "id": "quote-302",
+      "bucket": "fact_lookup",
+      "question": "Which forwarded ZZT digital email quoted Vera Sander?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "subject": "ZZT digital"
+      },
+      "expected_answer": "The likely forwarded quote-heavy ZZT digital message is FW: ZZT digital from 2021-03-05T08:04:58.",
+      "expected_support_uids": [
+        "b5abe493a7f54c3a2943580b22d6016c"
+      ],
+      "expected_top_uid": "b5abe493a7f54c3a2943580b22d6016c",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "quote_attribution"
+      ],
+      "notes": "Real forwarded message whose preserved body begins with a From header."
+    },
+    {
+      "id": "attach-105",
+      "bucket": "attachment_lookup",
+      "question": "Which Panopto Anfrage email carried eight attachments?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true,
+        "subject": "Panopto Anfrage"
+      },
+      "expected_answer": "The Panopto Anfrage message with eight attachments is Re: Panopto Anfrage from 2023-07-19T13:56:38.",
+      "expected_support_uids": [
+        "be2558603b1e4eac1e0ff7d8f894c0ec"
+      ],
+      "expected_top_uid": "be2558603b1e4eac1e0ff7d8f894c0ec",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [
+        "sebastian.spicker@hfmt-koeln.de"
+      ],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "attachment_extraction",
+        "quote_attribution"
+      ],
+      "notes": "Real attachment-heavy Panopto thread message with nested quoted content."
+    },
+    {
+      "id": "attach-106",
+      "bucket": "attachment_lookup",
+      "question": "Which attachment-only message was titled LoLa Manual?",
+      "status": "labeled",
+      "evidence_mode": "forensic",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The attachment-only message titled LoLa Manual is from 2023-05-15T08:33:59.",
+      "expected_support_uids": [
+        "ab1bdc068c079462b7f5fa8627376f96"
+      ],
+      "expected_top_uid": "ab1bdc068c079462b7f5fa8627376f96",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "attachment_extraction",
+        "weak_message_handling"
+      ],
+      "notes": "Real attachment-only message in the corpus; useful for attachment-heavy weak-evidence coverage."
+    },
+    {
+      "id": "ambig-105",
+      "bucket": "ambiguity_stress",
+      "question": "Which source-shell-only message was titled FW Update HP?",
+      "status": "labeled",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The source-shell-only message FW Update HP matches, but the visible authored body remains weak.",
+      "expected_support_uids": [
+        "f9dcb5dedaa45a5e34db40c38359e08a"
+      ],
+      "expected_top_uid": "f9dcb5dedaa45a5e34db40c38359e08a",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Real source-shell-only forwarded message from 2022-02-01."
+    },
+    {
+      "id": "thread-105",
+      "bucket": "thread_process",
+      "question": "Which message anchors the packed quick and dirty thread answer?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {
+        "subject": "quick and dirty",
+        "folder": "Sent Items"
+      },
+      "expected_answer": "The packed quick and dirty thread answer is anchored on uid 06a9f338e135c8acd077a57769d0f390.",
+      "expected_support_uids": [
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "expected_top_uid": "06a9f338e135c8acd077a57769d0f390",
+      "expected_ambiguity": "ambiguous",
+      "expected_quoted_speaker_emails": [
+        "matthias.richter@hfmt-koeln.de"
+      ],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "long_thread",
+        "quote_attribution"
+      ],
+      "notes": "Real long-thread anchor case promoted from the AQ24 live subset."
+    }
+  ],
+  "results": [
+    {
+      "id": "fact-101",
+      "bucket": "fact_lookup",
+      "question": "Who sent the HARICA certificate mail?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "31692630078d4d3689505120c1b61631",
+      "candidate_uids": [
+        "31692630078d4d3689505120c1b61631",
+        "0072e5296d66de5ded6517789e7a9365",
+        "446b590da52994ffef209f20f473738e",
+        "b8ea99e1ede6f91693961db3fef39c95"
+      ],
+      "attachment_candidate_uids": [
+        "446b590da52994ffef209f20f473738e"
+      ],
+      "matched_support_uids": [
+        "31692630078d4d3689505120c1b61631"
+      ],
+      "matched_support_uids_top_3": [
+        "31692630078d4d3689505120c1b61631"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.25,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAJs4xnMm8KVFtgA92fLK4Qs=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "low",
+      "observed_ambiguity_reason": "weak_top_score"
+    },
+    {
+      "id": "fact-102",
+      "bucket": "fact_lookup",
+      "question": "Which folder contains the Apple Support notes import message?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "099aa2e0070e2a4b9d8dfeaf41a68a02",
+      "candidate_uids": [
+        "099aa2e0070e2a4b9d8dfeaf41a68a02",
+        "05e4e145e43984facb87f16f545fec85",
+        "a794b2c4d1f804412378a8d2676f8ece"
+      ],
+      "attachment_candidate_uids": [
+        "05e4e145e43984facb87f16f545fec85"
+      ],
+      "matched_support_uids": [
+        "099aa2e0070e2a4b9d8dfeaf41a68a02"
+      ],
+      "matched_support_uids_top_3": [
+        "099aa2e0070e2a4b9d8dfeaf41a68a02"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAI6Jvfr+5ABBvkJSFWKsYAA=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "fact-103",
+      "bucket": "fact_lookup",
+      "question": "Which message mentioned the Windows 11 TPM constraint?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "05cfd57c33128f29ea8ad85c30281dc6",
+      "candidate_uids": [
+        "05cfd57c33128f29ea8ad85c30281dc6",
+        "e3aebd7bd08e22fd21b7019090968a64",
+        "0810d4e7d8252aefb00195872603f49f",
+        "891648cc4954152190a269112d54912e"
+      ],
+      "attachment_candidate_uids": [
+        "891648cc4954152190a269112d54912e"
+      ],
+      "matched_support_uids": [
+        "05cfd57c33128f29ea8ad85c30281dc6"
+      ],
+      "matched_support_uids_top_3": [
+        "05cfd57c33128f29ea8ad85c30281dc6"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.25,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAA9I+yE/57JKiCUm+/QSIoc=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "fact-104",
+      "bucket": "fact_lookup",
+      "question": "Who announced that the Zammad test version was created?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "addd6fad46c354177e7b59e32bb9b86a",
+      "candidate_uids": [
+        "addd6fad46c354177e7b59e32bb9b86a",
+        "25db298e5b5009e3046c7ff72c366815",
+        "4c8f3416374cbfc17b5d23f8081ba22d",
+        "9d5eecd15bba2b424fbad161a4155c39",
+        "ca5c63b4310e1ee16134d1d3c7164345"
+      ],
+      "attachment_candidate_uids": [
+        "9d5eecd15bba2b424fbad161a4155c39",
+        "ca5c63b4310e1ee16134d1d3c7164345"
+      ],
+      "matched_support_uids": [
+        "addd6fad46c354177e7b59e32bb9b86a"
+      ],
+      "matched_support_uids_top_3": [
+        "addd6fad46c354177e7b59e32bb9b86a"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.2,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQACJocdEXD0lfkDJxs9M5VK4=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "fact-105",
+      "bucket": "fact_lookup",
+      "question": "Who sent the IT Besprechnung 07.05.2025 email?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "a7ec62d7fd950e1d165cb342c73d5a40",
+      "candidate_uids": [
+        "a7ec62d7fd950e1d165cb342c73d5a40",
+        "25a47aa1688c0f9df5615610b6614dd1",
+        "d6d3e1cc5dc90a3faa768cc416add7ff"
+      ],
+      "attachment_candidate_uids": [
+        "a7ec62d7fd950e1d165cb342c73d5a40",
+        "25a47aa1688c0f9df5615610b6614dd1",
+        "d6d3e1cc5dc90a3faa768cc416add7ff"
+      ],
+      "matched_support_uids": [
+        "a7ec62d7fd950e1d165cb342c73d5a40"
+      ],
+      "matched_support_uids_top_3": [
+        "a7ec62d7fd950e1d165cb342c73d5a40"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAMuTTyk0iEwQvqtl+8+A650=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "fact-106",
+      "bucket": "fact_lookup",
+      "question": "Who sent the Workshop KI message?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "0c281ee7c85f4d7511e618940ae31cf3",
+      "candidate_uids": [
+        "6162747c4462d7d3a6378cea35508b11",
+        "0c281ee7c85f4d7511e618940ae31cf3"
+      ],
+      "attachment_candidate_uids": [
+        "0c281ee7c85f4d7511e618940ae31cf3"
+      ],
+      "matched_support_uids": [
+        "6162747c4462d7d3a6378cea35508b11"
+      ],
+      "matched_support_uids_top_3": [
+        "6162747c4462d7d3a6378cea35508b11"
+      ],
+      "top_1_correctness": false,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.5,
+      "top_uid_match": false,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAKfI3p0M/A5LmUONylD5yaU=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "thread-101",
+      "bucket": "thread_process",
+      "question": "When did the Zammad Reboot 2026 thread begin?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "3cda29cdadc3ba0cd2ad54525da8ce5b",
+      "candidate_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b",
+        "c2bb780257d287b386513bab525da59d",
+        "dc1d77335ff95cef62273983c265ecb1",
+        "258a973e951cc61d521e5ab3ca418378",
+        "ee5788a50ac4d4ea8f2a443fd4987f94"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "matched_support_uids_top_3": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.2,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [
+        "technik@hfmt-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAI95EDRW3Ui2kZkswqY5hVc=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "thread-102",
+      "bucket": "thread_process",
+      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "3cda29cdadc3ba0cd2ad54525da8ce5b",
+      "candidate_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b",
+        "c2bb780257d287b386513bab525da59d",
+        "dc1d77335ff95cef62273983c265ecb1",
+        "258a973e951cc61d521e5ab3ca418378",
+        "ee5788a50ac4d4ea8f2a443fd4987f94"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "matched_support_uids_top_3": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.2,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [
+        "technik@hfmt-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAI95EDRW3Ui2kZkswqY5hVc=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "thread-103",
+      "bucket": "thread_process",
+      "question": "When did the Physics Reimagined thread begin?",
+      "status": "labeled",
+      "source": "live",
+      "count": 4,
+      "top_uid": "851423b922b15b17597f39449d6cdfdf",
+      "candidate_uids": [
+        "851423b922b15b17597f39449d6cdfdf",
+        "fa2a76eb800572cded0aacbac62f28c2",
+        "94f3d5806456a3406cdc3103eedbd71b",
+        "309cc5b9aacd86073355e1e3cdcc5e84"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "851423b922b15b17597f39449d6cdfdf"
+      ],
+      "matched_support_uids_top_3": [
+        "851423b922b15b17597f39449d6cdfdf"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.25,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": true,
+      "long_thread_structure_preserved": true,
+      "observed_quoted_speaker_emails": [
+        "sebastian.spicker@hfmt-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAAOi2mP+YUqHpS3bc5RIoTs=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "thread-104",
+      "bucket": "thread_process",
+      "question": "Which messages belong to the quick and dirty conversation?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "cd4214c127dd1914ba7a60bbc29b3410",
+      "candidate_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410",
+        "5a6141808a00c479473d9409b414c591"
+      ],
+      "attachment_candidate_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410",
+        "5a6141808a00c479473d9409b414c591"
+      ],
+      "matched_support_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410",
+        "5a6141808a00c479473d9409b414c591"
+      ],
+      "matched_support_uids_top_3": [
+        "cd4214c127dd1914ba7a60bbc29b3410",
+        "5a6141808a00c479473d9409b414c591"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 0.4,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": true,
+      "long_thread_structure_preserved": true,
+      "observed_quoted_speaker_emails": [
+        "matthias.richter@hfmt-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAH44TQnVHUhqsamMnapNeIg=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "attach-101",
+      "bucket": "attachment_lookup",
+      "question": "Which email had attachments and discussed Configurator 2 Blueprints?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "34148ff0e46e7077ba649601058133d0",
+      "candidate_uids": [
+        "34148ff0e46e7077ba649601058133d0",
+        "9d5eecd15bba2b424fbad161a4155c39"
+      ],
+      "attachment_candidate_uids": [
+        "34148ff0e46e7077ba649601058133d0"
+      ],
+      "matched_support_uids": [
+        "34148ff0e46e7077ba649601058133d0"
+      ],
+      "matched_support_uids_top_3": [
+        "34148ff0e46e7077ba649601058133d0"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.5,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": false,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAI/n+wUwYyZEo564Qf48/F0=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "attach-102",
+      "bucket": "attachment_lookup",
+      "question": "Which email had the manual attachment for zammad agent manual?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "9d5eecd15bba2b424fbad161a4155c39",
+      "candidate_uids": [
+        "9d5eecd15bba2b424fbad161a4155c39",
+        "ca5c63b4310e1ee16134d1d3c7164345",
+        "6aa75006417cda5fba243f9dd1446c81"
+      ],
+      "attachment_candidate_uids": [
+        "ca5c63b4310e1ee16134d1d3c7164345",
+        "9d5eecd15bba2b424fbad161a4155c39",
+        "6aa75006417cda5fba243f9dd1446c81"
+      ],
+      "matched_support_uids": [
+        "9d5eecd15bba2b424fbad161a4155c39"
+      ],
+      "matched_support_uids_top_3": [
+        "9d5eecd15bba2b424fbad161a4155c39"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": true,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQACsx6Zf/EUBfqhEt4D5fSh4=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "attach-103",
+      "bucket": "attachment_lookup",
+      "question": "Which Personalrat email in the mobiles Arbeiten thread had attachments?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "0fb188fe6e5f4a71b07e11dea219da65",
+      "candidate_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65",
+        "ee31c3d0b228d083b968abc6d3d0389c"
+      ],
+      "attachment_candidate_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65",
+        "ee31c3d0b228d083b968abc6d3d0389c"
+      ],
+      "matched_support_uids": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "matched_support_uids_top_3": [
+        "0fb188fe6e5f4a71b07e11dea219da65"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.5,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": false,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAK0oKM+6tETivfIeAe6B+70=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "attach-104",
+      "bucket": "attachment_lookup",
+      "question": "Which forwarded email opened the Videographie-Manual attachment thread?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "abf4e4dad69a6302154c1a7a0449062b",
+      "candidate_uids": [
+        "abf4e4dad69a6302154c1a7a0449062b",
+        "f611627c3517d49a09016f712bea6ff6",
+        "4e40967c92c91d3f06f72bdf3cf387d9"
+      ],
+      "attachment_candidate_uids": [
+        "abf4e4dad69a6302154c1a7a0449062b",
+        "f611627c3517d49a09016f712bea6ff6"
+      ],
+      "matched_support_uids": [
+        "abf4e4dad69a6302154c1a7a0449062b"
+      ],
+      "matched_support_uids_top_3": [
+        "abf4e4dad69a6302154c1a7a0449062b"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": true,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [
+        "kkaspar@uni-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAOQ/X4qXD7pEhYaA5R/jsYM=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "ambig-101",
+      "bucket": "ambiguity_stress",
+      "question": "What did the HP scan attachment say?",
+      "status": "labeled",
+      "source": "live",
+      "count": 3,
+      "top_uid": "891648cc4954152190a269112d54912e",
+      "candidate_uids": [
+        "891648cc4954152190a269112d54912e",
+        "ab716d8296ec6d1ba96504d2fcbf4759"
+      ],
+      "attachment_candidate_uids": [
+        "891648cc4954152190a269112d54912e"
+      ],
+      "matched_support_uids": [
+        "891648cc4954152190a269112d54912e"
+      ],
+      "matched_support_uids_top_3": [
+        "891648cc4954152190a269112d54912e"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.5,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": false,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [
+        "jubobroff@gmail.com"
+      ],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAKcjmZruhIxKv33pcR1IUrY=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "insufficient",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "ambig-102",
+      "bucket": "ambiguity_stress",
+      "question": "Which source-shell message discussed zammad DNS and certificate?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "2606da536f3e533033cd6c2a8544f3a3",
+      "candidate_uids": [
+        "2606da536f3e533033cd6c2a8544f3a3",
+        "addd6fad46c354177e7b59e32bb9b86a",
+        "25db298e5b5009e3046c7ff72c366815",
+        "9d5eecd15bba2b424fbad161a4155c39",
+        "ca5c63b4310e1ee16134d1d3c7164345"
+      ],
+      "attachment_candidate_uids": [
+        "9d5eecd15bba2b424fbad161a4155c39",
+        "ca5c63b4310e1ee16134d1d3c7164345"
+      ],
+      "matched_support_uids": [
+        "2606da536f3e533033cd6c2a8544f3a3"
+      ],
+      "matched_support_uids_top_3": [
+        "2606da536f3e533033cd6c2a8544f3a3"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.2,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": true,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAIRCt8DbUE5CvDUG8mrCIHE=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "insufficient",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "ambig-103",
+      "bucket": "ambiguity_stress",
+      "question": "Which image-only message was titled Schreibtisch?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "c0bb0c8460f910d672cc662bd97e53c8",
+      "candidate_uids": [
+        "c0bb0c8460f910d672cc662bd97e53c8",
+        "ec83d34050d34e37d8cba54bfe262105",
+        "1a689cec97c0acbddd276b25afb7c1d0"
+      ],
+      "attachment_candidate_uids": [
+        "c0bb0c8460f910d672cc662bd97e53c8",
+        "ec83d34050d34e37d8cba54bfe262105"
+      ],
+      "matched_support_uids": [
+        "c0bb0c8460f910d672cc662bd97e53c8"
+      ],
+      "matched_support_uids_top_3": [
+        "c0bb0c8460f910d672cc662bd97e53c8"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": true,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQADsX7OtpDbxFiD16vYnwMqg=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "insufficient",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "ambig-104",
+      "bucket": "ambiguity_stress",
+      "question": "Which image-only message was titled Manual?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "f067af29aa8b9a8852de7ead6e735803",
+      "candidate_uids": [
+        "f067af29aa8b9a8852de7ead6e735803",
+        "132a752c4cd42443c4fa9a09b18628f5",
+        "4e40967c92c91d3f06f72bdf3cf387d9"
+      ],
+      "attachment_candidate_uids": [
+        "132a752c4cd42443c4fa9a09b18628f5",
+        "f067af29aa8b9a8852de7ead6e735803",
+        "4e40967c92c91d3f06f72bdf3cf387d9"
+      ],
+      "matched_support_uids": [
+        "f067af29aa8b9a8852de7ead6e735803"
+      ],
+      "matched_support_uids_top_3": [
+        "f067af29aa8b9a8852de7ead6e735803"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": true,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [
+        "sebastian.spicker@hfmt-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAJLRu251dhRHld2KX0VZKFk=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "insufficient",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "quote-301",
+      "bucket": "thread_process",
+      "question": "Which message said here is our trace in the LoLa with EAMT thread?",
+      "status": "labeled",
+      "source": "live",
+      "count": 1,
+      "top_uid": "1b024147f347e29e4ef502440228566a",
+      "candidate_uids": [
+        "1b024147f347e29e4ef502440228566a"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "1b024147f347e29e4ef502440228566a"
+      ],
+      "matched_support_uids_top_3": [
+        "1b024147f347e29e4ef502440228566a"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAIAsA2azIDhNrxFXIieMCH4=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "quote-302",
+      "bucket": "fact_lookup",
+      "question": "Which forwarded ZZT digital email quoted Vera Sander?",
+      "status": "labeled",
+      "source": "live",
+      "count": 2,
+      "top_uid": "b5abe493a7f54c3a2943580b22d6016c",
+      "candidate_uids": [
+        "b5abe493a7f54c3a2943580b22d6016c"
+      ],
+      "attachment_candidate_uids": [
+        "b5abe493a7f54c3a2943580b22d6016c"
+      ],
+      "matched_support_uids": [
+        "b5abe493a7f54c3a2943580b22d6016c"
+      ],
+      "matched_support_uids_top_3": [
+        "b5abe493a7f54c3a2943580b22d6016c"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAPV8d6M7uAJJtlYhEpRRuFE=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "attach-105",
+      "bucket": "attachment_lookup",
+      "question": "Which Panopto Anfrage email carried eight attachments?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "be2558603b1e4eac1e0ff7d8f894c0ec",
+      "candidate_uids": [
+        "be2558603b1e4eac1e0ff7d8f894c0ec"
+      ],
+      "attachment_candidate_uids": [
+        "be2558603b1e4eac1e0ff7d8f894c0ec"
+      ],
+      "matched_support_uids": [
+        "be2558603b1e4eac1e0ff7d8f894c0ec"
+      ],
+      "matched_support_uids_top_3": [
+        "be2558603b1e4eac1e0ff7d8f894c0ec"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": false,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [
+        "sebastian.spicker@hfmt-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [
+        "sebastian.spicker@hfmt-koeln.de"
+      ],
+      "quote_attribution_precision": 1.0,
+      "quote_attribution_coverage": 1.0,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQACsO58L8145HqzUVIuYRv4c=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "attach-106",
+      "bucket": "attachment_lookup",
+      "question": "Which attachment-only message was titled LoLa Manual?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "ab1bdc068c079462b7f5fa8627376f96",
+      "candidate_uids": [
+        "ab1bdc068c079462b7f5fa8627376f96",
+        "6aa75006417cda5fba243f9dd1446c81",
+        "4e40967c92c91d3f06f72bdf3cf387d9"
+      ],
+      "attachment_candidate_uids": [
+        "ab1bdc068c079462b7f5fa8627376f96",
+        "6aa75006417cda5fba243f9dd1446c81",
+        "4e40967c92c91d3f06f72bdf3cf387d9"
+      ],
+      "matched_support_uids": [
+        "ab1bdc068c079462b7f5fa8627376f96"
+      ],
+      "matched_support_uids_top_3": [
+        "ab1bdc068c079462b7f5fa8627376f96"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": false,
+      "confidence_calibration_match": false,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": true,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAJE+mqw9vIZPnIGIRJbhKtg=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    },
+    {
+      "id": "ambig-105",
+      "bucket": "ambiguity_stress",
+      "question": "Which source-shell-only message was titled FW Update HP?",
+      "status": "labeled",
+      "source": "live",
+      "count": 5,
+      "top_uid": "f9dcb5dedaa45a5e34db40c38359e08a",
+      "candidate_uids": [
+        "f9dcb5dedaa45a5e34db40c38359e08a",
+        "bd9c48bd54754f7b8589a78578d04073",
+        "891648cc4954152190a269112d54912e"
+      ],
+      "attachment_candidate_uids": [
+        "891648cc4954152190a269112d54912e",
+        "bd9c48bd54754f7b8589a78578d04073"
+      ],
+      "matched_support_uids": [
+        "f9dcb5dedaa45a5e34db40c38359e08a"
+      ],
+      "matched_support_uids_top_3": [
+        "f9dcb5dedaa45a5e34db40c38359e08a"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [
+        "claus.schwellenbach@hfmt-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAFImvMi7pUHkgVeJs6D5dWU=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "thread-105",
+      "bucket": "thread_process",
+      "question": "Which message anchors the packed quick and dirty thread answer?",
+      "status": "labeled",
+      "source": "live",
+      "count": 4,
+      "top_uid": "06a9f338e135c8acd077a57769d0f390",
+      "candidate_uids": [
+        "06a9f338e135c8acd077a57769d0f390",
+        "b624c1dd78dd21e9e81077194ebad06a",
+        "f32d49d0f5d1498454926f6621ce31a1",
+        "5a6141808a00c479473d9409b414c591"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "matched_support_uids_top_3": [
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 0.25,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": true,
+      "long_thread_structure_preserved": true,
+      "observed_quoted_speaker_emails": [
+        "matthias.richter@hfmt-koeln.de"
+      ],
+      "matched_quoted_speaker_emails": [
+        "matthias.richter@hfmt-koeln.de"
+      ],
+      "quote_attribution_precision": 1.0,
+      "quote_attribution_coverage": 1.0,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAH44TQnVHUhqsamMnapNeIg=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "ambiguous",
+      "observed_confidence_label": "ambiguous",
+      "observed_ambiguity_reason": "close_top_scores"
+    }
+  ],
+  "summary": {
+    "total_cases": 24,
+    "bucket_counts": {
+      "ambiguity_stress": 5,
+      "attachment_lookup": 6,
+      "fact_lookup": 7,
+      "thread_process": 6
+    },
+    "top_1_correctness": {
+      "scorable": 24,
+      "passed": 23,
+      "failed": 1
+    },
+    "support_uid_hit": {
+      "scorable": 24,
+      "passed": 24,
+      "failed": 0
+    },
+    "support_uid_hit_top_3": {
+      "scorable": 24,
+      "passed": 24,
+      "failed": 0
+    },
+    "support_uid_recall": {
+      "scorable": 24,
+      "average": 0.975
+    },
+    "evidence_precision": {
+      "scorable": 24,
+      "average": 0.4361111111111111
+    },
+    "top_uid_match": {
+      "scorable": 24,
+      "passed": 23,
+      "failed": 1
+    },
+    "ambiguity_match": {
+      "scorable": 24,
+      "passed": 9,
+      "failed": 15
+    },
+    "confidence_calibration_match": {
+      "scorable": 24,
+      "passed": 9,
+      "failed": 15
+    },
+    "attachment_support_uid_hit": {
+      "scorable": 6,
+      "passed": 6,
+      "failed": 0
+    },
+    "attachment_answer_success": {
+      "scorable": 6,
+      "passed": 6,
+      "failed": 0
+    },
+    "attachment_text_evidence_success": {
+      "scorable": 6,
+      "passed": 3,
+      "failed": 3
+    },
+    "attachment_ocr_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "weak_evidence_explained": {
+      "scorable": 4,
+      "passed": 3,
+      "failed": 1
+    },
+    "quote_attribution_precision": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "quote_attribution_coverage": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "thread_group_id_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "thread_group_source_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "long_thread_answer_present": {
+      "scorable": 3,
+      "passed": 3,
+      "failed": 0
+    },
+    "long_thread_structure_preserved": {
+      "scorable": 3,
+      "passed": 3,
+      "failed": 0
+    }
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 22,
+    "categories": {
+      "final_rendering": {
+        "category": "final_rendering",
+        "flagged_cases": 3,
+        "failed_cases": 3,
+        "weak_cases": 0,
+        "case_ids": [
+          "fact-101",
+          "fact-105",
+          "fact-106"
+        ],
+        "drivers": [
+          "ambiguity_or_confidence_mismatch"
+        ]
+      },
+      "retrieval_recall": {
+        "category": "retrieval_recall",
+        "flagged_cases": 9,
+        "failed_cases": 2,
+        "weak_cases": 7,
+        "case_ids": [
+          "fact-101",
+          "fact-102",
+          "fact-103",
+          "fact-104",
+          "fact-105",
+          "fact-106",
+          "thread-101",
+          "thread-103",
+          "thread-104"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "top_uid_mismatch",
+          "ambiguity_or_confidence_mismatch"
+        ]
+      },
+      "quote_attribution": {
+        "category": "quote_attribution",
+        "flagged_cases": 2,
+        "failed_cases": 1,
+        "weak_cases": 1,
+        "case_ids": [
+          "attach-105",
+          "thread-105"
+        ],
+        "drivers": [
+          "ambiguity_or_confidence_mismatch",
+          "weak_attachment_text_evidence",
+          "evidence_precision_below_one"
+        ]
+      },
+      "attachment_extraction": {
+        "category": "attachment_extraction",
+        "flagged_cases": 5,
+        "failed_cases": 0,
+        "weak_cases": 5,
+        "case_ids": [
+          "attach-101",
+          "attach-102",
+          "attach-103",
+          "attach-104",
+          "attach-106"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "ambiguity_or_confidence_mismatch",
+          "weak_attachment_text_evidence"
+        ]
+      },
+      "weak_message_handling": {
+        "category": "weak_message_handling",
+        "flagged_cases": 5,
+        "failed_cases": 0,
+        "weak_cases": 5,
+        "case_ids": [
+          "ambig-101",
+          "ambig-102",
+          "ambig-103",
+          "ambig-104",
+          "ambig-105"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "ambiguity_or_confidence_mismatch",
+          "weak_evidence_not_explained"
+        ]
+      },
+      "inferred_threading": {
+        "category": "inferred_threading",
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "thread-102"
+        ],
+        "drivers": [
+          "evidence_precision_below_one"
+        ]
+      }
+    },
+    "ranked_categories": [
+      {
+        "category": "final_rendering",
+        "flagged_cases": 3,
+        "failed_cases": 3,
+        "weak_cases": 0,
+        "case_ids": [
+          "fact-101",
+          "fact-105",
+          "fact-106"
+        ],
+        "drivers": [
+          "ambiguity_or_confidence_mismatch"
+        ]
+      },
+      {
+        "category": "retrieval_recall",
+        "flagged_cases": 9,
+        "failed_cases": 2,
+        "weak_cases": 7,
+        "case_ids": [
+          "fact-101",
+          "fact-102",
+          "fact-103",
+          "fact-104",
+          "fact-105",
+          "fact-106",
+          "thread-101",
+          "thread-103",
+          "thread-104"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "top_uid_mismatch",
+          "ambiguity_or_confidence_mismatch"
+        ]
+      },
+      {
+        "category": "quote_attribution",
+        "flagged_cases": 2,
+        "failed_cases": 1,
+        "weak_cases": 1,
+        "case_ids": [
+          "attach-105",
+          "thread-105"
+        ],
+        "drivers": [
+          "ambiguity_or_confidence_mismatch",
+          "weak_attachment_text_evidence",
+          "evidence_precision_below_one"
+        ]
+      },
+      {
+        "category": "attachment_extraction",
+        "flagged_cases": 5,
+        "failed_cases": 0,
+        "weak_cases": 5,
+        "case_ids": [
+          "attach-101",
+          "attach-102",
+          "attach-103",
+          "attach-104",
+          "attach-106"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "ambiguity_or_confidence_mismatch",
+          "weak_attachment_text_evidence"
+        ]
+      },
+      {
+        "category": "weak_message_handling",
+        "flagged_cases": 5,
+        "failed_cases": 0,
+        "weak_cases": 5,
+        "case_ids": [
+          "ambig-101",
+          "ambig-102",
+          "ambig-103",
+          "ambig-104",
+          "ambig-105"
+        ],
+        "drivers": [
+          "evidence_precision_below_one",
+          "ambiguity_or_confidence_mismatch",
+          "weak_evidence_not_explained"
+        ]
+      },
+      {
+        "category": "inferred_threading",
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "thread-102"
+        ],
+        "drivers": [
+          "evidence_precision_below_one"
+        ]
+      }
+    ]
+  },
+  "source_counts": {
+    "live": 24
+  },
+  "live_backend": "sqlite_fallback"
+}

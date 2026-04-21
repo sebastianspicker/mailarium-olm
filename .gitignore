@@ -1,8 +1,83 @@
-node_modules/
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
 .venv/
-dist/
+venv/
+
+# Tooling caches
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
+.coverage
+htmlcov/
 
-# forced-align-ignore-rules-with--1
+# Agent worktrees and orchestration artifacts
+.claude/
+.codex/
+.agents/
+.github/codex/
+.github/workflows/codex.yml
+AGENTS.md
+HARNESS_PRINCIPLES.md
+code_review.md
+AUDIT.md
+docs/source-audit/
+docs/agent/Prompt.md
+docs/agent/Plan.md
+docs/agent/Documentation.md
+docs/agent/Implement.md
+docs/agent/RunModes.md
+docs/agent/AutonomyPolicy.md
+docs/agent/Goals.md
+docs/agent/RepoProfile.md
+docs/agent/Findings.md
+docs/agent/Backlog.md
+docs/agent/Topology.md
+docs/agent/VerificationMatrix.md
+docs/agent/Checkpoint.md
+docs/agent/Decisions.md
 
-# forced-clean-temporary-review-a-2
+# Stale planning and progress artifacts
+plans/
+progress.md
+
+# Runtime artifacts
+*.log
+*.db
+*.sqlite3
+*.bak
+*.orig
+.tmp/
+tmp/
+
+# Local/private email data and vector indexes
+data/*.olm
+data/chromadb/
+data/email_metadata.db
+data/mcp_server.lock
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+credentials.json
+service_account.json
+*_secret*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local examples/scratch
+/.example/

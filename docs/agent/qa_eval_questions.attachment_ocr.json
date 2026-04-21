@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "description": "Captured AQ15 OCR attachment evaluation subset for answer-task readiness.",
+  "cases": [
+    {
+      "id": "attach-ocr-101",
+      "bucket": "attachment_lookup",
+      "status": "labeled",
+      "question": "What did the scanned invoice attachment say?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The scanned invoice attachment was recovered through OCR-backed text evidence.",
+      "expected_support_uids": [
+        "uid-att-ocr-1"
+      ],
+      "expected_top_uid": "uid-att-ocr-1",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "attachment_extraction",
+        "attachment_ocr"
+      ],
+      "notes": "Captured OCR-positive attachment case."
+    },
+    {
+      "id": "attach-ocr-102",
+      "bucket": "attachment_lookup",
+      "status": "labeled",
+      "question": "What did the scanned archive cover sheet say?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The system identified the scanned archive attachment, but OCR text was not recovered.",
+      "expected_support_uids": [
+        "uid-att-ocr-2"
+      ],
+      "expected_top_uid": "uid-att-ocr-2",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "attachment_extraction",
+        "attachment_ocr"
+      ],
+      "notes": "Captured OCR-negative attachment case."
+    }
+  ]
+}

@@ -1,0 +1,353 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "ba18-101",
+      "bucket": "explicit_hostility",
+      "status": "labeled",
+      "question": "Assess the conduct in the figures reprimand message.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "figures-reprimand",
+        "target_person": {
+          "name": "Alex Example",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Manager",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility"
+        ],
+        "analysis_goal": "hr_review"
+      },
+      "expected_support_uids": [
+        "uid-host-1"
+      ],
+      "expected_top_uid": "uid-host-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-host-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-host-1"
+      ],
+      "expected_behavior_ids": [
+        "escalation",
+        "public_correction",
+        "deadline_pressure"
+      ],
+      "expected_max_claim_level": "observed_fact",
+      "expected_report_sections": [
+        "executive_summary",
+        "behaviour_analysis",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "behavioral_tagging",
+        "report_completeness"
+      ],
+      "notes": "Explicit hostility benchmark case with direct authored-text evidence."
+    },
+    {
+      "id": "ba18-102",
+      "bucket": "subtle_exclusion",
+      "status": "labeled",
+      "question": "Assess the exclusion pattern in the follow-up message.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "subtle-exclusion",
+        "target_person": {
+          "name": "Alex Example",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Manager",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "exclusion"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-excl-1"
+      ],
+      "expected_top_uid": "uid-excl-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-excl-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-excl-1"
+      ],
+      "expected_behavior_ids": [
+        "exclusion",
+        "withholding"
+      ],
+      "expected_counter_indicator_markers": [
+        "operational routing"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "behaviour_analysis",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "behavioral_tagging",
+        "counter_indicator_handling"
+      ],
+      "notes": "Subtle exclusion benchmark case with omission-aware message behaviour."
+    },
+    {
+      "id": "ba18-103",
+      "bucket": "retaliation_after_trigger",
+      "status": "labeled",
+      "question": "Assess whether the after-complaint record suggests retaliation.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "after-complaint-shift",
+        "target_person": {
+          "name": "Alex Example",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Manager",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "retaliation"
+        ],
+        "analysis_goal": "hr_review",
+        "trigger_events": [
+          {
+            "date": "2026-02-03",
+            "trigger_type": "complaint",
+            "notes": "Formal complaint filed by the target person."
+          }
+        ]
+      },
+      "expected_support_uids": [
+        "uid-ret-1"
+      ],
+      "expected_top_uid": "uid-ret-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-ret-1",
+        "uid-ret-2"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-ret-1",
+        "uid-ret-2"
+      ],
+      "expected_behavior_ids": [
+        "escalation"
+      ],
+      "expected_counter_indicator_markers": [
+        "independent operational developments"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "chronological_pattern_analysis",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "chronology_analysis",
+        "counter_indicator_handling",
+        "overclaiming_guard"
+      ],
+      "notes": "Retaliation benchmark case with explicit trigger event and before/after chronology."
+    },
+    {
+      "id": "ba18-104",
+      "bucket": "unequal_treatment",
+      "status": "labeled",
+      "question": "Assess whether the comparator record suggests unequal treatment.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "comparator-review",
+        "target_person": {
+          "name": "Alex Example",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Manager",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "comparator_actors": [
+          {
+            "name": "Pat Peer",
+            "email": "pat@example.com",
+            "role_hint": "employee"
+          }
+        ],
+        "allegation_focus": [
+          "unequal_treatment"
+        ],
+        "analysis_goal": "neutral_chronology"
+      },
+      "expected_support_uids": [
+        "uid-cmpr-1"
+      ],
+      "expected_top_uid": "uid-cmpr-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-cmpr-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-cmpr-1"
+      ],
+      "expected_behavior_ids": [
+        "public_correction"
+      ],
+      "expected_counter_indicator_markers": [
+        "comparator may not be sufficiently similar"
+      ],
+      "expected_quoted_speaker_emails": [
+        "lead@example.com"
+      ],
+      "expected_max_claim_level": "stronger_interpretation",
+      "expected_report_sections": [
+        "executive_summary",
+        "power_context_analysis",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "quote_attribution",
+        "counter_indicator_handling"
+      ],
+      "notes": "Comparator benchmark case with quoted speaker and unequal-treatment framing."
+    },
+    {
+      "id": "ba18-105",
+      "bucket": "ordinary_workplace_conflict",
+      "status": "labeled",
+      "question": "Assess whether this is ordinary workplace conflict rather than a stronger pattern.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "ordinary-conflict",
+        "target_person": {
+          "name": "Alex Example",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Manager",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-conf-expected"
+      ],
+      "expected_top_uid": "uid-conf-expected",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-conf-observed"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-conf-observed"
+      ],
+      "expected_behavior_ids": [
+        "escalation"
+      ],
+      "expected_counter_indicator_markers": [
+        "process friction"
+      ],
+      "expected_max_claim_level": "observed_fact",
+      "expected_report_sections": [
+        "executive_summary",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "retrieval_recall"
+      ],
+      "notes": "Ordinary-conflict benchmark case that currently includes a retrieval miss."
+    },
+    {
+      "id": "ba18-106",
+      "bucket": "false_positive_trap",
+      "status": "labeled",
+      "question": "Assess whether the sparse record supports any behavioural conclusion.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "false-positive-trap",
+        "target_person": {
+          "name": "Alex Example",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Manager",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility",
+          "retaliation"
+        ],
+        "analysis_goal": "lawyer_briefing"
+      },
+      "expected_support_uids": [
+        "uid-fp-1"
+      ],
+      "expected_top_uid": "uid-fp-1",
+      "expected_ambiguity": "insufficient",
+      "expected_case_bundle_uids": [
+        "uid-fp-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_counter_indicator_markers": [
+        "support is limited"
+      ],
+      "expected_max_claim_level": "insufficient_evidence",
+      "expected_report_sections": [
+        "overall_assessment",
+        "missing_information"
+      ],
+      "triage_tags": [
+        "overclaiming_guard",
+        "report_completeness"
+      ],
+      "notes": "False-positive trap benchmark case requiring insufficient-evidence handling."
+    }
+  ]
+}

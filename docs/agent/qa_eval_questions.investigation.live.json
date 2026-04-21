@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "investigation-101",
+      "bucket": "investigation_case",
+      "status": "labeled",
+      "question": "Which messages belong to the quick and dirty conversation?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "max_results": 5
+      },
+      "case_scope": {
+        "case_label": "quick-and-dirty-review",
+        "target_person": {
+          "name": "Alex Example"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Manager",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility",
+          "exclusion"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_answer": "The quick and dirty conversation is represented by two messages in the sampled live corpus.",
+      "expected_support_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410"
+      ],
+      "expected_top_uid": "cd4214c127dd1914ba7a60bbc29b3410",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "cd4214c127dd1914ba7a60bbc29b3410"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "triage_tags": [
+        "investigation_bundle_completeness",
+        "long_thread"
+      ],
+      "notes": "Case-scoped live investigation probe over the quick and dirty conversation."
+    },
+    {
+      "id": "investigation-102",
+      "bucket": "investigation_case",
+      "status": "labeled",
+      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "max_results": 5
+      },
+      "case_scope": {
+        "case_label": "zammad-reboot-2026-review",
+        "target_person": {
+          "name": "Pat Example"
+        },
+        "suspected_actors": [
+          {
+            "name": "Taylor Lead",
+            "email": "lead@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "retaliation",
+          "unequal_treatment"
+        ],
+        "analysis_goal": "neutral_chronology"
+      },
+      "expected_answer": "The Zammad Reboot 2026 conversation spans five messages in the sampled live corpus.",
+      "expected_support_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "expected_top_uid": "3cda29cdadc3ba0cd2ad54525da8ce5b",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "3cda29cdadc3ba0cd2ad54525da8ce5b"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "triage_tags": [
+        "investigation_bundle_completeness"
+      ],
+      "notes": "Case-scoped live investigation probe over the sampled Zammad Reboot 2026 conversation."
+    }
+  ]
+}

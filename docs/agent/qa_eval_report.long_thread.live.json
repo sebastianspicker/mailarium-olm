@@ -1,0 +1,252 @@
+{
+  "questions_path": "docs/agent/qa_eval_questions.long_thread.live.json",
+  "results_path": null,
+  "total_cases": 2,
+  "cases": [
+    {
+      "id": "long-thread-501",
+      "bucket": "thread_process",
+      "question": "Which message anchors the packed Physics Reimagined thread answer?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {
+        "subject": "Physics Reimagined"
+      },
+      "expected_answer": "The packed Physics Reimagined thread answer is anchored on uid 309cc5b9aacd86073355e1e3cdcc5e84.",
+      "expected_support_uids": [
+        "309cc5b9aacd86073355e1e3cdcc5e84"
+      ],
+      "expected_top_uid": "309cc5b9aacd86073355e1e3cdcc5e84",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "long_thread"
+      ],
+      "notes": "Real six-message Physics Reimagined thread under a constrained live JSON budget."
+    },
+    {
+      "id": "long-thread-502",
+      "bucket": "thread_process",
+      "question": "Which message anchors the packed quick and dirty thread answer?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {
+        "subject": "quick and dirty",
+        "folder": "Sent Items"
+      },
+      "expected_answer": "The packed quick and dirty thread answer is anchored on uid 06a9f338e135c8acd077a57769d0f390.",
+      "expected_support_uids": [
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "expected_top_uid": "06a9f338e135c8acd077a57769d0f390",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "triage_tags": [
+        "long_thread"
+      ],
+      "notes": "Real five-message Sent Items conversation under a constrained live JSON budget."
+    }
+  ],
+  "results": [
+    {
+      "id": "long-thread-501",
+      "bucket": "thread_process",
+      "question": "Which message anchors the packed Physics Reimagined thread answer?",
+      "status": "labeled",
+      "source": "live",
+      "count": 1,
+      "top_uid": "309cc5b9aacd86073355e1e3cdcc5e84",
+      "candidate_uids": [
+        "309cc5b9aacd86073355e1e3cdcc5e84"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "309cc5b9aacd86073355e1e3cdcc5e84"
+      ],
+      "matched_support_uids_top_3": [
+        "309cc5b9aacd86073355e1e3cdcc5e84"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": true,
+      "long_thread_structure_preserved": true,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAAOi2mP+YUqHpS3bc5RIoTs=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": ""
+    },
+    {
+      "id": "long-thread-502",
+      "bucket": "thread_process",
+      "question": "Which message anchors the packed quick and dirty thread answer?",
+      "status": "labeled",
+      "source": "live",
+      "count": 1,
+      "top_uid": "06a9f338e135c8acd077a57769d0f390",
+      "candidate_uids": [
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "matched_support_uids_top_3": [
+        "06a9f338e135c8acd077a57769d0f390"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": true,
+      "long_thread_structure_preserved": true,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "AAQkAGNlNDQzMTY4LTk5MmYtNDMxYi05NmZmLWIxYThiNzhhODA5YQAQAH44TQnVHUhqsamMnapNeIg=",
+      "observed_thread_group_source": "canonical",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": ""
+    }
+  ],
+  "summary": {
+    "total_cases": 2,
+    "bucket_counts": {
+      "thread_process": 2
+    },
+    "top_1_correctness": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_hit_top_3": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "support_uid_recall": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "evidence_precision": {
+      "scorable": 2,
+      "average": 1.0
+    },
+    "top_uid_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "ambiguity_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "confidence_calibration_match": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_support_uid_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_answer_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "attachment_ocr_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "weak_evidence_explained": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "quote_attribution_precision": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "quote_attribution_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "thread_group_id_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "thread_group_source_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "long_thread_answer_present": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "long_thread_structure_preserved": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 0,
+    "categories": {},
+    "ranked_categories": []
+  },
+  "source_counts": {
+    "live": 2
+  },
+  "live_backend": "sqlite_fallback"
+}

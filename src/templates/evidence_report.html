@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence Report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #222;
+    background: #fff;
+    padding: 20px 30px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* Report header */
+  .report-header {
+    border-bottom: 3px solid #c0392b;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+  }
+  .report-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #c0392b;
+  }
+  .report-meta {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+
+  /* Verification banner */
+  .verification-banner {
+    padding: 10px 16px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .banner-ok {
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    color: #2e7d32;
+  }
+  .banner-warn {
+    background: #fff3e0;
+    border: 1px solid #ffcc80;
+    color: #e65100;
+  }
+
+  /* Summary stats */
+  .summary-section {
+    margin-bottom: 24px;
+  }
+  .summary-section h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+  }
+  .stats-grid {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .stat-box {
+    background: #f8f8f8;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px 16px;
+    min-width: 120px;
+    text-align: center;
+  }
+  .stat-number {
+    font-size: 24px;
+    font-weight: 700;
+    color: #c0392b;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Category table */
+  .cat-table {
+    width: auto;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+  }
+  .cat-table th, .cat-table td {
+    padding: 4px 14px 4px 0;
+    text-align: left;
+    font-size: 13px;
+  }
+  .cat-table th {
+    font-weight: 600;
+    color: #555;
+    border-bottom: 1px solid #ddd;
+  }
+
+  /* Evidence table */
+  .evidence-section h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+  }
+  .evidence-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+    font-size: 12px;
+  }
+  .evidence-table th {
+    background: #f0f0f0;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #555;
+    border-bottom: 2px solid #ddd;
+  }
+  .evidence-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+  }
+  .evidence-table tr:hover { background: #fafafa; }
+  .evidence-table .col-id { width: 35px; text-align: center; }
+  .evidence-table .col-date { width: 90px; white-space: nowrap; }
+  .evidence-table .col-from { width: 130px; }
+  .evidence-table .col-cat { width: 100px; }
+  .evidence-table .col-rel { width: 60px; text-align: center; }
+  .evidence-table .col-ver { width: 45px; text-align: center; }
+  .evidence-table .col-quote { max-width: 300px; }
+
+  /* Category badges */
+  .cat-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .cat-discrimination { background: #ffcdd2; color: #b71c1c; }
+  .cat-harassment { background: #f8bbd0; color: #880e4f; }
+  .cat-sexual_harassment { background: #e1bee7; color: #6a1b9a; }
+  .cat-insult { background: #ffe0b2; color: #e65100; }
+  .cat-bossing { background: #ffccbc; color: #bf360c; }
+  .cat-retaliation { background: #d1c4e9; color: #4527a0; }
+  .cat-exclusion { background: #bbdefb; color: #0d47a1; }
+  .cat-microaggression { background: #c8e6c9; color: #1b5e20; }
+  .cat-micromanagement { background: #b2dfdb; color: #004d40; }
+  .cat-gaslighting { background: #f3e5f5; color: #4a148c; }
+  .cat-workload { background: #e3f2fd; color: #0d47a1; }
+  .cat-hostile_environment { background: #fff9c4; color: #f57f17; }
+  .cat-general { background: #f5f5f5; color: #616161; }
+  .cat-other { background: #e0e0e0; color: #424242; }
+
+  /* Relevance stars */
+  .relevance-stars { color: #f9a825; letter-spacing: 1px; font-size: 14px; }
+
+  /* Verified checkmarks */
+  .verified-yes { color: #2e7d32; font-weight: bold; }
+  .verified-no { color: #c62828; font-weight: bold; }
+
+  /* Appendix */
+  .appendix-section {
+    margin-top: 40px;
+  }
+  .appendix-section h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #c0392b;
+    padding-bottom: 4px;
+  }
+  .appendix-item {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    background: #fafafa;
+  }
+  .appendix-item-header {
+    background: #f0f0f0;
+    padding: 10px 14px;
+    border-bottom: 1px solid #ddd;
+    font-size: 12px;
+  }
+  .appendix-item-header table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .appendix-item-header td {
+    padding: 2px 0;
+    vertical-align: top;
+  }
+  .appendix-item-header .label {
+    font-weight: 600;
+    color: #555;
+    width: 70px;
+    white-space: nowrap;
+    padding-right: 8px;
+  }
+  .appendix-evidence-note {
+    background: #fff3e0;
+    padding: 8px 14px;
+    border-bottom: 1px solid #eee;
+    font-size: 12px;
+  }
+  .appendix-evidence-note .highlight-quote {
+    background: #ffeb3b;
+    padding: 1px 3px;
+    font-weight: 600;
+  }
+  .appendix-body {
+    padding: 14px;
+    background: #fff;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* Footer */
+  .export-footer {
+    margin-top: 30px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+    font-size: 11px;
+    color: #999;
+    text-align: center;
+  }
+
+  /* Print styles */
+  @media print {
+    body { padding: 0; font-size: 11px; max-width: 100%; }
+    .report-header { border-bottom-color: #333; }
+    .report-header h1 { color: #333; }
+    .appendix-item { break-inside: avoid; page-break-inside: avoid; }
+    .evidence-table { font-size: 10px; }
+    .export-footer { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="report-header">
+  <h1>Evidence Report</h1>
+  <div class="report-meta">
+    {{ total_count }} evidence item{{ 's' if total_count != 1 else '' }} collected
+    {% if date_range %}&middot; {{ date_range.earliest }} &ndash; {{ date_range.latest }}{% endif %}
+    &middot; Generated {{ generated_at }}
+  </div>
+</div>
+
+{% if total_count > 0 %}
+<div class="verification-banner {{ 'banner-ok' if verified_count == total_count else 'banner-warn' }}">
+  {% if verified_count == total_count %}
+    All {{ total_count }} quotes verified against source emails.
+  {% else %}
+    {{ verified_count }} of {{ total_count }} quotes verified.
+    {{ total_count - verified_count }} quote{{ 's' if (total_count - verified_count) != 1 else '' }} could not be verified against source email text.
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="summary-section">
+  <h2>Summary</h2>
+  <div class="stats-grid">
+    <div class="stat-box">
+      <div class="stat-number">{{ stats.total }}</div>
+      <div class="stat-label">Total Items</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-number">{{ stats.verified }}</div>
+      <div class="stat-label">Verified</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-number">{{ stats.unverified }}</div>
+      <div class="stat-label">Unverified</div>
+    </div>
+  </div>
+
+  {% if stats.by_category %}
+  <table class="cat-table">
+    <thead>
+      <tr><th>Category</th><th>Count</th></tr>
+    </thead>
+    <tbody>
+      {% for cat in stats.by_category %}
+      <tr>
+        <td><span class="cat-badge cat-{{ cat.category }}">{{ cat.category | replace('_', ' ') }}</span></td>
+        <td>{{ cat.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<div class="evidence-section">
+  <h2>Evidence Items</h2>
+  <table class="evidence-table">
+    <thead>
+      <tr>
+        <th class="col-id">#</th>
+        <th class="col-date">Date</th>
+        <th class="col-from">From</th>
+        <th>To</th>
+        <th>Subject</th>
+        <th class="col-cat">Category</th>
+        <th class="col-quote">Key Quote</th>
+        <th class="col-rel">Rel.</th>
+        <th class="col-ver">Ver.</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td class="col-id">{{ item.id }}</td>
+        <td class="col-date">{{ (item.date or '')[:10] }}</td>
+        <td class="col-from">{{ item.sender_name or item.sender_email or '' }}</td>
+        <td>{{ item.recipients or '' }}</td>
+        <td>{{ item.subject or '' }}</td>
+        <td class="col-cat">
+          <span class="cat-badge cat-{{ item.category }}">{{ item.category | replace('_', ' ') }}</span>
+        </td>
+        <td class="col-quote">{{ item.key_quote }}</td>
+        <td class="col-rel">
+          <span class="relevance-stars">{{ '\u2605' * item.relevance }}{{ '\u2606' * (5 - item.relevance) }}</span>
+        </td>
+        <td class="col-ver">
+          {% if item.verified %}
+            <span class="verified-yes">&#10003;</span>
+          {% else %}
+            <span class="verified-no">&#10007;</span>
+          {% endif %}
+        </td>
+        <td>{{ item.notes or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if appendix_emails %}
+<div class="appendix-section">
+  <h2>Appendix: Source Emails</h2>
+  {% for entry in appendix_emails %}
+  <div class="appendix-item">
+    <div class="appendix-item-header">
+      <table>
+        <tr>
+          <td class="label">Ref #:</td>
+          <td>Evidence Item {{ entry.evidence_id }}</td>
+        </tr>
+        <tr>
+          <td class="label">From:</td>
+          <td>
+            {{ entry.email.sender_name or '' }}
+            {% if entry.email.sender_email %}&lt;{{ entry.email.sender_email }}&gt;{% endif %}
+          </td>
+        </tr>
+        {% if entry.email.to %}
+        <tr>
+          <td class="label">To:</td>
+          <td>{{ entry.email.to | join(', ') }}</td>
+        </tr>
+        {% endif %}
+        {% if entry.email.cc %}
+        <tr>
+          <td class="label">CC:</td>
+          <td>{{ entry.email.cc | join(', ') }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td class="label">Date:</td>
+          <td>{{ entry.email.date or '(unknown)' }}</td>
+        </tr>
+        <tr>
+          <td class="label">Subject:</td>
+          <td><strong>{{ entry.email.subject or '(no subject)' }}</strong></td>
+        </tr>
+        <tr>
+          <td class="label">UID:</td>
+          <td style="font-family: monospace; font-size: 11px;">{{ entry.email.uid }}</td>
+        </tr>
+      </table>
+    </div>
+    {% if entry.key_quote %}
+    <div class="appendix-evidence-note">
+      <strong>Evidence quote:</strong> <span class="highlight-quote">{{ entry.key_quote }}</span>
+      {% if entry.category %}<span class="cat-badge cat-{{ entry.category }}" style="margin-left: 8px;">{{ entry.category | replace('_', ' ') }}</span>{% endif %}
+    </div>
+    {% endif %}
+    <div class="appendix-body">{{ (entry.email.body_text or '(no body text available)') | strip_html }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="export-footer">
+  Evidence Report &middot; Generated by Outlook Email RAG
+</div>
+
+</body>
+</html>

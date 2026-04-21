@@ -1,0 +1,315 @@
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #222;
+    background: #fff;
+    padding: 20px 30px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* Print styles */
+  @media print {
+    body { padding: 0; font-size: 11px; }
+    .page-break { page-break-before: always; }
+    .no-print { display: none; }
+    .evidence-item, .email-card, .relationship-card { break-inside: avoid; }
+    .email-card-body { max-height: none !important; overflow: visible !important; }
+    @page {
+      margin: 20mm 15mm;
+      @top-center { content: "CONFIDENTIAL"; font-size: 8px; color: #999; }
+      @bottom-right { content: "Page " counter(page); font-size: 8px; color: #999; }
+    }
+  }
+
+  /* Cover page */
+  .cover {
+    text-align: center;
+    padding: 60px 20px 40px;
+    border-bottom: 3px solid #1a237e;
+    margin-bottom: 30px;
+  }
+  .cover h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a237e;
+    margin-bottom: 12px;
+  }
+  .cover .case-ref {
+    font-size: 16px;
+    color: #555;
+    margin-bottom: 8px;
+  }
+  .cover .meta-line {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+  }
+  .cover .hash {
+    font-family: monospace;
+    font-size: 10px;
+    color: #999;
+    word-break: break-all;
+    margin-top: 16px;
+  }
+
+  /* Section headers */
+  h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a237e;
+    border-bottom: 2px solid #e8eaf6;
+    padding-bottom: 6px;
+    margin: 24px 0 12px;
+  }
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin: 16px 0 8px;
+  }
+
+  /* Summary stats */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-box {
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a237e;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* TOC */
+  .toc { margin-bottom: 24px; }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin-bottom: 4px; }
+  .toc a { color: #1a237e; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* Evidence timeline */
+  .evidence-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    background: #fafafa;
+  }
+  .evidence-item.relevance-5 { border-left: 4px solid #c62828; }
+  .evidence-item.relevance-4 { border-left: 4px solid #e65100; }
+  .evidence-item.relevance-3 { border-left: 4px solid #f9a825; }
+  .evidence-item.relevance-2 { border-left: 4px solid #2e7d32; }
+  .evidence-item.relevance-1 { border-left: 4px solid #90a4ae; }
+
+  .evidence-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .evidence-date { font-weight: 600; color: #333; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .badge-category {
+    background: #e8eaf6;
+    color: #1a237e;
+  }
+  .badge-relevance {
+    background: #fce4ec;
+    color: #c62828;
+  }
+  .badge-verified {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  .badge-unverified {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  /* Category-specific badge colors */
+  .badge-discrimination { background: #ffcdd2; color: #b71c1c; }
+  .badge-harassment { background: #f8bbd0; color: #880e4f; }
+  .badge-sexual_harassment { background: #e1bee7; color: #6a1b9a; }
+  .badge-bossing { background: #ffccbc; color: #bf360c; }
+  .badge-retaliation { background: #d1c4e9; color: #4527a0; }
+  .badge-exclusion { background: #bbdefb; color: #0d47a1; }
+  .badge-micromanagement { background: #b2dfdb; color: #004d40; }
+  .badge-gaslighting { background: #f3e5f5; color: #4a148c; }
+  .badge-workload { background: #e3f2fd; color: #0d47a1; }
+  .badge-hostile_environment { background: #fff9c4; color: #f57f17; }
+  .badge-general { background: #f5f5f5; color: #616161; }
+  .evidence-quote {
+    font-style: italic;
+    background: #fff;
+    border-left: 3px solid #ccc;
+    padding: 8px 12px;
+    margin: 8px 0;
+    color: #333;
+  }
+  .evidence-meta {
+    font-size: 11px;
+    color: #666;
+  }
+
+  /* Source email appendix */
+  .email-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    background: #fff;
+  }
+  .email-card-header {
+    background: #f5f5f5;
+    padding: 10px 14px;
+    border-bottom: 1px solid #e0e0e0;
+    font-size: 12px;
+  }
+  .email-card-header strong { color: #333; }
+  .email-card-body {
+    padding: 14px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  /* Custody log */
+  .custody-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 20px;
+  }
+  .custody-table th, .custody-table td {
+    border: 1px solid #e0e0e0;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .custody-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+    color: #333;
+  }
+  .custody-table td.hash {
+    font-family: monospace;
+    font-size: 9px;
+    word-break: break-all;
+  }
+
+  /* Relationship section */
+  .relationship-card {
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  /* Evidence quote banners in source emails */
+  .evidence-quote-banner {
+    background: #fff8e1;
+    border-left: 3px solid #f9a825;
+    padding: 6px 10px;
+    margin: 0 14px;
+    font-size: 11px;
+  }
+  .evidence-quote-banner .quote-text {
+    font-style: italic;
+    color: #333;
+  }
+  .evidence-quote-banner .quote-ref {
+    font-weight: 600;
+    color: #1a237e;
+  }
+
+  /* Attachment bar */
+  .attachment-bar {
+    background: #f5f5f5;
+    border-top: 1px solid #e0e0e0;
+    padding: 6px 14px;
+    font-size: 11px;
+    color: #555;
+  }
+  .attachment-bar strong { color: #333; }
+
+  /* Verification banner */
+  .verification-banner {
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  .banner-ok {
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    color: #2e7d32;
+  }
+  .banner-warn {
+    background: #fff3e0;
+    border: 1px solid #ffcc80;
+    color: #e65100;
+  }
+
+  /* Evidence index table */
+  .evidence-index-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 20px;
+  }
+  .evidence-index-table th, .evidence-index-table td {
+    border: 1px solid #e0e0e0;
+    padding: 4px 8px;
+    text-align: left;
+  }
+  .evidence-index-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+    color: #333;
+  }
+  .evidence-index-table td:first-child { text-align: center; }
+
+  /* Relevance stars */
+  .relevance-stars {
+    color: #f9a825;
+    letter-spacing: 1px;
+    font-size: 12px;
+  }
+  @media print {
+    .relevance-stars { color: #333; }
+    .badge-category, .badge-discrimination, .badge-harassment,
+    .badge-sexual_harassment, .badge-bossing, .badge-retaliation,
+    .badge-exclusion, .badge-micromanagement, .badge-gaslighting,
+    .badge-workload, .badge-hostile_environment, .badge-general {
+      border: 1px solid #666;
+      background: #fff;
+      color: #000;
+    }
+  }

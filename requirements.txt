@@ -1,4 +1,42 @@
-pytest
-ruff
+# Embedding & Vector DB
+sentence-transformers>=2.7.0
+transformers>=5.0.0rc3,<6
+chromadb>=0.5.0
 
-# forced-sketch-the-local-mail-se-1
+# MCP Server
+mcp[cli]>=1.0.0
+pydantic>=2.0.0
+
+# Email parsing
+lxml>=5.0.0
+
+# Analysis
+networkx>=3.2
+pandas>=2.1.0
+
+# Search quality
+rank_bm25>=0.2.2
+
+# Reporting
+jinja2>=3.0.0
+
+# NLP
+spacy>=3.7.0
+textstat>=0.7.0
+
+# Multi-vector retrieval (unlocks BGE-M3 sparse + ColBERT; dense-only fallback without it)
+FlagEmbedding>=1.3.0
+
+# PDF export (optional — exporter falls back to HTML without it)
+# weasyprint>=62.0
+
+# Utilities and UI
+python-dotenv>=1.0.0
+rich>=13.0.0
+streamlit>=1.40.0
+
+# Security: minimum versions for transitive deps with known CVEs
+# PyJWT CVE-2026-32597: missing crit header validation — fix in 2.12.0 (required by mcp)
+PyJWT>=2.12.0
+# tornado CVE-2026-31958/GHSA-78cv-mqj4-43f7: cookie injection + multipart DoS — fix in 6.5.5 (required by streamlit)
+tornado>=6.5.5

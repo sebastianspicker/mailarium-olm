@@ -1,0 +1,32 @@
+<!-- Evidence Timeline -->
+<div class="page-break"></div>
+<h2 id="evidence-timeline">Evidence Timeline</h2>
+{% if evidence_items %}
+{% for item in evidence_items %}
+<div class="evidence-item relevance-{{ item.relevance }}" id="evidence-{{ item.evidence_number }}">
+  <div class="evidence-header">
+    <span class="evidence-date"><strong>{{ item.evidence_number }}</strong> &mdash; {{ item.date_formatted }}</span>
+    <span>
+      <span class="badge badge-{{ item.category }}">{{ item.category }}</span>
+      <span class="relevance-stars" title="Relevance: {{ item.relevance }}/5">{{ item.relevance_stars }}</span>
+      <span class="badge {{ item.verified_class }}">{{ item.verified_text }}</span>
+    </span>
+  </div>
+  <div class="evidence-quote">&ldquo;{{ item.key_quote }}&rdquo;</div>
+  <div class="evidence-meta">
+    <strong>Summary:</strong> {{ item.summary }}<br>
+    <strong>From:</strong> {{ item.sender_name }} &lt;{{ item.sender_email }}&gt;<br>
+    {% if item.recipients %}<strong>To:</strong> {{ item.recipients }}<br>{% endif %}
+    <strong>Subject:</strong> {{ item.subject }}<br>
+    {% if item.appendix_ref %}<strong>Source:</strong> Appendix <a href="#appendix-{{ item.appendix_ref }}">{{ item.appendix_ref }}</a><br>{% endif %}
+    {% if item.thread_topic %}<strong>Thread:</strong> {{ item.thread_topic }}<br>{% endif %}
+    {% if item.created_at_formatted %}<strong>Collected:</strong> {{ item.created_at_formatted }}<br>{% endif %}
+    {% if item.has_updated %}<strong>Updated:</strong> {{ item.updated_at_formatted }}<br>{% endif %}
+    <strong>Email UID:</strong> <span style="font-family: monospace; font-size: 10px;">{{ item.email_uid }}</span>
+    {% if item.has_notes %}<br><strong>Notes:</strong> {{ item.notes }}{% endif %}
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<p>No evidence items match the specified filters.</p>
+{% endif %}

@@ -1,0 +1,352 @@
+{
+  "ba18-101": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "uid-host-1",
+        "message_findings": {
+          "authored_text": {
+            "behavior_candidates": [
+              {"behavior_id": "escalation"},
+              {"behavior_id": "public_correction"},
+              {"behavior_id": "deadline_pressure"}
+            ],
+            "counter_indicators": []
+          },
+          "quoted_blocks": []
+        }
+      }
+    ],
+    "attachment_candidates": [],
+    "case_bundle": {"bundle_id": "case-host-1"},
+    "actor_identity_graph": {"actors": []},
+    "case_patterns": {"behavior_patterns": [{"cluster_id": "pattern-host-1"}]},
+    "finding_evidence_index": {"version": "1", "findings": []},
+    "evidence_table": {"version": "1", "rows": [{"finding_id": "host-1"}]},
+    "quote_attribution_metrics": {"version": "1"},
+    "multi_source_case_bundle": {"sources": [{"source_type": "email"}]},
+    "timeline": {"events": [{"uid": "uid-host-1"}]},
+    "investigation_report": {
+      "sections": {
+        "executive_summary": {"status": "supported", "entries": [{"claim_level": "observed_fact"}]},
+        "behaviour_analysis": {"status": "supported", "entries": [{"claim_level": "observed_fact"}]},
+        "overall_assessment": {"status": "supported", "entries": [{"claim_level": "observed_fact"}]}
+      }
+    },
+    "answer_quality": {"top_candidate_uid": "uid-host-1", "confidence_label": "high", "ambiguity_reason": null}
+  },
+  "ba18-102": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "uid-excl-1",
+        "message_findings": {
+          "authored_text": {
+            "behavior_candidates": [
+              {"behavior_id": "exclusion"},
+              {"behavior_id": "withholding"}
+            ],
+            "counter_indicators": []
+          },
+          "quoted_blocks": []
+        }
+      }
+    ],
+    "attachment_candidates": [],
+    "case_bundle": {"bundle_id": "case-excl-1"},
+    "actor_identity_graph": {"actors": []},
+    "case_patterns": {"behavior_patterns": [{"cluster_id": "pattern-excl-1"}]},
+    "finding_evidence_index": {
+      "version": "1",
+      "findings": [
+        {
+          "finding_id": "excl-1",
+          "alternative_explanations": [
+            "Recipient visibility patterns may reflect operational routing or process stage differences."
+          ]
+        }
+      ]
+    },
+    "evidence_table": {"version": "1", "rows": [{"finding_id": "excl-1"}]},
+    "quote_attribution_metrics": {"version": "1"},
+    "multi_source_case_bundle": {"sources": [{"source_type": "email"}]},
+    "timeline": {"events": [{"uid": "uid-excl-1"}]},
+    "investigation_report": {
+      "sections": {
+        "executive_summary": {
+          "status": "supported",
+          "entries": [
+            {
+              "claim_level": "pattern_concern",
+              "alternative_explanations": [
+                "Recipient visibility patterns may reflect operational routing or process stage differences."
+              ]
+            }
+          ]
+        },
+        "behaviour_analysis": {"status": "supported", "entries": [{"claim_level": "pattern_concern"}]},
+        "overall_assessment": {
+          "status": "supported",
+          "entries": [
+            {
+              "claim_level": "pattern_concern",
+              "alternative_explanations": [
+                "Recipient visibility patterns may reflect operational routing or process stage differences."
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "answer_quality": {"top_candidate_uid": "uid-excl-1", "confidence_label": "medium", "ambiguity_reason": null}
+  },
+  "ba18-103": {
+    "count": 2,
+    "candidates": [
+      {
+        "uid": "uid-ret-1",
+        "message_findings": {
+          "authored_text": {
+            "behavior_candidates": [
+              {"behavior_id": "escalation"}
+            ],
+            "counter_indicators": []
+          },
+          "quoted_blocks": []
+        }
+      },
+      {
+        "uid": "uid-ret-2",
+        "message_findings": {
+          "authored_text": {
+            "behavior_candidates": [],
+            "counter_indicators": []
+          },
+          "quoted_blocks": []
+        }
+      }
+    ],
+    "attachment_candidates": [],
+    "case_bundle": {"bundle_id": "case-ret-1"},
+    "actor_identity_graph": {"actors": []},
+    "case_patterns": {"behavior_patterns": [{"cluster_id": "pattern-ret-1"}]},
+    "finding_evidence_index": {
+      "version": "1",
+      "findings": [
+        {
+          "finding_id": "ret-1",
+          "alternative_explanations": [
+            "Before/after changes may reflect independent operational developments rather than retaliation."
+          ]
+        }
+      ]
+    },
+    "evidence_table": {"version": "1", "rows": [{"finding_id": "ret-1"}]},
+    "quote_attribution_metrics": {"version": "1"},
+    "multi_source_case_bundle": {"sources": [{"source_type": "email"}]},
+    "timeline": {"events": [{"uid": "uid-ret-1"}, {"uid": "uid-ret-2"}]},
+    "investigation_report": {
+      "sections": {
+        "executive_summary": {
+          "status": "supported",
+          "entries": [
+            {
+              "claim_level": "pattern_concern",
+              "alternative_explanations": [
+                "Before/after changes may reflect independent operational developments rather than retaliation."
+              ]
+            }
+          ]
+        },
+        "chronological_pattern_analysis": {"status": "supported", "entries": [{"claim_level": "pattern_concern"}]},
+        "overall_assessment": {
+          "status": "supported",
+          "entries": [
+            {
+              "claim_level": "pattern_concern",
+              "alternative_explanations": [
+                "Before/after changes may reflect independent operational developments rather than retaliation."
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "answer_quality": {"top_candidate_uid": "uid-ret-1", "confidence_label": "medium", "ambiguity_reason": null}
+  },
+  "ba18-104": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "uid-cmpr-1",
+        "message_findings": {
+          "authored_text": {
+            "behavior_candidates": [
+              {"behavior_id": "public_correction"}
+            ],
+            "counter_indicators": []
+          },
+          "quoted_blocks": []
+        },
+        "speaker_attribution": {
+          "quoted_blocks": [
+            {"speaker_email": "lead@example.com"}
+          ]
+        }
+      }
+    ],
+    "attachment_candidates": [],
+    "case_bundle": {"bundle_id": "case-cmpr-1"},
+    "actor_identity_graph": {"actors": []},
+    "case_patterns": {"behavior_patterns": [{"cluster_id": "pattern-cmpr-1"}]},
+    "finding_evidence_index": {
+      "version": "1",
+      "findings": [
+        {
+          "finding_id": "cmpr-1",
+          "alternative_explanations": [
+            "The comparator may not be sufficiently similar in role, context, or process stage."
+          ]
+        }
+      ]
+    },
+    "evidence_table": {"version": "1", "rows": [{"finding_id": "cmpr-1"}]},
+    "quote_attribution_metrics": {"version": "1"},
+    "multi_source_case_bundle": {"sources": [{"source_type": "email"}]},
+    "timeline": {"events": [{"uid": "uid-cmpr-1"}]},
+    "investigation_report": {
+      "sections": {
+        "executive_summary": {"status": "supported", "entries": [{"claim_level": "stronger_interpretation"}]},
+        "power_context_analysis": {"status": "supported", "entries": [{"claim_level": "pattern_concern"}]},
+        "overall_assessment": {
+          "status": "supported",
+          "entries": [
+            {
+              "claim_level": "stronger_interpretation",
+              "alternative_explanations": [
+                "The comparator may not be sufficiently similar in role, context, or process stage."
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "answer_quality": {"top_candidate_uid": "uid-cmpr-1", "confidence_label": "medium", "ambiguity_reason": null}
+  },
+  "ba18-105": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "uid-conf-observed",
+        "message_findings": {
+          "authored_text": {
+            "behavior_candidates": [
+              {"behavior_id": "escalation"}
+            ],
+            "counter_indicators": []
+          },
+          "quoted_blocks": []
+        }
+      }
+    ],
+    "attachment_candidates": [],
+    "case_bundle": {"bundle_id": "case-conf-1"},
+    "actor_identity_graph": {"actors": []},
+    "case_patterns": {"behavior_patterns": [{"cluster_id": "pattern-conf-1"}]},
+    "finding_evidence_index": {
+      "version": "1",
+      "findings": [
+        {
+          "finding_id": "conf-1",
+          "alternative_explanations": [
+            "The pattern may reflect repeated process friction rather than targeted hostility."
+          ]
+        }
+      ]
+    },
+    "evidence_table": {"version": "1", "rows": [{"finding_id": "conf-1"}]},
+    "quote_attribution_metrics": {"version": "1"},
+    "multi_source_case_bundle": {"sources": [{"source_type": "email"}]},
+    "timeline": {"events": [{"uid": "uid-conf-observed"}]},
+    "investigation_report": {
+      "sections": {
+        "executive_summary": {"status": "supported", "entries": [{"claim_level": "observed_fact"}]},
+        "overall_assessment": {
+          "status": "supported",
+          "entries": [
+            {
+              "claim_level": "observed_fact",
+              "alternative_explanations": [
+                "The pattern may reflect repeated process friction rather than targeted hostility."
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "answer_quality": {"top_candidate_uid": "uid-conf-observed", "confidence_label": "medium", "ambiguity_reason": null}
+  },
+  "ba18-106": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "uid-fp-1",
+        "message_findings": {
+          "authored_text": {
+            "behavior_candidates": [],
+            "counter_indicators": [
+              "The available support is limited and should be read cautiously."
+            ]
+          },
+          "quoted_blocks": []
+        }
+      }
+    ],
+    "attachment_candidates": [],
+    "case_bundle": {"bundle_id": "case-fp-1"},
+    "actor_identity_graph": {"actors": []},
+    "case_patterns": {"behavior_patterns": []},
+    "finding_evidence_index": {
+      "version": "1",
+      "findings": [
+        {
+          "finding_id": "fp-1",
+          "alternative_explanations": [
+            "The current support relies on message metadata more than direct authored text."
+          ]
+        }
+      ]
+    },
+    "evidence_table": {"version": "1", "rows": [{"finding_id": "fp-1"}]},
+    "quote_attribution_metrics": {"version": "1"},
+    "multi_source_case_bundle": {"sources": [{"source_type": "email"}]},
+    "timeline": {"events": []},
+    "investigation_report": {
+      "sections": {
+        "overall_assessment": {
+          "status": "supported",
+          "entries": [
+            {
+              "claim_level": "insufficient_evidence",
+              "alternative_explanations": [
+                "The current support relies on message metadata more than direct authored text."
+              ],
+              "ambiguity_disclosures": [
+                "The available support is limited and should be read cautiously."
+              ]
+            }
+          ]
+        },
+        "missing_information": {
+          "status": "supported",
+          "entries": [
+            {
+              "statement": "The available support is limited and should be read cautiously."
+            }
+          ]
+        }
+      }
+    },
+    "answer_quality": {"top_candidate_uid": "uid-fp-1", "confidence_label": "low", "ambiguity_reason": "metadata_only_reply"}
+  }
+}
