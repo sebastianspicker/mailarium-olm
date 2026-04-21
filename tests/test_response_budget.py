@@ -26,7 +26,7 @@ class TestEvidenceCompactMode:
             "summary": "Test summary",
             "relevance": 4,
             "sender_name": "Alice",
-            "sender_email": "alice@example.com",
+            "sender_email": "employee@example.test",
             "date": "2024-01-01",
             "recipients": "bob@example.com",
             "subject": "Test",
@@ -76,7 +76,7 @@ class TestEvidenceCompactMode:
         assert result[0]["category"] == "harassment"
         assert result[0]["summary"] == "Test summary"
         assert result[0]["relevance"] == 4
-        assert items[0]["sender_email"] == "alice@example.com"
+        assert items[0]["sender_email"] == "employee@example.test"
         assert items[0]["verified"] == 1
 
     def test_include_quotes_preserves_full_data(self):
@@ -96,13 +96,13 @@ class TestModelDefaults:
     def test_shared_recipients_limit(self):
         from src.mcp_models import SharedRecipientsInput
 
-        m = SharedRecipientsInput(email_addresses=["a@b.com", "c@d.com"])
+        m = SharedRecipientsInput(email_addresses=["a@example.test", "c@example.test"])
         assert m.limit == 30
 
     def test_coordinated_timing_limit(self):
         from src.mcp_models import CoordinatedTimingInput
 
-        m = CoordinatedTimingInput(email_addresses=["a@b.com", "c@d.com"])
+        m = CoordinatedTimingInput(email_addresses=["a@example.test", "c@example.test"])
         assert m.limit == 20
 
     def test_decisions_limit(self):
@@ -159,7 +159,7 @@ class TestEvidenceTimelineLimit:
                     f"summary {i}",
                     3,
                     "Alice",
-                    "alice@example.com",
+                    "employee@example.test",
                     f"2024-01-{i + 1:02d}",
                     "bob@example.com",
                     f"Subject {i}",
@@ -177,8 +177,11 @@ class TestEvidenceTimelineLimit:
         mixin = EvidenceMixin.__new__(EvidenceMixin)
         mixin.conn = conn
 
-        items = mixin.evidence_timeline()
-        assert len(items) == 10
+        try:
+            items = mixin.evidence_timeline()
+            assert len(items) == 10
+        finally:
+            conn.close()
 
     def test_timeline_with_limit(self, tmp_path):
         from src.db_evidence import EvidenceMixin
@@ -187,10 +190,13 @@ class TestEvidenceTimelineLimit:
         mixin = EvidenceMixin.__new__(EvidenceMixin)
         mixin.conn = conn
 
-        items = mixin.evidence_timeline(limit=5)
-        assert len(items) == 5
-        # Should be ordered by date ASC
-        assert items[0]["date"] <= items[4]["date"]
+        try:
+            items = mixin.evidence_timeline(limit=5)
+            assert len(items) == 5
+            # Should be ordered by date ASC
+            assert items[0]["date"] <= items[4]["date"]
+        finally:
+            conn.close()
 
     def test_timeline_limit_with_category_filter(self, tmp_path):
         from src.db_evidence import EvidenceMixin
@@ -199,9 +205,12 @@ class TestEvidenceTimelineLimit:
         mixin = EvidenceMixin.__new__(EvidenceMixin)
         mixin.conn = conn
 
-        items = mixin.evidence_timeline(category="harassment", limit=3)
-        assert len(items) == 3
-        assert all(item["category"] == "harassment" for item in items)
+        try:
+            items = mixin.evidence_timeline(category="harassment", limit=3)
+            assert len(items) == 3
+            assert all(item["category"] == "harassment" for item in items)
+        finally:
+            conn.close()
 
 
 # ── Custody compact mode ──────────────────────────────────────
@@ -330,7 +339,28 @@ class TestJsonResponseSizeGuard:
         import json
 
         parsed = json.loads(result)
-        assert parsed["_truncated"] is True
+        assert parsed["_truncated"]["field"] == "text"
+        assert parsed["text"] != ""
+
+    def test_dict_without_lists_keeps_nonempty_snippet_when_possible(self):
+        from src.tools.utils import json_response
+
+        data = {"text": "x" * 5000}
+        result = json_response(data, max_chars=120)
+        parsed = json.loads(result)
+        assert parsed["_truncated"]["field"] == "text"
+        assert parsed["text"] != ""
+
+    def test_nested_dict_string_field_is_trimmed_before_fallback(self):
+        from src.tools.utils import json_response
+
+        data = {"email": {"body_text": "x" * 5000, "uid": "uid-1"}}
+        result = json_response(data, max_chars=180)
+        parsed = json.loads(result)
+
+        assert parsed["_truncated"]["field"] == "email.body_text"
+        assert parsed["email"]["uid"] == "uid-1"
+        assert parsed["email"]["body_text"] != ""
 
     def test_finds_largest_list_to_trim(self):
         from src.tools.utils import json_response

@@ -37,12 +37,12 @@ def db():
             )
             database.conn.execute(
                 "INSERT INTO recipients(email_uid, address, display_name, type) VALUES(?,?,?,?)",
-                (f"uid-{i}", "recipient@test.com", "Recipient", "to"),
+                (f"uid-{i}", "recipient@example.test", "Recipient", "to"),
             )
 
         database.conn.execute(
             "INSERT INTO communication_edges(sender_email, recipient_email, email_count) VALUES(?,?,?)",
-            ("sender1@test.com", "sender2@test.com", 5),
+            ("sender1@example.test", "sender2@example.test", 5),
         )
 
         database.conn.commit()

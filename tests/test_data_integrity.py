@@ -16,7 +16,7 @@ def _make_email(**overrides) -> Email:
         "message_id": "<msg1@example.com>",
         "subject": "Hello",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["Bob <bob@example.com>"],
         "cc": [],
         "bcc": [],
@@ -56,7 +56,7 @@ class TestSchemaIdempotency:
         init_schema(conn)
         conn.execute(
             "INSERT INTO emails (uid, subject, sender_email, date, folder) "
-            "VALUES ('test1', 'Sub', 'a@b.com', '2024-01-01', 'Inbox')"
+            "VALUES ('test1', 'Sub', 'a@example.test', '2024-01-01', 'Inbox')"
         )
         conn.commit()
         # Re-run migrations
@@ -87,6 +87,7 @@ class TestSchemaIdempotency:
             "cluster_info",
             "ingestion_runs",
             "evidence_items",
+            "evidence_candidates",
             "custody_chain",
             "sparse_vectors",
             "attachments",
@@ -119,6 +120,11 @@ class TestSchemaIdempotency:
         assert "reply_context_subject" in cols
         assert "reply_context_date" in cols
         assert "reply_context_source" in cols
+        assert "meeting_data_json" in cols
+        assert "exchange_extracted_links_json" in cols
+        assert "exchange_extracted_emails_json" in cols
+        assert "exchange_extracted_contacts_json" in cols
+        assert "exchange_extracted_meetings_json" in cols
         assert "inferred_parent_uid" in cols
         assert "inferred_thread_id" in cols
         assert "inferred_match_reason" in cols
@@ -213,13 +219,13 @@ class TestSqlInjectionSurface:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<m1@ex.com>",
+                message_id="<m1@example.test>",
                 sender_email="alice_admin@example.com",
             )
         )
         db.insert_email(
             _make_email(
-                message_id="<m2@ex.com>",
+                message_id="<m2@example.test>",
                 sender_email="alicexadmin@example.com",
             )
         )
@@ -318,11 +324,11 @@ class TestDataTypeContracts:
     def test_references_json_valid(self):
         db = EmailDatabase(":memory:")
         email = _make_email()
-        email.references = ["<ref1@ex.com>", "<ref2@ex.com>"]
+        email.references = ["<ref1@example.test>", "<ref2@example.test>"]
         db.insert_email(email)
         row = db.conn.execute("SELECT references_json FROM emails").fetchone()
         parsed = json.loads(row["references_json"])
-        assert parsed == ["<ref1@ex.com>", "<ref2@ex.com>"]
+        assert parsed == ["<ref1@example.test>", "<ref2@example.test>"]
         db.close()
 
     def test_empty_categories_is_valid_json(self):

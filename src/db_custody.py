@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 
 class CustodyMixin:
@@ -48,7 +52,9 @@ class CustodyMixin:
         )
         if commit:
             self.conn.commit()
-        return cur.lastrowid  # type: ignore[return-value]
+        lastrowid = cur.lastrowid
+        assert lastrowid is not None
+        return int(lastrowid)
 
     def get_custody_chain(
         self,
@@ -73,7 +79,7 @@ class CustodyMixin:
 
         where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
         rows = self.conn.execute(
-            f"SELECT * FROM custody_chain{where} ORDER BY timestamp DESC LIMIT ?",  # nosec B608
+            f"SELECT * FROM custody_chain{where} ORDER BY timestamp DESC LIMIT ?",  # nosec
             [*params, limit],
         ).fetchall()
 
@@ -196,6 +202,144 @@ class CustodyMixin:
             ),
         )
         self.conn.commit()
+        run_row = self.conn.execute("SELECT olm_path FROM ingestion_runs WHERE id = ?", (run_id,)).fetchone()
+        if run_row is not None:
+            self.update_ingest_checkpoint(
+                run_id=run_id,
+                olm_path=str(run_row["olm_path"] or ""),
+                last_batch_ordinal=0,
+                emails_parsed=int(stats.get("emails_parsed", 0) or 0),
+                emails_inserted=int(stats.get("emails_inserted", 0) or 0),
+                last_email_uid="",
+                status="completed",
+                commit=True,
+            )
+
+    def record_ingestion_failure(self, run_id: int, *, error_message: str, stats: dict | None = None) -> None:
+        """Record that an ingestion run failed instead of leaving it as running."""
+        stats = stats or {}
+        self.conn.execute(
+            "UPDATE ingestion_runs SET completed_at=?, emails_parsed=?, emails_inserted=?, status='failed' WHERE id=?",
+            (
+                datetime.now(UTC).isoformat(),
+                stats.get("emails_parsed", 0),
+                stats.get("emails_inserted", 0),
+                run_id,
+            ),
+        )
+        self.conn.commit()
+        self.log_custody_event(
+            "ingest_failed",
+            target_type="ingestion_run",
+            target_id=str(run_id),
+            details={
+                "error_message": error_message,
+                "emails_parsed": stats.get("emails_parsed", 0),
+                "emails_inserted": stats.get("emails_inserted", 0),
+            },
+        )
+        run_row = self.conn.execute("SELECT olm_path FROM ingestion_runs WHERE id = ?", (run_id,)).fetchone()
+        if run_row is not None:
+            self.update_ingest_checkpoint(
+                run_id=run_id,
+                olm_path=str(run_row["olm_path"] or ""),
+                last_batch_ordinal=0,
+                emails_parsed=int(stats.get("emails_parsed", 0) or 0),
+                emails_inserted=int(stats.get("emails_inserted", 0) or 0),
+                last_email_uid="",
+                status="failed",
+                commit=True,
+            )
+
+    def update_ingest_checkpoint(
+        self,
+        *,
+        run_id: int,
+        olm_path: str,
+        last_batch_ordinal: int,
+        emails_parsed: int,
+        emails_inserted: int,
+        last_email_uid: str,
+        status: str = "running",
+        commit: bool = True,
+        skip_locked: bool = False,
+    ) -> bool:
+        """Upsert resumable ingest checkpoint state for one run."""
+        started = time.monotonic()
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO ingest_checkpoints(
+                    run_id,
+                    olm_path,
+                    last_batch_ordinal,
+                    emails_parsed,
+                    emails_inserted,
+                    last_email_uid,
+                    status,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(run_id) DO UPDATE SET
+                    olm_path=excluded.olm_path,
+                    last_batch_ordinal=excluded.last_batch_ordinal,
+                    emails_parsed=excluded.emails_parsed,
+                    emails_inserted=excluded.emails_inserted,
+                    last_email_uid=excluded.last_email_uid,
+                    status=excluded.status,
+                    updated_at=datetime('now')
+                """,
+                (
+                    run_id,
+                    olm_path,
+                    int(last_batch_ordinal or 0),
+                    int(emails_parsed or 0),
+                    int(emails_inserted or 0),
+                    str(last_email_uid or ""),
+                    str(status or "running"),
+                ),
+            )
+            if commit:
+                self.conn.commit()
+            return True
+        except sqlite3.OperationalError as exc:
+            if skip_locked and "locked" in str(exc).lower():
+                logger.debug(
+                    "Skipping ingest checkpoint update for run %s after %.3fs because SQLite is locked "
+                    "(status=%s, batch=%s, parsed=%s, inserted=%s)",
+                    run_id,
+                    time.monotonic() - started,
+                    status,
+                    last_batch_ordinal,
+                    emails_parsed,
+                    emails_inserted,
+                    exc_info=True,
+                )
+                return False
+            raise
+
+    def latest_ingest_checkpoint(self, *, olm_path: str) -> dict | None:
+        """Return the most recent resumable checkpoint for one OLM path."""
+        row = self.conn.execute(
+            """
+            SELECT *
+            FROM ingest_checkpoints
+            WHERE olm_path = ?
+              AND status IN ('running', 'failed')
+            ORDER BY updated_at DESC, run_id DESC
+            LIMIT 1
+            """,
+            (olm_path,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def clear_ingest_checkpoint(self, run_id: int, *, commit: bool = True) -> None:
+        """Mark one checkpoint as completed and non-resumable."""
+        self.conn.execute(
+            "UPDATE ingest_checkpoints SET status='completed', updated_at=datetime('now') WHERE run_id = ?",
+            (run_id,),
+        )
+        if commit:
+            self.conn.commit()
 
     def last_ingestion(self, olm_path: str | None = None) -> dict | None:
         """Return the most recent completed ingestion run."""

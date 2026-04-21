@@ -41,6 +41,11 @@ def hydrate_emails_with_related(
         email["bcc"] = recips["bcc"]
         email["categories"] = safe_json_parse(email.pop("categories", None))
         email["references"] = safe_json_parse(email.pop("references_json", None))
+        email["meeting_data"] = safe_json_parse(email.pop("meeting_data_json", None), default={})
+        email["exchange_extracted_links"] = safe_json_parse(email.pop("exchange_extracted_links_json", None))
+        email["exchange_extracted_emails"] = safe_json_parse(email.pop("exchange_extracted_emails_json", None))
+        email["exchange_extracted_contacts"] = safe_json_parse(email.pop("exchange_extracted_contacts_json", None))
+        email["exchange_extracted_meetings"] = safe_json_parse(email.pop("exchange_extracted_meetings_json", None))
         email["attachments"] = attachments_by_uid.get(uid, [])
         result.append(email)
     return result
@@ -55,7 +60,7 @@ def attachments_for_uids(conn: sqlite3.Connection, uids: list[str], *, batch_siz
         batch = uids[start : start + batch_size]
         placeholders = ",".join("?" * len(batch))
         att_rows = conn.execute(
-            "SELECT name, mime_type, size, content_id, is_inline, email_uid"  # nosec B608
+            "SELECT name, mime_type, size, content_id, is_inline, email_uid"  # nosec
             f" FROM attachments WHERE email_uid IN ({placeholders})",
             batch,
         ).fetchall()
@@ -95,7 +100,7 @@ def recipients_for_uids_impl(db: Any, uids: list[str]) -> dict[str, dict[str, li
         batch = uids[start : start + batch_size]
         placeholders = ",".join("?" * len(batch))
         rows = db.conn.execute(
-            f"SELECT address, display_name, type, email_uid FROM recipients WHERE email_uid IN ({placeholders})",  # nosec B608
+            f"SELECT address, display_name, type, email_uid FROM recipients WHERE email_uid IN ({placeholders})",  # nosec
             batch,
         ).fetchall()
         for row in rows:
@@ -119,6 +124,11 @@ def get_email_full_impl(db: Any, uid: str) -> dict | None:
     email["bcc"] = recipients["bcc"]
     email["categories"] = safe_json_parse(email.pop("categories", None))
     email["references"] = safe_json_parse(email.pop("references_json", None))
+    email["meeting_data"] = safe_json_parse(email.pop("meeting_data_json", None), default={})
+    email["exchange_extracted_links"] = safe_json_parse(email.pop("exchange_extracted_links_json", None))
+    email["exchange_extracted_emails"] = safe_json_parse(email.pop("exchange_extracted_emails_json", None))
+    email["exchange_extracted_contacts"] = safe_json_parse(email.pop("exchange_extracted_contacts_json", None))
+    email["exchange_extracted_meetings"] = safe_json_parse(email.pop("exchange_extracted_meetings_json", None))
     email["attachments"] = db.attachments_for_email(uid)
     return email
 
@@ -135,7 +145,7 @@ def get_emails_full_batch_impl(db: Any, uids: list[str]) -> dict[str, dict]:
         placeholders = ",".join("?" * len(batch))
         rows.extend(
             db.conn.execute(
-                f"SELECT * FROM emails WHERE uid IN ({placeholders})",  # nosec B608
+                f"SELECT * FROM emails WHERE uid IN ({placeholders})",  # nosec
                 batch,
             ).fetchall()
         )
@@ -234,11 +244,11 @@ def list_emails_paginated_impl(
 
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
-    total_row = db.conn.execute(f"SELECT COUNT(*) AS c FROM emails{join}{where}", params).fetchone()  # nosec B608
+    total_row = db.conn.execute(f"SELECT COUNT(*) AS c FROM emails{join}{where}", params).fetchone()  # nosec
     total = total_row["c"]
 
     rows = db.conn.execute(
-        f"SELECT emails.uid, subject, sender_name, sender_email, date, folder,"  # nosec B608
+        f"SELECT emails.uid, subject, sender_name, sender_email, date, folder,"  # nosec
         f" email_type, has_attachments, attachment_count, body_length,"
         f" conversation_id"
         f" FROM emails{join}{where}"

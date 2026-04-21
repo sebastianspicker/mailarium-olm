@@ -10,7 +10,7 @@ def test_get_thread_emails_ordered_by_date():
     db = EmailDatabase(":memory:")
     db.insert_email(
         make_email(
-            message_id="<m1@ex.com>",
+            message_id="<m1@example.test>",
             date="2024-01-10T10:00:00",
             conversation_id="conv_A",
             body_text="First",
@@ -18,7 +18,7 @@ def test_get_thread_emails_ordered_by_date():
     )
     db.insert_email(
         make_email(
-            message_id="<m2@ex.com>",
+            message_id="<m2@example.test>",
             date="2024-01-12T10:00:00",
             conversation_id="conv_A",
             body_text="Third",
@@ -26,7 +26,7 @@ def test_get_thread_emails_ordered_by_date():
     )
     db.insert_email(
         make_email(
-            message_id="<m3@ex.com>",
+            message_id="<m3@example.test>",
             date="2024-01-11T10:00:00",
             conversation_id="conv_A",
             body_text="Second",
@@ -66,8 +66,8 @@ def test_get_thread_emails_empty_conversation_id():
 
 def test_get_thread_emails_only_matching_conversation():
     db = EmailDatabase(":memory:")
-    db.insert_email(make_email(message_id="<m1@ex.com>", conversation_id="conv_A"))
-    db.insert_email(make_email(message_id="<m2@ex.com>", conversation_id="conv_B"))
+    db.insert_email(make_email(message_id="<m1@example.test>", conversation_id="conv_A"))
+    db.insert_email(make_email(message_id="<m2@example.test>", conversation_id="conv_B"))
 
     thread_a = db.get_thread_emails("conv_A")
     assert len(thread_a) == 1

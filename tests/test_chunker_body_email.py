@@ -68,7 +68,7 @@ def test_multi_chunk_header_once():
         "message_id": "m1",
         "subject": "Important Discussion",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["bob@example.com"],
         "cc": [],
         "date": "2025-01-01",
@@ -85,7 +85,7 @@ def test_multi_chunk_header_once():
     assert "Subject:" in chunks[0].text
     assert "Date:" not in chunks[1].text or "Date: 2025-01-01" in chunks[1].text
     assert "[Important Discussion - Part 2/" in chunks[1].text
-    assert "From: Alice <alice@example.com> | Date:" in chunks[1].text
+    assert "From: Alice <employee@example.test> | Date:" in chunks[1].text
 
 
 def test_chunk_metadata_includes_new_fields():
@@ -94,7 +94,7 @@ def test_chunk_metadata_includes_new_fields():
         "message_id": "m1",
         "subject": "RE: Test",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["bob@example.com"],
         "cc": ["carol@example.com"],
         "date": "2025-01-01",
@@ -125,7 +125,7 @@ def test_cc_in_embedding_header():
         "message_id": "m1",
         "subject": "CC Test",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["bob@example.com"],
         "cc": ["carol@example.com", "dave@example.com"],
         "date": "2025-01-01",
@@ -145,7 +145,7 @@ def test_chunk_email_strips_quoted_in_reply():
         "subject": "RE: Question",
         "sender_name": "Bob",
         "sender_email": "bob@example.com",
-        "to": ["alice@example.com"],
+        "to": ["employee@example.test"],
         "cc": [],
         "date": "2025-01-01",
         "body": "Yes, I agree.\n\n----- Original Message -----\nFrom: Alice\n\nDo you agree?",
@@ -167,7 +167,7 @@ def test_continuation_chunks_have_context_header():
         "message_id": "m1",
         "subject": "Budget Review",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["bob@example.com"],
         "cc": [],
         "date": "2025-03-01",
@@ -181,7 +181,7 @@ def test_continuation_chunks_have_context_header():
     assert len(chunks) >= 2
 
     text = chunks[1].text
-    assert "From: Alice <alice@example.com>" in text
+    assert "From: Alice <employee@example.test>" in text
     assert "Date: 2025-03-01" in text
     assert "Subject: Budget Review" in text
     assert "[Budget Review - Part 2/" in text
@@ -216,7 +216,7 @@ def test_chunk_includes_categories_in_metadata():
         "message_id": "",
         "subject": "Category test",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": [],
         "cc": [],
         "bcc": [],
@@ -250,7 +250,7 @@ def test_chunk_includes_categories_in_text():
         "message_id": "",
         "subject": "Cat text test",
         "sender_name": "",
-        "sender_email": "a@b.com",
+        "sender_email": "a@example.test",
         "to": [],
         "cc": [],
         "bcc": [],
@@ -280,7 +280,7 @@ def test_chunk_email_no_duplicate_categories():
         "uid": "test-uid",
         "subject": "Meeting Notes",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "date": "2024-01-15",
         "folder": "Inbox",
         "body": "Important discussion about Q4 budget and resources.",

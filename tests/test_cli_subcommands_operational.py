@@ -25,9 +25,9 @@ class TestAnalyticsSubcommand:
         assert args.analytics_action == "suggest"
 
     def test_analytics_contacts(self) -> None:
-        args = parse_args(["analytics", "contacts", "alice@example.com"])
+        args = parse_args(["analytics", "contacts", "employee@example.test"])
         assert args.analytics_action == "contacts"
-        assert args.email_address == "alice@example.com"
+        assert args.email_address == "employee@example.test"
 
     def test_analytics_volume_default(self) -> None:
         args = parse_args(["analytics", "volume"])

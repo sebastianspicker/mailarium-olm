@@ -2,6 +2,15 @@
 
 This document collects the runtime-mode, hardware, and performance tuning details that used to sit inline in the README.
 
+Use this file after the first setup succeeds. It is an advanced tuning reference, not required reading for a normal first run.
+
+## Network And Disk Expectations
+
+- Email content stays local.
+- First-run model loading may contact Hugging Face unless you explicitly choose offline mode.
+- Model caches and local runtime stores can consume several gigabytes on disk depending on archive size and enabled models.
+- Keep live operator runtimes under `private/runtime/current/` and keep tracked `data/` limited to sanitized examples.
+
 ## Recommended Profiles
 
 Use `RUNTIME_PROFILE` as the first lever, then override individual flags only when you need to.
@@ -73,7 +82,7 @@ Use that summary instead of inferring behavior from `.env` alone.
 
 The embedding forward pass remains the dominant ingestion cost.
 
-| Hardware | Device | Batch size | Sustained rate | 20K emails (~47K chunks) |
+| Hardware | Device | Batch size | Observed sustained rate | 20K emails (~47K chunks) |
 | --- | --- | --- | --- | --- |
 | Apple M4 / 16 GB | `mps` | 32 | 5 to 3 chunks/s | about 4 hours |
 | Apple M1 Pro / 16 GB | `mps` | 32 | about 4 to 5 chunks/s | about 4.5 hours |
@@ -81,7 +90,9 @@ The embedding forward pass remains the dominant ingestion cost.
 | NVIDIA RTX 3090 / 4090 | `cuda` | 64 | about 15 to 30 chunks/s | about 30 to 60 min |
 | CPU only | `cpu` | 16 | about 1 to 2 chunks/s | about 10+ hours |
 
-On Apple Silicon, sustained runs still degrade from the peak warm-up rate because of thermal throttling. This is expected on fanless hardware.
+These numbers are local engineering baselines, not vendor guarantees. On Apple
+Silicon, sustained runs can degrade from the peak warm-up rate because of
+thermal and memory-pressure behavior, especially on fanless hardware.
 
 ## High-Value Knobs
 

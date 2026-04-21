@@ -1,0 +1,9 @@
+2025-03-14 | manager -> employee
+Subject: Meeting follow-up
+
+We will circulate the written summary and include SBV before any decision.
+
+2025-03-18 | manager -> employee
+Subject: Implementation
+
+The process will proceed now; a written summary is not necessary.

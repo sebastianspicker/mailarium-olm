@@ -8,11 +8,19 @@ import sqlite3
 import threading
 from pathlib import Path
 
+from .attachment_identity import (
+    ATTACHMENT_TEXT_NORMALIZATION_VERSION,
+    ensure_attachment_identity,
+    normalize_attachment_search_text,
+)
+from .attachment_surfaces import attachment_surface_rows_for_attachment
 from .db_analytics import AnalyticsMixin
 from .db_attachments import AttachmentMixin
 from .db_custody import CustodyMixin
 from .db_entities import EntityMixin
+from .db_events import EventMixin
 from .db_evidence import EvidenceMixin
+from .db_matter import MatterMixin
 from .db_queries import QueryMixin
 from .db_schema import _escape_like, init_schema
 from .email_db_enrichment import parse_address
@@ -32,6 +40,11 @@ logger = logging.getLogger(__name__)
 
 # Backward-compatible re-export for tests and existing imports.
 _parse_address = parse_address
+
+
+def _int_value(value: object) -> int:
+    return int(value) if isinstance(value, int | float | str) else 0
+
 
 _EMAIL_INSERT_COLUMNS = (
     "uid",
@@ -73,6 +86,11 @@ _EMAIL_INSERT_COLUMNS = (
     "reply_context_subject",
     "reply_context_date",
     "reply_context_source",
+    "meeting_data_json",
+    "exchange_extracted_links_json",
+    "exchange_extracted_emails_json",
+    "exchange_extracted_contacts_json",
+    "exchange_extracted_meetings_json",
     "inferred_parent_uid",
     "inferred_thread_id",
     "inferred_match_reason",
@@ -86,25 +104,37 @@ _EMAIL_INSERT_COLUMNS = (
     "ingestion_run_id",
 )
 _EMAIL_INSERT_SQL = f"""INSERT INTO emails ({", ".join(_EMAIL_INSERT_COLUMNS)})
-VALUES ({",".join("?" for _ in _EMAIL_INSERT_COLUMNS)})"""
+VALUES ({",".join("?" for _ in _EMAIL_INSERT_COLUMNS)})"""  # nosec B608 — column names are compile-time constants in _EMAIL_INSERT_COLUMNS; no user input
 _EMAIL_INSERT_OR_IGNORE_SQL = _EMAIL_INSERT_SQL.replace("INSERT INTO", "INSERT OR IGNORE INTO", 1)
 
 
-class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, AttachmentMixin, QueryMixin):
+class EmailDatabase(
+    CustodyMixin,
+    EvidenceMixin,
+    MatterMixin,
+    EntityMixin,
+    EventMixin,
+    AnalyticsMixin,
+    AttachmentMixin,
+    QueryMixin,
+):
     """SQLite-backed relational store for email metadata.
 
     Method groups are organized into mixins for maintainability:
     - ``CustodyMixin`` — chain-of-custody audit trail and ingestion tracking
     - ``EvidenceMixin`` — evidence item CRUD, verification, search
     - ``EntityMixin`` — NLP entity insert, search, timeline
+    - ``EventMixin`` — extracted event persistence and lookups
     - ``AnalyticsMixin`` — clusters, topics, keywords, contacts, relationships
     - ``QueryMixin`` — read queries, full-body retrieval, browsing, consistency
     """
 
-    def __init__(self, db_path: str = ":memory:") -> None:
+    def __init__(self, db_path: str = ":memory:", *, busy_timeout_ms: int = 5000) -> None:
         self._db_path = db_path
+        self._busy_timeout_ms = max(int(busy_timeout_ms), 0)
         self._conn: sqlite3.Connection | None = None
         self._conn_lock = threading.Lock()
+        self._matter_write_lock = threading.RLock()
         self._email_insert_sql = _EMAIL_INSERT_SQL
         self._email_insert_or_ignore_sql = _EMAIL_INSERT_OR_IGNORE_SQL
         self._sqlite_integrity_error = sqlite3.IntegrityError
@@ -120,9 +150,10 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
             if self._conn is None:
                 if self._db_path != ":memory:":
                     Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
-                self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
+                connect_timeout = max(self._busy_timeout_ms / 1000.0, 0.1)
+                self._conn = sqlite3.connect(self._db_path, check_same_thread=False, timeout=connect_timeout)
                 self._conn.execute("PRAGMA journal_mode=WAL")
-                self._conn.execute("PRAGMA busy_timeout = 5000")
+                self._conn.execute(f"PRAGMA busy_timeout = {self._busy_timeout_ms}")
                 self._conn.execute("PRAGMA foreign_keys=ON")
                 self._conn.row_factory = sqlite3.Row
                 init_schema(self._conn)
@@ -133,6 +164,13 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+    def __del__(self) -> None:
+        """Best-effort close to avoid leaked SQLite handles during teardown."""
+        try:
+            self.close()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Sparse vector storage
@@ -217,18 +255,96 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
 
     def update_analytics_batch(
         self,
-        rows: list[tuple[str | None, str | None, float | None, str]],
+        rows: list[tuple[object, ...]],
+        *,
+        commit: bool = True,
     ) -> int:
-        """Batch-update detected_language, sentiment_label, sentiment_score by uid.
+        """Batch-update language and sentiment analytics by uid.
 
-        Each tuple: (detected_language, sentiment_label, sentiment_score, uid).
+        Supported tuple shapes:
+        - ``(detected_language, sentiment_label, sentiment_score, uid)``
+        - ``(
+              detected_language,
+              detected_language_confidence,
+              detected_language_reason,
+              detected_language_source,
+              detected_language_token_count,
+              sentiment_label,
+              sentiment_score,
+              uid,
+          )``
         Returns number of rows submitted for update.
         """
+        if not rows:
+            return 0
+        first_row = rows[0]
+        if len(first_row) == 4:
+            self.conn.executemany(
+                "UPDATE emails SET detected_language=?, sentiment_label=?, sentiment_score=? WHERE uid=?",
+                rows,
+            )
+        elif len(first_row) == 8:
+            self.conn.executemany(
+                """
+                UPDATE emails
+                   SET detected_language=?,
+                       detected_language_confidence=?,
+                       detected_language_reason=?,
+                       detected_language_source=?,
+                       detected_language_token_count=?,
+                       sentiment_label=?,
+                       sentiment_score=?
+                 WHERE uid=?
+                """,
+                rows,
+            )
+        else:
+            raise ValueError(f"Unsupported analytics row shape: {len(first_row)}")
+        if commit:
+            self.conn.commit()
+        return len(rows)
+
+    def upsert_language_surface_analytics(
+        self,
+        rows: list[tuple[object, ...]],
+        *,
+        commit: bool = True,
+    ) -> int:
+        """Upsert per-surface language analytics rows for one batch."""
+        if not rows:
+            return 0
         self.conn.executemany(
-            "UPDATE emails SET detected_language=?, sentiment_label=?, sentiment_score=? WHERE uid=?",
+            """
+            INSERT INTO language_surface_analytics(
+                email_uid,
+                surface_scope,
+                source_surface,
+                segment_ordinal,
+                text_hash,
+                text_char_count,
+                detected_language,
+                detected_language_confidence,
+                detected_language_reason,
+                detected_language_token_count,
+                detector_version,
+                analyzed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopword_v1', datetime('now'))
+            ON CONFLICT(email_uid, surface_scope) DO UPDATE SET
+                source_surface=excluded.source_surface,
+                segment_ordinal=excluded.segment_ordinal,
+                text_hash=excluded.text_hash,
+                text_char_count=excluded.text_char_count,
+                detected_language=excluded.detected_language,
+                detected_language_confidence=excluded.detected_language_confidence,
+                detected_language_reason=excluded.detected_language_reason,
+                detected_language_token_count=excluded.detected_language_token_count,
+                detector_version='stopword_v1',
+                analyzed_at=datetime('now')
+            """,
             rows,
         )
-        self.conn.commit()
+        if commit:
+            self.conn.commit()
         return len(rows)
 
     # ------------------------------------------------------------------
@@ -249,6 +365,8 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
         self,
         emails: list[Email],
         ingestion_run_id: int | None = None,
+        *,
+        commit: bool = True,
     ) -> set[str]:
         """Insert a batch of emails in a single transaction.
 
@@ -260,7 +378,18 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
         attachments, contacts, and communication edges to reduce per-row
         execute() overhead.
         """
-        return insert_emails_batch_impl(self, emails, ingestion_run_id=ingestion_run_id)
+        if commit:
+            return insert_emails_batch_impl(
+                self,
+                emails,
+                ingestion_run_id=ingestion_run_id,
+            )
+        return insert_emails_batch_impl(
+            self,
+            emails,
+            ingestion_run_id=ingestion_run_id,
+            commit=commit,
+        )
 
     def _upsert_contact(
         self,
@@ -403,7 +532,9 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
         cur.execute(
             """UPDATE emails
                SET categories = ?, thread_topic = ?, inference_classification = ?,
-                   is_calendar_message = ?, references_json = ?
+                   is_calendar_message = ?, references_json = ?, meeting_data_json = ?,
+                   exchange_extracted_links_json = ?, exchange_extracted_emails_json = ?,
+                   exchange_extracted_contacts_json = ?, exchange_extracted_meetings_json = ?
              WHERE uid = ?""",
             (
                 categories_json,
@@ -411,13 +542,19 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
                 getattr(email, "inference_classification", "") or "",
                 int(getattr(email, "is_calendar_message", False)),
                 references_json,
+                json.dumps(getattr(email, "meeting_data", {}) or {}, ensure_ascii=False),
+                json.dumps(getattr(email, "exchange_extracted_links", []) or [], ensure_ascii=False),
+                json.dumps(getattr(email, "exchange_extracted_emails", []) or [], ensure_ascii=False),
+                json.dumps(getattr(email, "exchange_extracted_contacts", []) or [], ensure_ascii=False),
+                json.dumps(getattr(email, "exchange_extracted_meetings", []) or [], ensure_ascii=False),
                 email.uid,
             ),
         )
         if cur.rowcount == 0:
             return False
 
-        # Upsert categories
+        # Replace categories so removed categories are no longer query-visible.
+        cur.execute("DELETE FROM email_categories WHERE email_uid = ?", (email.uid,))
         cats = getattr(email, "categories", []) or []
         if cats:
             cur.executemany(
@@ -425,34 +562,212 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
                 [(email.uid, cat) for cat in cats],
             )
 
-        # Upsert attachments
+        # Rebuild attachments while preserving previously extracted evidence fields when a metadata-only reparse
+        # does not carry replacement text/OCR state.
+        existing_attachments = self.attachments_for_email(email.uid)
+        existing_by_key = {
+            (
+                str(att.get("name") or ""),
+                str(att.get("mime_type") or ""),
+                int(att.get("size") or 0),
+                str(att.get("content_id") or ""),
+                int(att.get("is_inline") or 0),
+            ): att
+            for att in existing_attachments
+        }
+        existing_by_attachment_id = {
+            str(att.get("attachment_id") or ""): att for att in existing_attachments if str(att.get("attachment_id") or "")
+        }
+        cur.execute("DELETE FROM attachment_surfaces WHERE email_uid = ?", (email.uid,))
         cur.execute("DELETE FROM attachments WHERE email_uid = ?", (email.uid,))
         atts = getattr(email, "attachments", []) or []
         if atts:
-            cur.executemany(
-                "INSERT INTO attachments(email_uid, name, mime_type, size, content_id, is_inline, "
-                "extraction_state, evidence_strength, ocr_used, failure_reason, text_preview) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                [
+            attachment_rows: list[tuple[object, ...]] = []
+            attachment_surface_rows: list[tuple] = []
+            for att in atts:
+                key = (
+                    str(att.get("name") or ""),
+                    str(att.get("mime_type") or ""),
+                    int(att.get("size") or 0),
+                    str(att.get("content_id") or ""),
+                    int(att.get("is_inline", False)),
+                )
+                attachment_id, content_sha256 = ensure_attachment_identity(att)
+                existing = existing_by_key.get(key) or existing_by_attachment_id.get(attachment_id, {})
+                extracted_text = str(att.get("extracted_text") or existing.get("extracted_text") or "")
+                normalized_text = str(att.get("normalized_text") or existing.get("normalized_text") or "")
+                if extracted_text and not normalized_text:
+                    normalized_text = normalize_attachment_search_text(extracted_text)
+                text_normalization_version = int(
+                    att.get("text_normalization_version") or existing.get("text_normalization_version") or 0
+                )
+                if normalized_text and text_normalization_version <= 0:
+                    text_normalization_version = ATTACHMENT_TEXT_NORMALIZATION_VERSION
+                text_locator = att.get("text_locator") or existing.get("text_locator", {})
+                surfaces = att.get("surfaces") or existing.get("surfaces")
+                attachment_rows.append(
                     (
                         email.uid,
                         att.get("name", ""),
+                        attachment_id,
                         att.get("mime_type", ""),
                         att.get("size", 0),
+                        content_sha256,
                         att.get("content_id", ""),
                         int(att.get("is_inline", False)),
-                        att.get("extraction_state", "") or "",
-                        att.get("evidence_strength", "") or "",
-                        int(bool(att.get("ocr_used", False))),
-                        att.get("failure_reason", "") or "",
-                        att.get("text_preview", "") or "",
+                        att.get("extraction_state") or existing.get("extraction_state", ""),
+                        att.get("evidence_strength") or existing.get("evidence_strength", ""),
+                        int(bool(att.get("ocr_used") if att.get("ocr_used") is not None else existing.get("ocr_used", False))),
+                        att.get("ocr_engine") or existing.get("ocr_engine", ""),
+                        att.get("ocr_lang") or existing.get("ocr_lang", ""),
+                        float(att.get("ocr_confidence") or existing.get("ocr_confidence") or 0.0),
+                        att.get("failure_reason") or existing.get("failure_reason", ""),
+                        att.get("text_preview") or existing.get("text_preview", ""),
+                        extracted_text,
+                        normalized_text,
+                        text_normalization_version,
+                        int(att.get("locator_version") or existing.get("locator_version") or 1),
+                        att.get("text_source_path") or existing.get("text_source_path", ""),
+                        json.dumps(text_locator, ensure_ascii=False),
                     )
-                    for att in atts
-                ],
+                )
+                attachment_surface_rows.extend(
+                    attachment_surface_rows_for_attachment(
+                        email_uid=email.uid,
+                        attachment_name=str(att.get("name", "") or ""),
+                        attachment_id=attachment_id,
+                        extracted_text=extracted_text,
+                        normalized_text=normalized_text,
+                        text_locator=text_locator,
+                        extraction_state=str(att.get("extraction_state") or existing.get("extraction_state", "")),
+                        evidence_strength=str(att.get("evidence_strength") or existing.get("evidence_strength", "")),
+                        ocr_used=bool(
+                            att.get("ocr_used") if att.get("ocr_used") is not None else existing.get("ocr_used", False)
+                        ),
+                        ocr_confidence=float(att.get("ocr_confidence") or existing.get("ocr_confidence") or 0.0),
+                        surfaces=surfaces,
+                    )
+                )
+            cur.executemany(
+                "INSERT INTO attachments(email_uid, name, attachment_id, mime_type, size, content_sha256, content_id, "
+                "is_inline, extraction_state, evidence_strength, ocr_used, ocr_engine, ocr_lang, ocr_confidence, "
+                "failure_reason, text_preview, extracted_text, normalized_text, text_normalization_version, locator_version, "
+                "text_source_path, text_locator_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                attachment_rows,
             )
+            if attachment_surface_rows:
+                cur.executemany(
+                    "INSERT OR REPLACE INTO attachment_surfaces("
+                    "surface_id, attachment_id, email_uid, attachment_name, surface_kind, origin_kind, text, normalized_text, "
+                    "alignment_map_json, language, language_confidence, ocr_confidence, surface_hash, locator_json, quality_json"
+                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    attachment_surface_rows,
+                )
 
         if commit:
             self.conn.commit()
         return True
+
+    def mark_ingest_batch_pending(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        commit: bool = True,
+    ) -> None:
+        """Mark one batch as pending vector completion in the ingest ledger."""
+        if not rows:
+            return
+        self.conn.executemany(
+            """INSERT INTO email_ingest_state(
+                   email_uid, body_chunk_count, attachment_chunk_count, image_chunk_count,
+                   vector_chunk_count, vector_status, attachment_status, image_status,
+                   last_error, updated_at
+               ) VALUES(?, ?, ?, ?, ?, 'pending', ?, ?, '', datetime('now'))
+               ON CONFLICT(email_uid) DO UPDATE SET
+                   body_chunk_count=excluded.body_chunk_count,
+                   attachment_chunk_count=excluded.attachment_chunk_count,
+                   image_chunk_count=excluded.image_chunk_count,
+                   vector_chunk_count=excluded.vector_chunk_count,
+                   vector_status='pending',
+                   attachment_status=excluded.attachment_status,
+                   image_status=excluded.image_status,
+                   last_error='',
+                   updated_at=datetime('now')""",
+            [
+                (
+                    str(row.get("email_uid") or ""),
+                    _int_value(row.get("body_chunk_count")),
+                    _int_value(row.get("attachment_chunk_count")),
+                    _int_value(row.get("image_chunk_count")),
+                    _int_value(row.get("vector_chunk_count")),
+                    str(row.get("attachment_status") or "not_requested"),
+                    str(row.get("image_status") or "not_requested"),
+                )
+                for row in rows
+                if str(row.get("email_uid") or "")
+            ],
+        )
+        if commit:
+            self.conn.commit()
+
+    def mark_ingest_batch_completed(
+        self,
+        rows: list[dict[str, object]],
+        *,
+        commit: bool = True,
+    ) -> None:
+        """Mark one batch as fully persisted to the vector store."""
+        if not rows:
+            return
+        self.conn.executemany(
+            """UPDATE email_ingest_state
+               SET body_chunk_count = ?,
+                   attachment_chunk_count = ?,
+                   image_chunk_count = ?,
+                   vector_chunk_count = ?,
+                   vector_status = 'completed',
+                   attachment_status = ?,
+                   image_status = ?,
+                   last_error = '',
+                   updated_at = datetime('now')
+               WHERE email_uid = ?""",
+            [
+                (
+                    _int_value(row.get("body_chunk_count")),
+                    _int_value(row.get("attachment_chunk_count")),
+                    _int_value(row.get("image_chunk_count")),
+                    _int_value(row.get("vector_chunk_count")),
+                    str(row.get("attachment_status") or "not_requested"),
+                    str(row.get("image_status") or "not_requested"),
+                    str(row.get("email_uid") or ""),
+                )
+                for row in rows
+                if str(row.get("email_uid") or "")
+            ],
+        )
+        if commit:
+            self.conn.commit()
+
+    def mark_ingest_batch_failed(
+        self,
+        email_uids: list[str],
+        *,
+        error_message: str,
+        commit: bool = True,
+    ) -> None:
+        """Persist a failed vector-write state for one batch."""
+        if not email_uids:
+            return
+        self.conn.executemany(
+            """UPDATE email_ingest_state
+               SET vector_status = 'failed',
+                   last_error = ?,
+                   updated_at = datetime('now')
+               WHERE email_uid = ?""",
+            [(error_message, uid) for uid in email_uids if uid],
+        )
+        if commit:
+            self.conn.commit()
 
     def all_uids(self) -> set[str]:
         """Return all UIDs in the database."""
@@ -460,9 +775,23 @@ class EmailDatabase(CustodyMixin, EvidenceMixin, EntityMixin, AnalyticsMixin, At
         return {r["uid"] for r in rows}
 
     def uids_missing_body(self) -> set[str]:
-        """Return UIDs of emails where body_text is NULL."""
-        rows = self.conn.execute("SELECT uid FROM emails WHERE body_text IS NULL").fetchall()
+        """Return UIDs of emails where body_text is NULL, empty, or whitespace-only."""
+        rows = self.conn.execute("SELECT uid FROM emails WHERE body_text IS NULL OR TRIM(body_text) = ''").fetchall()
         return {r["uid"] for r in rows}
+
+    def delete_sparse_by_chunk_ids(self, chunk_ids: list[str], *, commit: bool = True) -> int:
+        """Delete sparse vectors for an explicit chunk-id list. Returns count deleted."""
+        filtered_ids = [chunk_id for chunk_id in chunk_ids if chunk_id]
+        if not filtered_ids:
+            return 0
+        before = self.conn.total_changes
+        self.conn.executemany(
+            "DELETE FROM sparse_vectors WHERE chunk_id = ?",
+            [(chunk_id,) for chunk_id in filtered_ids],
+        )
+        if commit:
+            self.conn.commit()
+        return self.conn.total_changes - before
 
     def delete_sparse_by_uid(self, uid: str) -> int:
         """Delete sparse vectors for all chunks of an email. Returns count deleted."""

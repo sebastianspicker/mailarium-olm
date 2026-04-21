@@ -6,13 +6,13 @@
     {
       "id": "investigation-101",
       "bucket": "investigation_case",
-      "question": "Which messages belong to the quick and dirty conversation?",
+      "question": "Which messages belong to the rapid review conversation?",
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {
         "max_results": 5
       },
-      "expected_answer": "The quick and dirty conversation is represented by two messages in the sampled live corpus.",
+      "expected_answer": "The rapid review conversation is represented by two messages in the sampled synthetic corpus.",
       "expected_support_uids": [
         "cd4214c127dd1914ba7a60bbc29b3410"
       ],
@@ -24,7 +24,7 @@
       "case_scope": {
         "date_from": null,
         "date_to": null,
-        "case_label": "quick-and-dirty-review",
+        "case_label": "rapid-review",
         "target_person": {
           "name": "Alex Example",
           "email": null,
@@ -57,18 +57,18 @@
         "investigation_bundle_completeness",
         "long_thread"
       ],
-      "notes": "Case-scoped live investigation probe over the quick and dirty conversation."
+      "notes": "Case-scoped live investigation probe over the rapid review conversation."
     },
     {
       "id": "investigation-102",
       "bucket": "investigation_case",
-      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "question": "Which messages belong to the ticket system Reboot 2026 conversation?",
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {
         "max_results": 5
       },
-      "expected_answer": "The Zammad Reboot 2026 conversation spans five messages in the sampled live corpus.",
+      "expected_answer": "The ticket system Reboot 2026 conversation spans five messages in the sampled synthetic corpus.",
       "expected_support_uids": [
         "3cda29cdadc3ba0cd2ad54525da8ce5b"
       ],
@@ -80,7 +80,7 @@
       "case_scope": {
         "date_from": null,
         "date_to": null,
-        "case_label": "zammad-reboot-2026-review",
+        "case_label": "ticket system-reboot-2026-review",
         "target_person": {
           "name": "Pat Example",
           "email": null,
@@ -112,14 +112,14 @@
       "triage_tags": [
         "investigation_bundle_completeness"
       ],
-      "notes": "Case-scoped live investigation probe over the sampled Zammad Reboot 2026 conversation."
+      "notes": "Case-scoped live investigation probe over the sampled ticket system Reboot 2026 conversation."
     }
   ],
   "results": [
     {
       "id": "investigation-101",
       "bucket": "investigation_case",
-      "question": "Which messages belong to the quick and dirty conversation?",
+      "question": "Which messages belong to the rapid review conversation?",
       "status": "labeled",
       "source": "live",
       "count": 1,
@@ -169,7 +169,7 @@
     {
       "id": "investigation-102",
       "bucket": "investigation_case",
-      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "question": "Which messages belong to the ticket system Reboot 2026 conversation?",
       "status": "labeled",
       "source": "live",
       "count": 1,
@@ -357,5 +357,12 @@
     "total_emails": 392,
     "emails_with_segments_count": 368,
     "attachment_email_count": 151
+  },
+  "source_mode": "live_only",
+  "threshold_verdict": {
+    "profile": "default",
+    "status": "pass",
+    "failure_count": 0,
+    "failures": []
   }
 }

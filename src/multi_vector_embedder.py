@@ -102,6 +102,13 @@ class MultiVectorEmbedder:
         if self._model is not None:
             return
 
+        # FlagEmbedding's M3 loader does not reliably honor offline cache-only
+        # semantics. For dense-only local_only runs, use SentenceTransformer's
+        # explicit local_files_only path instead of probing FlagEmbedding first.
+        if self.load_mode == "local_only" and not self._sparse_enabled and not self._colbert_enabled:
+            self._load_sentence_transformer()
+            return
+
         # Try FlagEmbedding first (unlocks sparse + ColBERT)
         if self._try_load_flag_model():
             return
@@ -446,8 +453,10 @@ def _offline_model_load(enabled: bool):
         return
     old_hf = os.environ.get("HF_HUB_OFFLINE")
     old_tx = os.environ.get("TRANSFORMERS_OFFLINE")
+    old_st = os.environ.get("DISABLE_SAFETENSORS_CONVERSION")
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "1"
     try:
         yield
     finally:
@@ -459,3 +468,7 @@ def _offline_model_load(enabled: bool):
             os.environ.pop("TRANSFORMERS_OFFLINE", None)
         else:
             os.environ["TRANSFORMERS_OFFLINE"] = old_tx
+        if old_st is None:
+            os.environ.pop("DISABLE_SAFETENSORS_CONVERSION", None)
+        else:
+            os.environ["DISABLE_SAFETENSORS_CONVERSION"] = old_st

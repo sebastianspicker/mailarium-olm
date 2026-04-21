@@ -66,3 +66,86 @@ def test_resolve_actor_id_does_not_over_merge_ambiguous_name_only_reference():
     assert actor_id is None
     assert resolution == {"resolved_by": "name", "ambiguous": True}
     assert graph["stats"]["ambiguous_name_count"] == 1
+
+
+def test_resolve_actor_graph_registers_comparators_and_representation_roles():
+    scope = BehavioralCaseScopeInput(
+        target_person=CasePartyInput(name="Alex Example", email="alex@example.com"),
+        suspected_actors=[CasePartyInput(name="Morgan Manager", email="manager@example.com", role_hint="manager")],
+        comparator_actors=[CasePartyInput(name="Pat Peer", email="personalrat@example.com")],
+        allegation_focus=["retaliation"],
+        analysis_goal="hr_review",
+    )
+
+    graph = resolve_actor_graph(
+        case_scope=scope,
+        candidates=[],
+        attachment_candidates=[],
+        full_map={},
+    )
+
+    assert graph["stats"]["actor_count"] == 3
+    comparator = next(actor for actor in graph["actors"] if actor["primary_email"] == "personalrat@example.com")
+    target = next(actor for actor in graph["actors"] if actor["primary_email"] == "alex@example.com")
+    assert "comparator" in comparator["role_hints"]
+    assert "representation" in comparator["role_hints"]
+    assert "target_person" in target["role_hints"]
+
+
+def test_resolve_actor_graph_tolerates_malformed_reply_context_json() -> None:
+    graph = resolve_actor_graph(
+        case_scope=None,
+        candidates=[
+            {
+                "uid": "uid-malformed",
+                "sender_email": "manager@example.com",
+                "sender_name": "Morgan Manager",
+            }
+        ],
+        attachment_candidates=[],
+        full_map={
+            "uid-malformed": {
+                "to": ["Alex Example <alex@example.com>"],
+                "cc": [],
+                "bcc": [],
+                "reply_context_from": "alex@example.com",
+                "reply_context_to_json": "{invalid-json",
+            }
+        },
+    )
+
+    assert graph["stats"]["actor_count"] == 2
+    reasons = {str(item.get("reason") or "") for item in graph["unresolved_references"]}
+    assert "malformed_reply_context_to_json" in reasons
+
+
+def test_resolve_actor_graph_uses_entity_occurrences_for_actor_hints() -> None:
+    graph = resolve_actor_graph(
+        case_scope=None,
+        candidates=[
+            {
+                "uid": "uid-entity-occ",
+                "sender_email": "leader@example.com",
+                "sender_name": "Leitung",
+                "entity_occurrences": [
+                    {
+                        "entity_text": "Alex Example",
+                        "entity_type": "person",
+                        "source_scope": "authored_body",
+                    },
+                    {
+                        "entity_text": "SBV",
+                        "entity_type": "organization",
+                        "normalized_form": "sbv",
+                        "source_scope": "authored_body",
+                    },
+                ],
+            }
+        ],
+        attachment_candidates=[],
+        full_map={},
+    )
+
+    leader = next(actor for actor in graph["actors"] if actor["primary_email"] == "leader@example.com")
+    assert "representation" in leader["role_hints"]
+    assert any("Alex Example" in actor["display_names"] for actor in graph["actors"])

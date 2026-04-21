@@ -247,15 +247,15 @@ class TestLanguageDetectionCache:
 
         with patch("src.language_detector.detect_language", return_value="en") as mock_detect:
             # First call: detects language
-            mod.extract_nlp_entities("Hello world", sender_email="alice@example.com")
+            mod.extract_nlp_entities("Hello world", sender_email="employee@example.test")
             assert mock_detect.call_count == 1
 
             # Second call with same text content: uses cache (keyed by content hash)
-            mod.extract_nlp_entities("Hello world", sender_email="alice@example.com")
+            mod.extract_nlp_entities("Hello world", sender_email="employee@example.test")
             assert mock_detect.call_count == 1  # Not called again
 
             # Third call with different text: not cached
-            mod.extract_nlp_entities("Hello again", sender_email="alice@example.com")
+            mod.extract_nlp_entities("Hello again", sender_email="employee@example.test")
             assert mock_detect.call_count == 2  # Called again for new text
 
     def test_language_detection_unknown_falls_back_to_none(self):

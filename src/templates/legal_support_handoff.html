@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    :root {
+      --ink: #16202a;
+      --muted: #5b6977;
+      --line: #d7dee4;
+      --panel: #f7f5ef;
+      --accent: #9a3412;
+      --accent-soft: #ffedd5;
+      --bg: #fffdf8;
+    }
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      background: linear-gradient(180deg, #fffdf8 0%, #f4f0e7 100%);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+    header {
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 20px;
+      margin-bottom: 28px;
+    }
+    h1, h2, h3 {
+      margin: 0 0 12px;
+      line-height: 1.15;
+    }
+    h1 {
+      font-size: 2.3rem;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: 1.35rem;
+      margin-top: 28px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+    .meta, .warning {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .warning {
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+      padding: 10px 12px;
+      margin-top: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 24px rgba(22, 32, 42, 0.05);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.95rem;
+      background: rgba(255, 255, 255, 0.92);
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    th {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    ul {
+      padding-left: 18px;
+    }
+    .mono {
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.88rem;
+    }
+    @media print {
+      body {
+        background: #fff;
+      }
+      .card {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+      table, tr, td, th {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>{{ title }}</h1>
+      <div class="meta">Generated: {{ generated_at }}</div>
+      <div class="meta">Analysis query: {{ analysis_query }}</div>
+      <div class="meta">Review mode: {{ review_mode or "retrieval_only" }}</div>
+      {% if export_metadata.get("review_classification") and export_metadata.get("review_classification").get("classification") %}
+      <div class="meta">Review classification: {{ export_metadata.get("review_classification").get("classification") }}</div>
+      {% endif %}
+      <div class="meta">Privacy mode: {{ privacy_guardrails.get("privacy_mode", "full_access") }}</div>
+      {% if export_metadata.get("snapshot_id") %}
+      <div class="meta">Snapshot: <span class="mono">{{ export_metadata.get("snapshot_id") }}</span></div>
+      {% endif %}
+      {% if export_metadata.get("snapshot_review_state") %}
+      <div class="meta">Snapshot review state: {{ export_metadata.get("snapshot_review_state") }}</div>
+      {% endif %}
+      {% if export_metadata.get("coverage_status") %}
+      <div class="meta">Coverage status: {{ export_metadata.get("coverage_status") }}</div>
+      {% endif %}
+      {% if matter_ingestion_report %}
+      <div class="meta">Completeness: {{ matter_ingestion_report.get("completeness_status", "unknown") }}</div>
+      {% endif %}
+      {% if export_metadata.get("review_classification") and not export_metadata.get("review_classification").get("may_be_presented_as_full_matter_review") %}
+      <div class="warning">
+        This handoff must not be presented as a full matter-file review without complete manifest-backed accounting.
+      </div>
+      {% endif %}
+      {% if export_metadata.get("last_approved_snapshot_id") %}
+      <div class="meta">Previous approved snapshot: <span class="mono">{{ export_metadata.get("last_approved_snapshot_id") }}</span></div>
+      {% endif %}
+      {% if export_metadata.get("changes_since_last_approved") and export_metadata.get("changes_since_last_approved").get("changed_registries") %}
+      <div class="warning">
+        Changes since last approved snapshot: {{ ", ".join(export_metadata.get("changes_since_last_approved").get("changed_registries", [])) }}.
+      </div>
+      {% endif %}
+      {% if case_scope_quality.get("status") != "sufficient" %}
+      <div class="warning">
+        Case scope quality is {{ case_scope_quality.get("status", "unknown") }}. Review the downgrade reasons before relying on this handoff as a final record.
+      </div>
+      {% endif %}
+      {% if export_metadata.get("downgrade_markers") %}
+      <div class="warning">
+        Downgrade markers: {{ ", ".join(export_metadata.get("downgrade_markers", [])) }}.
+      </div>
+      {% endif %}
+    </header>
+
+    <section>
+      <h2>Executive Summary</h2>
+      <div class="grid">
+        {% for item in memo_lines %}
+        <div class="card">
+          <strong>{{ item.get("entry_id", "memo") }}</strong>
+          <p>{{ item.get("text", "") }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Dashboard</h2>
+      <div class="grid">
+        {% for group_name, items in dashboard_cards.items() %}
+        <div class="card">
+          <h3>{{ group_name.replace("_", " ").title() }}</h3>
+          <ul>
+            {% for item in items[:4] %}
+            <li><strong>{{ item.get("title", "Item") }}</strong>: {{ item.get("summary", "") }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Issue Matrix</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Issue</th>
+            <th>Status</th>
+            <th>Conflict status</th>
+            <th>Missing proof</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in issue_rows %}
+          <tr>
+            <td>{{ row.get("title", row.get("issue_id", "")) }}</td>
+            <td>{{ row.get("legal_relevance_status", "") }}</td>
+            <td>{{ row.get("source_conflict_status", "") }}</td>
+            <td>{{ "; ".join(row.get("missing_proof", [])[:2]) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Exhibit Register</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Exhibit</th>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Reliability</th>
+            <th>Conflict</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in exhibit_rows %}
+          <tr>
+            <td class="mono">{{ row.get("exhibit_id", "") }}</td>
+            <td>{{ row.get("date", "") }}</td>
+            <td>{{ row.get("short_description", "") }}</td>
+            <td>{{ row.get("exhibit_reliability", {}).get("strength", "") }}</td>
+            <td>{{ row.get("source_conflict_status", "") }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Chronology</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Date</th>
+            <th>Entry</th>
+            <th>Stability</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in chronology_entries %}
+          <tr>
+            <td class="mono">{{ entry.get("chronology_id", "") }}</td>
+            <td>{{ entry.get("date", "") }}</td>
+            <td>{{ entry.get("title", "") }}. {{ entry.get("description", "") }}</td>
+            <td>{{ entry.get("fact_stability", "stable") }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Source Conflicts</h2>
+      {% if conflict_rows %}
+      <table>
+        <thead>
+          <tr>
+            <th>Conflict</th>
+            <th>Kind</th>
+            <th>Status</th>
+            <th>Preferred rule</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in conflict_rows %}
+          <tr>
+            <td>{{ row.get("summary", "") }}</td>
+            <td>{{ row.get("conflict_kind", "") }}</td>
+            <td>{{ row.get("resolution_status", "") }}</td>
+            <td>{{ row.get("priority_rule_applied", "") }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="meta">No explicit source conflicts are currently recorded.</p>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2>Document Requests</h2>
+      <div class="grid">
+        {% for group in checklist_groups %}
+        <div class="card">
+          <h3>{{ group.get("group_title", group.get("group_id", "Checklist Group")) }}</h3>
+          <ul>
+            {% for item in group.get("items", [])[:4] %}
+            <li>{{ item.get("requested_record", item.get("item_id", "")) }}{% if item.get("likely_custodian") %} [{{ item.get("likely_custodian") }}]{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

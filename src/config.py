@@ -361,7 +361,7 @@ def resolve_runtime_settings(
     """Derive runtime settings from env defaults with optional overrides."""
     from dataclasses import replace
 
-    base = get_settings()
+    base = Settings.from_env()
     overrides: dict[str, str] = {}
     if chromadb_path:
         overrides["chromadb_path"] = chromadb_path

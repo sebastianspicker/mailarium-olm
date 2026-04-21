@@ -49,6 +49,22 @@ def test_dedup_handles_missing_uid():
     assert len(deduped) == 2
 
 
+def test_dedup_preserves_attachment_hit_alongside_body_hit_for_same_uid():
+    results = [
+        SearchResult("body", "Body hit", {"uid": "u1"}, 0.05),
+        SearchResult(
+            "attachment",
+            "Attachment hit",
+            {"uid": "u1", "candidate_kind": "attachment", "attachment_filename": "note.pdf"},
+            0.1,
+        ),
+    ]
+
+    deduped = _deduplicate_by_email(results)
+
+    assert [result.chunk_id for result in deduped] == ["body", "attachment"]
+
+
 def test_dedup_empty_list():
     assert _deduplicate_by_email([]) == []
 

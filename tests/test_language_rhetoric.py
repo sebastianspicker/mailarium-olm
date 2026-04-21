@@ -5,10 +5,7 @@ from src.language_rhetoric import analyze_message_rhetoric
 
 def test_analyze_message_rhetoric_detects_multiple_authored_signals():
     analysis = analyze_message_rhetoric(
-        (
-            "For the record, you failed to provide the figures. "
-            "As already stated, please just send them today."
-        ),
+        ("For the record, you failed to provide the figures. As already stated, please just send them today."),
         text_scope="authored_text",
     )
 
@@ -59,3 +56,36 @@ def test_analyze_message_rhetoric_detects_gaslighting_like_pattern_as_low_confid
     assert "dismissiveness" in signal_ids
     assert "gaslighting_like_contradiction" in signal_ids
     assert contradiction_signal["confidence"] == "low"
+
+
+def test_analyze_message_rhetoric_detects_subtle_workplace_signals_in_english() -> None:
+    analysis = analyze_message_rhetoric(
+        ("With all due respect, kindly note that this will be documented. As your manager, I trust this clarifies matters."),
+        text_scope="authored_text",
+    )
+
+    signal_ids = [signal["signal_id"] for signal in analysis["signals"]]
+
+    assert "selective_politeness" in signal_ids
+    assert "procedural_intimidation" in signal_ids
+    assert "status_marking" in signal_ids
+    assert "passive_aggressive_deflection" in signal_ids
+
+
+def test_analyze_message_rhetoric_detects_german_workplace_signals() -> None:
+    analysis = analyze_message_rhetoric(
+        (
+            "Wie bereits mitgeteilt, Sie haben das missverstanden. "
+            "Bitte nehmen Sie zur Kenntnis, dass dies dokumentiert wird. "
+            "In meiner Funktion als Leitung erwarte ich das."
+        ),
+        text_scope="quoted_text",
+    )
+
+    signal_ids = [signal["signal_id"] for signal in analysis["signals"]]
+
+    assert "dismissiveness" in signal_ids
+    assert "selective_politeness" in signal_ids
+    assert "procedural_intimidation" in signal_ids
+    assert "status_marking" in signal_ids
+    assert "gaslighting_like_contradiction" in signal_ids

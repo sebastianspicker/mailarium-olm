@@ -56,7 +56,7 @@ def test_saved_natural_inferred_thread_prevalence_artifact_has_expected_contract
     artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
 
     assert artifact["artifact_type"] == "natural_inferred_thread_prevalence"
-    assert artifact["source_corpus"].endswith(".example/my-export.olm")
+    assert artifact["source_corpus"].endswith("synthetic-eval-corpus.olm")
     assert artifact["sample_email_count"] >= 1000
     assert artifact["emails_with_inferred_thread_id"] >= 0
     assert artifact["emails_with_inferred_parent_uid"] >= 0

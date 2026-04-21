@@ -180,9 +180,10 @@ class ImageEmbedder:
             _HF_FILENAME,
         )
         try:
-            downloaded = hf_hub_download(  # nosec B615 — model repo is hardcoded, not user-controlled
+            downloaded = hf_hub_download(
                 repo_id=_HF_REPO_ID,
                 filename=_HF_FILENAME,
+                revision="a53c18db9fd0015b8f8d6a8d778a20a20d4cc21b",
                 local_dir=str(target_dir),
             )
             logger.info("Visualized-BGE weights downloaded to: %s", downloaded)

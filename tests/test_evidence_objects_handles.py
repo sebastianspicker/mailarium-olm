@@ -12,6 +12,7 @@ def test_evidence_table_exists():
     db = EmailDatabase(":memory:")
     tables = {row[0] for row in db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert "evidence_items" in tables
+    assert "evidence_candidates" in tables
     db.close()
 
 
@@ -31,6 +32,10 @@ def test_evidence_table_columns():
         "recipients",
         "subject",
         "notes",
+        "candidate_kind",
+        "provenance_json",
+        "document_locator_json",
+        "context_json",
         "created_at",
         "updated_at",
         "verified",
@@ -55,7 +60,7 @@ def test_add_evidence_valid():
     assert result["id"] is not None
     assert result["category"] == "discrimination"
     assert result["relevance"] == 5
-    assert result["sender_email"] == "alice@company.com"
+    assert result["sender_email"] == "alice@example.test"
     assert result["sender_name"] == "Alice Manager"
     assert result["subject"] == "Meeting notes"
     assert result["date"] == "2024-03-15T10:30:00"
@@ -65,7 +70,7 @@ def test_add_evidence_valid():
 
 def test_add_evidence_auto_populates_recipients():
     db = EmailDatabase(":memory:")
-    email = make_email(to=["Bob <bob@company.com>", "Carol <carol@company.com>"])
+    email = make_email(to=["Bob <bob@example.test>", "Carol <carol@example.test>"])
     db.insert_email(email)
 
     result = db.add_evidence(
@@ -76,8 +81,8 @@ def test_add_evidence_auto_populates_recipients():
         relevance=4,
     )
 
-    assert "bob@company.com" in result["recipients"]
-    assert "carol@company.com" in result["recipients"]
+    assert "bob@example.test" in result["recipients"]
+    assert "carol@example.test" in result["recipients"]
     db.close()
 
 
@@ -136,6 +141,27 @@ def test_add_evidence_quote_verified_case_insensitive():
         category="bossing",
         key_quote="you are not welcome here",
         summary="Hostile statement.",
+        relevance=4,
+    )
+    assert result["verified"] == 1
+    db.close()
+
+
+def test_add_evidence_quote_verified_from_forensic_body():
+    db = EmailDatabase(":memory:")
+    email = make_email(
+        body_text="Hi Lara,",
+        forensic_body_text="Hi Lara,\nPlease send the updated budget by Friday.\nRegards",
+        raw_body_text="Hi Lara,\nPlease send the updated budget by Friday.\nRegards",
+        forensic_body_source="raw_body_text",
+    )
+    db.insert_email(email)
+
+    result = db.add_evidence(
+        email_uid=email.uid,
+        category="general",
+        key_quote="Please send the updated budget by Friday.",
+        summary="Recovered from the preserved forwarded body.",
         relevance=4,
     )
     assert result["verified"] == 1
@@ -212,6 +238,24 @@ def test_update_evidence_reverifies_quote():
     assert item["verified"] == 0
 
     db.update_evidence(added["id"], key_quote="New quote in body")
+    item = db.get_evidence(added["id"])
+    assert item["verified"] == 1
+    db.close()
+
+
+def test_update_evidence_reverifies_quote_from_forensic_body():
+    db = EmailDatabase(":memory:")
+    email = make_email(
+        body_text="Hi Lara,",
+        forensic_body_text="Hi Lara,\nThe mobile-work arrangement remains in place.\nRegards",
+        raw_body_text="Hi Lara,\nThe mobile-work arrangement remains in place.\nRegards",
+        forensic_body_source="raw_body_text",
+    )
+    db.insert_email(email)
+    added = db.add_evidence(email.uid, "general", "Hi Lara", "Initial.", 2)
+    assert db.get_evidence(added["id"])["verified"] == 1
+
+    db.update_evidence(added["id"], key_quote="The mobile-work arrangement remains in place.")
     item = db.get_evidence(added["id"])
     assert item["verified"] == 1
     db.close()

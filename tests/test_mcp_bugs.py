@@ -54,7 +54,7 @@ class TestFormatContextBlockTruncation:
         from src.formatting import format_context_block
 
         text = "x" * 1000
-        metadata = {"sender_name": "Alice", "sender_email": "a@b.com", "date": "2024-01-01"}
+        metadata = {"sender_name": "Alice", "sender_email": "a@example.test", "date": "2024-01-01"}
         result = format_context_block(text, metadata, 0.95, max_body_chars=200)
         assert "truncated" in result
         assert "x" * 200 in result
@@ -114,7 +114,7 @@ class TestFormatResultsBudget:
         return SearchResult(
             chunk_id=f"chunk-{uid}",
             text=text,
-            metadata={"sender_email": "a@b.com", "date": "2024-01-01", "uid": uid},
+            metadata={"sender_email": "a@example.test", "date": "2024-01-01", "uid": uid},
             distance=0.2,
         )
 
@@ -344,7 +344,7 @@ class TestSerializeResultsBudget:
         return SearchResult(
             chunk_id=f"chunk-{uid}",
             text=text,
-            metadata={"sender_email": "a@b.com", "date": "2024-01-01", "uid": uid},
+            metadata={"sender_email": "a@example.test", "date": "2024-01-01", "uid": uid},
             distance=0.2,
         )
 
@@ -358,26 +358,23 @@ class TestSerializeResultsBudget:
         r = self._make_retriever()
         results = [self._make_result(text="x" * 500, uid=f"u{i}") for i in range(50)]
         payload = r.serialize_results("test", results, max_body_chars=0, max_response_tokens=200)
-        # Should have a "note" entry about omitted results
-        notes = [e for e in payload["results"] if "note" in e]
-        assert len(notes) == 1
-        assert "omitted" in notes[0]["note"]
-        # count still reflects total
-        assert payload["count"] == 50
+        assert payload["results_truncated"] is True
+        assert payload["count"] < 50
+        assert payload["total_count"] == 50
+        assert payload["omitted_count"] > 0
+        assert "omitted" in payload["truncation_note"]
 
     def test_unlimited_budget_shows_all(self):
         r = self._make_retriever()
         results = [self._make_result(uid=f"u{i}") for i in range(5)]
         payload = r.serialize_results("test", results, max_body_chars=0, max_response_tokens=0)
-        notes = [e for e in payload["results"] if "note" in e]
-        assert len(notes) == 0
         assert len(payload["results"]) == 5
+        assert payload["results_truncated"] is False
 
     def test_budget_keeps_at_least_one_result(self):
         """Even with a very tight budget, the first result is always included."""
         r = self._make_retriever()
         results = [self._make_result(text="x" * 2000, uid="u0")]
         payload = r.serialize_results("test", results, max_body_chars=0, max_response_tokens=1)
-        # First result should always be present (no note-only output)
-        real_results = [e for e in payload["results"] if "note" not in e]
-        assert len(real_results) == 1
+        assert len(payload["results"]) == 1
+        assert payload["count"] == 1

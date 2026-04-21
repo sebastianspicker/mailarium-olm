@@ -48,7 +48,8 @@ def test_build_communication_graph_reports_repeated_exclusion_and_visibility_asy
                 "sender_actor_id": "actor-manager",
                 "sender_email": "manager@example.com",
                 "thread_group_id": "thread-a",
-                "snippet": "Please send the figures.",
+                "subject": "Project status update",
+                "snippet": "We decided to proceed. Alex Example is informed on this update.",
                 "message_findings": {
                     "authored_text": {
                         "behavior_candidates": [
@@ -61,7 +62,7 @@ def test_build_communication_graph_reports_repeated_exclusion_and_visibility_asy
         full_map={
             "u1": {"to": ["HR Example <hr@example.com>"], "cc": [], "bcc": []},
             "u2": {"to": ["Ops Example <ops@example.com>"], "cc": [], "bcc": []},
-            "u3": {"to": ["Alex Example <alex@example.com>"], "cc": [], "bcc": []},
+            "u3": {"to": ["Alex Example <alex@example.com>"], "cc": ["HR Example <hr@example.com>"], "bcc": []},
         },
     )
 
@@ -71,9 +72,16 @@ def test_build_communication_graph_reports_repeated_exclusion_and_visibility_asy
     assert graph["summary"]["target_actor_id"] == "actor-target"
     assert "repeated_exclusion" in finding_types
     assert "visibility_asymmetry" in finding_types
+    assert "decision_visibility_asymmetry" in finding_types
     repeated = next(finding for finding in graph["graph_findings"] if finding["graph_signal_type"] == "repeated_exclusion")
     assert repeated["evidence_basis"] == "graph_plus_behavior"
     assert repeated["evidence_chain"]["message_uids"] == ["u1", "u2"]
+    assert repeated["evidence_chain"]["subject_families"] == []
+    decision = next(
+        finding for finding in graph["graph_findings"] if finding["graph_signal_type"] == "decision_visibility_asymmetry"
+    )
+    assert decision["evidence_chain"]["included_uids"] == ["u3"]
+    assert decision["evidence_chain"]["excluded_uids"] == ["u1", "u2"]
 
 
 def test_build_communication_graph_reports_selective_escalation_and_forked_side_channel():
@@ -112,6 +120,8 @@ def test_build_communication_graph_reports_selective_escalation_and_forked_side_
                 "message_findings": {
                     "authored_text": {
                         "behavior_candidates": [
+                            {"behavior_id": "escalation"},
+                            {"behavior_id": "public_correction"},
                             {"behavior_id": "withholding"},
                         ]
                     }
@@ -125,8 +135,8 @@ def test_build_communication_graph_reports_selective_escalation_and_forked_side_
                 "bcc": [],
             },
             "u2": {
-                "to": ["HR Example <hr@example.com>"],
-                "cc": [],
+                "to": ["HR Example <hr@example.com>", "Legal Example <legal@example.com>"],
+                "cc": ["Director Example <director@example.com>"],
                 "bcc": [],
             },
         },
@@ -136,3 +146,5 @@ def test_build_communication_graph_reports_selective_escalation_and_forked_side_
 
     assert "selective_escalation" in finding_types
     assert "forked_side_channel" in finding_types
+    assert "thread_fork_exclusion" in finding_types
+    assert "escalation_visibility_asymmetry" in finding_types

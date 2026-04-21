@@ -166,7 +166,7 @@ def derive_email_enrichments(
     email_type = classify_email_type_fn(parts.subject, parts.in_reply_to)
 
     reply_context = None
-    if not parts.in_reply_to and not parts.references:
+    if email_type in {"reply", "forward"}:
         reply_context = extract_reply_context(parts.body_text, parts.body_html, email_type)
 
     try:

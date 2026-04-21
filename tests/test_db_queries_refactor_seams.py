@@ -9,6 +9,17 @@ class _QueryHarness(QueryMixin):
     def __init__(self) -> None:
         self.conn = sqlite3.connect(":memory:")
 
+    def close(self) -> None:
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
 
 def test_query_mixin_browse_family_delegates_to_extracted_helpers(monkeypatch):
     db = _QueryHarness()
@@ -88,3 +99,4 @@ def test_query_mixin_browse_family_delegates_to_extracted_helpers(monkeypatch):
         ),
         ("reembed", (db, "uid-1"), {}),
     ]
+    db.close()

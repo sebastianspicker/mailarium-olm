@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from importlib import import_module
 from typing import Any
 
 from .storage import iter_collection_metadatas
@@ -157,20 +158,74 @@ def resolve_semantic_uids_impl(
 def expand_query_impl(retriever: Any, query: str) -> str:
     """Expand query with semantically related terms."""
     try:
-        from .query_expander import QueryExpander
+        query_expander_module = import_module("src.query_expander")
+
+        QueryExpander = query_expander_module.QueryExpander
+        legal_support_query_profile = getattr(query_expander_module, "legal_support_query_profile", None)
 
         db = retriever.email_db
         if db is None:
             return query
 
         if retriever._query_expander is None:
-            keywords = db.top_keywords(limit=200)
+            keywords = db.top_keywords(limit=400)
             if not keywords:
                 return query
             vocab = [kw["keyword"] for kw in keywords]
             retriever._query_expander = QueryExpander(model=retriever.model, vocabulary=vocab)
 
-        return retriever._query_expander.expand(query, n_terms=3)
+        if callable(legal_support_query_profile):
+            profile = legal_support_query_profile(query)
+        else:
+            profile = {"is_legal_support": False, "intents": [], "suggested_terms": []}
+        expanded = retriever._query_expander.expand(query, n_terms=5 if profile["is_legal_support"] else 3)
+        retriever._last_query_expansion = {
+            "original_query": query,
+            "expanded_query": expanded,
+            "used_query_expansion": expanded != query,
+            "legal_support_profile": profile,
+        }
+        return expanded
     except Exception:
         logger.debug("Query expansion failed", exc_info=True)
         return query
+
+
+def expand_query_lanes_impl(retriever: Any, query: str, *, max_lanes: int = 4) -> list[str]:
+    """Expand one query into multiple retrieval lanes."""
+    try:
+        query_expander_module = import_module("src.query_expander")
+
+        QueryExpander = query_expander_module.QueryExpander
+        legal_support_query_profile = getattr(query_expander_module, "legal_support_query_profile", None)
+
+        db = retriever.email_db
+        if db is None:
+            return [query]
+
+        if retriever._query_expander is None:
+            keywords = db.top_keywords(limit=400)
+            if not keywords:
+                return [query]
+            vocab = [kw["keyword"] for kw in keywords]
+            retriever._query_expander = QueryExpander(model=retriever.model, vocabulary=vocab)
+
+        if callable(legal_support_query_profile):
+            profile = legal_support_query_profile(query)
+        else:
+            profile = {"is_legal_support": False, "intents": [], "suggested_terms": []}
+        lanes = retriever._query_expander.expand_lanes(
+            query,
+            n_terms=5 if profile["is_legal_support"] else 3,
+            max_lanes=max_lanes,
+        )
+        retriever._last_query_expansion = {
+            "original_query": query,
+            "query_lanes": lanes,
+            "used_query_expansion": len(lanes) > 1,
+            "legal_support_profile": profile,
+        }
+        return lanes or [query]
+    except Exception:
+        logger.debug("Query lane expansion failed", exc_info=True)
+        return [query]

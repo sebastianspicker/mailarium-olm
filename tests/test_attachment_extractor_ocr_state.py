@@ -10,6 +10,7 @@ from src.attachment_extractor import (
     MAX_EXTRACTED_CHARS,
     _optional_extract,
     _pptx_extractor,
+    attachment_ocr_available_for,
     extract_image_embedding,
     is_image_attachment,
 )
@@ -187,3 +188,20 @@ class TestExtractorStateEdges:
         mock_presentation_cls = MagicMock(return_value=mock_prs)
         result = _pptx_extractor(mock_presentation_cls, io.BytesIO(b"fake"))
         assert "[Slide 1]" in result
+
+
+class TestAttachmentOcrAvailability:
+    def test_pdf_requires_pdftoppm_even_when_tesseract_exists(self, monkeypatch) -> None:
+        monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
+        monkeypatch.setattr("src.attachment_extractor.pdf_ocr_available", lambda: False)
+        assert attachment_ocr_available_for("scan.pdf", mime_type="application/pdf") is False
+
+    def test_pdf_available_when_both_tools_exist(self, monkeypatch) -> None:
+        monkeypatch.setattr("src.attachment_extractor.pdf_ocr_available", lambda: True)
+        assert attachment_ocr_available_for("scan.pdf", mime_type="application/pdf") is True
+
+    def test_image_ocr_depends_on_tesseract_only(self, monkeypatch) -> None:
+        monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
+        assert attachment_ocr_available_for("photo.png", mime_type="image/png") is True
+        monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
+        assert attachment_ocr_available_for("photo.png", mime_type="image/png") is False

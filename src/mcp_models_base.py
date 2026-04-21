@@ -11,33 +11,89 @@ Two base classes eliminate repeated ``model_config`` declarations:
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .repo_paths import normalize_local_path, validate_local_read_path, validate_output_path, validate_runtime_path
 from .validation import parse_iso_date
 from .validation import validate_date_window as ensure_valid_date_window
 
 
-def _validate_output_path(v: str | None) -> str | None:
-    """Reject null bytes, path-traversal, and absolute paths outside safe directories."""
+def _resolve_local_path(v: str | None, *, field_name: str = "path") -> Path | None:
+    """Normalize a local path while rejecting null bytes and parent traversal."""
     if v is None:
-        return v
-    if "\x00" in v:
-        raise ValueError("output_path must not contain null bytes")
-    if ".." in Path(v).parts:
-        raise ValueError("output_path must not traverse parent directories with '..'")
-    resolved = Path(v).resolve()
-    cwd = Path.cwd().resolve()
-    if not resolved.is_relative_to(cwd):
-        import tempfile as _tmpmod
+        return None
+    return normalize_local_path(v, field_name=field_name)
 
-        home = Path.home().resolve()
-        tmp = Path("/tmp").resolve()  # nosec B108
-        systmp = Path(_tmpmod.gettempdir()).resolve()
-        if not (resolved.is_relative_to(home) or resolved.is_relative_to(tmp) or resolved.is_relative_to(systmp)):
-            raise ValueError(f"Output path must be under working directory, home, or /tmp: {v}")
+
+def _validate_local_path(v: str | None, *, field_name: str = "path") -> str | None:
+    """Reject null bytes and path traversal for local paths."""
+    _resolve_local_path(v, field_name=field_name)
     return v
+
+
+def _validate_local_read_path(v: str | None, *, field_name: str = "path") -> str | None:
+    """Reject local read paths outside configured allowlisted roots."""
+    if v is None:
+        return None
+    validate_local_read_path(v, field_name=field_name)
+    return v
+
+
+def _validate_readable_file_path(v: str | None, *, field_name: str = "path") -> str | None:
+    """Validate a readable local file path."""
+    if v is None:
+        return None
+    resolved = validate_local_read_path(v, field_name=field_name)
+    if not resolved.exists() or not resolved.is_file():
+        raise ValueError(f"{field_name} must resolve to an existing file")
+    if not os.access(resolved, os.R_OK):
+        raise ValueError(f"{field_name} must be readable")
+    return v
+
+
+def _validate_readable_dir_path(v: str | None, *, field_name: str = "path") -> str | None:
+    """Validate a readable local directory path."""
+    if v is None:
+        return None
+    resolved = validate_local_read_path(v, field_name=field_name)
+    if not resolved.exists() or not resolved.is_dir():
+        raise ValueError(f"{field_name} must resolve to an existing directory")
+    if not os.access(resolved, os.R_OK):
+        raise ValueError(f"{field_name} must be readable")
+    return v
+
+
+def _validate_runtime_path(v: str | None, *, field_name: str = "path") -> str | None:
+    """Validate runtime override paths with local-path safety checks."""
+    if v is None:
+        return None
+    validate_runtime_path(v, field_name=field_name)
+    return v
+
+
+def _validate_output_path(v: str | None) -> str | None:
+    """Validate output paths against allowlisted writable roots."""
+    if v is None:
+        return None
+    validate_output_path(v, field_name="Output path")
+    return v
+
+
+def _coerce_json_object_input(value: object) -> object:
+    """Accept JSON-object strings from MCP wrappers that serialize params eagerly."""
+    if not isinstance(value, str):
+        return value
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Input must be a JSON object or JSON-encoded object string.") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("Input JSON must decode to an object.")
+    return parsed
 
 
 # ── Base Classes ─────────────────────────────────────────────
@@ -48,11 +104,21 @@ class StrictInput(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_json_object_string(cls, value: object) -> object:
+        return _coerce_json_object_input(value)
+
 
 class PlainInput(BaseModel):
     """Base for MCP inputs without whitespace stripping."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_json_object_string(cls, value: object) -> object:
+        return _coerce_json_object_input(value)
 
 
 class DateRangeInput(BaseModel):

@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .email_db import EmailDatabase
 
+from .repo_paths import validate_new_output_path
+
 logger = logging.getLogger(__name__)
 
 # Maximum entries in per-instance analysis caches.  The graph is static
@@ -363,10 +365,9 @@ class CommunicationNetwork:
         if nx is None:
             return {"error": "networkx not installed. Run: pip install networkx"}
 
-        from pathlib import Path
-
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        nx.write_graphml(self._graph, output_path)
+        output = validate_new_output_path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        nx.write_graphml(self._graph, str(output))
 
         return {
             "output_path": output_path,

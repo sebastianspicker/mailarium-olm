@@ -5,16 +5,18 @@ from __future__ import annotations
 import zipfile
 from collections.abc import Callable, Generator
 from logging import Logger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from lxml import etree
 
 from .body_forensics import extract_source_headers
 from .olm_xml_helpers import (
+    _apply_attachment_payload_metadata,
     _detect_namespace,
     _extract_address_details,
     _extract_addresses,
     _extract_attachment_contents,
+    _extract_attachment_payloads,
     _extract_attachments,
     _extract_categories,
     _extract_exchange_list,
@@ -78,8 +80,34 @@ def parse_olm_archive_impl(
                     processed_xml_bytes += len(xml_bytes)
                     email = parse_email_xml_fn(xml_bytes, xml_path)
                     if email and extract_attachments:
-                        email.attachment_contents = _extract_attachment_contents(xml_bytes, xml_path, zf)
+                        transient_email = cast(Any, email)
+                        transient_email._attachment_payload_extraction_failed = False
+                        transient_email._attachment_payload_extraction_error = ""
+                        root = getattr(email, "_olm_root", None)
+                        ns = getattr(email, "_olm_ns", None)
+                        try:
+                            if isinstance(root, etree._Element) and isinstance(ns, dict):
+                                payloads = _extract_attachment_payloads(root, ns, xml_path, zf)
+                                email.attachment_contents = [
+                                    (
+                                        str(payload.get("name") or ""),
+                                        cast(bytes, payload.get("content") or b""),
+                                    )
+                                    for payload in payloads
+                                    if payload.get("content") is not None and str(payload.get("name") or "")
+                                ]
+                                _apply_attachment_payload_metadata(getattr(email, "attachments", []) or [], payloads)
+                            else:
+                                email.attachment_contents = _extract_attachment_contents(xml_bytes, xml_path, zf)
+                        except Exception as exc:
+                            logger.warning("Attachment extraction failed for %s: %s", xml_path, exc)
+                            email.attachment_contents = []
+                            transient_email._attachment_payload_extraction_failed = True
+                            transient_email._attachment_payload_extraction_error = str(exc)
                     if email:
+                        for attr_name in ("_olm_root", "_olm_ns"):
+                            if hasattr(email, attr_name):
+                                delattr(email, attr_name)
                         yield email
             except Exception as exc:  # pragma: no cover - defensive branch
                 logger.warning("Failed to parse %s: %s", xml_path, exc)
@@ -168,7 +196,7 @@ def parse_email_xml_impl(
     subject = _find_text(root, "OPFMessageCopySubject", ns)
     date = _normalize_date(_find_text(root, "OPFMessageCopySentTime", ns))
     body_text_el = _find(root, "OPFMessageCopyBody", ns)
-    body_text = "".join(body_text_el.itertext()) if body_text_el is not None else ""
+    body_text = "".join(str(part) for part in body_text_el.itertext()) if body_text_el is not None else ""
     body_html_el = _find(root, "OPFMessageCopyHTMLBody", ns)
     body_html = _extract_html_body(body_html_el) if body_html_el is not None else ""
     raw_body_text = body_text
@@ -221,7 +249,7 @@ def parse_email_xml_impl(
     exchange_extracted_meetings = _extract_exchange_meetings(root, ns)
 
     raw_source_el = _find(root, "OPFMessageCopySource", ns)
-    raw_source = "".join(raw_source_el.itertext()) if raw_source_el is not None else ""
+    raw_source = "".join(str(part) for part in raw_source_el.itertext()) if raw_source_el is not None else ""
     raw_source_headers = extract_source_headers(raw_source)
     attachment_names, attachments = _extract_attachments(root, ns)
 
@@ -267,4 +295,8 @@ def parse_email_xml_impl(
     apply_source_header_fallbacks_fn(parts)
     finalize_parsed_email_parts_fn(parts)
     enrichments = derive_email_enrichments_fn(parts, source_path)
-    return build_parsed_email_from_parts_fn(parts, enrichments)
+    email = build_parsed_email_from_parts_fn(parts, enrichments)
+    transient_email = cast(Any, email)
+    transient_email._olm_root = root
+    transient_email._olm_ns = ns
+    return email

@@ -37,7 +37,7 @@ def test_search_filtered_applies_to_filter() -> None:
             SearchResult(
                 chunk_id="match",
                 text="hello",
-                metadata={"to": "alice@example.com, bob@example.com", "date": "2024-01-01"},
+                metadata={"to": "employee@example.test, bob@example.com", "date": "2024-01-01"},
                 distance=0.1,
             ),
             SearchResult(
@@ -49,7 +49,7 @@ def test_search_filtered_applies_to_filter() -> None:
         ]
 
     retriever.search = _search
-    results = retriever.search_filtered(query="budget", to="alice", top_k=5)
+    results = retriever.search_filtered(query="budget", to="employee", top_k=5)
 
     assert len(results) == 1
     assert results[0].chunk_id == "match"

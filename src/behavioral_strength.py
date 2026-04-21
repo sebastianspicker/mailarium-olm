@@ -82,13 +82,10 @@ def _score_finding(finding: dict[str, Any]) -> dict[str, Any]:
         if str((_as_dict(citation.get("provenance"))).get("evidence_handle") or "")
     }
     message_ids = {
-        str(citation.get("message_or_document_id") or "")
-        for citation in supporting
-        if citation.get("message_or_document_id")
+        str(citation.get("message_or_document_id") or "") for citation in supporting if citation.get("message_or_document_id")
     }
     text_statuses = Counter(
-        str((_as_dict(citation.get("text_attribution"))).get("authored_quoted_inferred_status") or "")
-        for citation in supporting
+        str((_as_dict(citation.get("text_attribution"))).get("authored_quoted_inferred_status") or "") for citation in supporting
     )
 
     if len(evidence_handles) >= 2 or len(message_ids) >= 2:
@@ -182,9 +179,7 @@ def apply_behavioral_strength(
                 **row,
                 "evidence_strength": str(evidence_strength.get("label") or ""),
                 "evidence_confidence": str(_as_dict(confidence_split.get("evidence_confidence")).get("label") or ""),
-                "interpretation_confidence": str(
-                    _as_dict(confidence_split.get("interpretation_confidence")).get("label") or ""
-                ),
+                "interpretation_confidence": str(_as_dict(confidence_split.get("interpretation_confidence")).get("label") or ""),
             }
         )
 

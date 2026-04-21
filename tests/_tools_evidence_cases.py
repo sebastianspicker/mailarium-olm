@@ -26,7 +26,7 @@ class MockEmailDB:
         )
         self.conn.execute(
             "INSERT INTO emails VALUES "
-            "('uid-1', 'Budget Review', 'alice@example.com', 'Alice', "
+            "('uid-1', 'Budget Review', 'employee@example.test', 'Alice', "
             "'2025-06-01', 'We decided to go with vendor A.', 'conv-1', 'Inbox', "
             "'en', 'positive', 0.85, 'run-1')"
         )
@@ -125,6 +125,17 @@ class MockEmailDB:
 
     def top_contacts(self, email, limit=5):
         return [{"email": "bob@example.com", "count": 5}]
+
+    def close(self) -> None:
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 class MockDeps:

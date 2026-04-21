@@ -30,11 +30,19 @@ def test_saved_live_expanded_report_has_expected_contract():
     assert report["questions_path"].endswith("docs/agent/qa_eval_questions.live_expanded.json")
     assert report["total_cases"] == len(cases)
     assert report["summary"]["total_cases"] == len(cases)
+    assert report["source_mode"] == "live_only"
     assert report["source_counts"] == {"live": len(cases)}
     assert isinstance(report["live_backend"], str) and report["live_backend"]
     assert len(report["results"]) == len(cases)
+    assert report["summary"]["support_uid_hit"]["passed"] == len(cases)
+    assert report["summary"]["support_uid_recall"]["average"] >= 0.95
+    assert report["summary"]["confidence_calibration_match"]["passed"] >= 9
     assert report["summary"]["quote_attribution_precision"]["scorable"] >= 2
+    assert report["summary"]["quote_attribution_precision"]["average"] >= 1.0
     assert report["summary"]["quote_attribution_coverage"]["scorable"] >= 2
+    assert report["summary"]["quote_attribution_coverage"]["average"] >= 1.0
+    assert report["threshold_verdict"]["profile"] == "live_expanded"
+    assert report["threshold_verdict"]["status"] == "fail"
 
 
 def test_saved_embedding_live_expanded_report_has_expected_contract():
@@ -48,6 +56,11 @@ def test_saved_embedding_live_expanded_report_has_expected_contract():
     assert report["questions_path"].endswith("docs/agent/qa_eval_questions.live_expanded.json")
     assert report["total_cases"] == len(cases)
     assert report["summary"]["total_cases"] == len(cases)
+    assert report["source_mode"] == "live_only"
     assert report["source_counts"] == {"live": len(cases)}
     assert report["live_backend"] == "embedding"
     assert len(report["results"]) == len(cases)
+    assert report["summary"]["support_uid_hit"]["scorable"] == len(cases)
+    assert report["summary"]["support_uid_recall"]["scorable"] == len(cases)
+    assert report["threshold_verdict"]["profile"] == "live_expanded_embedding"
+    assert report["threshold_verdict"]["status"] == "pass"

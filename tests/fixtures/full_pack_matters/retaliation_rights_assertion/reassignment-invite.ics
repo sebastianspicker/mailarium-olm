@@ -1,0 +1,11 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:20250305T150000
+DTEND:20250305T153000
+SUMMARY:Project reassignment and reporting rules
+LOCATION:Office 5
+ORGANIZER:mailto:manager@example.test
+ATTENDEE:mailto:employee@example.test
+END:VEVENT
+END:VCALENDAR

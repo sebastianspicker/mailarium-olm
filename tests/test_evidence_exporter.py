@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from src.email_db import EmailDatabase
 from src.evidence_exporter import EvidenceExporter
 from src.parse_olm import Email
@@ -15,8 +17,8 @@ def _make_email(**overrides) -> Email:
         "message_id": "<msg1@example.com>",
         "subject": "Team Meeting",
         "sender_name": "Boss",
-        "sender_email": "boss@company.com",
-        "to": ["Worker <worker@company.com>"],
+        "sender_email": "boss@example.test",
+        "to": ["Worker <worker@example.test>"],
         "cc": [],
         "bcc": [],
         "date": "2024-06-15T10:30:00",
@@ -80,6 +82,34 @@ def test_html_export_contains_items():
     assert "bossing" in html.lower()
     assert "harassment" in html.lower()
     db.close()
+
+
+def test_export_file_rejects_existing_html_output_path(tmp_path: Path) -> None:
+    db = _seed_db()
+    exporter = EvidenceExporter(db)
+    output = tmp_path / "existing.html"
+    output.write_text("keep", encoding="utf-8")
+
+    try:
+        with pytest.raises(ValueError, match="already exists"):
+            exporter.export_file(str(output), fmt="html")
+        assert output.read_text(encoding="utf-8") == "keep"
+    finally:
+        db.close()
+
+
+def test_export_file_rejects_existing_csv_output_path(tmp_path: Path) -> None:
+    db = _seed_db()
+    exporter = EvidenceExporter(db)
+    output = tmp_path / "existing.csv"
+    output.write_text("keep", encoding="utf-8")
+
+    try:
+        with pytest.raises(ValueError, match="already exists"):
+            exporter.export_file(str(output), fmt="csv")
+        assert output.read_text(encoding="utf-8") == "keep"
+    finally:
+        db.close()
 
 
 def test_html_export_contains_quotes():

@@ -12,10 +12,22 @@ if TYPE_CHECKING:
 
 def run_generate_report_impl(get_email_db: Callable[[], EmailDatabase], output_path: str) -> None:
     db = get_email_db()
-    from .report_generator import ReportGenerator
+    from .report_generator import ReportGenerationError, ReportGenerator
 
     generator = ReportGenerator(db)
-    generator.generate(output_path=output_path)
+    try:
+        generator.generate(output_path=output_path)
+    except ReportGenerationError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+
+    warnings = getattr(generator, "last_warnings", [])
+    if isinstance(warnings, list) and warnings:
+        print(f"Report generated with warnings: {output_path}")
+        for warning in warnings:
+            print(f"  Warning: {warning}")
+        return
+
     print(f"Report generated: {output_path}")
 
 
@@ -30,11 +42,19 @@ def run_export_thread_impl(
 
     exporter = EmailExporter(db)
     if output_path:
-        result = exporter.export_thread_file(conversation_id, output_path, fmt=fmt)
+        result = exporter.export_thread_file(
+            conversation_id,
+            output_path,
+            fmt=fmt,
+        )
     else:
         safe_id = conversation_id[:20].replace("/", "_")
         default_path = f"thread_{safe_id}.{fmt}"
-        result = exporter.export_thread_file(conversation_id, default_path, fmt=fmt)
+        result = exporter.export_thread_file(
+            conversation_id,
+            default_path,
+            fmt=fmt,
+        )
 
     if "error" in result:
         print(f"Error: {result['error']}")

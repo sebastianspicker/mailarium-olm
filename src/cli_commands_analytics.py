@@ -196,7 +196,7 @@ def run_response_times_impl(db) -> None:
         from rich.table import Table
 
         console = Console()
-        table = Table(title="[bold]Average Response Times[/]", border_style="dim")
+        table = Table(title="[bold]Average Response Times (Recent Sample)[/]", border_style="dim")
         table.add_column("#", style="dim", width=3, justify="right")
         table.add_column("Avg Time", width=10, justify="right")
         table.add_column("Replies", width=8, justify="right", style="cyan")
@@ -220,10 +220,12 @@ def run_response_times_impl(db) -> None:
                 row["replier"],
             )
         console.print(table)
+        console.print("[dim]Based on up to the 500 most recent canonical reply pairs.[/]")
     except ImportError:
-        print("\nAverage response times:\n")
+        print("\nAverage response times (recent sample):\n")
         for row in data:
             print(f"  {row['avg_response_hours']:>6.1f}h avg  ({row['response_count']:>3} replies)  {row['replier']}")
+        print("\n  Based on up to the 500 most recent canonical reply pairs.")
 
 
 def run_suggest_impl(get_email_db: Callable[[], EmailDatabase]) -> None:

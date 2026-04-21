@@ -41,7 +41,7 @@ class WritingMetrics:
 
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<!\.)\.(?!\.)\s+|[!?]+\s+|(?<!\.)\.(?!\.)$|[!?]+$")
-_WORD_RE = re.compile(r"\b[a-zA-Z]+\b")
+_WORD_RE = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*", re.UNICODE)
 
 
 def _split_sentences(text: str) -> list[str]:

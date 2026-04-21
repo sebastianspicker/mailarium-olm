@@ -17,6 +17,47 @@ from .utils import ToolDepsProto, json_error, json_response, run_with_db
 
 logger = logging.getLogger(__name__)
 
+_DEEP_CONTEXT_EMAIL_FIELDS = {
+    "uid",
+    "message_id",
+    "subject",
+    "sender_name",
+    "sender_email",
+    "date",
+    "folder",
+    "email_type",
+    "has_attachments",
+    "attachment_count",
+    "priority",
+    "is_read",
+    "conversation_id",
+    "in_reply_to",
+    "base_subject",
+    "body_length",
+    "body_text",
+    "body_render_mode",
+    "body_render_source",
+    "thread_topic",
+    "inference_classification",
+    "is_calendar_message",
+    "detected_language",
+    "sentiment_label",
+    "sentiment_score",
+    "content_sha256",
+    "body_kind",
+    "body_empty_reason",
+    "recovery_strategy",
+    "recovery_confidence",
+    "normalized_body_source",
+    "body_normalization_version",
+    "to",
+    "cc",
+    "bcc",
+    "categories",
+    "references",
+    "attachments",
+}
+
 
 def _thread_graph_for_email(email: dict[str, Any]) -> dict[str, Any]:
     """Return canonical vs inferred thread graph fields for one email."""
@@ -47,6 +88,95 @@ def _thread_graph_for_email(email: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compact_email_for_deep_context(email: dict[str, Any]) -> dict[str, Any]:
+    """Return a stable email payload without giant raw-body fields."""
+    return {key: email.get(key) for key in _DEEP_CONTEXT_EMAIL_FIELDS if key in email}
+
+
+def _estimated_json_chars(payload: dict[str, Any]) -> int:
+    return len(json.dumps(payload, ensure_ascii=False, default=str, separators=(",", ":")))
+
+
+def _trim_text(value: Any, max_chars: int) -> str:
+    collapsed = str(value or "")
+    if len(collapsed) <= max_chars:
+        return collapsed
+    if max_chars <= 3:
+        return collapsed[:max_chars]
+    return collapsed[: max_chars - 3].rstrip() + "..."
+
+
+def _compact_deep_context_payload(payload: dict[str, Any], *, budget: int) -> dict[str, Any]:
+    """Drop low-priority deep-context sidecars before the generic JSON budget guard runs."""
+    if budget <= 0 or _estimated_json_chars(payload) <= budget:
+        return payload
+    compacted = json.loads(json.dumps(payload, default=str))
+    email = compacted.get("email")
+    if isinstance(email, dict):
+        body_text = str(email.get("body_text") or "")
+        if body_text:
+            email["body_total_chars"] = len(body_text)
+    conversation_debug = compacted.get("conversation_debug")
+    if isinstance(conversation_debug, dict):
+        segments = conversation_debug.get("segments")
+        if isinstance(segments, list) and segments:
+            conversation_debug["segment_sample"] = [
+                {
+                    "ordinal": item.get("ordinal"),
+                    "segment_type": item.get("segment_type"),
+                    "source_surface": item.get("source_surface"),
+                }
+                for item in segments[:3]
+                if isinstance(item, dict)
+            ]
+            conversation_debug["segment_truncated_count"] = max(0, len(segments) - len(conversation_debug["segment_sample"]))
+            conversation_debug.pop("segments", None)
+    if _estimated_json_chars(compacted) <= budget:
+        return compacted
+    thread_payload = compacted.get("thread")
+    if isinstance(thread_payload, dict):
+        timeline = thread_payload.get("timeline")
+        if isinstance(timeline, list) and len(timeline) > 2:
+            thread_payload["timeline"] = timeline[:1] + timeline[-1:]
+            thread_payload["timeline_truncated_count"] = max(0, len(timeline) - len(thread_payload["timeline"]))
+        summary = str(thread_payload.get("summary") or "")
+        if summary:
+            thread_payload["summary"] = _trim_text(summary, 240)
+    if _estimated_json_chars(compacted) <= budget:
+        return compacted
+    evidence = compacted.get("evidence")
+    if isinstance(evidence, dict):
+        items = evidence.get("items")
+        if isinstance(items, list) and len(items) > 8:
+            evidence["items"] = items[:8]
+            evidence["truncated_count"] = len(items) - len(evidence["items"])
+    if _estimated_json_chars(compacted) <= budget:
+        return compacted
+    if isinstance(email, dict):
+        trimmed_email = {
+            key: email.get(key)
+            for key in (
+                "uid",
+                "subject",
+                "sender_email",
+                "sender_name",
+                "date",
+                "body_text",
+                "body_total_chars",
+                "body_render_mode",
+                "body_render_source",
+                "weak_message",
+            )
+            if key in email
+        }
+        compacted["email"] = trimmed_email
+    for optional_key in ("conversation_debug", "sender", "evidence", "thread"):
+        if _estimated_json_chars(compacted) <= budget:
+            break
+        compacted.pop(optional_key, None)
+    return compacted
+
+
 def register(mcp: Any, deps: ToolDepsProto) -> None:
     """Register browse and export tools."""
 
@@ -59,6 +189,9 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
 
         Provide exactly one of uid (single email) or conversation_id (thread).
         """
+
+        if params.format == "pdf" and not params.output_path:
+            return json_error("pdf export requires output_path; omit output_path only for in-memory HTML export.")
 
         def _work(db):
             from ..email_exporter import EmailExporter
@@ -186,7 +319,9 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
                     email["body_text"],
                     max_body,
                 )
-            result: dict = {"email": email}
+            result: dict = {"email": _compact_email_for_deep_context(email)}
+            if weak_message:
+                result["email"]["weak_message"] = weak_message
 
             # Thread context
             if params.include_thread:
@@ -292,7 +427,10 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
                     "inferred_thread": inferred_thread,
                 }
 
-            return json_response(result, default=str)
+            return json_response(
+                _compact_deep_context_payload(result, budget=get_settings().mcp_max_json_response_chars),
+                default=str,
+            )
 
         return await run_with_db(deps, _work)
 

@@ -19,12 +19,12 @@ class TestEvidenceExport:
 
         with patch("src.evidence_exporter.EvidenceExporter") as mock_cls:
             mock_exporter = MagicMock()
-            mock_exporter.export_file.return_value = {"path": "out.html", "count": 3}
+            mock_exporter.export_file.return_value = {"path": "private/exports/out.html", "count": 3}
             mock_cls.return_value = mock_exporter
-            params = EvidenceExportInput(output_path="out.html", format="html")
+            params = EvidenceExportInput(output_path="private/exports/out.html", format="html")
             result = await fn(params)
             data = json.loads(result)
-            assert data["path"] == "out.html"
+            assert data["path"] == "private/exports/out.html"
 
 
 class TestEmailDossier:
@@ -54,12 +54,12 @@ class TestEmailDossier:
             patch("src.network_analysis.CommunicationNetwork") as mock_net_cls,
         ):
             mock_gen = MagicMock()
-            mock_gen.generate_file.return_value = {"path": "dossier.html", "status": "ok"}
+            mock_gen.generate_file.return_value = {"path": "private/exports/dossier.html", "status": "ok"}
             mock_gen_cls.return_value = mock_gen
             mock_net_cls.return_value = MagicMock()
 
             params = EmailDossierInput(
-                output_path="dossier.html",
+                output_path="private/exports/dossier.html",
                 title="Test Dossier",
                 case_reference="CASE-001",
             )
@@ -78,10 +78,10 @@ class TestEmailDossier:
             patch("src.network_analysis.CommunicationNetwork", side_effect=RuntimeError("no graph")),
         ):
             mock_gen = MagicMock()
-            mock_gen.generate_file.return_value = {"path": "dossier.html", "status": "ok"}
+            mock_gen.generate_file.return_value = {"path": "private/exports/dossier.html", "status": "ok"}
             mock_gen_cls.return_value = mock_gen
 
-            params = EmailDossierInput(output_path="dossier.html")
+            params = EmailDossierInput(output_path="private/exports/dossier.html")
             result = await fn(params)
             data = json.loads(result)
             assert data["status"] == "ok"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import pickle  # nosec B403 - persists only local trusted scikit-learn artifacts
+import pickle  # nosec B403
 from pathlib import Path
 from typing import Any
 
@@ -178,7 +178,7 @@ class TopicModeler:
             "ngram_range": self.ngram_range,
             "sklearn_version": sklearn.__version__,
         }
-        # nosec B301 — serializing user's own trained model, not untrusted data
+        # nosec B301
         with open(path, "wb") as f:
             pickle.dump(data, f)  # nosec B301
         logger.info("Topic model saved to %s", path)
@@ -204,7 +204,7 @@ class TopicModeler:
             raise FileNotFoundError(f"Topic model file not found: {path}")
         logger.info("Loading topic model from %s (pickle — ensure this file is trusted)", path)
         with open(path, "rb") as f:
-            data = pickle.load(f)  # nosec B301 — loading user's own saved model, not untrusted data
+            data = pickle.load(f)  # nosec B301
 
         # Validate scikit-learn version compatibility
         saved_version = data.get("sklearn_version", "unknown")

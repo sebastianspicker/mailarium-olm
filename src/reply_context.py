@@ -21,6 +21,8 @@ _RE_REPLY_CONTEXT_HEADER_LINE = re.compile(
     r"od|do|wys[łl]ano|temat"
     r"):\s*(.+)$"
 )
+_RE_REPLY_WRAPPER_LINE = re.compile(r"(?i)^(?:on .+ wrote:|am .+ schrieb.*:)$")
+_RE_REPLY_SEPARATOR_LINE = re.compile(r"(?i)^-+\s*original message\s*-+$")
 
 _RE_REPLY_CONTEXT_LABELS = {
     "from": "from",
@@ -153,12 +155,18 @@ def extract_reply_context(body_text: str, body_html: str, email_type: str) -> Re
         lines = text.splitlines()
         for idx, line in enumerate(lines):
             parsed = _parse_reply_context_line(line)
-            if not parsed:
+            start_index: int | None = None
+            confidence = 0.8
+            if parsed:
+                label, _value = parsed
+                if label in {"from", "sent"}:
+                    start_index = idx
+            elif _RE_REPLY_WRAPPER_LINE.match(line.strip()) or _RE_REPLY_SEPARATOR_LINE.match(line.strip()):
+                start_index = idx + 1
+                confidence = 0.65
+            if start_index is None:
                 continue
-            label, _value = parsed
-            if label not in {"from", "sent"}:
-                continue
-            block, header_count = _collect_header_block(lines, idx)
+            block, header_count = _collect_header_block(lines, start_index)
             if header_count < 3:
                 continue
             reply_from = _extract_identity_addresses([block.get("from", "")])
@@ -172,6 +180,6 @@ def extract_reply_context(body_text: str, body_html: str, email_type: str) -> Re
                     subject=subject,
                     date=date,
                     source=source,
-                    confidence=0.8,
+                    confidence=confidence,
                 )
     return None

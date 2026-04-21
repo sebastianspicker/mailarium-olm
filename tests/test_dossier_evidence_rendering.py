@@ -163,14 +163,14 @@ def test_toc_includes_index(gen):
 def test_bcc_shown_in_appendix(db, gen):
     db.conn.execute(
         "INSERT INTO recipients(email_uid, address, display_name, type) VALUES(?,?,?,?)",
-        ("uid-1", "secret@test.com", "Secret Person", "bcc"),
+        ("uid-1", "secret@example.test", "Secret Person", "bcc"),
     )
     db.conn.commit()
 
     result = gen.generate()
     html = result["html"]
 
-    assert "secret@test.com" in html
+    assert "secret@example.test" in html
     assert "<strong>BCC:</strong>" in html
 
 

@@ -262,8 +262,8 @@ def test_stats_unique_senders_ignores_blank_and_trims():
             if offset == 0:
                 return {
                     "metadatas": [
-                        {"uid": "1", "sender_email": " Alice@Example.com ", "folder": "Inbox"},
-                        {"uid": "2", "sender_email": "alice@example.com", "folder": "Inbox"},
+                        {"uid": "1", "sender_email": " Employee@Example.TEST ", "folder": "Inbox"},
+                        {"uid": "2", "sender_email": "employee@example.test", "folder": "Inbox"},
                         {"uid": "3", "sender_email": "   ", "folder": "Inbox"},
                     ]
                 }

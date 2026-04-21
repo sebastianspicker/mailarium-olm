@@ -31,6 +31,12 @@ CATEGORY_GLOSSARY: dict[str, str] = {
     "exclusion": "Deliberate isolation from meetings, decisions, communications, or social activities",
     "gaslighting": "Denying facts, rewriting history, or questioning competence to undermine confidence",
     "workload": "Unreasonable assignments, impossible deadlines, or deliberate work overload",
+    "contradiction": "Material tension between one record and another that requires source-anchored reconciliation",
+    "chronology": "Timeline anchor, sequencing conflict, or dated event linkage that affects case reconstruction",
+    "provenance": "Source-origin or custody detail needed to confirm where a record came from and how it was handled",
+    "quote_repair": "Replacement or repair of a previously unstable quote so later analysis stays source-accurate",
+    "omission": "Meaningful missing follow-through, reply, or process step that the record makes visible",
+    "promise": "Recorded promise, representation, or commitment that matters to later conduct review",
     "general": "Other relevant evidence not fitting a specific category",
 }
 
@@ -167,7 +173,7 @@ class DossierGenerator:
         if evidence_uids:
             ph = ",".join("?" * len(evidence_uids))
             rows = self._db.conn.execute(
-                f"SELECT uid, thread_topic FROM emails WHERE uid IN ({ph})",  # nosec B608
+                f"SELECT uid, thread_topic FROM emails WHERE uid IN ({ph})",  # nosec
                 evidence_uids,
             ).fetchall()
             thread_topics = {r["uid"]: r["thread_topic"] or "" for r in rows}

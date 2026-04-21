@@ -12,7 +12,7 @@ def _make_email(**overrides) -> Email:
         "message_id": "<msg1@example.com>",
         "subject": "Hello",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["Bob <bob@example.com>"],
         "cc": [],
         "bcc": [],
@@ -29,11 +29,11 @@ def _make_email(**overrides) -> Email:
 def _populated_db() -> EmailDatabase:
     db = EmailDatabase(":memory:")
     # Mon Jan 15 2024
-    db.insert_email(_make_email(message_id="<m1@ex.com>", date="2024-01-15T10:30:00"))
+    db.insert_email(_make_email(message_id="<m1@example.test>", date="2024-01-15T10:30:00"))
     # Tue Jan 16 2024
-    db.insert_email(_make_email(message_id="<m2@ex.com>", date="2024-01-16T14:00:00"))
+    db.insert_email(_make_email(message_id="<m2@example.test>", date="2024-01-16T14:00:00"))
     # Wed Feb 14 2024
-    db.insert_email(_make_email(message_id="<m3@ex.com>", date="2024-02-14T09:00:00"))
+    db.insert_email(_make_email(message_id="<m3@example.test>", date="2024-02-14T09:00:00"))
     return db
 
 
@@ -62,7 +62,7 @@ class TestVolumeOverTime:
         db = _populated_db()
         db.insert_email(
             _make_email(
-                message_id="<m4@ex.com>",
+                message_id="<m4@example.test>",
                 sender_email="bob@example.com",
                 date="2024-01-20T10:00:00",
             )
@@ -87,7 +87,7 @@ class TestVolumeOverTime:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<tz-pos@ex.com>",
+                message_id="<tz-pos@example.test>",
                 date="2024-01-01T00:30:00+02:00",
             )
         )
@@ -100,7 +100,7 @@ class TestVolumeOverTime:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<tz-neg@ex.com>",
+                message_id="<tz-neg@example.test>",
                 date="2024-01-01T23:30:00-05:00",
             )
         )
@@ -113,7 +113,7 @@ class TestVolumeOverTime:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<tz-filter@ex.com>",
+                message_id="<tz-filter@example.test>",
                 date="2024-01-01T23:30:00-05:00",
             )
         )
@@ -144,7 +144,7 @@ class TestActivityHeatmap:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<heatmap@ex.com>",
+                message_id="<heatmap@example.test>",
                 date="2024-01-01T00:30:00-05:00",
             )
         )
@@ -157,13 +157,13 @@ class TestActivityHeatmap:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<dst-1@ex.com>",
+                message_id="<dst-1@example.test>",
                 date="2024-03-10T01:30:00-05:00",
             )
         )
         db.insert_email(
             _make_email(
-                message_id="<dst-2@ex.com>",
+                message_id="<dst-2@example.test>",
                 date="2024-03-10T03:30:00-04:00",
             )
         )
@@ -192,19 +192,19 @@ class TestResponseTimes:
         # Original email
         db.insert_email(
             _make_email(
-                message_id="<orig@ex.com>",
+                message_id="<orig@example.test>",
                 date="2024-01-15T10:00:00",
             )
         )
         # Reply 2 hours later
         db.insert_email(
             _make_email(
-                message_id="<reply@ex.com>",
+                message_id="<reply@example.test>",
                 subject="RE: Hello",
                 sender_email="bob@example.com",
                 sender_name="Bob",
-                to=["Alice <alice@example.com>"],
-                in_reply_to="<orig@ex.com>",
+                to=["Alice <employee@example.test>"],
+                in_reply_to="<orig@example.test>",
                 date="2024-01-15T12:00:00",
             )
         )
@@ -213,21 +213,23 @@ class TestResponseTimes:
         assert len(result) == 1
         assert result[0]["replier"] == "bob@example.com"
         assert result[0]["avg_response_hours"] == 2.0
+        assert result[0]["response_sample_scope"] == "recent_canonical_reply_pairs"
+        assert result[0]["response_sample_pair_limit"] == 500
 
     def test_negative_times_excluded(self):
         db = EmailDatabase(":memory:")
         # "Reply" is before original (malformed data)
         db.insert_email(
             _make_email(
-                message_id="<orig@ex.com>",
+                message_id="<orig@example.test>",
                 date="2024-01-15T12:00:00",
             )
         )
         db.insert_email(
             _make_email(
-                message_id="<reply@ex.com>",
+                message_id="<reply@example.test>",
                 sender_email="bob@example.com",
-                in_reply_to="<orig@ex.com>",
+                in_reply_to="<orig@example.test>",
                 date="2024-01-15T10:00:00",
             )
         )

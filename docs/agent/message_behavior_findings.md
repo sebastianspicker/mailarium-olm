@@ -25,8 +25,20 @@ This BA6 layer turns per-message rhetoric and bounded message context into behav
   - `HR`
   - `formal process`
   - `disciplinary`
+  - procedural intimidation or hierarchy-marking without a clear substantive basis
 - Typical neutral alternative:
   - routine escalation may be policy-required or time-critical
+
+### `blame_shifting`
+
+- Meaning:
+  - responsibility or causation is framed onto one person in a way that can function as unilateral narrative control
+- Typical evidence:
+  - `due to your delay`
+  - `because of you`
+  - accusation plus vague concern-framing in the same message
+- Typical neutral alternative:
+  - the message may accurately attribute responsibility within the current workflow
 
 ### `public_correction`
 
@@ -34,7 +46,7 @@ This BA6 layer turns per-message rhetoric and bounded message context into behav
   - corrective or accusatory wording is sent with unnecessary visible recipients
 - Typical evidence:
   - multi-recipient visibility
-  - accusation or competence-framing in authored text
+  - accusation, competence-framing, or patronizing wording in authored text
 - Typical neutral alternative:
   - wider circulation may be operationally required
 
@@ -79,6 +91,7 @@ This BA6 layer turns per-message rhetoric and bounded message context into behav
   - ridicule
   - competence framing
   - patronizing wording
+  - degrading dismissal layered onto capability or credibility framing
 - Typical neutral alternative:
   - a one-off correction or performance concern may explain the phrasing
 

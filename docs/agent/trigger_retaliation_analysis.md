@@ -16,8 +16,7 @@ This BA8 layer adds explicit trigger events and conservative before/after deltas
 ## Before/after metrics
 
 - `response_time`
-  - currently `not_available`
-  - explicit request-response pairing is not modeled yet
+  - based on BA11 reply-pairing when request-expected target-authored messages exist
 - `escalation_rate`
   - count of BA6 `escalation` candidates
 - `inclusion_changes`
@@ -27,13 +26,32 @@ This BA8 layer adds explicit trigger events and conservative before/after deltas
 - `demand_intensity`
   - count of BA6 `deadline_pressure`, `selective_accountability`, and `escalation` candidates
 
+## Trigger windows
+
+Each trigger event now keeps a bounded window breakdown:
+
+- `immediate_after`
+  - 0 to 14 days after the trigger
+- `medium_term`
+  - 15 to 45 days after the trigger
+- `long_tail`
+  - more than 45 days after the trigger
+
+These windows are descriptive. BA8 still does not infer retaliation from timing alone.
+
 ## Assessment states
 
-### `possible_retaliatory_shift`
+### `adverse_shift_after_trigger`
 
 - before/after context exists
 - adverse message-level behaviour totals increased after the trigger event
 - still conditional because comparator support is not present yet
+
+### `mixed_shift`
+
+- before/after context exists
+- some adverse metrics increased, but others moved in a different direction
+- confounders or mixed metric movement keep the assessment below a cleaner adverse-shift read
 
 ### `no_clear_shift`
 
@@ -54,9 +72,29 @@ Each trigger event emits:
 
 These UID lists are the traceability anchor for later report phases.
 
+## Structured retaliation timeline assessment
+
+`retaliation_analysis` now also emits `retaliation_timeline_assessment` for counsel-facing timeline review.
+
+It contains:
+
+- `protected_activity_timeline`
+- `adverse_action_timeline`
+- `temporal_correlation_analysis`
+- `strongest_retaliation_indicators`
+- `strongest_non_retaliatory_explanations`
+- `overall_evidentiary_rating`
+
+Rules:
+
+- this is still a timing-and-sequence review layer, not a final retaliation holding
+- timing-based indicators must stay paired with confounders, uncertainty reasons, or both when those exist
+- `overall_evidentiary_rating` stays conservative and evidence-bound
+
 ## Boundaries
 
 - BA8 requires explicit trigger events from the operator.
 - BA8 does not yet compare against peer comparators.
 - BA8 does not yet infer retaliation from timing alone.
+- BA8 now surfaces simple confounder signals such as new senders, topic shifts, thread/workflow changes, and narrow post-trigger bursts.
 - Later BA phases still need comparator logic, stronger evidence scoring, and report wording policy.

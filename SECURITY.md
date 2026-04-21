@@ -2,21 +2,39 @@
 
 ## Supported Versions
 
-Only the latest version on the `main` branch is supported with security updates.
+Security fixes are only guaranteed for the latest state of the `dev` branch.
 
-## Reporting a Vulnerability
+Best-practice support assumptions:
 
-If you discover a security vulnerability, please report it responsibly:
+- no backport promise for older snapshots or local forks
+- reports should reproduce against the latest `dev` branch when possible
+- local configuration mistakes, unsafe export handling, and unsupported environment changes may fall outside coordinated disclosure scope
 
-1. **Do not** open a public GitHub issue.
-2. Email a description of the vulnerability, steps to reproduce, and any relevant context.
-3. Allow reasonable time for a fix before any public disclosure.
+## Reporting A Vulnerability
 
-## Scope
+Do not open a public GitHub issue for a suspected vulnerability.
 
-This project runs entirely locally — no data leaves the machine. The primary attack surfaces are:
+Preferred process:
 
-- **OLM/XML parsing** — mitigated with XXE-safe lxml parser settings.
-- **SQL injection** — mitigated with parameterized queries throughout.
-- **Dependency supply chain** — mitigated with Dependabot, pip-audit, and bandit in CI.
-- **Input sanitization** — ANSI/control character stripping on untrusted text.
+1. Use GitHub private vulnerability reporting for this repository if it is available.
+2. If private reporting is unavailable, contact the maintainer directly before public disclosure.
+3. Include the affected branch or commit, reproduction steps, impact, and any relevant logs or proof-of-concept details.
+4. Give reasonable time for triage and remediation before public disclosure.
+
+## Scope And Threat Model
+
+This project is local-first, but that does not mean risk-free.
+
+Primary security-sensitive areas include:
+
+- **OLM/XML parsing**: mitigated with XXE-safe parsing limits and local-file handling constraints.
+- **Local file and export paths**: write/export paths are validated against allowlisted local roots.
+- **SQLite and query handling**: mitigated with parameterized queries and constrained input models.
+- **Dependency supply chain**: monitored with CI checks including `bandit` and the bounded `scripts/dependency_audit.py` wrapper around `pip-audit`.
+- **Untrusted content rendering**: ANSI/control-character stripping and output sanitization reduce terminal/rendering abuse.
+
+## Operational Notes
+
+- Email content stays local, but first-run model loading may contact Hugging Face to download or validate cached model weights unless you explicitly run in offline mode.
+- Generated HTML, PDF, CSV, JSON, and bundle exports may contain sensitive source content and should be reviewed before sharing.
+- For serious operator use, keep live runtime data under `private/runtime/current/` and keep tracked `data/` sanitized.

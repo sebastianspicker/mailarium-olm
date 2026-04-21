@@ -12,9 +12,11 @@ Strategy:
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 
+from .attachment_identity import attachment_chunk_token
 from .formatting import build_email_header
 
 
@@ -235,6 +237,7 @@ def chunk_email(email_dict: dict) -> list[EmailChunk]:
     bcc_str = ", ".join(email_dict.get("bcc", []))
     att_names = email_dict.get("attachment_names", [])
     att_names_str = ", ".join(att_names)
+    body_surface_hash = hashlib.sha256(body.encode("utf-8", errors="ignore")).hexdigest()
 
     # Metadata stored in ChromaDB (not embedded, but returned with results)
     base_metadata = {
@@ -261,6 +264,8 @@ def chunk_email(email_dict: dict) -> list[EmailChunk]:
         "is_calendar_message": str(email_dict.get("is_calendar_message", False)),
         "thread_topic": email_dict.get("thread_topic", "") or "",
         "inference_classification": email_dict.get("inference_classification", "") or "",
+        "source_scope": "email_body",
+        "surface_hash": body_surface_hash,
     }
 
     if len(body) <= MAX_CHUNK_CHARS:
@@ -270,16 +275,24 @@ def chunk_email(email_dict: dict) -> list[EmailChunk]:
                 uid=uid,
                 chunk_id=f"{uid}__0",
                 text=text,
-                metadata={**base_metadata, "chunk_index": "0", "total_chunks": "1"},
+                metadata={
+                    **base_metadata,
+                    "chunk_index": "0",
+                    "total_chunks": "1",
+                    "segment_ordinal": "0",
+                    "char_start": 0,
+                    "char_end": len(body),
+                },
             )
         ]
 
     # Clamp to avoid negative/zero max_len when headers are unusually long
     max_body_len = max(OVERLAP_CHARS + 100, MAX_CHUNK_CHARS - len(header) - 50)
-    body_segments = _split_text(body, max_body_len, OVERLAP_CHARS)
+    body_segments_with_offsets = _split_text_with_offsets(body, max_body_len, OVERLAP_CHARS)
+    body_segments = [segment for segment, _start, _end in body_segments_with_offsets]
 
     chunks: list[EmailChunk] = []
-    for i, segment in enumerate(body_segments):
+    for i, (segment, start_offset, end_offset) in enumerate(body_segments_with_offsets):
         if i == 0:
             # First chunk gets full header + extra metadata lines
             text = f"{header}\n\n[Part 1/{len(body_segments)}]\n{segment}"
@@ -310,6 +323,9 @@ def chunk_email(email_dict: dict) -> list[EmailChunk]:
                     **base_metadata,
                     "chunk_index": str(i),
                     "total_chunks": str(len(body_segments)),
+                    "segment_ordinal": str(i),
+                    "char_start": start_offset,
+                    "char_end": end_offset,
                 },
             )
         )
@@ -319,21 +335,28 @@ def chunk_email(email_dict: dict) -> list[EmailChunk]:
 
 def _split_text(text: str, max_len: int, overlap: int) -> list[str]:
     """Split text into overlapping segments, preferring to break at paragraph/sentence boundaries."""
-    if not text:
-        return [text] if text is not None else []
-    if max_len <= 0:
-        return [text]
-    if len(text) <= max_len:
-        return [text]
+    return [segment for segment, _start, _end in _split_text_with_offsets(text, max_len, overlap)]
 
-    segments = []
+
+def _split_text_with_offsets(text: str, max_len: int, overlap: int) -> list[tuple[str, int, int]]:
+    """Split text into overlapping segments and return ``(segment, start, end)``."""
+    if not text:
+        return [(text, 0, len(text))] if text is not None else []
+    if max_len <= 0:
+        return [(text, 0, len(text))]
+    if len(text) <= max_len:
+        return [(text, 0, len(text))]
+
+    segments: list[tuple[str, int, int]] = []
     start = 0
 
     while start < len(text):
         end = start + max_len
 
         if end >= len(text):
-            segments.append(text[start:])
+            segment = text[start:]
+            if segment.strip():
+                segments.append((segment, start, len(text)))
             break
 
         # Try to break at paragraph boundary
@@ -356,11 +379,11 @@ def _split_text(text: str, max_len: int, overlap: int) -> list[str]:
 
         segment = text[start:break_point]
         if segment.strip():  # Skip empty or whitespace-only segments
-            segments.append(segment)
+            segments.append((segment, start, break_point))
         start = max(start + 1, break_point - overlap)
 
     # Ensure at least one segment is returned
-    return segments if segments else [text]
+    return segments if segments else [(text, 0, len(text))]
 
 
 def chunk_attachment(
@@ -369,10 +392,18 @@ def chunk_attachment(
     text: str,
     parent_metadata: dict,
     att_index: int = 0,
+    attachment_id: str = "",
+    content_sha256: str = "",
+    normalized_text: str = "",
     extraction_state: str = "text_extracted",
     evidence_strength: str = "strong_text",
     ocr_used: bool = False,
     failure_reason: str | None = None,
+    surface_id: str = "",
+    surface_kind: str = "",
+    surface_origin_kind: str = "",
+    surface_locator: dict[str, object] | None = None,
+    surface_ocr_confidence: float = 0.0,
 ) -> list[EmailChunk]:
     """Chunk extracted attachment text for embedding.
 
@@ -386,6 +417,11 @@ def chunk_attachment(
         evidence_strength: Answer-facing evidence quality label for the attachment text.
         ocr_used: Whether OCR was used to recover the attachment text.
         failure_reason: Optional extraction failure reason for weak attachment references.
+        surface_id: Stable attachment-surface identifier propagated into chunk metadata.
+        surface_kind: Surface role for retrieval/audit (e.g. verbatim, normalized_retrieval).
+        surface_origin_kind: Surface origin label (native, ocr, normalized, reference).
+        surface_locator: Structured locator payload associated with the surface.
+        surface_ocr_confidence: OCR confidence propagated from the selected surface.
 
     Returns:
         List of EmailChunk objects for the attachment content.
@@ -393,44 +429,88 @@ def chunk_attachment(
     if not text or not text.strip():
         return []
 
+    def _normalize_metadata_value(value: object) -> str | int | float | bool:
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        if value is None:
+            return ""
+        if isinstance(value, (list, tuple, set)):
+            items = list(value)
+            if all(isinstance(item, (str, int, float, bool)) or item is None for item in items):
+                return ", ".join(str(item) for item in items if str(item).strip())
+            return json.dumps(items, ensure_ascii=False, sort_keys=True, default=str)
+        if isinstance(value, dict):
+            return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        return str(value)
+
     subject = parent_metadata.get("subject", "")
     date = parent_metadata.get("date", "")
-    filename_hash = hashlib.md5(f"{filename}_{att_index}".encode(), usedforsecurity=False).hexdigest()[:16]
+    filename_hash = attachment_chunk_token(attachment_id=attachment_id, filename=filename, att_index=att_index)
     header = f'[Attachment: {filename} from email "{subject}" ({date})]'
+    normalized_parent_metadata = {str(key): _normalize_metadata_value(value) for key, value in parent_metadata.items()}
+    source_text = str(text)
+    normalized_sidecar = str(normalized_text or "").strip()
+    index_text = source_text
+    if normalized_sidecar and normalized_sidecar != source_text:
+        index_text = f"{source_text}\n\n[Normalized OCR search text]\n{normalized_sidecar}"
+    source_surface_hash = hashlib.sha256(source_text.encode("utf-8", errors="ignore")).hexdigest()
 
     base_metadata = {
-        **parent_metadata,
+        **normalized_parent_metadata,
+        "candidate_kind": "attachment",
+        "chunk_type": "attachment",
         "is_attachment": "True",
         "parent_uid": email_uid,
+        "attachment_name": filename,
         "attachment_filename": filename,
+        "attachment_type": filename.rsplit(".", 1)[-1].lower() if "." in filename else "",
+        "attachment_id": attachment_id,
+        "content_sha256": content_sha256,
         "extraction_state": extraction_state,
         "evidence_strength": evidence_strength,
         "ocr_used": str(ocr_used),
         "failure_reason": failure_reason or "",
+        "source_scope": "attachment_text",
+        "surface_hash": source_surface_hash,
+        "locator_version": "2",
+        "surface_id": surface_id,
+        "surface_kind": surface_kind,
+        "origin_kind": surface_origin_kind,
+        "surface_locator_json": json.dumps(surface_locator or {}, ensure_ascii=False, sort_keys=True),
+        "surface_ocr_confidence": str(float(surface_ocr_confidence or 0.0)),
     }
 
-    if len(text) <= MAX_CHUNK_CHARS:
+    if len(index_text) <= MAX_CHUNK_CHARS:
         chunk_id = f"{email_uid}__att_{filename_hash}__0"
         return [
             EmailChunk(
                 uid=email_uid,
                 chunk_id=chunk_id,
-                text=f"{header}\n\n{text}",
-                metadata={**base_metadata, "chunk_index": "0", "total_chunks": "1"},
+                text=f"{header}\n\n{index_text}",
+                metadata={
+                    **base_metadata,
+                    "chunk_index": "0",
+                    "total_chunks": "1",
+                    "segment_ordinal": str(att_index),
+                    "char_start": 0,
+                    "char_end": len(source_text),
+                },
             )
         ]
 
     max_body_len = max(OVERLAP_CHARS + 100, MAX_CHUNK_CHARS - len(header) - 50)
-    segments = _split_text(text, max_body_len, OVERLAP_CHARS)
+    segments_with_offsets = _split_text_with_offsets(index_text, max_body_len, OVERLAP_CHARS)
 
     chunks: list[EmailChunk] = []
-    for i, segment in enumerate(segments):
+    for i, (segment, start_offset, end_offset) in enumerate(segments_with_offsets):
         chunk_id = f"{email_uid}__att_{filename_hash}__{i}"
         if i == 0:
-            chunk_text = f"{header}\n\n[Part 1/{len(segments)}]\n{segment}"
+            chunk_text = f"{header}\n\n[Part 1/{len(segments_with_offsets)}]\n{segment}"
         else:
-            chunk_text = f"[{filename} - Part {i + 1}/{len(segments)}]\n{segment}"
+            chunk_text = f"[{filename} - Part {i + 1}/{len(segments_with_offsets)}]\n{segment}"
 
+        verbatim_start = min(start_offset, len(source_text))
+        verbatim_end = min(end_offset, len(source_text))
         chunks.append(
             EmailChunk(
                 uid=email_uid,
@@ -439,7 +519,10 @@ def chunk_attachment(
                 metadata={
                     **base_metadata,
                     "chunk_index": str(i),
-                    "total_chunks": str(len(segments)),
+                    "total_chunks": str(len(segments_with_offsets)),
+                    "segment_ordinal": str(att_index),
+                    "char_start": verbatim_start,
+                    "char_end": verbatim_end,
                 },
             )
         )

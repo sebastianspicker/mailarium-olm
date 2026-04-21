@@ -53,7 +53,7 @@ class TestParseInt:
 class TestExtractBodyFromSource:
     def test_simple_plain_text_email(self):
         raw = (
-            "From: alice@example.com\r\n"
+            "From: employee@example.test\r\n"
             "To: bob@example.com\r\n"
             "Subject: Test\r\n"
             "Content-Type: text/plain; charset=utf-8\r\n"
@@ -66,7 +66,7 @@ class TestExtractBodyFromSource:
 
     def test_simple_html_email(self):
         raw = (
-            "From: alice@example.com\r\n"
+            "From: employee@example.test\r\n"
             "To: bob@example.com\r\n"
             "Subject: Test\r\n"
             "Content-Type: text/html; charset=utf-8\r\n"
@@ -79,7 +79,7 @@ class TestExtractBodyFromSource:
 
     def test_multipart_email_with_text_and_html(self):
         raw = (
-            "From: alice@example.com\r\n"
+            "From: employee@example.test\r\n"
             "To: bob@example.com\r\n"
             "Subject: Test\r\n"
             "MIME-Version: 1.0\r\n"
@@ -101,7 +101,7 @@ class TestExtractBodyFromSource:
 
     def test_multipart_email_with_calendar(self):
         raw = (
-            "From: alice@example.com\r\n"
+            "From: employee@example.test\r\n"
             "To: bob@example.com\r\n"
             "Subject: Meeting\r\n"
             "MIME-Version: 1.0\r\n"
@@ -125,7 +125,7 @@ class TestExtractBodyFromSource:
 
     def test_non_multipart_calendar(self):
         raw = (
-            "From: alice@example.com\r\n"
+            "From: employee@example.test\r\n"
             "To: bob@example.com\r\n"
             "Subject: Meeting\r\n"
             "Content-Type: text/calendar; charset=utf-8\r\n"
@@ -157,7 +157,7 @@ class TestExtractBodyFromSource:
     def test_multipart_attachment_only(self):
         """Multipart email with only an attachment (no text/html)."""
         raw = (
-            "From: alice@example.com\r\n"
+            "From: employee@example.test\r\n"
             "To: bob@example.com\r\n"
             "Subject: File\r\n"
             "MIME-Version: 1.0\r\n"
@@ -177,7 +177,7 @@ class TestExtractBodyFromSource:
     def test_multipart_calendar_only(self):
         """Multipart with only calendar part, no text or html parts."""
         raw = (
-            "From: alice@example.com\r\n"
+            "From: employee@example.test\r\n"
             "To: bob@example.com\r\n"
             "Subject: Meeting invite\r\n"
             "MIME-Version: 1.0\r\n"
@@ -254,16 +254,16 @@ class TestDecodeMimeWords:
 
 class TestExtractEmailFromHeader:
     def test_angle_bracket_email(self):
-        source = "From: Alice Smith <alice@example.com>\n\nBody"
-        assert _extract_email_from_header(source, "From") == "alice@example.com"
+        source = "From: employee <employee@example.test>\n\nBody"
+        assert _extract_email_from_header(source, "From") == "employee@example.test"
 
     def test_bare_email(self):
-        source = "From: alice@example.com\n\nBody"
-        assert _extract_email_from_header(source, "From") == "alice@example.com"
+        source = "From: employee@example.test\n\nBody"
+        assert _extract_email_from_header(source, "From") == "employee@example.test"
 
     def test_html_encoded_brackets(self):
-        source = "From: Alice &lt;alice@example.com&gt;\n\nBody"
-        assert _extract_email_from_header(source, "From") == "alice@example.com"
+        source = "From: Alice &lt;employee@example.test&gt;\n\nBody"
+        assert _extract_email_from_header(source, "From") == "employee@example.test"
 
     def test_missing_header(self):
         source = "Subject: Test\n\nBody"
@@ -276,8 +276,8 @@ class TestExtractEmailFromHeader:
         assert result == "Just A Name"
 
     def test_quoted_name_with_email(self):
-        source = 'From: "Smith, Alice" <alice@example.com>\n\nBody'
-        assert _extract_email_from_header(source, "From") == "alice@example.com"
+        source = 'From: "Smith, Alice" <employee@example.test>\n\nBody'
+        assert _extract_email_from_header(source, "From") == "employee@example.test"
 
 
 # ── _extract_name_from_header ────────────────────────────────────
@@ -285,30 +285,30 @@ class TestExtractEmailFromHeader:
 
 class TestExtractNameFromHeader:
     def test_quoted_name(self):
-        source = 'From: "Alice Smith" <alice@example.com>\n\nBody'
-        assert _extract_name_from_header(source, "From") == "Alice Smith"
+        source = 'From: "employee" <employee@example.test>\n\nBody'
+        assert _extract_name_from_header(source, "From") == "employee"
 
     def test_unquoted_name(self):
-        source = "From: Alice Smith <alice@example.com>\n\nBody"
-        assert _extract_name_from_header(source, "From") == "Alice Smith"
+        source = "From: employee <employee@example.test>\n\nBody"
+        assert _extract_name_from_header(source, "From") == "employee"
 
     def test_missing_header(self):
         source = "Subject: Test\n\nBody"
         assert _extract_name_from_header(source, "From") == ""
 
     def test_email_only_no_name(self):
-        source = "From: alice@example.com\n\nBody"
+        source = "From: employee@example.test\n\nBody"
         result = _extract_name_from_header(source, "From")
         # parseaddr should return empty name for bare email
         assert result == ""
 
     def test_html_encoded_brackets(self):
-        source = "From: Alice &lt;alice@example.com&gt;\n\nBody"
+        source = "From: Alice &lt;employee@example.test&gt;\n\nBody"
         name = _extract_name_from_header(source, "From")
         assert name == "Alice"
 
     def test_name_with_comma_quoted(self):
-        source = 'From: "Smith, Alice" <alice@example.com>\n\nBody'
+        source = 'From: "Smith, Alice" <employee@example.test>\n\nBody'
         name = _extract_name_from_header(source, "From")
         assert "Smith" in name
         assert "Alice" in name
@@ -319,11 +319,11 @@ class TestExtractNameFromHeader:
 
 class TestExtractHeader:
     def test_simple_header(self):
-        source = "Subject: Test Email\nFrom: alice@example.com\n\nBody"
+        source = "Subject: Test Email\nFrom: employee@example.test\n\nBody"
         assert _extract_header(source, "Subject") == "Test Email"
 
     def test_continuation_line(self):
-        source = "Subject: Very Long\n Subject Line\nFrom: alice@example.com\n\nBody"
+        source = "Subject: Very Long\n Subject Line\nFrom: employee@example.test\n\nBody"
         result = _extract_header(source, "Subject")
         assert "Very Long" in result
         assert "Subject Line" in result
@@ -342,31 +342,31 @@ class TestExtractHeader:
 
 class TestParseAddressList:
     def test_single_address(self):
-        result = _parse_address_list("alice@example.com")
-        assert result == ["alice@example.com"]
+        result = _parse_address_list("employee@example.test")
+        assert result == ["employee@example.test"]
 
     def test_multiple_comma_separated(self):
-        result = _parse_address_list("alice@example.com, bob@example.com")
-        assert result == ["alice@example.com", "bob@example.com"]
+        result = _parse_address_list("employee@example.test, bob@example.com")
+        assert result == ["employee@example.test", "bob@example.com"]
 
     def test_semicolon_separated(self):
-        result = _parse_address_list("alice@example.com; bob@example.com")
-        assert result == ["alice@example.com", "bob@example.com"]
+        result = _parse_address_list("employee@example.test; bob@example.com")
+        assert result == ["employee@example.test", "bob@example.com"]
 
     def test_with_display_names(self):
-        result = _parse_address_list("Alice <alice@example.com>, Bob <bob@example.com>")
-        assert result == ["alice@example.com", "bob@example.com"]
+        result = _parse_address_list("Alice <employee@example.test>, Bob <bob@example.com>")
+        assert result == ["employee@example.test", "bob@example.com"]
 
     def test_html_encoded_brackets(self):
-        result = _parse_address_list("Alice &lt;alice@example.com&gt;")
-        assert result == ["alice@example.com"]
+        result = _parse_address_list("Alice &lt;employee@example.test&gt;")
+        assert result == ["employee@example.test"]
 
     def test_empty_string(self):
         result = _parse_address_list("")
         assert result == []
 
     def test_mixed_separators(self):
-        result = _parse_address_list("a@x.com; b@x.com, c@x.com")
+        result = _parse_address_list("a@example.test; b@example.test, c@example.test")
         assert len(result) == 3
 
 
@@ -410,7 +410,7 @@ class TestCalendarToText:
             "BEGIN:VCALENDAR\r\n"
             "BEGIN:VEVENT\r\n"
             "SUMMARY:Team Standup\r\n"
-            "ORGANIZER;CN=Alice:mailto:alice@example.com\r\n"
+            "ORGANIZER;CN=Alice:mailto:employee@example.test\r\n"
             "LOCATION:Room 101\r\n"
             "DTSTART:20240101T090000Z\r\n"
             "DTEND:20240101T093000Z\r\n"
@@ -420,7 +420,7 @@ class TestCalendarToText:
         )
         result = _calendar_to_text(ical)
         assert "Team Standup" in result
-        assert "alice@example.com" in result
+        assert "employee@example.test" in result
         assert "Room 101" in result
         assert "Daily standup meeting" in result
 

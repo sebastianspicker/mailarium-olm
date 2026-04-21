@@ -1,4 +1,5 @@
 """Static data for the lightweight language detector."""
+
 from __future__ import annotations
 
 import re

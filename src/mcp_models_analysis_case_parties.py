@@ -30,6 +30,44 @@ class CasePartyInput(StrictInput):
     )
 
 
+class InstitutionalActorInput(StrictInput):
+    """Structured institutional actor, mailbox, or workflow surface."""
+
+    label: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Display label for the institutional actor, mailbox, distribution list, or system surface.",
+    )
+    actor_type: Literal[
+        "institutional_body",
+        "shared_mailbox",
+        "distribution_list",
+        "workflow_surface",
+        "system_surface",
+        "external_body",
+        "other",
+    ] = Field(
+        ...,
+        description="Structured actor classification for one non-person case surface.",
+    )
+    email: str | None = Field(
+        default=None,
+        max_length=254,
+        description="Optional mailbox or distribution-list email address for the institutional actor.",
+    )
+    function: str | None = Field(
+        default=None,
+        max_length=240,
+        description="Optional concise function or routing role for the institutional actor.",
+    )
+    notes: str | None = Field(
+        default=None,
+        max_length=800,
+        description="Optional relevance notes for why this institutional actor matters in the case.",
+    )
+
+
 class RoleFactInput(StrictInput):
     """Operator-supplied structured role/org fact for one actor."""
 

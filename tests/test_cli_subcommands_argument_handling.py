@@ -9,6 +9,22 @@ import pytest
 from src.cli import parse_args
 
 
+def _parse_legacy_args(argv: list[str]):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        args = parse_args(argv)
+    assert any(issubclass(item.category, DeprecationWarning) for item in caught)
+    return args
+
+
+def _assert_legacy_parse_error(argv: list[str]) -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(SystemExit):
+            parse_args(argv)
+    assert any(issubclass(item.category, DeprecationWarning) for item in caught)
+
+
 class TestArgumentValidation:
     def test_search_rejects_both_positional_and_flag_query(self) -> None:
         with pytest.raises(SystemExit):
@@ -25,6 +41,11 @@ class TestSharedFlags:
         assert args.chromadb_path == "/tmp/db"
         assert args.subcommand == "search"
 
+    def test_sqlite_path_on_search(self) -> None:
+        args = parse_args(["search", "--query", "test", "--sqlite-path", "/tmp/email.db"])
+        assert args.sqlite_path == "/tmp/email.db"
+        assert args.subcommand == "search"
+
     def test_log_level_on_browse(self) -> None:
         args = parse_args(["browse", "--log-level", "DEBUG"])
         assert args.log_level == "DEBUG"
@@ -35,8 +56,12 @@ class TestSharedFlags:
         assert args.chromadb_path == "/tmp/db"
 
     def test_chromadb_path_on_legacy(self) -> None:
-        args = parse_args(["--chromadb-path", "/tmp/db", "--stats"])
+        args = _parse_legacy_args(["--chromadb-path", "/tmp/db", "--stats"])
         assert args.chromadb_path == "/tmp/db"
+
+    def test_sqlite_path_on_legacy(self) -> None:
+        args = _parse_legacy_args(["--sqlite-path", "/tmp/email.db", "--stats"])
+        assert args.sqlite_path == "/tmp/email.db"
 
 
 class TestLegacyBackwardCompat:
@@ -96,8 +121,7 @@ class TestLegacyBackwardCompat:
         assert args.subcommand is None
 
     def test_legacy_validation_still_applies(self) -> None:
-        with pytest.raises(SystemExit):
-            parse_args(["--stats", "--suggest"])
+        _assert_legacy_parse_error(["--stats", "--suggest"])
 
 
 class TestSubcommandDetection:
@@ -121,6 +145,7 @@ class TestSubcommandDetection:
 
         assert _has_subcommand(["--log-level", "DEBUG", "browse"]) is True
         assert _has_subcommand(["--chromadb-path", "/tmp/db", "analytics"]) is True
+        assert _has_subcommand(["--sqlite-path", "/tmp/email.db", "analytics"]) is True
 
     def test_has_subcommand_all_valid_names(self) -> None:
         from src.cli import _has_subcommand
@@ -145,56 +170,56 @@ class TestLegacyDispatchActions:
     """Verify _infer_subcommand sets action attributes for legacy flags."""
 
     def test_stats_sets_analytics_action(self) -> None:
-        args = parse_args(["--stats"])
+        args = _parse_legacy_args(["--stats"])
         assert args.subcommand == "analytics"
         assert args.analytics_action == "stats"
 
     def test_list_senders_sets_analytics_action(self) -> None:
-        args = parse_args(["--list-senders", "20"])
+        args = _parse_legacy_args(["--list-senders", "20"])
         assert args.subcommand == "analytics"
         assert args.analytics_action == "senders"
 
     def test_suggest_sets_analytics_action(self) -> None:
-        args = parse_args(["--suggest"])
+        args = _parse_legacy_args(["--suggest"])
         assert args.subcommand == "analytics"
         assert args.analytics_action == "suggest"
 
     def test_volume_sets_analytics_action(self) -> None:
-        args = parse_args(["--volume", "month"])
+        args = _parse_legacy_args(["--volume", "month"])
         assert args.subcommand == "analytics"
         assert args.analytics_action == "volume"
 
     def test_heatmap_sets_analytics_action(self) -> None:
-        args = parse_args(["--heatmap"])
+        args = _parse_legacy_args(["--heatmap"])
         assert args.subcommand == "analytics"
         assert args.analytics_action == "heatmap"
 
     def test_response_times_sets_analytics_action(self) -> None:
-        args = parse_args(["--response-times"])
+        args = _parse_legacy_args(["--response-times"])
         assert args.subcommand == "analytics"
         assert args.analytics_action == "response-times"
 
     def test_evidence_list_sets_evidence_action(self) -> None:
-        args = parse_args(["--evidence-list"])
+        args = _parse_legacy_args(["--evidence-list"])
         assert args.subcommand == "evidence"
         assert args.evidence_action == "list"
 
     def test_evidence_stats_sets_evidence_action(self) -> None:
-        args = parse_args(["--evidence-stats"])
+        args = _parse_legacy_args(["--evidence-stats"])
         assert args.subcommand == "evidence"
         assert args.evidence_action == "stats"
 
     def test_evidence_verify_sets_evidence_action(self) -> None:
-        args = parse_args(["--evidence-verify"])
+        args = _parse_legacy_args(["--evidence-verify"])
         assert args.subcommand == "evidence"
         assert args.evidence_action == "verify"
 
     def test_reset_index_sets_admin_action(self) -> None:
-        args = parse_args(["--reset-index"])
+        args = _parse_legacy_args(["--reset-index"])
         assert args.subcommand == "admin"
         assert args.admin_action == "reset-index"
 
     def test_generate_training_data_sets_training_action(self) -> None:
-        args = parse_args(["--generate-training-data", "out.jsonl"])
+        args = _parse_legacy_args(["--generate-training-data", "out.jsonl"])
         assert args.subcommand == "training"
         assert args.training_action == "generate-data"

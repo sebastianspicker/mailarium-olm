@@ -33,10 +33,10 @@ def db_with_email(db: EmailDatabase) -> EmailDatabase:
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             "test-uid-1",
-            "<msg1@test.com>",
+            "<msg1@example.test>",
             "Test Subject",
             "Alice",
-            "alice@test.com",
+            "alice@example.test",
             "2024-01-15",
             "Inbox",
             "This is the email body with important evidence text.",
@@ -51,7 +51,7 @@ def db_with_email(db: EmailDatabase) -> EmailDatabase:
     )
     db.conn.execute(
         "INSERT INTO recipients(email_uid, address, display_name, type) VALUES(?,?,?,?)",
-        ("test-uid-1", "bob@test.com", "Bob", "to"),
+        ("test-uid-1", "bob@example.test", "Bob", "to"),
     )
     db.conn.commit()
     return db
@@ -62,10 +62,10 @@ class FakeEmail:
     """Minimal fake parsed email payload for custody tests."""
 
     uid: str = "fake-uid"
-    message_id: str = "<fake@test.com>"
+    message_id: str = "<fake@example.test>"
     subject: str = "Fake Subject"
     sender_name: str = "Sender"
-    sender_email: str = "sender@test.com"
+    sender_email: str = "sender@example.test"
     date: str = "2024-01-01"
     folder: str = "Inbox"
     email_type: str = "original"

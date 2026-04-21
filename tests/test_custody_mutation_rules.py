@@ -134,6 +134,12 @@ def test_evidence_categories_match_mcp_tools_doc() -> None:
         "exclusion",
         "gaslighting",
         "workload",
+        "contradiction",
+        "chronology",
+        "provenance",
+        "quote_repair",
+        "omission",
+        "promise",
         "general",
     }
     assert set(EmailDatabase.EVIDENCE_CATEGORIES) == expected
@@ -158,7 +164,7 @@ def test_add_evidence_no_warning_for_standard_category(db_with_email: EmailDatab
     with caplog.at_level(logging.WARNING, logger="src.db_evidence"):
         db_with_email.add_evidence(
             "test-uid-1",
-            "harassment",
+            "contradiction",
             "evidence text",
             "test",
             3,

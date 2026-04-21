@@ -98,11 +98,35 @@ class TestEmailDeepContextInputDefaults:
         with pytest.raises(ValidationError):
             EmailDeepContextInput(uid="abc", bogus=True)
 
+    def test_legacy_include_sender_profile_alias(self):
+        m = EmailDeepContextInput.model_validate(
+            {
+                "uid": "abc",
+                "include_sender_profile": False,
+            }
+        )
+        assert m.include_sender_stats is False
+
+
+class TestEmailProvenanceInputAliases:
+    def test_uid_alias_supported(self):
+        from src.mcp_models import EmailProvenanceInput
+
+        m = EmailProvenanceInput.model_validate({"uid": "abc123"})
+        assert m.email_uid == "abc123"
+
 
 # ── format_triage_results tests ───────────────────────────────
 
 
-def _make_result(uid="u1", sender="a@b.com", date="2024-03-15T10:30:00", subject="Hello", score=0.87654, text="Body text here"):
+def _make_result(
+    uid="u1",
+    sender="a@example.test",
+    date="2024-03-15T10:30:00",
+    subject="Hello",
+    score=0.87654,
+    text="Body text here",
+):
     """Create a fake search result with .metadata, .score, .text."""
     return SimpleNamespace(
         metadata={"uid": uid, "sender_email": sender, "date": date, "subject": subject},
@@ -201,36 +225,36 @@ class TestArchiveStatsHint:
 class TestUniqueParticipants:
     def test_deduplicates_case_insensitive(self):
         emails = [
-            {"sender_email": "Alice@Example.COM"},
-            {"sender_email": "alice@example.com"},
+            {"sender_email": "Employee@Example.TEST"},
+            {"sender_email": "employee@example.test"},
             {"sender_email": "Bob@example.com"},
         ]
         result = _unique_participants(emails)
         assert len(result) == 2
-        assert result[0] == "alice@example.com"
+        assert result[0] == "employee@example.test"
         assert result[1] == "bob@example.com"
 
     def test_handles_empty(self):
         assert _unique_participants([]) == []
 
     def test_handles_none_sender(self):
-        emails = [{"sender_email": None}, {"sender_email": "a@b.com"}]
+        emails = [{"sender_email": None}, {"sender_email": "a@example.test"}]
         result = _unique_participants(emails)
-        assert result == ["a@b.com"]
+        assert result == ["a@example.test"]
 
     def test_handles_missing_key(self):
-        emails = [{}, {"sender_email": "a@b.com"}]
+        emails = [{}, {"sender_email": "a@example.test"}]
         result = _unique_participants(emails)
-        assert result == ["a@b.com"]
+        assert result == ["a@example.test"]
 
     def test_preserves_order(self):
         emails = [
-            {"sender_email": "c@d.com"},
-            {"sender_email": "a@b.com"},
-            {"sender_email": "c@d.com"},
+            {"sender_email": "c@example.test"},
+            {"sender_email": "a@example.test"},
+            {"sender_email": "c@example.test"},
         ]
         result = _unique_participants(emails)
-        assert result == ["c@d.com", "a@b.com"]
+        assert result == ["c@example.test", "a@example.test"]
 
 
 # ── _thread_date_range tests ─────────────────────────────────

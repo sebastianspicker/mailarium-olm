@@ -108,7 +108,7 @@ def test_body_text_stored_without_reply_header_tail():
         subject="RE: Hello",
         body_text=(
             "Latest answer.\n\n"
-            "From: Alice <alice@example.com>\n"
+            "From: Alice <employee@example.test>\n"
             "Sent: Monday, January 1, 2025 10:00 AM\n"
             "To: Bob <bob@example.com>\n"
             "Subject: Hello"
@@ -133,7 +133,7 @@ def test_body_text_stored_without_german_reply_header_tail():
         subject="AW: Hallo",
         body_text=(
             "Aktuelle Antwort.\n\n"
-            "Von: Alice <alice@example.com>\n"
+            "Von: Alice <employee@example.test>\n"
             "Gesendet: Montag, 1. Januar 2025 10:00\n"
             "An: Bob <bob@example.com>\n"
             "Betreff: Hallo"
@@ -158,7 +158,7 @@ def test_body_text_stored_without_portuguese_reply_header_tail():
         subject="RE: Ola",
         body_text=(
             "Resposta atual.\n\n"
-            "De: Alice <alice@example.com>\n"
+            "De: Alice <employee@example.test>\n"
             "Enviado: segunda-feira, 1 de janeiro de 2025 10:00\n"
             "Para: Bob <bob@example.com>\n"
             "Assunto: Ola"
@@ -198,8 +198,8 @@ def test_body_text_stored_without_get_outlook_ios_footer():
 def test_body_text_stored_on_batch_insert():
     db = EmailDatabase(":memory:")
     emails = [
-        make_email(message_id="<m1@ex.com>", body_text="Body one"),
-        make_email(message_id="<m2@ex.com>", body_text="Body two"),
+        make_email(message_id="<m1@example.test>", body_text="Body one"),
+        make_email(message_id="<m2@example.test>", body_text="Body two"),
     ]
     db.insert_emails_batch(emails)
 
@@ -224,7 +224,7 @@ def test_get_email_full_returns_body():
         to_identities=["bob@example.com"],
         recipient_identity_source="source_header",
         reply_context_from="carol@example.com",
-        reply_context_to=["alice@example.com"],
+        reply_context_to=["employee@example.test"],
         reply_context_subject="Original topic",
         reply_context_date="2025-01-01T10:00:00",
         reply_context_source="body_text",
@@ -247,12 +247,12 @@ def test_get_email_full_returns_body():
     assert full["to_identities_json"] == '["bob@example.com"]'
     assert full["recipient_identity_source"] == "source_header"
     assert full["reply_context_from"] == "carol@example.com"
-    assert full["reply_context_to_json"] == '["alice@example.com"]'
+    assert full["reply_context_to_json"] == '["employee@example.test"]'
     assert full["reply_context_subject"] == "Original topic"
     assert full["reply_context_date"] == "2025-01-01T10:00:00"
     assert full["reply_context_source"] == "body_text"
     assert full["subject"] == "Hello"
-    assert full["sender_email"] == "alice@example.com"
+    assert full["sender_email"] == "employee@example.test"
     assert full["to"] == ["Bob Example <bob@example.com>"]
     db.close()
 

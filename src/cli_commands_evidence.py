@@ -171,8 +171,16 @@ def run_evidence_stats_impl(
                 2: "[yellow dim]\u2605\u2605\u2606\u2606\u2606[/] Background",
                 1: "[dim]\u2605\u2606\u2606\u2606\u2606[/] Tangential",
             }
+            if isinstance(relevance_counts, dict):
+                normalized_relevance_counts = {int(level): int(count) for level, count in relevance_counts.items()}
+            else:
+                normalized_relevance_counts = {
+                    int(item.get("relevance", 0)): int(item.get("count", 0))
+                    for item in relevance_counts
+                    if isinstance(item, dict) and int(item.get("count", 0)) > 0
+                }
             for level in (5, 4, 3, 2, 1):
-                count = relevance_counts.get(str(level), relevance_counts.get(level, 0))
+                count = normalized_relevance_counts.get(level, 0)
                 if count:
                     rel_table.add_row(labels.get(level, str(level)), str(count))
             console.print(rel_table)

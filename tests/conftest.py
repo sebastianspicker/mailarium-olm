@@ -1,4 +1,7 @@
+import os
+import sqlite3
 import sys
+import tempfile
 import types
 from pathlib import Path
 from typing import Any
@@ -242,3 +245,102 @@ def stub_multi_vector_embedder(monkeypatch):
         return FakeMultiVectorEmbedder
 
     return _apply
+
+
+def _close_sqlite_handle(candidate: object) -> None:
+    close = getattr(candidate, "close", None)
+    if callable(close):
+        try:
+            close()
+        except sqlite3.Error:
+            return
+        return
+
+    conn = getattr(candidate, "conn", None)
+    if isinstance(conn, sqlite3.Connection):
+        try:
+            conn.close()
+        except sqlite3.Error:
+            return
+        try:
+            candidate.conn = None
+        except AttributeError:
+            return
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Close lingering in-memory SQLite handles held by test doubles."""
+    del session, exitstatus
+    for module in list(sys.modules.values()):
+        if module is None or not getattr(module, "__name__", "").startswith("tests."):
+            continue
+        module_dict = getattr(module, "__dict__", {})
+        for value in module_dict.values():
+            if isinstance(value, sqlite3.Connection):
+                try:
+                    value.close()
+                except sqlite3.Error:
+                    pass
+                continue
+            mock_db = getattr(value, "_email_db", None)
+            if mock_db is not None:
+                _close_sqlite_handle(mock_db)
+            helper_db = getattr(value, "_db", None)
+            if helper_db is not None:
+                _close_sqlite_handle(helper_db)
+            conn = getattr(value, "conn", None)
+            if isinstance(conn, sqlite3.Connection):
+                _close_sqlite_handle(value)
+
+
+@pytest.fixture(autouse=True)
+def allow_tmp_output_roots_for_tests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Allow each test's temp workspace as an explicit output root."""
+
+    existing = os.environ.get("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", "")
+    roots = [str(tmp_path), tempfile.gettempdir()]
+    if existing:
+        roots.append(existing)
+    monkeypatch.setenv("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", os.pathsep.join(roots))
+
+
+@pytest.fixture(autouse=True)
+def allow_tmp_local_read_roots_for_tests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Allow temp workspaces as explicit local-read roots during tests."""
+
+    existing = os.environ.get("EMAIL_RAG_ALLOWED_LOCAL_READ_ROOTS", "")
+    roots = [str(tmp_path), tempfile.gettempdir()]
+    if existing:
+        roots.append(existing)
+    monkeypatch.setenv("EMAIL_RAG_ALLOWED_LOCAL_READ_ROOTS", os.pathsep.join(dict.fromkeys(roots)))
+
+
+@pytest.fixture(autouse=True)
+def allow_tmp_runtime_roots_for_tests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Allow temp workspaces as explicit runtime-reset roots during tests."""
+
+    existing = os.environ.get("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", "")
+    roots = [str(tmp_path), tempfile.gettempdir()]
+    if existing:
+        roots.append(existing)
+    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", os.pathsep.join(dict.fromkeys(roots)))
+
+
+@pytest.fixture(autouse=True)
+def reset_ephemeral_tool_state():
+    """Keep module-level MCP tool state isolated between tests."""
+    from src import mcp_server
+    from src.scan_session import _sessions
+    from src.tools import search as search_tools
+
+    _close_sqlite_handle(getattr(mcp_server, "_email_db", None))
+    mcp_server._email_db = None
+    mcp_server._retriever = None
+    _sessions.clear()
+    search_tools._deps = mcp_server.ToolDeps()
+    yield
+    _close_sqlite_handle(getattr(mcp_server, "_email_db", None))
+    mcp_server._email_db = None
+    mcp_server._retriever = None
+    _sessions.clear()
+    search_tools._deps = mcp_server.ToolDeps()

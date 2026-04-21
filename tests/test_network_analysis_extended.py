@@ -15,7 +15,7 @@ def _make_email(**overrides) -> Email:
         "message_id": "<msg1@example.com>",
         "subject": "Hello",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["Bob <bob@example.com>"],
         "cc": [],
         "bcc": [],
@@ -31,15 +31,15 @@ def _make_email(**overrides) -> Email:
 
 def _populated_db() -> EmailDatabase:
     db = EmailDatabase(":memory:")
-    db.insert_email(_make_email(message_id="<m1@ex.com>", to=["Bob <bob@example.com>"]))
-    db.insert_email(_make_email(message_id="<m2@ex.com>", to=["Bob <bob@example.com>"]))
-    db.insert_email(_make_email(message_id="<m3@ex.com>", to=["Carol <carol@example.com>"]))
+    db.insert_email(_make_email(message_id="<m1@example.test>", to=["Bob <bob@example.com>"]))
+    db.insert_email(_make_email(message_id="<m2@example.test>", to=["Bob <bob@example.com>"]))
+    db.insert_email(_make_email(message_id="<m3@example.test>", to=["Carol <carol@example.com>"]))
     db.insert_email(
         _make_email(
-            message_id="<m4@ex.com>",
+            message_id="<m4@example.test>",
             sender_email="bob@example.com",
             sender_name="Bob",
-            to=["Alice <alice@example.com>"],
+            to=["Alice <employee@example.test>"],
         )
     )
     return db
@@ -100,19 +100,19 @@ class TestFindPathsEdgeCases:
     def test_find_paths_empty_graph(self):
         db = EmailDatabase(":memory:")
         net = CommunicationNetwork(db)
-        result = net.find_paths("a@ex.com", "b@ex.com")
+        result = net.find_paths("a@example.test", "b@example.test")
         assert result == []
 
     def test_find_paths_source_not_in_graph(self):
         db = _populated_db()
         net = CommunicationNetwork(db)
-        result = net.find_paths("nobody@ex.com", "alice@example.com")
+        result = net.find_paths("nobody@example.test", "employee@example.test")
         assert result == []
 
     def test_find_paths_same_source_and_target(self):
         db = _populated_db()
         net = CommunicationNetwork(db)
-        result = net.find_paths("alice@example.com", "alice@example.com")
+        result = net.find_paths("employee@example.test", "employee@example.test")
         assert len(result) == 1
         assert "error" in result[0]
 
@@ -121,14 +121,14 @@ class TestFindPathsEdgeCases:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<island1@ex.com>",
+                message_id="<island1@example.test>",
                 sender_email="alone1@example.com",
                 to=["alone1b@example.com"],
             )
         )
         db.insert_email(
             _make_email(
-                message_id="<island2@ex.com>",
+                message_id="<island2@example.test>",
                 sender_email="alone2@example.com",
                 to=["alone2b@example.com"],
             )
@@ -140,10 +140,10 @@ class TestFindPathsEdgeCases:
     def test_find_paths_valid(self):
         db = _populated_db()
         net = CommunicationNetwork(db)
-        paths = net.find_paths("alice@example.com", "bob@example.com")
+        paths = net.find_paths("employee@example.test", "bob@example.com")
         assert len(paths) >= 1
         assert paths[0]["hops"] == 1
-        assert "alice@example.com" in paths[0]["nodes"]
+        assert "employee@example.test" in paths[0]["nodes"]
         assert "bob@example.com" in paths[0]["nodes"]
 
 
@@ -244,14 +244,14 @@ class TestCoordinatedTimingEdgeCases:
         """coordinated_timing with <2 senders returns empty list."""
         db = _populated_db()
         net = CommunicationNetwork(db)
-        result = net.coordinated_timing(["alice@example.com"])
+        result = net.coordinated_timing(["employee@example.test"])
         assert result == []
 
     def test_empty_timeline_returns_empty(self):
         """No timeline data returns empty."""
         db = EmailDatabase(":memory:")
         net = CommunicationNetwork(db)
-        result = net.coordinated_timing(["a@ex.com", "b@ex.com"])
+        result = net.coordinated_timing(["a@example.test", "b@example.test"])
         assert result == []
 
     def test_invalid_date_skipped(self):
@@ -259,23 +259,23 @@ class TestCoordinatedTimingEdgeCases:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<bad_date@ex.com>",
-                sender_email="alice@example.com",
+                message_id="<bad_date@example.test>",
+                sender_email="employee@example.test",
                 to=["Bob <bob@example.com>"],
                 date="not-a-date",
             )
         )
         db.insert_email(
             _make_email(
-                message_id="<good@ex.com>",
+                message_id="<good@example.test>",
                 sender_email="bob@example.com",
-                to=["Alice <alice@example.com>"],
+                to=["Alice <employee@example.test>"],
                 date="2024-01-15T10:00:00",
             )
         )
         net = CommunicationNetwork(db)
         # Should not crash on invalid date
-        result = net.coordinated_timing(["alice@example.com", "bob@example.com"])
+        result = net.coordinated_timing(["employee@example.test", "bob@example.com"])
         assert isinstance(result, list)
 
     def test_coordinated_timing_window_not_met(self):
@@ -283,24 +283,24 @@ class TestCoordinatedTimingEdgeCases:
         db = EmailDatabase(":memory:")
         db.insert_email(
             _make_email(
-                message_id="<c1@ex.com>",
-                sender_email="alice@example.com",
+                message_id="<c1@example.test>",
+                sender_email="employee@example.test",
                 to=["Bob <bob@example.com>"],
                 date="2024-01-15T10:00:00",
             )
         )
         db.insert_email(
             _make_email(
-                message_id="<c2@ex.com>",
+                message_id="<c2@example.test>",
                 sender_email="bob@example.com",
-                to=["Alice <alice@example.com>"],
+                to=["Alice <employee@example.test>"],
                 date="2024-06-15T10:00:00",
             )
         )
         net = CommunicationNetwork(db)
         # Window of 1 hour, events 5 months apart, min_events=3
         result = net.coordinated_timing(
-            ["alice@example.com", "bob@example.com"],
+            ["employee@example.test", "bob@example.com"],
             window_hours=1,
             min_events=3,
         )
@@ -324,8 +324,8 @@ class TestRelationshipSummaryEdgeCases:
         """relationship_summary for a known node returns valid data."""
         db = _populated_db()
         net = CommunicationNetwork(db)
-        result = net.relationship_summary("alice@example.com")
-        assert result["email"] == "alice@example.com"
+        result = net.relationship_summary("employee@example.test")
+        assert result["email"] == "employee@example.test"
         assert result["send_count"] > 0
         assert isinstance(result["community"], list)
 
@@ -336,7 +336,7 @@ class TestRelationshipSummaryEdgeCases:
 
         net._ensure_graph()
         with patch.object(net, "_get_betweenness", side_effect=Exception("fail")):
-            result = net.relationship_summary("alice@example.com")
+            result = net.relationship_summary("employee@example.test")
         assert result["bridge_score"] == 0.0
 
     def test_relationship_summary_community_exception(self):
@@ -357,7 +357,7 @@ class TestRelationshipSummaryEdgeCases:
             try:
                 if hasattr(nx.community, "label_propagation_communities"):
                     nx.community.label_propagation_communities = MagicMock(side_effect=Exception("lpc fail"))
-                result = net.relationship_summary("alice@example.com")
+                result = net.relationship_summary("employee@example.test")
             finally:
                 if original_lpc is not None:
                     nx.community.label_propagation_communities = original_lpc
@@ -373,7 +373,7 @@ class TestRelationshipSummaryEdgeCases:
         try:
             if hasattr(nx.community, "louvain_communities"):
                 delattr(nx.community, "louvain_communities")
-            result = net.relationship_summary("alice@example.com")
+            result = net.relationship_summary("employee@example.test")
             assert isinstance(result["community"], list)
         finally:
             if original is not None:

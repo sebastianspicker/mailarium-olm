@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, cast
 
 from .result_filters import _deduplicate_by_email
+from .rfc2822 import _normalize_date
 
 if TYPE_CHECKING:
     from .retriever import EmailRetriever, SearchResult
+
+
+def _parsed_thread_date(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    normalized = _normalize_date(raw) or raw
+    try:
+        parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
 
 
 def search_by_thread_impl(retriever: EmailRetriever, conversation_id: str, top_k: int = 50) -> list[SearchResult]:
@@ -19,16 +35,16 @@ def search_by_thread_impl(retriever: EmailRetriever, conversation_id: str, top_k
     if top_k <= 0:
         raise ValueError("top_k must be a positive integer.")
 
-    conv_filter = {"conversation_id": {"$eq": conversation_id.strip()}}
+    conv_filter: dict[str, dict[str, str]] = {"conversation_id": {"$eq": conversation_id.strip()}}
     fetch_limit = max(top_k * 5, 500)
     all_ids: list[str] = []
     all_docs: list[str | None] = []
-    all_metas: list[dict] = []
+    all_metas: list[dict[str, Any]] = []
     offset = 0
 
     while True:
         raw = retriever.collection.get(
-            where=conv_filter,
+            where=cast(Any, conv_filter),
             include=["documents", "metadatas"],
             limit=fetch_limit,
             offset=offset,
@@ -37,8 +53,17 @@ def search_by_thread_impl(retriever: EmailRetriever, conversation_id: str, top_k
         if not batch_ids:
             break
         all_ids.extend(batch_ids)
-        all_docs.extend(raw.get("documents") or [None] * len(batch_ids))
-        all_metas.extend(raw.get("metadatas") or [{}] * len(batch_ids))
+        raw_docs: list[str | None]
+        docs_value = raw.get("documents")
+        if isinstance(docs_value, list):
+            raw_docs = [doc if isinstance(doc, str) else None for doc in docs_value]
+        else:
+            raw_docs = [None] * len(batch_ids)
+        normalized_docs = [doc if isinstance(doc, str) else None for doc in raw_docs]
+        all_docs.extend(normalized_docs)
+        raw_metas = raw.get("metadatas") or [{}] * len(batch_ids)
+        normalized_metas = [dict(meta) if isinstance(meta, dict) else {} for meta in raw_metas]
+        all_metas.extend(normalized_metas)
         if len(batch_ids) < fetch_limit:
             break
         offset += fetch_limit
@@ -55,5 +80,12 @@ def search_by_thread_impl(retriever: EmailRetriever, conversation_id: str, top_k
         )
 
     deduped = _deduplicate_by_email(results)
-    deduped.sort(key=lambda result: str(result.metadata.get("date", "")))
+    deduped.sort(
+        key=lambda result: (
+            _parsed_thread_date(result.metadata.get("date")) is None,
+            _parsed_thread_date(result.metadata.get("date")) or datetime.max,
+            str(result.metadata.get("date", "")),
+            str(result.metadata.get("uid", "")),
+        )
+    )
     return deduped[:top_k]

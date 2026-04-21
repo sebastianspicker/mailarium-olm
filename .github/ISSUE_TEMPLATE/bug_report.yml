@@ -1,0 +1,54 @@
+name: Bug Report
+description: Report a reproducible defect using synthetic data only.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include real mailbox contents, personal records, private local paths, or institution-specific details.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: A synthetic archive with two messages fails during local ingest.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest command sequence or workflow that reproduces the issue.
+      placeholder: |
+        1. Create a synthetic .olm fixture.
+        2. Run `python -m src.ingest private/ingest/example-export.olm --max-emails 10`.
+        3. Observe the error.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include only non-sensitive version information.
+      placeholder: |
+        Python:
+        macOS:
+        Branch or commit:
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized Logs
+      description: Paste only redacted logs that contain no private email content or personal identifiers.
+      render: text
+    validations:
+      required: false

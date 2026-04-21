@@ -1,6 +1,6 @@
 # API Compatibility Policy
 
-This document defines the public interface compatibility contract for `outlook-email-rag`.
+This document defines the public interface compatibility contract for Email RAG. It is primarily for integrators, automation authors, and maintainers who need to know which surfaces are expected to remain stable during the `0.1.x` series.
 
 ## Scope
 
@@ -8,6 +8,20 @@ Stable public interfaces for the `0.1.x` release series:
 
 1. CLI arguments and behavior in `python -m src.cli`.
 2. MCP tool names and parameter schemas exposed by `python -m src.mcp_server`.
+
+This policy is a compatibility promise for automation surfaces, not a promise
+that every documented tool has identical behavior across CLI, MCP, and
+Streamlit. Where the surfaces differ, the more specific workflow documentation
+in this file and [MCP_TOOLS.md](MCP_TOOLS.md) controls.
+
+## Intentional Surface Boundaries
+
+- Shared campaign execution is stable across the documented CLI `case execute-wave`, `case execute-all-waves`, and `case gather-evidence` commands plus the matching MCP `email_case_*` campaign tools.
+- Exploratory `email_case_analysis` remains retrieval-bounded and does not refresh persisted matter snapshots.
+- Dedicated legal-support analytical products and counsel-facing export remain MCP-governed even where a local CLI wrapper exists for operator convenience.
+- Full-pack execution and dedicated legal-support refresh may update persisted matter snapshots as part of the exhaustive workflow.
+- CLI, MCP, and Streamlit do not promise one-to-one parity for every convenience surface.
+- Streamlit web app is exploratory and outside the stable compatibility contract; runtime path overrides are validated best-effort and should not be treated as an authoritative workflow surface.
 
 ## CLI Compatibility Contract
 
@@ -78,7 +92,7 @@ The following CLI capabilities are stable for `0.1.x`:
 
 ## MCP Compatibility Contract
 
-The following 45 tool names are stable for `0.1.x`:
+The numbered entries below summarize the stable general-purpose archive surface for `0.1.x`. Dedicated `email_case_*` workflow and legal-support tools are also public and stable at the documented workflow boundaries above. Numbering in this section is for schema cross-reference, not as a public total-tool-count guarantee.
 
 ### Core Search (6)
 
@@ -134,7 +148,7 @@ The following 45 tool names are stable for `0.1.x`:
 35. `email_thread_lookup`
 36. `email_thread_summary`
 
-### Topics & Discovery (4)
+### Topics & Discovery (3)
 
 37. `email_clusters`
 38. `email_discovery`
@@ -166,12 +180,14 @@ The following 45 tool names are stable for `0.1.x`:
 
 `email_topics` and the CLI `--topic` filter remain available in the codebase, but they are excluded from the stable `0.1.x` compatibility contract until the repository ships a first-party workflow that populates topic tables.
 
+`email_answer_context` is part of the public MCP surface and follows the documented question-to-evidence contract in [MCP_TOOLS.md](MCP_TOOLS.md). It is omitted from the condensed numbered list below because it is a composite retrieval wrapper rather than a first-class CRUD or browse surface.
+
 ## Stable MCP Input Schema Summary
 
 ### Core Search
 
 1. `email_ingest`
-    1. `olm_path: str` (required) — absolute path to `.olm` file
+    1. `olm_path: str` (required) — local readable path to `.olm` file
     2. `max_emails: int | null` (optional, ge=1)
     3. `dry_run: bool` (optional, default false)
     4. `extract_attachments: bool` (optional, default false) — extract and index text from attachments
@@ -238,12 +254,19 @@ The following 45 tool names are stable for `0.1.x`:
     2. `include_thread: bool` (optional, default true)
     3. `include_evidence: bool` (optional, default true)
     4. `include_sender_stats: bool` (optional, default true)
-    5. `max_body_chars: int` (optional, default 10000, ge=0)
+    5. `max_body_chars: int | null` (optional, ge=0) — `None` uses profile default (`MCP_MAX_FULL_BODY_CHARS`), `0` disables truncation
 9. `email_export`
     1. `uid: str | null` (optional) — export a single email by UID
     2. `conversation_id: str | null` (optional) — export a thread by conversation ID
-    3. `output_path: str | null` (optional)
-    4. `format: str` (optional, default "html", one of html/pdf)
+    3. `output_path: str | null` (optional) — omit only for in-memory HTML export
+    4. `format: str` (optional, default "html", one of html/pdf) — `pdf` requires `output_path`
+
+Case-workflow contract notes:
+
+- counsel-facing export readiness is supported only for persisted snapshot review states `human_verified` and `export_approved`
+- archive-harvest diagnostics distinguish direct retrieval coverage from expanded thread or attachment context
+- runtime/read paths are validated as local normalized paths, while write/export paths must resolve inside configured allowlisted output roots (`EMAIL_RAG_ALLOWED_OUTPUT_ROOTS` for extensions)
+- `email_ingest` does not implicitly switch the active runtime archive for subsequent searches; archive switching remains an explicit separate action
 
 ### Evidence & Custody
 
@@ -255,7 +278,7 @@ The following 45 tool names are stable for `0.1.x`:
     5. `compact: bool` (optional, default true) — omit details JSON and content_hash
 11. `email_dossier`
     1. `preview_only: bool` (optional, default false) — return scope only, no file generated
-    2. `output_path: str` (optional, default "dossier.html")
+    2. `output_path: str` (optional, default "private/exports/dossier.html")
     3. `format: str` (optional, default "html", one of html/pdf)
     4. `title: str` (optional, default "Proof Dossier")
     5. `case_reference: str` (optional, default "")
@@ -278,7 +301,7 @@ The following 45 tool names are stable for `0.1.x`:
 14. `evidence_add_batch`
     1. `items: list[EvidenceAddInput]` (required, 1-20 items)
 15. `evidence_export`
-    1. `output_path: str` (optional, default "evidence_report.html")
+    1. `output_path: str` (optional, default "private/exports/evidence_report.html")
     2. `format: str` (optional, default "html", one of html/csv/pdf)
     3. `min_relevance: int | null` (optional, bounded 1-5)
     4. `category: str | null` (optional)
@@ -413,7 +436,7 @@ The following 45 tool names are stable for `0.1.x`:
 
 43. `email_report`
     1. `type: str` (required) — "archive", "network", or "writing"
-    2. `output_path: str` (optional, default "report.html") — for archive/network
+    2. `output_path: str` (optional, default "private/exports/report.html") — for archive/network
     3. `title: str` (optional, default "Email Archive Report") — for archive
     4. `sender: str | null` (optional) — for writing analysis
     5. `limit: int` (optional, default 10, bounded 1-50) — for writing

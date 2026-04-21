@@ -29,10 +29,12 @@ if TYPE_CHECKING:
 from . import (
     attachments,
     browse,
+    case_analysis,
     data_quality,
     diagnostics,
     entities,
     evidence,
+    legal_support,
     network,
     reporting,
     scan,
@@ -44,6 +46,8 @@ from . import (
 
 _MODULES = [
     search,
+    case_analysis,
+    legal_support,
     network,
     temporal,
     entities,

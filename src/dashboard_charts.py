@@ -69,7 +69,8 @@ def prepare_response_times_data(
 ) -> list[dict[str, Any]]:
     """Get response time data for display.
 
-    Returns list of {"replier": "…", "avg_response_hours": 2.5, "response_count": 10}.
+    Returns list of {"replier": "…", "avg_response_hours": 2.5, "response_count": 10}
+    from the recent canonical-reply sample used by TemporalAnalyzer.
     """
     return analyzer.response_times(limit=limit)
 

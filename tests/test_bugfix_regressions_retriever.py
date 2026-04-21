@@ -165,6 +165,30 @@ class TestP1KeywordOnlyScoreHalf:
         assert keyword_results[0].distance == 0.5
         assert keyword_results[0].score == pytest.approx(0.5, abs=0.01)
 
+    def test_keyword_only_result_marks_score_as_synthetic(self):
+        result = SearchResult(
+            chunk_id="c2",
+            text="keyword match",
+            metadata={"uid": "u2", "score_kind": "keyword_fused", "score_calibration": "synthetic"},
+            distance=0.5,
+        )
+
+        assert result.score_kind == "keyword_fused"
+        assert result.score_calibration == "synthetic"
+
+    def test_synthetic_keyword_score_is_not_filtered_by_min_score(self):
+        from src.result_filters import apply_metadata_filters
+
+        result = SearchResult(
+            chunk_id="c2",
+            text="keyword match",
+            metadata={"uid": "u2", "score_kind": "keyword_fused", "score_calibration": "synthetic"},
+            distance=0.5,
+        )
+
+        filtered = apply_metadata_filters([result], min_score=0.8)
+        assert filtered == [result]
+
 
 class TestP2RerankerOverflowProtection:
     """P2: Cross-encoder sigmoid must not overflow on extreme logits."""

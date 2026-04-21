@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 
-from .mcp_models_analysis import BehavioralCaseScopeInput
+from . import mcp_models_case_analysis as _mcp_models_case_analysis
 from .mcp_models_base import (
     DateRangeInput,
     PlainInput,
     StrictInput,
     _validate_output_path,
+    _validate_readable_file_path,
+    _validate_runtime_path,
 )
+
+CaseChatLogEntryInput = _mcp_models_case_analysis.CaseChatLogEntryInput
+CaseChatExportInput = _mcp_models_case_analysis.CaseChatExportInput
+EmailAnswerContextInput = _mcp_models_case_analysis.EmailAnswerContextInput
+EmailCaseAnalysisInput = _mcp_models_case_analysis.EmailCaseAnalysisInput
+EmailLegalSupportInput = _mcp_models_case_analysis.EmailLegalSupportInput
+EmailLegalSupportExportInput = _mcp_models_case_analysis.EmailLegalSupportExportInput
+MatterArtifactInput = _mcp_models_case_analysis.MatterArtifactInput
+MatterManifestInput = _mcp_models_case_analysis.MatterManifestInput
 
 # ── Core Search Inputs ───────────────────────────────────────
 
@@ -31,6 +43,7 @@ class EmailSearchStructuredInput(DateRangeInput, StrictInput):
         ge=1,
         le=30,
         description="Number of results to return (1-30).",
+        validation_alias=AliasChoices("top_k", "max_results"),
     )
     sender: str | None = Field(default=None, description="Filter by sender (partial match).")
     subject: str | None = Field(default=None, description="Filter by subject (partial match).")
@@ -71,6 +84,7 @@ class EmailSearchStructuredInput(DateRangeInput, StrictInput):
     expand_query: bool = Field(
         default=False,
         description="Expand query with semantically related terms for better recall.",
+        validation_alias=AliasChoices("expand_query", "query_expansion"),
     )
     category: str | None = Field(
         default=None,
@@ -93,51 +107,6 @@ class EmailSearchStructuredInput(DateRangeInput, StrictInput):
         min_length=1,
         max_length=100,
         description="Scan session ID for progressive search. Excludes previously seen emails and tracks new ones.",
-    )
-
-
-class EmailAnswerContextInput(DateRangeInput, StrictInput):
-    """Input for building a compact answer-ready evidence bundle."""
-
-    question: str = Field(
-        ...,
-        min_length=1,
-        max_length=500,
-        description="Natural-language mailbox question to answer from retrieved evidence.",
-    )
-    max_results: int = Field(
-        default=5,
-        ge=1,
-        le=10,
-        description="Number of candidate emails to return in the evidence bundle (1-10).",
-    )
-    evidence_mode: Literal["retrieval", "forensic", "hybrid"] = Field(
-        default="retrieval",
-        description=(
-            "Evidence render policy. 'retrieval' returns normalized-body evidence, "
-            "'forensic' prefers source-preserved body text, and 'hybrid' retrieves with "
-            "normalized text but verifies snippets against forensic text when available."
-        ),
-    )
-    sender: str | None = Field(default=None, description="Filter by sender (partial match).")
-    subject: str | None = Field(default=None, description="Filter by subject (partial match).")
-    folder: str | None = Field(default=None, description="Filter by folder name (partial match).")
-    has_attachments: bool | None = Field(default=None, description="Filter by attachment presence.")
-    email_type: Literal["reply", "forward", "original"] | None = Field(
-        default=None,
-        description="Filter by email type: 'reply', 'forward', or 'original'.",
-    )
-    rerank: bool = Field(
-        default=False,
-        description="Re-rank results with cross-encoder for better precision (slower).",
-    )
-    hybrid: bool = Field(
-        default=False,
-        description="Use hybrid semantic + BM25 keyword search for better recall.",
-    )
-    case_scope: BehavioralCaseScopeInput | None = Field(
-        default=None,
-        description="Structured investigation scope for case-based behavioural analysis.",
     )
 
 
@@ -227,6 +196,12 @@ class EmailIngestInput(StrictInput):
         description="Optional cap on number of emails to parse.",
         ge=1,
     )
+    batch_size: int = Field(
+        default=500,
+        ge=1,
+        le=5000,
+        description="Chunk-write batch size for ingest.",
+    )
     dry_run: bool = Field(
         default=False,
         description="If true, parse and chunk without writing to the database.",
@@ -246,6 +221,42 @@ class EmailIngestInput(StrictInput):
             "for cross-modal search. Automatically enables extract_attachments."
         ),
     )
+    incremental: bool = Field(
+        default=False,
+        description="If true, skip emails already marked complete in the ingest ledger.",
+    )
+    timing: bool = Field(
+        default=False,
+        description="If true, include parse/queue/sqlite/entity/analytics/embed timing buckets.",
+    )
+    chromadb_path: str | None = Field(
+        default=None,
+        description="Optional custom ChromaDB directory for the ingest run.",
+    )
+    sqlite_path: str | None = Field(
+        default=None,
+        description="Optional custom SQLite metadata database path for the ingest run.",
+    )
+
+    @field_validator("olm_path")
+    @classmethod
+    def validate_olm_path(cls, value: str) -> str:
+        validated = _validate_readable_file_path(value, field_name="olm_path")
+        if validated is None:
+            raise ValueError("olm_path is required")
+        if Path(validated).suffix.lower() != ".olm":
+            raise ValueError("olm_path must point to a .olm archive")
+        return validated
+
+    @field_validator("chromadb_path")
+    @classmethod
+    def validate_chromadb_path(cls, value: str | None) -> str | None:
+        return _validate_runtime_path(value, field_name="chromadb_path")
+
+    @field_validator("sqlite_path")
+    @classmethod
+    def validate_sqlite_path(cls, value: str | None) -> str | None:
+        return _validate_runtime_path(value, field_name="sqlite_path")
 
 
 # ── Export & Browse Inputs ──────────────────────────────────
@@ -291,6 +302,8 @@ class EmailExportInput(StrictInput):
             raise ValueError("Provide exactly one of uid or conversation_id, not both.")
         if not self.uid and not self.conversation_id:
             raise ValueError("Provide exactly one of uid or conversation_id.")
+        if self.format == "pdf" and self.output_path is None:
+            raise ValueError("pdf export requires output_path; omit output_path only for in-memory HTML export.")
         return self
 
 
@@ -327,10 +340,19 @@ class BrowseInput(DateRangeInput, PlainInput):
 class EmailDeepContextInput(StrictInput):
     """Input for deep single-email analysis combining body, thread, evidence, and sender."""
 
-    uid: str = Field(..., min_length=1, description="Email UID to analyze in depth.")
+    uid: str = Field(
+        ...,
+        min_length=1,
+        description="Email UID to analyze in depth.",
+        validation_alias=AliasChoices("uid", "email_uid"),
+    )
     include_thread: bool = Field(default=True, description="Include thread summary and timeline.")
     include_evidence: bool = Field(default=True, description="Include existing evidence from this email.")
-    include_sender_stats: bool = Field(default=True, description="Include sender communication profile.")
+    include_sender_stats: bool = Field(
+        default=True,
+        description="Include sender communication profile.",
+        validation_alias=AliasChoices("include_sender_stats", "include_sender_profile"),
+    )
     include_conversation_debug: bool = Field(
         default=False,
         description="Include segments and inferred-thread debug metadata.",

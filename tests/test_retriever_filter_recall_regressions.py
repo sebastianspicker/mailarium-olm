@@ -13,7 +13,7 @@ def test_search_filtered_combined_new_filters() -> None:
                 chunk_id="perfect",
                 text="hello",
                 metadata={
-                    "to": "alice@example.com",
+                    "to": "employee@example.test",
                     "has_attachments": "True",
                     "priority": "2",
                     "date": "2024-01-01",
@@ -35,7 +35,7 @@ def test_search_filtered_combined_new_filters() -> None:
                 chunk_id="no-att",
                 text="hello",
                 metadata={
-                    "to": "alice@example.com",
+                    "to": "employee@example.test",
                     "has_attachments": "False",
                     "priority": "2",
                     "date": "2024-01-01",
@@ -45,7 +45,7 @@ def test_search_filtered_combined_new_filters() -> None:
         ]
 
     retriever.search = _search
-    results = retriever.search_filtered(query="budget", to="alice", has_attachments=True, priority=1, top_k=5)
+    results = retriever.search_filtered(query="budget", to="employee", has_attachments=True, priority=1, top_k=5)
 
     assert len(results) == 1
     assert results[0].chunk_id == "perfect"

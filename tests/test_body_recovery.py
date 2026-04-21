@@ -126,7 +126,7 @@ def test_classify_body_state_marks_source_shell_only_when_only_raw_source_exists
         raw_body_html="",
         raw_source=(
             "Subject: Test\n"
-            "Content-Type: multipart/signed; protocol=\"application/pkcs7-signature\"; boundary=\"abc\"\n\n"
+            'Content-Type: multipart/signed; protocol="application/pkcs7-signature"; boundary="abc"\n\n'
             "--abc\n"
             "Content-Type: text/plain; charset=utf-8\n\n"
             "\n"

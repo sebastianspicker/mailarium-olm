@@ -1,0 +1,12 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:20250212T090000
+DTEND:20250212T100000
+SUMMARY:Accommodation review with HR and SBV question
+LOCATION:Meeting Room 2
+ORGANIZER:mailto:hr@example.org
+ATTENDEE:mailto:employee@example.test
+ATTENDEE:mailto:manager@example.test
+END:VEVENT
+END:VCALENDAR

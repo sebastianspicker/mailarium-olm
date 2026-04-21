@@ -6,8 +6,9 @@ import re
 from collections.abc import Mapping
 from datetime import datetime
 from html import unescape
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from .repo_paths import validate_new_output_path
 
 if TYPE_CHECKING:
     from .retriever import SearchResult
@@ -384,22 +385,24 @@ def write_html_or_pdf(html: str, output_path: str, fmt: str) -> dict[str, Any]:
     Returns:
         ``{"output_path": str, "format": str}`` (plus optional ``"note"``).
     """
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    output = validate_new_output_path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     if fmt.lower() == "pdf":
         try:
             from weasyprint import HTML as WeasyprintHTML
 
-            WeasyprintHTML(string=html).write_pdf(output_path)
+            WeasyprintHTML(string=html).write_pdf(str(output))
             return {"output_path": output_path, "format": "pdf"}
         except ImportError:
-            output_path = str(Path(output_path).with_suffix(".html"))
-            Path(output_path).write_text(html, encoding="utf-8")
+            fallback_output_path = str(output.with_suffix(".html"))
+            output = validate_new_output_path(str(output.with_suffix(".html")))
+            output.write_text(html, encoding="utf-8")
             return {
-                "output_path": output_path,
+                "output_path": fallback_output_path,
                 "format": "html",
                 "note": "weasyprint not installed; saved as HTML. Install with: pip install weasyprint",
             }
 
-    Path(output_path).write_text(html, encoding="utf-8")
+    output.write_text(html, encoding="utf-8")
     return {"output_path": output_path, "format": fmt}

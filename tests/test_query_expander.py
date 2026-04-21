@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from src.query_expander import QueryExpander
+from src.query_expander import QueryExpander, legal_support_query_profile
 
 
 class _FakeModel:
@@ -19,6 +19,15 @@ class _FakeModel:
 
 
 class TestQueryExpander:
+    def test_legal_support_query_profile_detects_participation_and_contradiction(self):
+        profile = legal_support_query_profile("Need SBV participation contradiction timeline after the complaint")
+
+        assert profile["is_legal_support"] is True
+        assert "participation" in profile["intents"]
+        assert "contradiction" in profile["intents"]
+        assert "chronology" in profile["intents"]
+        assert "personalrat" in profile["suggested_terms"]
+
     def test_expand_adds_terms(self):
         vocab = ["quarterly report", "budget review", "team meeting", "project deadline", "sales forecast"]
         expander = QueryExpander(model=_FakeModel(), vocabulary=vocab)
@@ -98,6 +107,57 @@ class TestQueryExpander:
         # "artificial intelligence" should not be skipped just because "art" is a substring
         # At minimum, the result should expand beyond just "art"
         assert len(result) > len("art")
+
+    def test_expand_adds_deterministic_legal_support_terms_before_semantic_vocab(self):
+        vocab = ["calendar invite", "attendance table", "peer review"]
+        expander = QueryExpander(model=_FakeModel(), vocabulary=vocab)
+        result = expander.expand("Need SBV participation contradiction review", n_terms=4)
+
+        assert "personalrat" in result or "betriebsrat" in result
+        assert "contradiction" in result
+
+    def test_expand_lanes_returns_distinct_query_lanes(self):
+        vocab = ["Stufenvorweggewährung", "Massregelung", "calendar invite", "BEM review"]
+        expander = QueryExpander(model=_FakeModel(), vocabulary=vocab)
+        lanes = expander.expand_lanes("Stufenvorweggewährung Maßregelung", n_terms=2, max_lanes=4)
+
+        assert lanes
+        assert lanes[0] == "Stufenvorweggewährung Maßregelung"
+        assert len(lanes) >= 2
+        assert any("Stufenvorweggewaehrung" in lane for lane in lanes)
+
+    def test_expand_lanes_splits_multi_intent_legal_support_queries_into_intent_scoped_lanes(self):
+        vocab = ["calendar invite", "attendance table", "peer review"]
+        expander = QueryExpander(model=_FakeModel(), vocabulary=vocab)
+        lanes = expander.expand_lanes(
+            "Need SBV participation contradiction timeline after the complaint",
+            n_terms=2,
+            max_lanes=6,
+        )
+
+        assert any("personalrat" in lane or "betriebsrat" in lane for lane in lanes[1:])
+        assert any("contradiction" in lane or "widerspruch" in lane for lane in lanes[1:])
+        assert any("timeline" in lane or "chronology" in lane for lane in lanes[1:])
+
+    def test_legal_support_query_profile_picks_up_wave_domain_intents(self):
+        profile = legal_support_query_profile("Need EG12 time system task withdrawal role ownership evidence")
+
+        assert "classification" in profile["intents"]
+        assert "timekeeping" in profile["intents"]
+        assert "task_ownership" in profile["intents"]
+
+    def test_legal_support_query_profile_detects_agg_intent(self):
+        profile = legal_support_query_profile("Need AGG equal treatment comparator evidence")
+
+        assert "anti_discrimination" in profile["intents"]
+        assert "Gleichbehandlung" in profile["suggested_terms"]
+
+    def test_expand_lanes_adds_compound_variant_lane(self):
+        expander = QueryExpander(model=_FakeModel(), vocabulary=["Stufenvorweggewährung", "TV-L"])
+
+        lanes = expander.expand_lanes("Stufenvorweggewährung TV-L", n_terms=2, max_lanes=6)
+
+        assert any("stufenvorweggewaehrung" in lane.lower() for lane in lanes)
 
 
 class TestMCPSmartSearch:

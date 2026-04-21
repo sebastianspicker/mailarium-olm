@@ -8,11 +8,14 @@ existing imports (``from src.cli import _cmd_search``) keep working.
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import logging
 import sys
-from typing import TYPE_CHECKING, Any, Literal
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Literal, cast
 
+from . import cli_commands_case as case_family
 from . import cli_commands_compat as compat_family
 from . import cli_commands_search as search_family
 from .config import get_settings
@@ -23,6 +26,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 OutputFormat = Literal["text", "json"]
+_CLI_SQLITE_PATH_OVERRIDE: str | None = None
+
+
+def set_cli_sqlite_path_override(sqlite_path: str | None) -> None:
+    """Set a process-local SQLite override for DB-backed CLI commands."""
+    global _CLI_SQLITE_PATH_OVERRIDE
+    _CLI_SQLITE_PATH_OVERRIDE = sqlite_path or None
 
 
 # ── Output format ────────────────────────────────────────────────
@@ -125,14 +135,24 @@ def _render_single_query_plain(query: str, results) -> None:
     search_family.render_single_query_plain_impl(query, results, sanitize_untrusted_text)
 
 
+def _resolve_retriever(retriever: EmailRetriever | Callable[[], EmailRetriever]) -> EmailRetriever:
+    if inspect.isfunction(retriever) or inspect.ismethod(retriever):
+        return retriever()
+    return cast(Any, retriever)
+
+
 # ── Subcommand handlers ──────────────────────────────────────────
 
 
-def _cmd_search(args: argparse.Namespace, retriever: EmailRetriever) -> None:
+def _cmd_search(
+    args: argparse.Namespace,
+    retriever: EmailRetriever | Callable[[], EmailRetriever],
+) -> None:
     """Handle `search` subcommand."""
+    resolved_retriever = _resolve_retriever(retriever)
     output_format = resolve_output_format(args)
     code = run_single_query(
-        retriever,
+        resolved_retriever,
         query=args.query,
         as_json=(output_format == "json"),
         top_k=getattr(args, "top_k", 10),
@@ -157,6 +177,42 @@ def _cmd_search(args: argparse.Namespace, retriever: EmailRetriever) -> None:
     sys.exit(code)
 
 
+def _cmd_case(
+    args: argparse.Namespace,
+    retriever: EmailRetriever | Callable[[], EmailRetriever],
+) -> None:
+    """Handle `case` subcommand."""
+    action = getattr(args, "case_action", None)
+    if action == "analyze":
+        case_family.run_case_analyze_impl(_resolve_retriever(retriever), _get_email_db, args)
+    elif action == "execute-wave":
+        case_family.run_case_execute_wave_impl(_resolve_retriever(retriever), _get_email_db, args)
+    elif action == "execute-all-waves":
+        case_family.run_case_execute_all_waves_impl(_resolve_retriever(retriever), _get_email_db, args)
+    elif action == "gather-evidence":
+        case_family.run_case_gather_evidence_impl(_resolve_retriever(retriever), _get_email_db, args)
+    elif action == "prompt-preflight":
+        case_family.run_case_prompt_preflight_impl(args)
+    elif action == "full-pack":
+        sys.exit(case_family.run_case_full_pack_impl(_resolve_retriever(retriever), _get_email_db, args))
+    elif action == "counsel-pack":
+        sys.exit(case_family.run_case_counsel_pack_impl(_resolve_retriever(retriever), _get_email_db, args))
+    elif action == "refresh-active-run":
+        case_family.run_case_refresh_active_run_impl(args)
+    elif action == "archive-results":
+        case_family.run_case_archive_results_impl(args)
+    elif action == "review-status":
+        case_family.run_case_review_status_impl(_get_email_db, args)
+    elif action == "review-override":
+        case_family.run_case_review_override_impl(_get_email_db, args)
+    elif action == "review-snapshot":
+        case_family.run_case_review_snapshot_impl(_get_email_db, args)
+    else:
+        print("Usage: python -m src.cli case analyze --input case.json")
+        sys.exit(2)
+    sys.exit(0)
+
+
 def _cmd_browse(args: argparse.Namespace) -> None:
     """Handle `browse` subcommand."""
     page_size = min(args.page_size, 50)
@@ -178,9 +234,9 @@ def _cmd_export(args: argparse.Namespace) -> None:
     elif action == "email":
         _run_export_email(args.uid, args.format, getattr(args, "output", None))
     elif action == "report":
-        _run_generate_report(getattr(args, "output", "report.html"))
+        _run_generate_report(getattr(args, "output", "private/exports/report.html"))
     elif action == "network":
-        _run_export_network(getattr(args, "output", "network.graphml"))
+        _run_export_network(getattr(args, "output", "private/exports/network.graphml"))
     else:
         print("Usage: python -m src.cli export {thread,email,report,network}")
         sys.exit(2)
@@ -224,14 +280,17 @@ def _cmd_evidence(args: argparse.Namespace) -> None:
     sys.exit(0)
 
 
-def _cmd_analytics(args: argparse.Namespace, retriever: EmailRetriever) -> None:
+def _cmd_analytics(
+    args: argparse.Namespace,
+    retriever: EmailRetriever | Callable[[], EmailRetriever],
+) -> None:
     """Handle `analytics` subcommand."""
     action = getattr(args, "analytics_action", None)
     if action == "stats":
-        print(json.dumps(retriever.stats(), indent=2))
+        print(json.dumps(_resolve_retriever(retriever).stats(), indent=2))
     elif action == "senders":
         limit = getattr(args, "limit", 30)
-        _print_sender_lines(retriever.list_senders(limit), print_fn=print)
+        _print_sender_lines(_resolve_retriever(retriever).list_senders(limit), print_fn=print)
     elif action == "suggest":
         _run_suggest()
     elif action == "contacts":
@@ -272,11 +331,36 @@ def _cmd_training(args: argparse.Namespace) -> None:
     sys.exit(0)
 
 
-def _cmd_admin(args: argparse.Namespace, retriever: EmailRetriever) -> None:
+def _cmd_admin(
+    args: argparse.Namespace,
+    retriever: EmailRetriever | Callable[[], EmailRetriever],
+) -> None:
     compat_family.cmd_admin_impl(args, retriever)
 
 
-def _cmd_legacy(args: argparse.Namespace, retriever: EmailRetriever) -> None:
+def _cmd_topics(args: argparse.Namespace) -> None:
+    """Handle `topics` subcommand."""
+    from . import cli_commands_topics as topics_family
+
+    action = getattr(args, "topics_action", None)
+    if action == "build":
+        topics_family.run_topics_build_impl(
+            _get_email_db,
+            n_topics=getattr(args, "n_topics", 20),
+            n_clusters=getattr(args, "n_clusters", None),
+            skip_topics=getattr(args, "skip_topics", False),
+            skip_clusters=getattr(args, "skip_clusters", False),
+        )
+    else:
+        print("Usage: python -m src.cli topics build [--n-topics N] [--n-clusters N]")
+        sys.exit(2)
+    sys.exit(0)
+
+
+def _cmd_legacy(
+    args: argparse.Namespace,
+    retriever: EmailRetriever | Callable[[], EmailRetriever],
+) -> None:
     compat_family.cmd_legacy_impl(
         args,
         retriever,
@@ -334,7 +418,10 @@ def _render_results_table(console, table_cls, results) -> None:
 
 
 def _get_email_db():
-    return compat_family.get_email_db_impl(get_settings=get_settings)
+    return compat_family.get_email_db_impl(
+        get_settings=get_settings,
+        sqlite_path_override=_CLI_SQLITE_PATH_OVERRIDE,
+    )
 
 
 # ── Run functions (unchanged domain logic) ───────────────────────

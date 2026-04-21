@@ -24,7 +24,7 @@ def _make_mock_analyzer():
         {"day_of_week": 4, "hour": 14, "count": 20},
     ]
     analyzer.response_times.return_value = [
-        {"replier": "alice@example.com", "avg_response_hours": 2.5, "response_count": 10},
+        {"replier": "employee@example.test", "avg_response_hours": 2.5, "response_count": 10},
     ]
     return analyzer
 
@@ -32,7 +32,7 @@ def _make_mock_analyzer():
 def _make_mock_db():
     db = MagicMock()
     db.top_contacts.return_value = [
-        {"partner": "alice@example.com", "total_count": 50},
+        {"partner": "employee@example.test", "total_count": 50},
         {"partner": "bob@example.com", "total_count": 30},
     ]
     db.top_entities.return_value = [
@@ -56,12 +56,12 @@ def test_volume_chart_data_with_filters():
         period="day",
         date_from="2024-01-01",
         date_to="2024-12-31",
-        sender="alice@example.com",
+        sender="employee@example.test",
     )
     call_kwargs = analyzer.volume_over_time.call_args[1]
     assert call_kwargs["period"] == "day"
     assert call_kwargs["date_from"] == "2024-01-01"
-    assert call_kwargs["sender"] == "alice@example.com"
+    assert call_kwargs["sender"] == "employee@example.test"
 
 
 def test_heatmap_data_structure():
@@ -97,7 +97,7 @@ def test_contacts_chart_data():
     db = _make_mock_db()
     data = prepare_contacts_chart_data(db, "me@example.com", limit=10)
     assert len(data) == 2
-    assert data[0]["partner"] == "alice@example.com"
+    assert data[0]["partner"] == "employee@example.test"
     db.top_contacts.assert_called_once_with("me@example.com", limit=10)
 
 

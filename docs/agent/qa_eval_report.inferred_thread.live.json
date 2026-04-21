@@ -10,7 +10,7 @@
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {
-        "sender": "personalrat@hfmt-koeln.de",
+        "sender": "staff-council@example.org",
         "subject": "Einbuchen von Arbeitszeiten"
       },
       "expected_answer": "The reply belongs to inferred thread aq23-mobiles-arbeiten.",
@@ -25,16 +25,16 @@
       "triage_tags": [
         "inferred_threading"
       ],
-      "notes": "Live AQ23 case on a real parsed message with canonical conversation removed and deterministic inferred-thread enrichment."
+      "notes": "Live AQ23 case on a sanitized parsed fixture with canonical conversation removed and deterministic inferred-thread enrichment."
     },
     {
       "id": "inferred-live-402",
       "bucket": "thread_process",
-      "question": "Which inferred-only thread does Lara Langer's mobiles Arbeiten reply belong to?",
+      "question": "Which inferred-only thread does Coordinator Two's mobiles Arbeiten reply belong to?",
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {
-        "sender": "lara.langer@hfmt-koeln.de",
+        "sender": "coordinator.two@example.org",
         "subject": "Einbuchen von Arbeitszeiten"
       },
       "expected_answer": "The reply belongs to inferred thread aq23-mobiles-arbeiten.",
@@ -49,7 +49,7 @@
       "triage_tags": [
         "inferred_threading"
       ],
-      "notes": "Live AQ23 case on a second real parsed message in the same deterministically enriched inferred-only thread."
+      "notes": "Live AQ23 case on a second sanitized parsed fixture in the same deterministically enriched inferred-only thread."
     }
   ],
   "results": [
@@ -101,7 +101,7 @@
     {
       "id": "inferred-live-402",
       "bucket": "thread_process",
-      "question": "Which inferred-only thread does Lara Langer's mobiles Arbeiten reply belong to?",
+      "question": "Which inferred-only thread does Coordinator Two's mobiles Arbeiten reply belong to?",
       "status": "labeled",
       "source": "live",
       "count": 3,
@@ -239,5 +239,12 @@
   "source_counts": {
     "live": 2
   },
-  "live_backend": "sqlite_fallback"
+  "live_backend": "sqlite_fallback",
+  "source_mode": "live_only",
+  "threshold_verdict": {
+    "profile": "default",
+    "status": "pass",
+    "failure_count": 0,
+    "failures": []
+  }
 }

@@ -52,14 +52,14 @@ def test_search_wrapper_delegates_to_family_module() -> None:
 
 def test_browse_wrapper_delegates_to_family_module() -> None:
     with patch("src.cli_commands_search.run_browse_impl") as mock_impl:
-        cli_commands._run_browse(offset=40, limit=10, folder="Inbox", sender="alice@example.com")
+        cli_commands._run_browse(offset=40, limit=10, folder="Inbox", sender="employee@example.test")
     mock_impl.assert_called_once_with(
         cli_commands._get_email_db,
         cli_commands.sanitize_untrusted_text,
         offset=40,
         limit=10,
         folder="Inbox",
-        sender="alice@example.com",
+        sender="employee@example.test",
     )
 
 

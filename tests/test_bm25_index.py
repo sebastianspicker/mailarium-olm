@@ -81,6 +81,38 @@ def test_bm25_empty_query():
     assert index.search("   ", top_k=5) == []
 
 
+def test_bm25_morphology_matches_german_compound_variants():
+    index = BM25Index()
+    index.build_from_documents(
+        chunk_ids=["c1", "c2"],
+        documents=[
+            "Stufenvorweggewährung wurde im Vorgang erwähnt.",
+            "Unrelated meeting note.",
+        ],
+    )
+    results = index.search("stufenvorweggewaehrung", top_k=5)
+
+    assert results
+    assert results[0][0] == "c1"
+
+
+def test_bm25_search_with_diagnostics_reports_morph_only_hits():
+    index = BM25Index()
+    index.build_from_documents(
+        chunk_ids=["c1", "c2"],
+        documents=[
+            "Stufenvorweggewährung wurde im Vorgang erwähnt.",
+            "General process update.",
+        ],
+    )
+    results, diagnostics = index.search_with_diagnostics("stufenvorweggewaehrung", top_k=5)
+
+    assert results
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["morph_hit_count"] >= diagnostics["raw_hit_count"]
+    assert "morph_query_tokens" in diagnostics
+
+
 # --------------------------------------------------------------------------
 # Reciprocal Rank Fusion tests
 # --------------------------------------------------------------------------

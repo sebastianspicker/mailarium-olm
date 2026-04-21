@@ -1,0 +1,120 @@
+{
+  "legal-support-001": {
+    "final_answer": {
+      "text": "The legal-support workspace includes the dashboard, checklist, and drafting products."
+    },
+    "lawyer_issue_matrix": {
+      "source_id": "workspace:legal-support",
+      "row_count": 1,
+      "rows": [{"issue_id": "retaliation_massregelungsverbot"}]
+    },
+    "case_dashboard": {
+      "source_id": "workspace:legal-support",
+      "dashboard_format": "refreshable_case_dashboard",
+      "summary": {"refreshable_from_shared_entities": true},
+      "cards": {
+        "main_claims_or_issues": [
+          {
+            "issue_id": "retaliation_massregelungsverbot",
+            "supporting_source_ids": ["workspace:legal-support"]
+          }
+        ]
+      }
+    },
+    "actor_map": {
+      "source_id": "workspace:legal-support",
+      "actors": [{"actor_id": "actor-manager"}]
+    },
+    "document_request_checklist": {
+      "source_id": "workspace:legal-support",
+      "groups": [{"group_id": "calendar_meeting_records"}]
+    },
+    "controlled_factual_drafting": {
+      "source_id": "workspace:legal-support",
+      "framing_preflight": {
+        "allegation_ceiling": {"ceiling_level": "concern_only"}
+      },
+      "controlled_draft": {
+        "sections": {
+          "established_facts": [{"item_id": "fact-1"}]
+        }
+      }
+    }
+  },
+  "legal-support-002": {
+    "final_answer": {
+      "text": "The comparator matrix preserves the control and participation rows."
+    },
+    "lawyer_issue_matrix": {
+      "source_id": "email:cmp-1",
+      "row_count": 1,
+      "rows": [{"issue_id": "retaliation_massregelungsverbot"}]
+    },
+    "comparative_treatment": {
+      "supporting_source_ids": ["email:cmp-1"],
+      "comparator_summaries": [
+        {
+          "comparator_matrix": {
+            "rows": [
+              {"issue_id": "control_intensity", "supporting_source_ids": ["email:cmp-1"]},
+              {"issue_id": "sbv_or_pr_participation", "supporting_source_ids": ["email:cmp-1"]}
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "legal-support-003": {
+    "final_answer": {
+      "text": "The dashboard keeps the expected actors and actions cards."
+    },
+    "case_dashboard": {
+      "source_id": "email:dash-1",
+      "dashboard_format": "refreshable_case_dashboard",
+      "summary": {"refreshable_from_shared_entities": true},
+      "cards": {
+        "main_claims_or_issues": [
+          {"issue_id": "retaliation_massregelungsverbot", "supporting_source_ids": ["email:dash-1"]}
+        ],
+        "main_actors": [{"actor_id": "actor-manager", "source_id": "email:dash-1"}],
+        "recommended_next_actions": [{"group_id": "calendar_meeting_records", "source_id": "email:dash-1"}]
+      }
+    },
+    "actor_map": {
+      "actors": [
+        {"actor_id": "actor-manager"},
+        {"actor_id": "actor-hr"}
+      ]
+    }
+  },
+  "legal-support-004": {
+    "final_answer": {
+      "text": "The checklist preserves the calendar and comparator request groups."
+    },
+    "document_request_checklist": {
+      "source_id": "calendar:meeting-1",
+      "groups": [
+        {"group_id": "calendar_meeting_records", "supporting_source_ids": ["calendar:meeting-1"]},
+        {"group_id": "comparator_evidence", "supporting_source_ids": ["calendar:meeting-1"]}
+      ]
+    }
+  },
+  "legal-support-005": {
+    "final_answer": {
+      "text": "The controlled draft stays at concern level and preserves clarification and demands sections."
+    },
+    "controlled_factual_drafting": {
+      "source_id": "email:draft-1",
+      "framing_preflight": {
+        "allegation_ceiling": {"ceiling_level": "concern_only"}
+      },
+      "controlled_draft": {
+        "sections": {
+          "established_facts": [{"item_id": "fact-1"}],
+          "requests_for_clarification": [{"item_id": "clarify-1"}],
+          "formal_demands": [{"item_id": "demand-1"}]
+        }
+      }
+    }
+  }
+}

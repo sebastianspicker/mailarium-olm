@@ -23,6 +23,8 @@
   .bar-container { display: flex; align-items: center; gap: 0.5rem; }
   .bar { height: 16px; background: var(--primary); border-radius: 3px; min-width: 2px; }
   .bar-label { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+  .privacy-banner { background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; padding: 1rem 1.2rem; border-radius: 8px; margin-bottom: 1.5rem; }
+  .privacy-banner strong { display: block; margin-bottom: 0.35rem; }
   .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.8rem; text-align: center; }
   .empty { color: var(--muted); font-style: italic; padding: 1rem 0; }
 </style>
@@ -31,6 +33,13 @@
 
 <h1>{{ title }}</h1>
 <p class="subtitle">Generated {{ generated_at }}</p>
+{% if privacy_guardrails and privacy_guardrails.privacy_mode != "full_access" %}
+<div class="privacy-banner">
+  <strong>Privacy Mode: {{ privacy_guardrails.privacy_mode }}</strong>
+  <div>Audience: {{ privacy_guardrails.audience }}</div>
+  <div>{{ privacy_guardrails.description }}</div>
+</div>
+{% endif %}
 
 {# ── Overview Metrics ────────────────────────────── #}
 <div class="metrics">

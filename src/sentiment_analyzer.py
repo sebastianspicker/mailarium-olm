@@ -29,6 +29,15 @@ _POSITIVE_WORDS = {
     "brilliant",
     "delighted",
     "love",
+    "danke",
+    "vielen",
+    "positiv",
+    "genehmigt",
+    "erfreut",
+    "zufrieden",
+    "gut",
+    "prima",
+    "hilfreich",
 }
 
 _NEGATIVE_WORDS = {
@@ -52,9 +61,38 @@ _NEGATIVE_WORDS = {
     "wrong",
     "broken",
     "unable",
+    "leider",
+    "problematisch",
+    "kritisch",
+    "fehler",
+    "fehlgeschlagen",
+    "beschwerde",
+    "abgelehnt",
+    "verweigert",
+    "sorge",
+    "verzögerung",
 }
 
-_NEGATION_WORDS = {"not", "no", "never", "neither", "nor", "don't", "doesn't", "didn't", "won't", "can't", "cannot"}
+_NEGATION_WORDS = {
+    "not",
+    "no",
+    "never",
+    "neither",
+    "nor",
+    "don't",
+    "doesn't",
+    "didn't",
+    "won't",
+    "can't",
+    "cannot",
+    "nicht",
+    "kein",
+    "keine",
+    "keinen",
+    "keinem",
+    "keiner",
+    "nie",
+}
 
 
 @dataclass
@@ -69,7 +107,7 @@ class SentimentResult:
 
 def _tokenize(text: str) -> list[str]:
     """Simple lowercase word tokenizer."""
-    return re.findall(r"[a-zA-Z']+", text.lower())
+    return re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?", text.lower(), flags=re.UNICODE)
 
 
 def analyze(text: str) -> SentimentResult:

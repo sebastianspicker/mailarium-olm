@@ -60,7 +60,7 @@ def test_rerank_preserves_metadata():
     result = SearchResult(
         chunk_id="c1",
         text="important body",
-        metadata={"uid": "u1", "subject": "test subject", "sender_email": "a@b.com"},
+        metadata={"uid": "u1", "subject": "test subject", "sender_email": "a@example.test"},
         distance=0.5,
     )
     reranked = reranker.rerank("query", [result])

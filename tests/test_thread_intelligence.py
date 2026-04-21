@@ -32,10 +32,10 @@ class TestActionItemExtraction:
 
     def test_self_commitment_pattern(self):
         text = "I'll prepare the presentation slides by tomorrow."
-        items = self.analyzer.extract_action_items(text, sender="alice@co.com")
+        items = self.analyzer.extract_action_items(text, sender="alice@example.test")
         assert len(items) >= 1
         # Self-commitment: assignee should be the sender
-        self_items = [a for a in items if a.assignee == "alice@co.com"]
+        self_items = [a for a in items if a.assignee == "alice@example.test"]
         assert len(self_items) >= 1
 
     def test_action_required_pattern(self):
@@ -82,6 +82,12 @@ class TestActionItemExtraction:
         items = self.analyzer.extract_action_items(text)
         assert len(items) >= 1
 
+    def test_german_action_patterns(self):
+        text = "Bitte prüfen Sie die Eingruppierung bis Freitag. Wir müssen die SBV heute noch informieren."
+        items = self.analyzer.extract_action_items(text)
+        assert len(items) >= 1
+        assert any("eingruppierung" in a.text.lower() or "sbv" in a.text.lower() for a in items)
+
 
 class TestDecisionExtraction:
     def setup_method(self):
@@ -118,6 +124,11 @@ class TestDecisionExtraction:
         decisions = self.analyzer.extract_decisions(text)
         assert len(decisions) >= 1
 
+    def test_german_decision_patterns(self):
+        text = "Wir haben entschieden, die mobile Arbeit vorerst fortzuführen. Die Entscheidung ist damit bestätigt."
+        decisions = self.analyzer.extract_decisions(text)
+        assert len(decisions) >= 1
+
     def test_empty_text(self):
         assert self.analyzer.extract_decisions("") == []
         assert self.analyzer.extract_decisions(None) == []
@@ -129,9 +140,9 @@ class TestDecisionExtraction:
 
     def test_sender_and_date_preserved(self):
         text = "We decided to go ahead with the merger and acquisitions plan."
-        decisions = self.analyzer.extract_decisions(text, sender="boss@co.com", date="2024-01-15", source_uid="uid-456")
+        decisions = self.analyzer.extract_decisions(text, sender="boss@example.test", date="2024-01-15", source_uid="uid-456")
         for d in decisions:
-            assert d.made_by == "boss@co.com"
+            assert d.made_by == "boss@example.test"
             assert d.date == "2024-01-15"
             assert d.source_uid == "uid-456"
 
@@ -159,7 +170,7 @@ class TestThreadAnalyzer:
             {
                 "clean_body": "We need to finalize the project plan. Please review the timeline and provide feedback.",
                 "sender_name": "Alice",
-                "sender_email": "alice@co.com",
+                "sender_email": "alice@example.test",
                 "date": "2024-01-10",
                 "uid": "uid-1",
                 "subject": "Project Plan",
@@ -167,7 +178,7 @@ class TestThreadAnalyzer:
             {
                 "clean_body": "We decided to extend the deadline by two weeks. I'll update the Gantt chart accordingly.",
                 "sender_name": "Bob",
-                "sender_email": "bob@co.com",
+                "sender_email": "bob@example.test",
                 "date": "2024-01-11",
                 "uid": "uid-2",
                 "subject": "Re: Project Plan",
@@ -180,17 +191,17 @@ class TestThreadAnalyzer:
 
     def test_participants_identified(self):
         emails = [
-            {"clean_body": "Starting the thread.", "sender_email": "alice@co.com", "sender_name": "Alice"},
-            {"clean_body": "Replying here.", "sender_email": "bob@co.com", "sender_name": "Bob"},
-            {"clean_body": "Me too.", "sender_email": "alice@co.com", "sender_name": "Alice"},
+            {"clean_body": "Starting the thread.", "sender_email": "alice@example.test", "sender_name": "Alice"},
+            {"clean_body": "Replying here.", "sender_email": "bob@example.test", "sender_name": "Bob"},
+            {"clean_body": "Me too.", "sender_email": "alice@example.test", "sender_name": "Alice"},
         ]
         result = self.analyzer.analyze_thread(emails)
         assert len(result.participants) == 2
         # Alice sent 2, Bob sent 1
-        alice = next(p for p in result.participants if p["email"] == "alice@co.com")
+        alice = next(p for p in result.participants if p["email"] == "alice@example.test")
         assert alice["message_count"] == 2
         assert alice["role"] == "initiator"
-        bob = next(p for p in result.participants if p["email"] == "bob@co.com")
+        bob = next(p for p in result.participants if p["email"] == "bob@example.test")
         assert bob["message_count"] == 1
         assert bob["role"] == "responder"
 
@@ -199,7 +210,7 @@ class TestThreadAnalyzer:
             summary="Test summary here.",
             action_items=[ActionItem(text="do X", assignee="alice", is_urgent=True)],
             decisions=[Decision(text="go with Y", made_by="bob", date="2024-01-15")],
-            participants=[{"email": "alice@co.com", "message_count": 3, "role": "initiator"}],
+            participants=[{"email": "alice@example.test", "message_count": 3, "role": "initiator"}],
         )
         d = analysis.to_dict()
         assert d["summary"] == "Test summary here."

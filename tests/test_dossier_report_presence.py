@@ -127,9 +127,9 @@ def test_generate_with_persons_of_interest(db):
 
     net = CommunicationNetwork(db)
     generator = DossierGenerator(db, network=net)
-    result = generator.generate(persons_of_interest=["sender1@test.com"])
+    result = generator.generate(persons_of_interest=["sender1@example.test"])
 
-    assert "sender1@test.com" in result["html"]
+    assert "sender1@example.test" in result["html"]
 
 
 def test_executive_summary_present(gen):

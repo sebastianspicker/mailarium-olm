@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.multi_vector_embedder import MultiVectorEmbedder, MultiVectorResult
+from src.multi_vector_embedder import MultiVectorEmbedder, MultiVectorResult, _offline_model_load
 from tests._multi_vector_embedder_cases import FakeSentenceTransformer
 
 
@@ -86,6 +87,32 @@ def test_load_sentence_transformer_download_mode_skips_local_probe():
 
     assert calls == [{"device": "cpu"}]
     assert emb.backend.name == "sentence_transformer"
+
+
+def test_load_model_local_only_dense_only_skips_flagembedding_probe():
+    emb = MultiVectorEmbedder(model_name="BAAI/bge-m3", device="cpu", load_mode="local_only")
+
+    with patch.object(emb, "_try_load_flag_model") as mock_flag:
+        with patch.object(emb, "_load_sentence_transformer") as mock_sentence:
+            emb._load_model()
+
+    mock_flag.assert_not_called()
+    mock_sentence.assert_called_once_with()
+
+
+def test_offline_model_load_sets_and_restores_safetensors_conversion_env(monkeypatch):
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
+    monkeypatch.delenv("DISABLE_SAFETENSORS_CONVERSION", raising=False)
+
+    with _offline_model_load(True):
+        assert os.environ["HF_HUB_OFFLINE"] == "1"
+        assert os.environ["TRANSFORMERS_OFFLINE"] == "1"
+        assert os.environ["DISABLE_SAFETENSORS_CONVERSION"] == "1"
+
+    assert "HF_HUB_OFFLINE" not in os.environ
+    assert "TRANSFORMERS_OFFLINE" not in os.environ
+    assert "DISABLE_SAFETENSORS_CONVERSION" not in os.environ
 
 
 def test_batch_size_default_auto():

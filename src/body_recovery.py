@@ -68,8 +68,11 @@ def classify_body_state(
 
     if _looks_image_only(raw_body_text, raw_body_html):
         reason = "image_only"
-    elif raw_source.strip() and not raw_text_visible and not raw_html_visible and (
-        (not source_text_visible and not source_html_visible) or source_visible_is_sentinel
+    elif (
+        raw_source.strip()
+        and not raw_text_visible
+        and not raw_html_visible
+        and ((not source_text_visible and not source_html_visible) or source_visible_is_sentinel)
     ):
         reason = "source_shell_only"
     elif raw_body_html.strip() and not raw_html_visible and not raw_text_visible:

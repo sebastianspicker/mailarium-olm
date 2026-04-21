@@ -223,6 +223,7 @@ def render_search_page_impl(
     thread_id = st_module.session_state.get("web_thread_id")
     if thread_id:
         st_module.markdown("### Conversation Thread")
+        st_module.caption("Canonical conversation view. Inferred thread groups remain available through CLI/MCP workflows.")
         thread_results = retriever.search_by_thread(thread_id)
         if thread_results:
             participants = list(

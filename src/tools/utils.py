@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import json
 import logging
 import threading
@@ -15,6 +17,7 @@ if TYPE_CHECKING:
     from ..retriever import EmailRetriever
 
 logger = logging.getLogger(__name__)
+_HEAVY_CASE_TOOL_SEMAPHORE = asyncio.Semaphore(1)
 
 
 def _serialize_json(data: Any, *, pretty: bool, **kwargs: Any) -> str:
@@ -34,6 +37,103 @@ def _fit_json_candidates(candidates: list[Any], max_chars: int, **kwargs: Any) -
         if len(rendered) <= max_chars:
             return rendered
     return "0"
+
+
+def _fit_truncated_snippet(
+    template: Callable[[str], Any],
+    snippet: str,
+    max_chars: int,
+    **kwargs: Any,
+) -> str | None:
+    """Return the largest snippet payload that still fits within *max_chars*."""
+    if not snippet:
+        rendered = _serialize_json(template(""), pretty=False, **kwargs)
+        return rendered if len(rendered) <= max_chars else None
+
+    lo, hi = 0, len(snippet)
+    best: str | None = None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        rendered = _serialize_json(template(snippet[:mid]), pretty=False, **kwargs)
+        if len(rendered) <= max_chars:
+            best = rendered
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best
+
+
+def _iter_string_paths(data: Any, *, max_depth: int = 3, _path: tuple[str, ...] = ()) -> list[tuple[tuple[str, ...], str]]:
+    """Collect nested dict string fields up to *max_depth* for budget trimming."""
+    if len(_path) > max_depth:
+        return []
+    if isinstance(data, str):
+        return [(_path, data)]
+    if not isinstance(data, dict):
+        return []
+    paths: list[tuple[tuple[str, ...], str]] = []
+    for key, value in data.items():
+        if key == "_truncated" or not isinstance(key, str):
+            continue
+        paths.extend(_iter_string_paths(value, max_depth=max_depth, _path=(*_path, key)))
+    return paths
+
+
+def _set_nested_string_field(data: dict[str, Any], path: tuple[str, ...], value: str) -> None:
+    """Set one nested dict string field identified by *path*."""
+    cursor: dict[str, Any] = data
+    for key in path[:-1]:
+        next_value = cursor.get(key)
+        if not isinstance(next_value, dict):
+            return
+        cursor = next_value
+    if path:
+        cursor[path[-1]] = value
+
+
+def _truncate_largest_string_field(data: dict[str, Any], max_chars: int, **kwargs: Any) -> str | None:
+    """Trim the largest nested string field in *data* until the payload fits."""
+    string_paths = _iter_string_paths(data)
+    if not string_paths:
+        return None
+    path, original_value = max(string_paths, key=lambda item: len(item[1]))
+    if not original_value:
+        return None
+
+    lo, hi = 0, len(original_value)
+    best: str | None = None
+    field_name = ".".join(path)
+    metadata_variants = (
+        lambda mid: {
+            "field": field_name,
+            "shown_chars": mid,
+            "original_chars": len(original_value),
+            "note": "Response trimmed; nested string field compacted to fit limit.",
+        },
+        lambda mid: {
+            "field": field_name,
+            "shown_chars": mid,
+            "original_chars": len(original_value),
+        },
+        lambda _mid: True,
+    )
+    for metadata_factory in metadata_variants:
+        lo, hi = 0, len(original_value)
+        best = None
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            candidate = copy.deepcopy(data)
+            _set_nested_string_field(candidate, path, original_value[:mid])
+            candidate["_truncated"] = metadata_factory(mid)
+            rendered = _serialize_json(candidate, pretty=False, **kwargs)
+            if len(rendered) <= max_chars:
+                best = rendered
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        if best is not None:
+            return best
+    return best
 
 
 def _fallback_truncated_json(
@@ -62,13 +162,14 @@ def _fallback_truncated_json(
             ]
         )
     if snippet is not None:
-        candidates.extend(
-            [
-                {"data": snippet, "_truncated": True, "note": "Response too large; truncated to fit limit."},
-                {"data": snippet, "_truncated": True},
-                {"data": "", "_truncated": True},
-            ]
-        )
+        for template in (
+            lambda value: {"data": value, "_truncated": True, "note": "Response too large; truncated to fit limit."},
+            lambda value: {"data": value, "_truncated": True},
+        ):
+            rendered = _fit_truncated_snippet(template, snippet, max_chars, **kwargs)
+            if rendered is not None:
+                return rendered
+        candidates.append({"data": "", "_truncated": True})
     candidates.extend([{"_truncated": True}, [], 0])
     return _fit_json_candidates(candidates, max_chars, **kwargs)
 
@@ -118,6 +219,18 @@ async def run_with_db(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
 async def run_with_retriever(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
     """Offload ``fn(retriever)`` to a thread."""
     return await deps.offload(lambda: fn(deps.get_retriever()))
+
+
+async def run_serialized_case_tool(fn: Callable[[], Any]) -> Any:
+    """Serialize heavyweight case-analysis/legal-support MCP flows.
+
+    These tools persist matter snapshots and export metadata through one shared
+    SQLite connection. Running them one-at-a-time is slower but avoids write
+    contention and keeps long-running legal-support refreshes reliable.
+    """
+
+    async with _HEAVY_CASE_TOOL_SEMAPHORE:
+        return await fn()
 
 
 def _sanitize_floats(obj: Any) -> Any:
@@ -185,11 +298,16 @@ def _truncate_json(data: Any, raw: str, max_chars: int, **kwargs: Any) -> str:
             largest_len = len(val)
 
     if largest_key is None:
-        # No list to trim — wrap in valid JSON structure
+        trimmed_string = _truncate_largest_string_field(data, max_chars, **kwargs)
+        if trimmed_string is not None:
+            return trimmed_string
         return _fallback_truncated_json(max_chars, snippet=raw[:max_chars], **kwargs)
     if largest_len <= 1:
         if len(compact_raw) <= max_chars:
             return compact_raw
+        trimmed_string = _truncate_largest_string_field(data, max_chars, **kwargs)
+        if trimmed_string is not None:
+            return trimmed_string
         return _fallback_truncated_json(max_chars, snippet=raw[:max_chars], **kwargs)
 
     # Binary search for how many items fit
@@ -216,6 +334,9 @@ def _truncate_json(data: Any, raw: str, max_chars: int, **kwargs: Any) -> str:
             hi = mid - 1
 
     if best_result is None:
+        trimmed_string = _truncate_largest_string_field(data, max_chars, **kwargs)
+        if trimmed_string is not None:
+            return trimmed_string
         return _fallback_truncated_json(
             max_chars,
             snippet=raw[:max_chars],

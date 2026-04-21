@@ -1,88 +1,45 @@
-"""Extract text content from common attachment file types.
-
-Supported formats:
-- Text-based: .txt, .csv, .log, .md, .json, .xml, .yaml, .yml
-- HTML: .html, .htm (converted via parse_olm._html_to_text)
-- PDF: .pdf (requires PyPDF2, optional)
-- Word: .docx (requires python-docx, optional)
-- Excel: .xlsx (requires openpyxl, optional)
-- Images: .jpg, .png, .bmp, .tiff, .webp (via ImageEmbedder, optional)
-
-Unsupported/binary formats return None.
-"""
+"""Extract text content from common attachment file types."""
 
 from __future__ import annotations
 
-import io
-import logging
-from collections.abc import Callable
-from typing import Any
+import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
+from .attachment_extractor_profiles import (
+    SOURCE_FORMAT_INGESTION_MATRIX_VERSION,
+    attachment_format_profile,
+    extraction_quality_profile,
+)
+from .attachment_extractor_text import (
+    _ARCHIVE_INVENTORY_HEADER,
+    _ARCHIVE_TEXT_HEADER,
+    MAX_EXTRACTED_CHARS,
+    _decode_text_bytes,
+    _dispatch_extension,
+    _docx_extractor,
+    _extract_html,
+    _extract_legacy_binary_office,
+    _extract_ods,
+    _extract_plain_text,
+    _extract_text_with_dispatch,
+    _get_extension,
+    _optional_extract,
+    _pdf_extractor,
+    _pptx_extractor,
+    _truncate,
+    _xlsx_extractor,
+    is_image_attachment,
+)
+from .attachment_identity import DEFAULT_ATTACHMENT_OCR_LANG
 from .image_embedder import _IMAGE_EXTENSIONS
 
-logger = logging.getLogger(__name__)
-
-MAX_EXTRACTED_CHARS = 50_000  # Truncate at ~50KB
-
-_TEXT_EXTENSIONS = frozenset(
-    {
-        ".txt",
-        ".csv",
-        ".log",
-        ".md",
-        ".json",
-        ".xml",
-        ".yaml",
-        ".yml",
-        ".ini",
-        ".cfg",
-        ".conf",
-        ".tsv",
-        ".rst",
-    }
-)
-
-_SKIP_EXTENSIONS = frozenset(
-    {
-        ".eml",
-        ".msg",
-        ".zip",
-        ".gz",
-        ".tar",
-        ".rar",
-        ".7z",
-        ".exe",
-        ".dll",
-        ".bin",
-        ".dat",
-        ".iso",
-        ".gif",
-        ".ico",
-        ".svg",
-        ".mp3",
-        ".mp4",
-        ".wav",
-        ".avi",
-        ".mov",
-        ".mkv",
-        ".flac",
-        ".ppt",
-    }
-)
-
-
-def is_image_attachment(filename: str) -> bool:
-    """Check if a filename is a supported image format for embedding."""
-    if not filename:
-        return False
-    return _get_extension(filename) in _IMAGE_EXTENSIONS
-
-
-_image_embedder: object | None = None
+_image_embedder = None
 
 
 def _get_image_embedder():
-    """Return the module-level ImageEmbedder singleton (lazy-init)."""
     global _image_embedder
     if _image_embedder is None:
         from .image_embedder import ImageEmbedder
@@ -92,200 +49,219 @@ def _get_image_embedder():
 
 
 def extract_image_embedding(filename: str, content: bytes) -> list[float] | None:
-    """Encode an image attachment into a 1024-d embedding vector.
-
-    Requires Visualized-BGE-M3 (FlagEmbedding + weight file).
-    Returns None if not available or encoding fails.
-
-    Args:
-        filename: The attachment filename.
-        content: The raw image bytes.
-
-    Returns:
-        1024-d embedding list, or None.
-    """
     if not is_image_attachment(filename) or not content:
         return None
-
     try:
         embedder = _get_image_embedder()
         if not embedder.is_available:
             return None
         return embedder.encode_image(content, filename=filename)
     except Exception:
-        logger.debug("Failed to encode image attachment: %s", filename, exc_info=True)
         return None
-
-
-def extract_text(filename: str, content: bytes) -> str | None:
-    """Extract readable text from an attachment.
-
-    Args:
-        filename: The attachment filename (used to determine format).
-        content: The raw attachment bytes.
-
-    Returns:
-        Extracted text, or None if the format is unsupported or extraction fails.
-    """
-    if not filename or not content:
-        return None
-
-    ext = _get_extension(filename)
-
-    if ext in _SKIP_EXTENSIONS or ext in _IMAGE_EXTENSIONS:
-        return None
-
-    if ext in _TEXT_EXTENSIONS:
-        return _extract_plain_text(content)
-
-    if ext in (".html", ".htm"):
-        return _extract_html(content)
-
-    if ext == ".pdf":
-        return _extract_pdf(content)
-
-    if ext == ".docx":
-        return _extract_docx(content)
-
-    if ext == ".xlsx":
-        return _extract_xlsx(content)
-
-    if ext == ".pptx":
-        return _extract_pptx(content)
-
-    return None
-
-
-def _get_extension(filename: str) -> str:
-    """Get lowercase file extension."""
-    dot_pos = filename.rfind(".")
-    if dot_pos == -1:
-        return ""
-    return filename[dot_pos:].lower()
-
-
-def _truncate(text: str) -> str:
-    """Truncate text to MAX_EXTRACTED_CHARS with a note."""
-    if len(text) <= MAX_EXTRACTED_CHARS:
-        return text
-    return text[:MAX_EXTRACTED_CHARS] + "\n[... content truncated ...]"
-
-
-def _extract_plain_text(content: bytes) -> str | None:
-    """Decode text content as UTF-8 or Latin-1 fallback."""
-    try:
-        text = content.decode("utf-8")
-    except UnicodeDecodeError:
-        text = content.decode("latin-1")  # latin-1 decodes all byte values
-    text = text.strip()
-    return _truncate(text) if text else None
-
-
-def _extract_html(content: bytes) -> str | None:
-    """Convert HTML attachment to plain text."""
-    try:
-        html = content.decode("utf-8")
-    except UnicodeDecodeError:
-        html = content.decode("latin-1")  # latin-1 decodes all byte values
-
-    from .html_converter import html_to_text as _html_to_text
-
-    text = _html_to_text(html).strip()
-    return _truncate(text) if text else None
-
-
-def _optional_extract(
-    content: bytes,
-    import_name: str,
-    import_from: str,
-    extractor: Callable[[Any, io.BytesIO], str | None],
-    fmt_label: str,
-) -> str | None:
-    """Shared skeleton for optional-library extraction strategies.
-
-    1. Try to import *import_from* from module *import_name*.
-    2. Call ``extractor(imported_obj, io.BytesIO(content))`` to get raw text.
-    3. Truncate and return, or None on any failure.
-
-    This deduplicates the try-import / try-extract / truncate-or-None pattern
-    used by PDF, DOCX, XLSX, and PPTX extractors.
-    """
-    try:
-        mod = __import__(import_name)
-        obj = getattr(mod, import_from)
-    except (ImportError, AttributeError):
-        logger.debug("%s not installed; skipping %s extraction.", import_name, fmt_label)
-        return None
-
-    try:
-        text = extractor(obj, io.BytesIO(content))
-        if text:
-            return _truncate(text)
-        return None
-    except Exception:
-        logger.debug("Failed to extract %s text from attachment.", fmt_label, exc_info=True)
-        return None
-
-
-def _pdf_extractor(PdfReader, stream):
-    reader = PdfReader(stream)
-    pages = []
-    for page in reader.pages:
-        page_text = page.extract_text()
-        if page_text:
-            pages.append(page_text)
-    return "\n\n".join(pages).strip()
-
-
-def _docx_extractor(Document, stream):
-    doc = Document(stream)
-    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    return "\n".join(paragraphs).strip()
-
-
-def _xlsx_extractor(load_workbook, stream):
-    wb = load_workbook(stream, read_only=True, data_only=True)
-    lines = []
-    for sheet in wb.sheetnames:
-        ws = wb[sheet]
-        lines.append(f"[Sheet: {sheet}]")
-        for row in ws.iter_rows(values_only=True):
-            cells = [str(cell) if cell is not None else "" for cell in row]
-            if any(c.strip() for c in cells):
-                lines.append("\t".join(cells))
-    wb.close()
-    return "\n".join(lines).strip()
-
-
-def _pptx_extractor(Presentation, stream):
-    prs = Presentation(stream)
-    lines: list[str] = []
-    for slide_num, slide in enumerate(prs.slides, 1):
-        lines.append(f"[Slide {slide_num}]")
-        for shape in slide.shapes:
-            if shape.has_text_frame:
-                for para in shape.text_frame.paragraphs:
-                    text = para.text.strip()
-                    if text:
-                        lines.append(text)
-    return "\n".join(lines).strip()
 
 
 def _extract_pdf(content: bytes) -> str | None:
-    """Extract text from a PDF using PyPDF2."""
     return _optional_extract(content, "PyPDF2", "PdfReader", _pdf_extractor, "PDF")
 
 
 def _extract_docx(content: bytes) -> str | None:
-    """Extract text from a Word .docx file using python-docx."""
     return _optional_extract(content, "docx", "Document", _docx_extractor, "DOCX")
 
 
 def _extract_xlsx(content: bytes) -> str | None:
-    """Extract text from an Excel .xlsx file using openpyxl."""
     return _optional_extract(content, "openpyxl", "load_workbook", _xlsx_extractor, "XLSX")
 
 
 def _extract_pptx(content: bytes) -> str | None:
-    """Extract text from a PowerPoint .pptx file using python-pptx."""
     return _optional_extract(content, "pptx", "Presentation", _pptx_extractor, "PPTX")
+
+
+def extract_text(filename: str, content: bytes, *, mime_type: str | None = None) -> str | None:
+    return _extract_text_with_dispatch(
+        filename,
+        content,
+        mime_type=mime_type,
+        plain_text_extractor=_extract_plain_text,
+        html_extractor=_extract_html,
+        pdf_extractor=_extract_pdf,
+        docx_extractor=_extract_docx,
+        xlsx_extractor=_extract_xlsx,
+        ods_extractor=_extract_ods,
+        legacy_office_extractor=lambda data, label: _extract_legacy_binary_office(data, format_label=label),
+        pptx_extractor=_extract_pptx,
+    )
+
+
+def image_ocr_available() -> bool:
+    """Return whether the local Tesseract OCR binary is available."""
+    return bool(shutil.which("tesseract"))
+
+
+def pdf_ocr_available() -> bool:
+    """Return whether local PDF OCR tooling is available."""
+    return image_ocr_available() and bool(shutil.which("pdftoppm"))
+
+
+def attachment_ocr_available() -> bool:
+    """Return whether any supported attachment OCR path is available."""
+    return image_ocr_available() or pdf_ocr_available()
+
+
+def attachment_ocr_available_for(filename: str, *, mime_type: str | None = None) -> bool:
+    """Return whether OCR is available for this specific attachment format."""
+    ext = _dispatch_extension(filename, mime_type)
+    if ext == ".pdf":
+        return pdf_ocr_available()
+    if is_image_attachment(filename):
+        return image_ocr_available()
+    return False
+
+
+def attachment_supports_ocr(filename: str, *, mime_type: str | None = None) -> bool:
+    ext = _dispatch_extension(filename, mime_type)
+    return bool(ext == ".pdf" or is_image_attachment(filename))
+
+
+def extract_image_text_ocr(filename: str, content: bytes, *, timeout_seconds: int = 30) -> str | None:
+    """Best-effort OCR for image attachments using the local Tesseract binary."""
+    if not is_image_attachment(filename) or not content or not image_ocr_available():
+        return None
+    suffix = Path(filename).suffix or ".img"
+    temp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_file.write(content)
+            temp_path = temp_file.name
+        command = ["tesseract", temp_path, "stdout", "--psm", os.environ.get("ATTACHMENT_OCR_PSM", "6")]
+        language_hint = str(os.environ.get("ATTACHMENT_OCR_LANG", DEFAULT_ATTACHMENT_OCR_LANG) or "").strip()
+        if not language_hint:
+            language_hint = DEFAULT_ATTACHMENT_OCR_LANG
+        if language_hint:
+            command.extend(["-l", language_hint])
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+        if result.returncode != 0:
+            return None
+        text = _truncate(str(result.stdout or "").strip())
+        return text or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+    finally:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+
+def extract_pdf_text_ocr(filename: str, content: bytes, *, timeout_seconds: int = 90) -> str | None:
+    """Best-effort OCR for scanned PDFs using pdftoppm plus Tesseract."""
+    if _dispatch_extension(filename) != ".pdf" or not content or not pdf_ocr_available():
+        return None
+    temp_pdf = ""
+    temp_dir = ""
+    try:
+        temp_dir = tempfile.mkdtemp(prefix="pdf-ocr-")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            temp_file.write(content)
+            temp_pdf = temp_file.name
+        output_prefix = str(Path(temp_dir) / "page")
+        max_pages = max(1, int(os.environ.get("ATTACHMENT_PDF_OCR_MAX_PAGES", "5")))
+        render = subprocess.run(
+            ["pdftoppm", "-f", "1", "-l", str(max_pages), "-png", temp_pdf, output_prefix],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+        if render.returncode != 0:
+            return None
+        page_paths = sorted(Path(temp_dir).glob("page-*.png"))
+        page_texts: list[str] = []
+        for page_path in page_paths:
+            page_bytes = page_path.read_bytes()
+            page_text = extract_image_text_ocr(page_path.name, page_bytes, timeout_seconds=timeout_seconds)
+            if page_text:
+                page_texts.append(page_text)
+        joined = "\n\n".join(page_texts).strip()
+        return _truncate(joined) if joined else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    finally:
+        if temp_pdf:
+            try:
+                os.unlink(temp_pdf)
+            except OSError:
+                pass
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def extract_attachment_text_ocr(filename: str, content: bytes, *, timeout_seconds: int = 90) -> str | None:
+    """Best-effort OCR for supported attachment types."""
+    ext = _dispatch_extension(filename)
+    if ext == ".pdf":
+        return extract_pdf_text_ocr(filename, content, timeout_seconds=timeout_seconds)
+    return extract_image_text_ocr(filename, content, timeout_seconds=min(timeout_seconds, 30))
+
+
+def classify_text_extraction_state(filename: str, text: str, *, ocr_used: bool = False) -> str:
+    """Return a normalized extraction-state label for extracted attachment text."""
+    if ocr_used:
+        return "ocr_text_extracted"
+    compact = str(text or "").strip()
+    ext = _dispatch_extension(filename)
+    if ext == ".zip":
+        if compact.startswith(_ARCHIVE_TEXT_HEADER):
+            return "archive_contents_extracted"
+        if compact.startswith(_ARCHIVE_INVENTORY_HEADER):
+            return "archive_inventory_extracted"
+    return "text_extracted"
+
+
+__all__ = [
+    "MAX_EXTRACTED_CHARS",
+    "SOURCE_FORMAT_INGESTION_MATRIX_VERSION",
+    "_ARCHIVE_INVENTORY_HEADER",
+    "_ARCHIVE_TEXT_HEADER",
+    "_IMAGE_EXTENSIONS",
+    "_decode_text_bytes",
+    "_dispatch_extension",
+    "_docx_extractor",
+    "_extract_docx",
+    "_extract_html",
+    "_extract_legacy_binary_office",
+    "_extract_ods",
+    "_extract_pdf",
+    "_extract_plain_text",
+    "_extract_pptx",
+    "_extract_text_with_dispatch",
+    "_extract_xlsx",
+    "_get_extension",
+    "_get_image_embedder",
+    "_image_embedder",
+    "_optional_extract",
+    "_pdf_extractor",
+    "_pptx_extractor",
+    "_truncate",
+    "_xlsx_extractor",
+    "attachment_format_profile",
+    "attachment_ocr_available",
+    "attachment_ocr_available_for",
+    "attachment_supports_ocr",
+    "classify_text_extraction_state",
+    "extract_attachment_text_ocr",
+    "extract_image_embedding",
+    "extract_image_text_ocr",
+    "extract_pdf_text_ocr",
+    "extract_text",
+    "extraction_quality_profile",
+    "image_ocr_available",
+    "is_image_attachment",
+    "pdf_ocr_available",
+]

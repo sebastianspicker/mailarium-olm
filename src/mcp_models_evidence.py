@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 
 from .mcp_models_base import PlainInput, StrictInput, _validate_output_path
 
@@ -18,6 +18,12 @@ EVIDENCE_CATEGORIES = Literal[
     "exclusion",
     "gaslighting",
     "workload",
+    "contradiction",
+    "chronology",
+    "provenance",
+    "quote_repair",
+    "omission",
+    "promise",
     "general",
 ]
 
@@ -33,7 +39,8 @@ class EvidenceAddInput(StrictInput):
         description=(
             "Evidence category: bossing, harassment, discrimination, retaliation, "
             "hostile_environment, micromanagement, exclusion, gaslighting, "
-            "workload, or general."
+            "workload, contradiction, chronology, provenance, quote_repair, "
+            "omission, promise, or general."
         ),
     )
     key_quote: str = Field(
@@ -85,7 +92,7 @@ class EvidenceExportInput(StrictInput):
     """Input for exporting the evidence report."""
 
     output_path: str = Field(
-        default="evidence_report.html",
+        default="private/exports/evidence_report.html",
         description="Output file path for the evidence report.",
     )
     format: Literal["html", "csv", "pdf"] = Field(
@@ -197,6 +204,7 @@ class EmailProvenanceInput(StrictInput):
         ...,
         description="Email UID to trace provenance for.",
         min_length=1,
+        validation_alias=AliasChoices("email_uid", "uid"),
     )
 
 
@@ -224,7 +232,7 @@ class EmailDossierInput(StrictInput):
         description="If true, return counts and scope only (no file generated).",
     )
     output_path: str = Field(
-        default="dossier.html",
+        default="private/exports/dossier.html",
         description="File path for the generated dossier.",
     )
     format: Literal["html", "pdf"] = Field(

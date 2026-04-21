@@ -40,3 +40,13 @@ streamlit>=1.40.0
 PyJWT>=2.12.0
 # tornado CVE-2026-31958/GHSA-78cv-mqj4-43f7: cookie injection + multipart DoS — fix in 6.5.5 (required by streamlit)
 tornado>=6.5.5
+# cryptography CVE-2026-34073, CVE-2026-39892 — fix in 46.0.7
+cryptography>=46.0.7
+# pillow CVE-2026-40192 — fix in 12.2.0 (required by transformers/sentence-transformers)
+pillow>=12.2.0
+# pygments CVE-2026-4539 — fix in 2.20.0 (required by rich)
+pygments>=2.20.0
+# python-multipart CVE-2026-40347 — fix in 0.0.26 (required by streamlit)
+python-multipart>=0.0.26
+# requests CVE-2026-25645 — fix in 2.33.0 (required by multiple deps)
+requests>=2.33.0

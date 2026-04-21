@@ -17,7 +17,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
 
         analysis='volume': email volume grouped by day/week/month.
         analysis='activity': hour-of-day x day-of-week heatmap.
-        analysis='response_times': average response times per sender.
+        analysis='response_times': recent-sample response times per sender, based on up to 500 canonical reply pairs.
         """
 
         def _work(db: Any) -> str:

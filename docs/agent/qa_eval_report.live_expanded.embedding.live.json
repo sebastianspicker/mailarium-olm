@@ -10,7 +10,7 @@
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "pki@hfmt-koeln.de sent the HARICA certificate reply.",
+      "expected_answer": "cert-admin@example.org sent the HARICA certificate reply.",
       "expected_support_uids": [
         "31692630078d4d3689505120c1b61631"
       ],
@@ -20,7 +20,7 @@
       "expected_thread_group_id": null,
       "expected_thread_group_source": null,
       "triage_tags": [],
-      "notes": "Real reply in _wichtig: subject AW: Zertifikat Harica."
+      "notes": "Synthetic reply in _wichtig: subject AW: Zertifikat Harica."
     },
     {
       "id": "fact-102",
@@ -39,7 +39,7 @@
       "expected_thread_group_id": null,
       "expected_thread_group_source": null,
       "triage_tags": [],
-      "notes": "Real original in memo: Notizen und Dateien in die Notizen-App importieren - Apple Support (DE)."
+      "notes": "Synthetic original in memo: Notizen und Dateien in die Notizen-App importieren - Apple Support (DE)."
     },
     {
       "id": "fact-103",
@@ -58,16 +58,16 @@
       "expected_thread_group_id": null,
       "expected_thread_group_source": null,
       "triage_tags": [],
-      "notes": "Real original in _wichtig from 2021-10-07."
+      "notes": "Synthetic original in _wichtig from 2021-10-07."
     },
     {
       "id": "fact-104",
       "bucket": "fact_lookup",
-      "question": "Who announced that the Zammad test version was created?",
+      "question": "Who announced that the ticket system test version was created?",
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "lukas.jacobs@hfmt-koeln.de announced the Zammad test version.",
+      "expected_answer": "service-owner@example.org announced the ticket system test version.",
       "expected_support_uids": [
         "addd6fad46c354177e7b59e32bb9b86a"
       ],
@@ -77,7 +77,7 @@
       "expected_thread_group_id": null,
       "expected_thread_group_source": null,
       "triage_tags": [],
-      "notes": "Real original in _wichtig: Zammad Testversion."
+      "notes": "Synthetic original in _wichtig: ticket system Testversion."
     },
     {
       "id": "fact-105",
@@ -86,7 +86,7 @@
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "atosa.amini@hfmt-koeln.de sent the IT Besprechnung 07.05.2025 email.",
+      "expected_answer": "coordinator.one@example.org sent the IT Besprechnung 07.05.2025 email.",
       "expected_support_uids": [
         "a7ec62d7fd950e1d165cb342c73d5a40"
       ],
@@ -96,7 +96,7 @@
       "expected_thread_group_id": null,
       "expected_thread_group_source": null,
       "triage_tags": [],
-      "notes": "Real attachment-bearing message in _wichtig from 2025-05-08."
+      "notes": "Synthetic attachment-bearing message in _wichtig from 2025-05-08."
     },
     {
       "id": "fact-106",
@@ -105,7 +105,7 @@
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "petra.john@hfmt-koeln.de sent the Workshop KI message.",
+      "expected_answer": "trainer.one@example.org sent the Workshop KI message.",
       "expected_support_uids": [
         "6162747c4462d7d3a6378cea35508b11"
       ],
@@ -115,16 +115,16 @@
       "expected_thread_group_id": null,
       "expected_thread_group_source": null,
       "triage_tags": [],
-      "notes": "Real message in _wichtig from 2024-10-22."
+      "notes": "Synthetic message in _wichtig from 2024-10-22."
     },
     {
       "id": "thread-101",
       "bucket": "thread_process",
-      "question": "When did the Zammad Reboot 2026 thread begin?",
+      "question": "When did the ticket system Reboot 2026 thread begin?",
       "status": "labeled",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "In the current 400-message live eval corpus slice, the retained Zammad Reboot 2026 thread anchor is from 2025-12-04T14:31:04.",
+      "expected_answer": "In the current 400-message live eval corpus slice, the retained ticket system Reboot 2026 thread anchor is from 2025-12-04T14:31:04.",
       "expected_support_uids": [
         "3cda29cdadc3ba0cd2ad54525da8ce5b"
       ],
@@ -136,16 +136,16 @@
       "triage_tags": [
         "retrieval_recall"
       ],
-      "notes": "Live corpus alignment: the fixed 400-message sqlite slice retains only one sampled Zammad Reboot 2026 message."
+      "notes": "synthetic corpus alignment: the fixed 400-message sqlite slice retains only one sampled ticket system Reboot 2026 message."
     },
     {
       "id": "thread-102",
       "bucket": "thread_process",
-      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "question": "Which messages belong to the ticket system Reboot 2026 conversation?",
       "status": "labeled",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "In the current 400-message live eval corpus slice, the retained Zammad Reboot 2026 conversation sample contains the 2025-12-04 Sent Items reply.",
+      "expected_answer": "In the current 400-message live eval corpus slice, the retained ticket system Reboot 2026 conversation sample contains the 2025-12-04 Sent Items reply.",
       "expected_support_uids": [
         "3cda29cdadc3ba0cd2ad54525da8ce5b"
       ],
@@ -157,7 +157,7 @@
       "triage_tags": [
         "inferred_threading"
       ],
-      "notes": "Live corpus alignment: only one sampled Zammad Reboot 2026 thread member is present in the fixed sqlite eval slice."
+      "notes": "synthetic corpus alignment: only one sampled ticket system Reboot 2026 thread member is present in the fixed sqlite eval slice."
     },
     {
       "id": "thread-103",
@@ -184,11 +184,11 @@
     {
       "id": "thread-104",
       "bucket": "thread_process",
-      "question": "Which messages belong to the quick and dirty conversation?",
+      "question": "Which messages belong to the rapid review conversation?",
       "status": "labeled",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "The quick and dirty conversation contains the five Sent Items replies from 2025-12-04 through 2025-12-05.",
+      "expected_answer": "The rapid review conversation contains the five Sent Items replies from 2025-12-04 through 2025-12-05.",
       "expected_support_uids": [
         "cd4214c127dd1914ba7a60bbc29b3410",
         "5a6141808a00c479473d9409b414c591",
@@ -233,13 +233,13 @@
     {
       "id": "attach-102",
       "bucket": "attachment_lookup",
-      "question": "Which email had the manual attachment for zammad agent manual?",
+      "question": "Which email had the manual attachment for ticket system agent manual?",
       "status": "labeled",
       "evidence_mode": "retrieval",
       "filters": {
         "has_attachments": true
       },
-      "expected_answer": "The Sent Items original zammad agent manual email had the manual attachment.",
+      "expected_answer": "The Sent Items original ticket system agent manual email had the manual attachment.",
       "expected_support_uids": [
         "9d5eecd15bba2b424fbad161a4155c39"
       ],
@@ -274,7 +274,7 @@
       "triage_tags": [
         "attachment_extraction"
       ],
-      "notes": "Real attachment-bearing reply from personalrat@hfmt-koeln.de in _wichtig."
+      "notes": "Synthetic attachment-bearing reply from staff-council@example.org in _wichtig."
     },
     {
       "id": "attach-104",
@@ -323,11 +323,11 @@
     {
       "id": "ambig-102",
       "bucket": "ambiguity_stress",
-      "question": "Which source-shell message discussed zammad DNS and certificate?",
+      "question": "Which source-shell message discussed ticket system DNS and certificate?",
       "status": "labeled",
       "evidence_mode": "forensic",
       "filters": {},
-      "expected_answer": "The source-shell message AW: zammad DNS und Zertifikat matches, but the visible body remains weak.",
+      "expected_answer": "The source-shell message AW: ticket system DNS und Zertifikat matches, but the visible body remains weak.",
       "expected_support_uids": [
         "2606da536f3e533033cd6c2a8544f3a3"
       ],
@@ -502,14 +502,14 @@
     {
       "id": "thread-105",
       "bucket": "thread_process",
-      "question": "Which message anchors the packed quick and dirty thread answer?",
+      "question": "Which message anchors the packed rapid review thread answer?",
       "status": "labeled",
       "evidence_mode": "hybrid",
       "filters": {
-        "subject": "quick and dirty",
+        "subject": "rapid review",
         "folder": "Sent Items"
       },
-      "expected_answer": "The packed quick and dirty thread answer is anchored on uid 06a9f338e135c8acd077a57769d0f390.",
+      "expected_answer": "The packed rapid review thread answer is anchored on uid 06a9f338e135c8acd077a57769d0f390.",
       "expected_support_uids": [
         "06a9f338e135c8acd077a57769d0f390"
       ],
@@ -645,7 +645,7 @@
     {
       "id": "fact-104",
       "bucket": "fact_lookup",
-      "question": "Who announced that the Zammad test version was created?",
+      "question": "Who announced that the ticket system test version was created?",
       "status": "labeled",
       "source": "live",
       "count": 0,
@@ -762,7 +762,7 @@
     {
       "id": "thread-101",
       "bucket": "thread_process",
-      "question": "When did the Zammad Reboot 2026 thread begin?",
+      "question": "When did the ticket system Reboot 2026 thread begin?",
       "status": "labeled",
       "source": "live",
       "count": 0,
@@ -801,7 +801,7 @@
     {
       "id": "thread-102",
       "bucket": "thread_process",
-      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "question": "Which messages belong to the ticket system Reboot 2026 conversation?",
       "status": "labeled",
       "source": "live",
       "count": 0,
@@ -879,7 +879,7 @@
     {
       "id": "thread-104",
       "bucket": "thread_process",
-      "question": "Which messages belong to the quick and dirty conversation?",
+      "question": "Which messages belong to the rapid review conversation?",
       "status": "labeled",
       "source": "live",
       "count": 0,
@@ -957,7 +957,7 @@
     {
       "id": "attach-102",
       "bucket": "attachment_lookup",
-      "question": "Which email had the manual attachment for zammad agent manual?",
+      "question": "Which email had the manual attachment for ticket system agent manual?",
       "status": "labeled",
       "source": "live",
       "count": 0,
@@ -1113,7 +1113,7 @@
     {
       "id": "ambig-102",
       "bucket": "ambiguity_stress",
-      "question": "Which source-shell message discussed zammad DNS and certificate?",
+      "question": "Which source-shell message discussed ticket system DNS and certificate?",
       "status": "labeled",
       "source": "live",
       "count": 0,
@@ -1425,7 +1425,7 @@
     {
       "id": "thread-105",
       "bucket": "thread_process",
-      "question": "Which message anchors the packed quick and dirty thread answer?",
+      "question": "Which message anchors the packed rapid review thread answer?",
       "status": "labeled",
       "source": "live",
       "count": 0,
@@ -1810,5 +1810,12 @@
   "source_counts": {
     "live": 24
   },
-  "live_backend": "embedding"
+  "live_backend": "embedding",
+  "source_mode": "live_only",
+  "threshold_verdict": {
+    "profile": "live_expanded_embedding",
+    "status": "pass",
+    "failure_count": 0,
+    "failures": []
+  }
 }

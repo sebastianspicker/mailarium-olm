@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
+from zipfile import ZipFile
 
 from src.parse_olm import Email, _parse_email_xml, _ParsedEmailEnrichments, parse_olm
+from src.parse_olm_xml_parser import parse_olm_archive_impl
 
 
 def test_parse_email_xml_delegates_postprocessing_helpers(monkeypatch):
@@ -131,3 +134,65 @@ def test_parse_olm_delegates_archive_traversal(monkeypatch, tmp_path):
     list(parse_olm(str(olm_path), extract_attachments=True))
 
     assert calls == [(str(olm_path), True, "_parse_email_xml")]
+
+
+def test_parse_archive_keeps_email_when_attachment_extraction_fails(monkeypatch, tmp_path):
+    from lxml import etree
+
+    olm_path = tmp_path / "sample.olm"
+    with ZipFile(olm_path, "w") as zip_file:
+        zip_file.writestr("Accounts/a/com.microsoft.__Messages/Inbox/msg.xml", "<root/>")
+
+    email = Email(
+        message_id="m1",
+        subject="Subject",
+        sender_name="Sender",
+        sender_email="sender@example.com",
+        to=[],
+        cc=[],
+        bcc=[],
+        date="2026-01-01T00:00:00Z",
+        body_text="body",
+        body_html="",
+        folder="Inbox",
+        has_attachments=True,
+        attachments=[{"name": "scan.pdf"}],
+        attachment_contents=[],
+    )
+    root_attr = "_olm_root"
+    ns_attr = "_olm_ns"
+    setattr(email, root_attr, etree.Element("Email"))
+    setattr(email, ns_attr, {})
+
+    monkeypatch.setattr(
+        "src.parse_olm_xml_parser._extract_attachment_payloads",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("payload failure")),
+    )
+
+    warnings: list[str] = []
+    logger = logging.getLogger("tests.parse_olm_refactor_seams")
+    monkeypatch.setattr(
+        logger,
+        "warning",
+        lambda message, *args: warnings.append(str(message) % args if args else str(message)),
+    )
+
+    parsed = list(
+        parse_olm_archive_impl(
+            str(olm_path),
+            extract_attachments=True,
+            max_xml_files=10,
+            max_total_xml_bytes=1024 * 1024,
+            max_xml_bytes=1024 * 1024,
+            logger=logger,
+            parse_email_xml_fn=lambda _xml, _path: email,
+        )
+    )
+
+    assert parsed == [email]
+    assert parsed[0].attachment_contents == []
+    assert bool(getattr(parsed[0], "_attachment_payload_extraction_failed", False)) is True
+    assert "payload failure" in str(getattr(parsed[0], "_attachment_payload_extraction_error", ""))
+    assert not hasattr(parsed[0], "_olm_root")
+    assert not hasattr(parsed[0], "_olm_ns")
+    assert any("Attachment extraction failed" in entry for entry in warnings)

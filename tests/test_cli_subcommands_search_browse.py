@@ -124,6 +124,10 @@ class TestBrowseSubcommand:
         assert args.page == 3
         assert args.page_size == 30
 
+    def test_browse_rejects_page_size_above_documented_max(self) -> None:
+        with pytest.raises(SystemExit):
+            parse_args(["browse", "--page-size", "51"])
+
     def test_browse_with_filters(self) -> None:
         args = parse_args(["browse", "--folder", "inbox", "--sender", "alice"])
         assert args.folder == "inbox"

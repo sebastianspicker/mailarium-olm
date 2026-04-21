@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [dev]
+    branches: [main, dev]
   pull_request:
-    branches: [dev]
+    branches: [main, dev]
 
 permissions:
   contents: read
@@ -36,9 +36,13 @@ jobs:
         run: mypy src
       - name: Test with coverage
         run: pytest -q --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+      - name: Legal-support captured artifacts contract
+        run: python scripts/refresh_qa_eval_captured_reports.py --check --scenario legal_support --scenario legal_support_full_pack_goldens
+      - name: Campaign workflow smoke
+        run: python scripts/wave_workflow_smoke.py
       - name: Streamlit smoke
         run: python scripts/streamlit_smoke.py
       - name: Security Scan
         run: bandit -r src -q -ll -ii
       - name: Dependency Audit
-        run: python -m pip_audit -r requirements.txt --ignore-vuln CVE-2026-4539  # pygments 2.19.2, no fix available yet
+        run: python scripts/dependency_audit.py

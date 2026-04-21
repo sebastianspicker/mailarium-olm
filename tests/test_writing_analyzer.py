@@ -18,6 +18,10 @@ class TestHelpers:
         assert "world" in words
         assert len(words) == 5
 
+    def test_get_words_handles_german_umlauts_and_sz(self):
+        words = _get_words("Überprüfung für äußere Lösungen ist nötig.")
+        assert words == ["überprüfung", "für", "äußere", "lösungen", "ist", "nötig"]
+
     def test_get_words_empty(self):
         assert _get_words("") == []
 
@@ -115,6 +119,11 @@ class TestWritingAnalyzer:
         m = self.analyzer.analyze_text(text)
         assert m.word_count == 10
 
+    def test_word_count_supports_german_unicode_words(self):
+        text = "Überprüfung für äußere Lösungen ist nötig."
+        m = self.analyzer.analyze_text(text)
+        assert m.word_count == 6
+
     def test_readability_without_textstat(self):
         # Force textstat to be unavailable
         analyzer = WritingAnalyzer()
@@ -144,8 +153,8 @@ class TestSenderProfile:
             ),
         ]
         analyzer = WritingAnalyzer()
-        profile = analyzer.analyze_sender_profile(texts, "alice@co.com")
-        assert profile["sender_email"] == "alice@co.com"
+        profile = analyzer.analyze_sender_profile(texts, "alice@example.test")
+        assert profile["sender_email"] == "alice@example.test"
         assert profile["emails_analyzed"] == 2
         assert profile["avg_sentence_length"] > 0
         assert profile["avg_word_length"] > 0
@@ -153,13 +162,13 @@ class TestSenderProfile:
 
     def test_sender_profile_empty_texts(self):
         analyzer = WritingAnalyzer()
-        profile = analyzer.analyze_sender_profile([], "nobody@co.com")
+        profile = analyzer.analyze_sender_profile([], "nobody@example.test")
         assert profile == {}
 
     def test_sender_profile_short_texts(self):
         # Texts too short to analyze
         analyzer = WritingAnalyzer()
-        profile = analyzer.analyze_sender_profile(["hi", "ok"], "x@co.com")
+        profile = analyzer.analyze_sender_profile(["hi", "ok"], "x@example.test")
         assert profile == {}
 
     def test_analyze_texts(self):

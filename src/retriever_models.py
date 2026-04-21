@@ -24,6 +24,20 @@ class SearchResult:
         """Similarity score 0-1 (higher = more similar)."""
         return min(1.0, max(0.0, 1.0 - self.distance))
 
+    @property
+    def score_kind(self) -> str:
+        """Return the outward score family for this result."""
+        value = str(self.metadata.get("score_kind") or "").strip().lower()
+        return value or "semantic"
+
+    @property
+    def score_calibration(self) -> str:
+        """Return whether the score is calibrated or synthetic."""
+        value = str(self.metadata.get("score_calibration") or "").strip().lower()
+        if value:
+            return value
+        return "calibrated" if self.score_kind == "semantic" else "synthetic"
+
     def to_context_string(self) -> str:
         """Format as a human-readable context block for LLM prompts."""
         max_body = get_settings().mcp_max_body_chars
@@ -34,6 +48,8 @@ class SearchResult:
         return {
             "chunk_id": self.chunk_id,
             "score": _safe_json_float(self.score),
+            "score_kind": self.score_kind,
+            "score_calibration": self.score_calibration,
             "distance": _safe_json_float(self.distance),
             "metadata": _json_safe(self.metadata),
             "text": self.text,

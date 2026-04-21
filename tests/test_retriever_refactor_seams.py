@@ -10,6 +10,18 @@ def _bare_retriever() -> EmailRetriever:
     return EmailRetriever.__new__(EmailRetriever)
 
 
+def test_bare_retriever_exposes_stable_last_search_debug_seam():
+    """The refactor seam should exist even on lightweight test instances."""
+    retriever = _bare_retriever()
+
+    assert retriever.last_search_debug == {}
+
+    retriever._set_last_search_debug({"used_query_expansion": True})
+
+    assert retriever._last_search_debug == {"used_query_expansion": True}
+    assert retriever.last_search_debug == {"used_query_expansion": True}
+
+
 def test_search_filtered_delegates_to_extracted_helpers(monkeypatch):
     """search_filtered should keep delegating through the stable seam."""
     retriever = _bare_retriever()
@@ -93,7 +105,7 @@ def test_list_senders_and_stats_delegate_to_extracted_helpers(monkeypatch):
 
     def fake_list_senders(instance, limit=50):
         sender_calls.append(limit)
-        return [{"email": "alice@example.com", "count": 1}]
+        return [{"email": "employee@example.test", "count": 1}]
 
     def fake_stats(instance):
         stats_calls.append("stats")
@@ -106,7 +118,7 @@ def test_list_senders_and_stats_delegate_to_extracted_helpers(monkeypatch):
     stats = retriever.stats()
     folders = retriever.list_folders()
 
-    assert senders == [{"email": "alice@example.com", "count": 1}]
+    assert senders == [{"email": "employee@example.test", "count": 1}]
     assert stats == {"folders": {"Inbox": 1}}
     assert folders == [{"folder": "Inbox", "count": 1}]
     assert sender_calls == [3]

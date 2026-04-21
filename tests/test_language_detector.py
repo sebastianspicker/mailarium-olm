@@ -1,6 +1,6 @@
 """Tests for language detection."""
 
-from src.language_detector import detect_language
+from src.language_detector import detect_language, detect_language_details
 
 
 def test_english():
@@ -43,6 +43,39 @@ def test_short_text_returns_unknown():
     assert detect_language("hi") == "unknown"
     assert detect_language("ok") == "unknown"
     assert detect_language("") == "unknown"
+
+
+def test_short_german_text_can_return_low_confidence_german() -> None:
+    details = detect_language_details("zur Prüfung")
+
+    assert details["language"] == "de"
+    assert details["confidence"] == "low"
+    assert details["reason"] == "short_text_stopword_vote"
+    assert detect_language("zur Prüfung") == "de"
+
+
+def test_short_text_without_signal_reports_reason_metadata() -> None:
+    details = detect_language_details("ok")
+
+    assert details["language"] == "unknown"
+    assert details["confidence"] == "none"
+    assert details["reason"] == "short_text_insufficient_signal"
+    assert details["token_count"] == 1
+
+
+def test_forwarded_german_subject_uses_marker_bias() -> None:
+    details = detect_language_details("WG: Bitte um Rückmeldung zum Protokoll")
+
+    assert details["language"] == "de"
+    assert details["confidence"] in {"low", "medium", "high"}
+    assert details["reason"] in {"short_text_german_marker", "stopword_overlap_with_markers", "german_marker_bias"}
+
+
+def test_adjusted_scores_can_override_raw_stopword_hit_leader() -> None:
+    details = detect_language_details("please send the report bitte rückmeldung zur besprechung")
+
+    assert details["language"] == "de"
+    assert details["reason"] == "stopword_overlap_with_markers"
 
 
 def test_gibberish_returns_unknown():

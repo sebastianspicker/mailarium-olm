@@ -1,0 +1,9 @@
+2025-02-10 | manager -> employee
+Subject: Mobile work request
+
+Please provide extra documentation before mobile work can be reconsidered.
+
+2025-02-11 | manager -> Pat Vergleich
+Subject: Mobile work request approved
+
+You may continue mobile work without further paperwork.

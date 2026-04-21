@@ -14,8 +14,8 @@ def _make_email(**overrides) -> Email:
         "message_id": "<msg1@test>",
         "subject": "Hello",
         "sender_name": "Alice",
-        "sender_email": "alice@co.com",
-        "to": ["bob@co.com"],
+        "sender_email": "alice@example.test",
+        "to": ["bob@example.test"],
         "cc": [],
         "bcc": [],
         "date": "2024-01-10T10:00:00",
@@ -33,14 +33,14 @@ def _make_db_with_threads() -> EmailDatabase:
     emails = [
         _make_email(
             message_id="<a1@test>",
-            sender_email="alice@co.com",
+            sender_email="alice@example.test",
             body_text="Here is the project status report for Q1.",
             conversation_id="thread_a",
             date="2024-01-10T10:00:00",
         ),
         _make_email(
             message_id="<a2@test>",
-            sender_email="bob@co.com",
+            sender_email="bob@example.test",
             sender_name="Bob",
             body_text="Thanks Alice, the numbers look good.",
             conversation_id="thread_a",
@@ -48,21 +48,21 @@ def _make_db_with_threads() -> EmailDatabase:
         ),
         _make_email(
             message_id="<a3@test>",
-            sender_email="alice@co.com",
+            sender_email="alice@example.test",
             body_text="I will send the detailed breakdown tomorrow.",
             conversation_id="thread_a",
             date="2024-01-10T12:00:00",
         ),
         _make_email(
             message_id="<b1@test>",
-            sender_email="alice@co.com",
+            sender_email="alice@example.test",
             body_text="Please find attached the invoice for January services.",
             conversation_id="thread_b",
             date="2024-01-15T09:00:00",
         ),
         _make_email(
             message_id="<b2@test>",
-            sender_email="finance@co.com",
+            sender_email="finance@example.test",
             sender_name="Finance",
             body_text="Invoice received and processed. Payment scheduled.",
             conversation_id="thread_b",
@@ -111,8 +111,8 @@ class TestBuildSenderIndex:
         gen = TrainingDataGenerator(db)
         index = gen._build_sender_index()
         assert isinstance(index, dict)
-        assert "alice@co.com" in index
-        assert len(index["alice@co.com"]) >= 3
+        assert "alice@example.test" in index
+        assert len(index["alice@example.test"]) >= 3
 
     def test_build_sender_index_empty_db(self):
         db = EmailDatabase(":memory:")
@@ -149,7 +149,7 @@ class TestFindNegativeNoCandidates:
         db.insert_email(
             _make_email(
                 message_id="<only1@test>",
-                sender_email="alice@co.com",
+                sender_email="alice@example.test",
                 body_text="Only email body",
                 conversation_id="only_thread",
             )
@@ -158,7 +158,7 @@ class TestFindNegativeNoCandidates:
         _, sender_index, all_emails = gen._load_email_data(min_thread_size=1)
 
         query_email = {
-            "sender_email": "alice@co.com",
+            "sender_email": "alice@example.test",
             "conversation_id": "only_thread",
             "body_text": "Only email body",
         }
@@ -178,7 +178,7 @@ class TestFindNegativeNoCandidates:
         _, sender_index, all_emails = gen._load_email_data(min_thread_size=2)
 
         query_email = {
-            "sender_email": "alice@co.com",
+            "sender_email": "alice@example.test",
             "conversation_id": "thread_a",
             "body_text": "Here is the project status report.",
         }
@@ -230,7 +230,7 @@ class TestGenerateTripletsEdgeCases:
             db.insert_email(
                 _make_email(
                     message_id=f"<no_neg{i}@test>",
-                    sender_email="only@co.com",
+                    sender_email="only@example.test",
                     body_text=f"Body text number {i}",
                     conversation_id="solo_thread",
                     date=f"2024-01-{10 + i}T10:00:00",

@@ -95,6 +95,9 @@ def _matches_priority(result: SearchResult, priority: int | None) -> bool:
 def _matches_min_score(result: SearchResult, min_score: float | None) -> bool:
     if min_score is None:
         return True
+    calibration = str(result.metadata.get("score_calibration") or "").strip().lower()
+    if calibration == "synthetic":
+        return True
     return result.score >= min_score
 
 
@@ -137,7 +140,10 @@ def _matches_attachment_name(result: SearchResult, attachment_name: str | None) 
         return True
     # Check attachment_filename (single-chunk metadata)
     fname = str(result.metadata.get("attachment_filename", "") or "").lower()
-    return needle in fname
+    if needle in fname:
+        return True
+    legacy_fname = str(result.metadata.get("filename", "") or "").lower()
+    return needle in legacy_fname
 
 
 def _matches_attachment_type(result: SearchResult, attachment_type: str | None) -> bool:
@@ -159,7 +165,10 @@ def _matches_attachment_type(result: SearchResult, attachment_type: str | None) 
             if _has_ext(n.strip()):
                 return True
     fname = str(result.metadata.get("attachment_filename", "") or "")
-    return _has_ext(fname)
+    if _has_ext(fname):
+        return True
+    legacy_fname = str(result.metadata.get("filename", "") or "")
+    return _has_ext(legacy_fname)
 
 
 def apply_metadata_filters(
@@ -233,6 +242,16 @@ def _email_dedup_key(meta: dict[str, Any]) -> str | None:
     return None
 
 
+def _attachment_dedup_key(meta: dict[str, Any]) -> str | None:
+    email_key = _email_dedup_key(meta)
+    if not email_key:
+        return None
+    attachment_name = str(meta.get("attachment_filename") or meta.get("attachment_name") or "").strip().lower()
+    if not attachment_name and str(meta.get("candidate_kind") or "").strip().lower() != "attachment":
+        return None
+    return f"{email_key}|attachment:{attachment_name or 'unknown'}"
+
+
 def _deduplicate_by_email(results: list[SearchResult]) -> list[SearchResult]:
     """Keep only the best-scoring chunk per unique email UID.
 
@@ -241,18 +260,20 @@ def _deduplicate_by_email(results: list[SearchResult]) -> list[SearchResult]:
     uses a fallback dedup key (sender+date+subject) to still deduplicate.
     """
     seen_keys: set[str] = set()
+    seen_attachment_keys: set[str] = set()
     deduped: list[SearchResult] = []
     for result in results:
-        uid = str(result.metadata.get("uid", "")).strip()
-        if uid:
-            key = uid
-        else:
-            # Build a fallback dedup key from metadata
-            key = _email_dedup_key(result.metadata)  # type: ignore[assignment]
-            if not key:
-                # Truly no identifying info — include the result
-                deduped.append(result)
+        attachment_key = _attachment_dedup_key(result.metadata)
+        if attachment_key:
+            if attachment_key in seen_attachment_keys:
                 continue
+            seen_attachment_keys.add(attachment_key)
+            deduped.append(result)
+            continue
+        key = _email_dedup_key(result.metadata)
+        if not key:
+            deduped.append(result)
+            continue
         if key in seen_keys:
             continue
         seen_keys.add(key)

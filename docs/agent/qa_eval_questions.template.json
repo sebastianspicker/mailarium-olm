@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Initial 25-case evaluation template for email_answer_context. Fill expected_answer / expected_support_uids / expected_top_uid after a live corpus review.",
+  "description": "Initial 25-case evaluation template for email_answer_context. Use scripts/run_qa_eval.py --questions <this file> --results <captured-results.json> --bootstrap --output <sampled-questions.json> to scaffold a reviewable sampled set before final human labeling.",
   "cases": [
     {
       "id": "fact-001",
@@ -9,7 +9,7 @@
       "question": "Who asked for the updated budget?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -22,7 +22,7 @@
       "question": "When was the printer replacement first mentioned?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -35,7 +35,7 @@
       "question": "Which folder contains the message about the Apple TV test?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -45,10 +45,10 @@
       "id": "fact-004",
       "bucket": "fact_lookup",
       "status": "todo",
-      "question": "Who confirmed the Zammad meeting time?",
+      "question": "Who confirmed the ticket system meeting time?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -63,7 +63,7 @@
       "filters": {
         "email_type": "original"
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -76,7 +76,7 @@
       "question": "Who sent the note about the HDMI cable test?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -86,10 +86,10 @@
       "id": "fact-007",
       "bucket": "fact_lookup",
       "status": "todo",
-      "question": "Which message asked to add a user to HFMT-V?",
+      "question": "Which message asked to add a user to ORG-VPN?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -102,7 +102,7 @@
       "question": "How did the budget discussion evolve over time?",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "TODO(human): summarize thread evolution",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -117,7 +117,7 @@
       "filters": {
         "email_type": "reply"
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -130,7 +130,7 @@
       "question": "What happened after the printer issue was reported?",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -145,7 +145,7 @@
       "filters": {
         "email_type": "forward"
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -160,7 +160,7 @@
       "filters": {
         "email_type": "reply"
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "ambiguous",
@@ -173,7 +173,7 @@
       "question": "Which messages belong to the same conversation about room access?",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -186,7 +186,7 @@
       "question": "When did the meeting planning thread end?",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -201,7 +201,7 @@
       "filters": {
         "has_attachments": true
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -211,12 +211,12 @@
       "id": "attach-002",
       "bucket": "attachment_lookup",
       "status": "todo",
-      "question": "What did the attached PDF say about the contract clause?",
+      "question": "What did the attached PDF say about the contract managere?",
       "evidence_mode": "forensic",
       "filters": {
         "has_attachments": true
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -231,7 +231,7 @@
       "filters": {
         "has_attachments": true
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "ambiguous",
@@ -246,7 +246,7 @@
       "filters": {
         "has_attachments": true
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "clear",
@@ -261,7 +261,7 @@
       "filters": {
         "has_attachments": true
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "insufficient",
@@ -274,7 +274,7 @@
       "question": "Which message was about the digital workplace?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "ambiguous",
@@ -287,7 +287,7 @@
       "question": "What did the image-only message say?",
       "evidence_mode": "forensic",
       "filters": {},
-      "expected_answer": "TODO(human): likely bounded summary only",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "insufficient",
@@ -300,7 +300,7 @@
       "question": "Which source-shell message discussed the scanned form?",
       "evidence_mode": "forensic",
       "filters": {},
-      "expected_answer": "TODO(human): likely bounded summary only",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "insufficient",
@@ -315,7 +315,7 @@
       "filters": {
         "email_type": "reply"
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "ambiguous",
@@ -328,7 +328,7 @@
       "question": "Which email confirmed the device test appointment?",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "ambiguous",
@@ -343,7 +343,7 @@
       "filters": {
         "email_type": "forward"
       },
-      "expected_answer": "TODO(human): fill after live corpus review",
+      "expected_answer": "",
       "expected_support_uids": [],
       "expected_top_uid": null,
       "expected_ambiguity": "insufficient",

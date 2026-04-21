@@ -7,7 +7,7 @@
         "score": 0.91,
         "speaker_attribution": {
           "authored_speaker": {
-            "email": "alice@example.com",
+            "email": "employee@example.test",
             "source": "canonical_sender",
             "confidence": 1.0
           },
@@ -39,7 +39,7 @@
         "score": 0.88,
         "speaker_attribution": {
           "authored_speaker": {
-            "email": "alice@example.com",
+            "email": "employee@example.test",
             "source": "canonical_sender",
             "confidence": 1.0
           },

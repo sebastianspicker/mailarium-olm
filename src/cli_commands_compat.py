@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .sanitization import sanitize_untrusted_text
 
@@ -15,14 +17,23 @@ if TYPE_CHECKING:
     from .retriever import EmailRetriever
 
 
-def cmd_admin_impl(args: argparse.Namespace, retriever: EmailRetriever) -> None:
+def _resolve_retriever(retriever: EmailRetriever | Callable[[], EmailRetriever]) -> EmailRetriever:
+    if inspect.isfunction(retriever) or inspect.ismethod(retriever):
+        return retriever()
+    return cast(Any, retriever)
+
+
+def cmd_admin_impl(
+    args: argparse.Namespace,
+    retriever: EmailRetriever | Callable[[], EmailRetriever],
+) -> None:
     """Handle `admin` subcommand."""
     action = getattr(args, "admin_action", None)
     if action == "reset-index":
         if not getattr(args, "yes", False):
             print("Refusing to reset index without --yes.")
             sys.exit(2)
-        retriever.reset_index()
+        _resolve_retriever(retriever).reset_index()
         print("Index has been reset.")
     else:
         print("Usage: python -m src.cli admin {reset-index}")
@@ -32,7 +43,7 @@ def cmd_admin_impl(args: argparse.Namespace, retriever: EmailRetriever) -> None:
 
 def cmd_legacy_impl(
     args: argparse.Namespace,
-    retriever: EmailRetriever,
+    retriever: EmailRetriever | Callable[[], EmailRetriever],
     *,
     resolve_output_format,
     run_single_query,
@@ -60,16 +71,16 @@ def cmd_legacy_impl(
         if not args.yes:
             print("Refusing to reset index without --yes.")
             sys.exit(2)
-        retriever.reset_index()
+        _resolve_retriever(retriever).reset_index()
         print("Index has been reset.")
         sys.exit(0)
 
     if args.stats:
-        print(json.dumps(retriever.stats(), indent=2))
+        print(json.dumps(_resolve_retriever(retriever).stats(), indent=2))
         sys.exit(0)
 
     if args.list_senders:
-        print_sender_lines(retriever.list_senders(args.list_senders), print_fn=print)
+        print_sender_lines(_resolve_retriever(retriever).list_senders(args.list_senders), print_fn=print)
         sys.exit(0)
 
     if args.suggest:
@@ -147,7 +158,9 @@ def cmd_legacy_impl(
         run_analytics_command(args)
         sys.exit(0)
 
-    if retriever.collection.count() == 0:
+    resolved_retriever = _resolve_retriever(retriever)
+
+    if resolved_retriever.collection.count() == 0:
         print("No emails in database. Run ingestion first:")
         print("  python -m src.ingest data/your-export.olm")
         print("Or use the email_ingest MCP tool from your MCP client.")
@@ -156,7 +169,7 @@ def cmd_legacy_impl(
     if args.query:
         output_format = resolve_output_format(args)
         code = run_single_query(
-            retriever,
+            resolved_retriever,
             query=args.query,
             as_json=(output_format == "json"),
             top_k=args.top_k,
@@ -180,7 +193,7 @@ def cmd_legacy_impl(
         )
         sys.exit(code)
 
-    run_interactive(retriever, top_k=args.top_k)
+    run_interactive(resolved_retriever, top_k=args.top_k)
 
 
 def print_sender_lines_impl(senders: list[dict[str, Any]], *, print_fn=print) -> None:
@@ -315,10 +328,10 @@ def render_results_table_impl(console, table_cls, results) -> None:
     console.print(table)
 
 
-def get_email_db_impl(*, get_settings):
+def get_email_db_impl(*, get_settings, sqlite_path_override: str | None = None):
     """Get EmailDatabase instance from settings, or exit with error."""
     settings = get_settings()
-    sqlite_path = settings.sqlite_path
+    sqlite_path = sqlite_path_override or settings.sqlite_path
     if not sqlite_path or not Path(sqlite_path).exists():
         print("SQLite database not found. Run ingestion first:")
         print("  python -m src.ingest data/your-export.olm --extract-entities")

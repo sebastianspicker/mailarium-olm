@@ -11,6 +11,13 @@ from .utils import ToolDepsProto, json_error, json_response, run_with_db
 logger = logging.getLogger(__name__)
 
 
+def _report_warnings(generator: Any) -> list[str]:
+    warnings = getattr(generator, "last_warnings", [])
+    if not isinstance(warnings, list):
+        return []
+    return [str(item) for item in warnings if str(item).strip()]
+
+
 def register(mcp: Any, deps: ToolDepsProto) -> None:
     """Register reporting and export tools."""
 
@@ -28,10 +35,28 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
 
         def _work(db: Any) -> str:
             if params.type == "archive":
-                from ..report_generator import ReportGenerator
+                from ..report_generator import ReportGenerationError, ReportGenerator
 
-                ReportGenerator(db).generate(title=params.title, output_path=params.output_path)
-                return json_response({"status": "ok", "output_path": params.output_path})
+                generator = ReportGenerator(db)
+                try:
+                    generator.generate(
+                        title=params.title,
+                        output_path=params.output_path,
+                        privacy_mode=params.privacy_mode,
+                    )
+                except ReportGenerationError as exc:
+                    return json_error(str(exc))
+
+                warnings = _report_warnings(generator)
+                status = "degraded" if warnings else "ok"
+                return json_response(
+                    {
+                        "status": status,
+                        "output_path": params.output_path,
+                        "privacy_mode": params.privacy_mode,
+                        "warnings": warnings,
+                    }
+                )
 
             if params.type == "network":
                 from ..network_analysis import CommunicationNetwork

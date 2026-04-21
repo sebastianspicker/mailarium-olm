@@ -1,0 +1,11 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:20250314T140000
+DTEND:20250314T150000
+SUMMARY:Meeting on process sequence and SBV inclusion
+LOCATION:Room 4
+ORGANIZER:mailto:manager@example.test
+ATTENDEE:mailto:employee@example.test
+END:VEVENT
+END:VCALENDAR

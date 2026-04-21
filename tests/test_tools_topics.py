@@ -21,7 +21,7 @@ def _make_result(
     uid="uid-1",
     text="Budget proposal review.",
     subject="Budget Review",
-    sender="alice@example.com",
+    sender="employee@example.test",
     date="2025-06-01",
     conversation_id="conv-1",
     distance=0.2,
@@ -194,11 +194,9 @@ class TestEmailClusters:
             result = await fn(params)
             data = json.loads(result)
             assert "error" in data
+            assert "topics build" in data["error"]
         finally:
             MockDeps._email_db = old_db
-
-
-# ── email_find_similar tests ─────────────────────────────────
 
 
 class TestEmailFindSimilar:
@@ -322,7 +320,7 @@ class TestEmailTopics:
             result = await fn(params)
             data = json.loads(result)
             assert "error" in data
-            assert "default ingest pipeline" in data["error"]
+            assert "topics build" in data["error"]
         finally:
             MockDeps._email_db = old_db
 
@@ -349,7 +347,7 @@ class TestEmailDiscovery:
         fn = fake_mcp._tools["email_discovery"]
         from src.mcp_models import EmailDiscoveryInput
 
-        params = EmailDiscoveryInput(mode="keywords", sender="alice@example.com", limit=10)
+        params = EmailDiscoveryInput(mode="keywords", sender="employee@example.test", limit=10)
         result = await fn(params)
         data = json.loads(result)
         assert isinstance(data, list)

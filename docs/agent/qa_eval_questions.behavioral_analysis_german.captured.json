@@ -1,0 +1,1037 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "de-ba18-201",
+      "bucket": "ordinary_workplace_conflict",
+      "status": "labeled",
+      "question": "Beurteile, ob der Schriftwechsel eher auf einen gewöhnlichen Arbeitsplatzkonflikt hindeutet.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-ordinary-conflict",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-de-conf-1"
+      ],
+      "expected_top_uid": "uid-de-conf-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-conf-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-conf-1"
+      ],
+      "expected_behavior_ids": [
+        "escalation"
+      ],
+      "expected_counter_indicator_markers": [
+        "wiederholte Prozessfriktion"
+      ],
+      "expected_max_claim_level": "observed_fact",
+      "expected_report_sections": [
+        "executive_summary",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "counter_indicator_handling",
+        "report_completeness"
+      ],
+      "notes": "Deutschsprachiger Referenzfall fuer begrenzten Konflikt ohne belastbare Systematik."
+    },
+    {
+      "id": "de-ba18-202",
+      "bucket": "poor_communication_or_process_noise",
+      "status": "labeled",
+      "question": "Pruefe, ob die Kommunikation eher schlecht organisiert als gezielt feindselig wirkt.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-process-noise",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "exclusion"
+        ],
+        "analysis_goal": "neutral_chronology"
+      },
+      "expected_support_uids": [
+        "uid-de-noise-1"
+      ],
+      "expected_top_uid": "uid-de-noise-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-noise-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-noise-1"
+      ],
+      "expected_behavior_ids": [
+        "withholding"
+      ],
+      "expected_counter_indicator_markers": [
+        "unklarer Prozesszustaendigkeit"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "overall_assessment",
+        "missing_information"
+      ],
+      "triage_tags": [
+        "counter_indicator_handling",
+        "report_completeness"
+      ],
+      "notes": "Deutschsprachiger Negativfall, in dem Routing- und Prozessfehler die staerkste Erklaerung bleiben."
+    },
+    {
+      "id": "de-ba18-203",
+      "bucket": "repeated_exclusion",
+      "status": "labeled",
+      "question": "Bewerte, ob die deutschsprachigen Folgemails ein wiederholtes Ausschlussmuster zeigen.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-repeated-exclusion",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "exclusion"
+        ],
+        "analysis_goal": "hr_review"
+      },
+      "expected_support_uids": [
+        "uid-de-excl-1",
+        "uid-de-excl-2"
+      ],
+      "expected_top_uid": "uid-de-excl-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-excl-1",
+        "uid-de-excl-2"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-excl-1",
+        "uid-de-excl-2"
+      ],
+      "expected_behavior_ids": [
+        "exclusion",
+        "withholding"
+      ],
+      "expected_counter_indicator_markers": [
+        "verteilerbedingte Abweichung"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "chronological_pattern_analysis",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "chronology_analysis",
+        "behavioral_tagging"
+      ],
+      "notes": "Deutschsprachiger Ausschlussfall mit wiederholter Sichtbarkeitsasymmetrie."
+    },
+    {
+      "id": "de-ba18-204",
+      "bucket": "selective_non_response",
+      "status": "labeled",
+      "question": "Pruefe, ob die Akte eher auf selektive Nichtantwort nach direkten Rueckfragen hindeutet.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-selective-non-response",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "retaliation",
+          "exclusion"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-de-nr-1",
+        "uid-de-nr-2"
+      ],
+      "expected_top_uid": "uid-de-nr-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-nr-1",
+        "uid-de-nr-2"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-nr-1",
+        "uid-de-nr-2"
+      ],
+      "expected_behavior_ids": [
+        "selective_non_response",
+        "withholding"
+      ],
+      "expected_counter_indicator_markers": [
+        "moegliche Antwort ausserhalb des Threads"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "chronological_pattern_analysis",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "chronology_analysis",
+        "counter_indicator_handling",
+        "behavioral_tagging"
+      ],
+      "notes": "Deutschsprachiger Fall fuer selektive Nichtantwort mit konservativer Alternativerklaerung."
+    },
+    {
+      "id": "de-ba18-205",
+      "bucket": "retaliation_after_trigger",
+      "status": "labeled",
+      "question": "Ordne ein, ob die deutschsprachigen Nachrichten nach der Beschwerde einen nachteiligen Umschwung zeigen.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-retaliation-shift",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "retaliation"
+        ],
+        "analysis_goal": "hr_review",
+        "trigger_events": [
+          {
+            "date": "2026-03-02",
+            "trigger_type": "complaint",
+            "notes": "Formelle Beschwerde der Zielperson."
+          }
+        ]
+      },
+      "expected_support_uids": [
+        "uid-de-ret-1",
+        "uid-de-ret-2"
+      ],
+      "expected_top_uid": "uid-de-ret-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-ret-1",
+        "uid-de-ret-2"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-ret-1",
+        "uid-de-ret-2"
+      ],
+      "expected_behavior_ids": [
+        "escalation",
+        "selective_non_response"
+      ],
+      "expected_counter_indicator_markers": [
+        "unabhaengige betriebliche Entwicklungen"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "chronological_pattern_analysis",
+        "overall_assessment",
+        "missing_information"
+      ],
+      "triage_tags": [
+        "chronology_analysis",
+        "counter_indicator_handling",
+        "overclaiming_guard"
+      ],
+      "notes": "Deutschsprachiger Vorher-Nachher-Fall mit dokumentiertem Trigger."
+    },
+    {
+      "id": "de-ba18-206",
+      "bucket": "unequal_treatment",
+      "status": "labeled",
+      "question": "Bewerte, ob die deutschsprachige Vergleichsakte auf ungleiche Behandlung hindeutet.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-comparator-unequal-treatment",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "comparator_actors": [
+          {
+            "name": "Pat Kollegin",
+            "email": "pat@example.com",
+            "role_hint": "employee"
+          }
+        ],
+        "allegation_focus": [
+          "unequal_treatment"
+        ],
+        "analysis_goal": "lawyer_briefing"
+      },
+      "expected_support_uids": [
+        "uid-de-cmpr-1"
+      ],
+      "expected_top_uid": "uid-de-cmpr-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-cmpr-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-cmpr-1"
+      ],
+      "expected_behavior_ids": [
+        "public_correction"
+      ],
+      "expected_counter_indicator_markers": [
+        "nur teilweise vergleichbar"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "power_context_analysis",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "behavioral_tagging",
+        "counter_indicator_handling",
+        "overclaiming_guard"
+      ],
+      "notes": "Deutschsprachiger Vergleichsfall fuer ungleiche Behandlung ohne Ueberdehnung zu Diskriminierung."
+    },
+    {
+      "id": "de-ba18-207",
+      "bucket": "explicit_hostility",
+      "status": "labeled",
+      "question": "Pruefe, ob die direkte deutsche Formulierung eine explizit feindselige Ansprache darstellt.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-explicit-hostility",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility"
+        ],
+        "analysis_goal": "hr_review"
+      },
+      "expected_support_uids": [
+        "uid-de-host-1"
+      ],
+      "expected_top_uid": "uid-de-host-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-host-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-host-1"
+      ],
+      "expected_behavior_ids": [
+        "escalation",
+        "public_correction",
+        "deadline_pressure"
+      ],
+      "expected_max_claim_level": "observed_fact",
+      "expected_report_sections": [
+        "executive_summary",
+        "behaviour_analysis",
+        "overall_assessment"
+      ],
+      "triage_tags": [
+        "behavioral_tagging",
+        "report_completeness"
+      ],
+      "notes": "Deutschsprachiger Klarfall mit offener Herabsetzung und Druckrahmung."
+    },
+    {
+      "id": "de-ba18-208",
+      "bucket": "mixed_evidence",
+      "status": "labeled",
+      "question": "Beurteile, ob die deutschsprachige Akte gemischte Hinweise statt eines eindeutigen Musters enthaelt.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-mixed-evidence",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility",
+          "exclusion"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-de-mixed-1",
+        "uid-de-mixed-2"
+      ],
+      "expected_top_uid": "uid-de-mixed-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-mixed-1",
+        "uid-de-mixed-2"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-mixed-1",
+        "uid-de-mixed-2"
+      ],
+      "expected_behavior_ids": [
+        "undermining"
+      ],
+      "expected_counter_indicator_markers": [
+        "teils sachliche Eskalation nach Projektfehler"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "overall_assessment",
+        "missing_information"
+      ],
+      "triage_tags": [
+        "counter_indicator_handling",
+        "overclaiming_guard",
+        "report_completeness"
+      ],
+      "notes": "Deutschsprachiger Mischfall mit belastenden Signalen und tragfaehigen Gegenargumenten."
+    },
+    {
+      "id": "de-ba18-209",
+      "bucket": "insufficient_evidence",
+      "status": "labeled",
+      "question": "Pruefe, ob der knappe deutschsprachige Datensatz ueberhaupt eine belastbare Verhaltensbewertung traegt.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-insufficient-evidence",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility",
+          "retaliation"
+        ],
+        "analysis_goal": "lawyer_briefing"
+      },
+      "expected_support_uids": [
+        "uid-de-insuf-1"
+      ],
+      "expected_top_uid": "uid-de-insuf-1",
+      "expected_ambiguity": "insufficient",
+      "expected_case_bundle_uids": [
+        "uid-de-insuf-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_counter_indicator_markers": [
+        "Beleglage bleibt lueckenhaft"
+      ],
+      "expected_max_claim_level": "insufficient_evidence",
+      "expected_report_sections": [
+        "overall_assessment",
+        "missing_information"
+      ],
+      "triage_tags": [
+        "overclaiming_guard",
+        "report_completeness",
+        "weak_message_handling"
+      ],
+      "notes": "Deutschsprachiger Schutzfall gegen ueberzogene Schlussfolgerungen bei duenner Beleglage."
+    },
+    {
+      "id": "de-ba18-210",
+      "bucket": "attachment_same_name_hard_negative",
+      "status": "labeled",
+      "question": "Pruefe, ob gleichnamige Anlagen sauber getrennt bleiben und nur der korrekte Anhang als nahe Treffer gilt.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-attachment-same-name",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "exclusion"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-de-att-same-1"
+      ],
+      "expected_top_uid": "uid-de-att-same-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-att-same-1"
+      ],
+      "expected_source_types": [
+        "email",
+        "attachment"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-att-same-1"
+      ],
+      "expected_max_claim_level": "observed_fact",
+      "expected_report_sections": [
+        "executive_summary",
+        "overall_assessment"
+      ],
+      "benchmark_pack": {
+        "slice_a": {
+          "near_exact_support_source_ids": [
+            "attachment:uid-de-att-same-1:anlage.pdf"
+          ],
+          "forbidden_exact_source_ids": [
+            "attachment:uid-de-att-same-2:anlage.pdf"
+          ],
+          "require_locator_coverage": true
+        }
+      },
+      "triage_tags": [
+        "slice_a_same_name_attachment",
+        "hard_negative"
+      ],
+      "notes": "Hard-negative Fall: identischer Dateiname darf nicht als exakter Treffer auf falschem Artefakt landen."
+    },
+    {
+      "id": "de-ba18-211",
+      "bucket": "wrong_attachment_quote_match",
+      "status": "labeled",
+      "question": "Bewerte, ob ein Zitat aus dem falschen Anhang als Fehler markiert wird statt als exakter Nachweis.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-wrong-attachment-quote",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "exclusion"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-de-wrong-att-1"
+      ],
+      "expected_top_uid": "uid-de-wrong-att-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-wrong-att-1"
+      ],
+      "expected_source_types": [
+        "email",
+        "attachment"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-wrong-att-1"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "overall_assessment",
+        "missing_information"
+      ],
+      "benchmark_pack": {
+        "slice_a": {
+          "near_exact_support_source_ids": [
+            "attachment:uid-de-wrong-att-1:zitat.pdf"
+          ],
+          "forbidden_exact_source_ids": [
+            "attachment:uid-de-wrong-att-2:zitat.pdf"
+          ],
+          "require_locator_coverage": true
+        }
+      },
+      "triage_tags": [
+        "slice_a_wrong_attachment_quote",
+        "hard_negative"
+      ],
+      "notes": "Hard-negative Fall: gleiches Zitat im falschen Anhang muss als false exact sichtbar werden."
+    },
+    {
+      "id": "de-ba18-212",
+      "bucket": "authored_german_quoted_english",
+      "status": "labeled",
+      "question": "Pruefe, ob deutsch verfasster Haupttext trotz englischem Zitat als primaer deutsch gewertet wird.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-authored-german-quoted-english",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "hostility"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-de-lang-1"
+      ],
+      "expected_top_uid": "uid-de-lang-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-lang-1"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-lang-1"
+      ],
+      "expected_max_claim_level": "observed_fact",
+      "expected_report_sections": [
+        "executive_summary",
+        "overall_assessment"
+      ],
+      "benchmark_pack": {
+        "slice_a": {
+          "expected_authored_language": "de",
+          "expected_quoted_language": "en"
+        }
+      },
+      "triage_tags": [
+        "slice_a_authored_language"
+      ],
+      "notes": "Sprachgewichtung: authored de muss gegen quoted en stabil bleiben."
+    },
+    {
+      "id": "de-ba18-213",
+      "bucket": "weak_ocr_near_exact",
+      "status": "labeled",
+      "question": "Beurteile, ob schwaches OCR-Material als near-exact, aber nicht als exact gewertet wird.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-weak-ocr-near-exact",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "exclusion"
+        ],
+        "analysis_goal": "internal_review"
+      },
+      "expected_support_uids": [
+        "uid-de-ocr-near-1"
+      ],
+      "expected_top_uid": "uid-de-ocr-near-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-ocr-near-1"
+      ],
+      "expected_source_types": [
+        "attachment"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-ocr-near-1"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "overall_assessment",
+        "missing_information"
+      ],
+      "benchmark_pack": {
+        "slice_a": {
+          "near_exact_support_source_ids": [
+            "attachment:uid-de-ocr-near-1:scan.pdf"
+          ],
+          "forbidden_exact_source_ids": [
+            "attachment:uid-de-ocr-near-1:scan.pdf"
+          ],
+          "require_locator_coverage": true,
+          "require_ocr_attachment_recall": true
+        }
+      },
+      "triage_tags": [
+        "slice_a_weak_ocr",
+        "attachment_ocr",
+        "hard_negative"
+      ],
+      "notes": "OCR-Fall: near exact erlaubt, exact verboten."
+    },
+    {
+      "id": "de-ba18-214",
+      "bucket": "calendar_only_exclusion",
+      "status": "labeled",
+      "question": "Ordne ein, ob ein Ausschluss nur aus Kalenderquellen sichtbar und damit benchmark-faehig bleibt.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-calendar-only-exclusion",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "exclusion"
+        ],
+        "analysis_goal": "hr_review"
+      },
+      "expected_support_uids": [
+        "uid-de-cal-1"
+      ],
+      "expected_top_uid": "uid-de-cal-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-cal-1"
+      ],
+      "expected_source_types": [
+        "calendar_event"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-cal-1"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "chronological_pattern_analysis",
+        "overall_assessment"
+      ],
+      "benchmark_pack": {
+        "slice_a": {
+          "require_calendar_evidence": true,
+          "required_source_types": [
+            "calendar_event"
+          ]
+        }
+      },
+      "triage_tags": [
+        "slice_a_calendar_only"
+      ],
+      "notes": "Kalender-only Ausschluss bleibt sichtbar und nicht von Mailtext abhaengig."
+    },
+    {
+      "id": "de-ba18-215",
+      "bucket": "silence_omission_chain",
+      "status": "labeled",
+      "question": "Pruefe, ob selektive Stille nur dann zaehlt, wenn Erwartungskante und Chronologieanker vorhanden sind.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-silence-omission-chain",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "exclusion",
+          "retaliation"
+        ],
+        "analysis_goal": "hr_review"
+      },
+      "expected_support_uids": [
+        "uid-de-silence-1",
+        "uid-de-silence-2"
+      ],
+      "expected_top_uid": "uid-de-silence-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-silence-1",
+        "uid-de-silence-2"
+      ],
+      "expected_source_types": [
+        "email"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-silence-1",
+        "uid-de-silence-2"
+      ],
+      "expected_behavior_ids": [
+        "selective_non_response"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "chronological_pattern_analysis",
+        "overall_assessment"
+      ],
+      "benchmark_pack": {
+        "slice_a": {
+          "require_reply_expectation_anchor": true
+        }
+      },
+      "triage_tags": [
+        "slice_a_silence_omission"
+      ],
+      "notes": "Stille/Omission braucht Reply-Edge plus Chronologieanker."
+    },
+    {
+      "id": "de-ba18-216",
+      "bucket": "promise_then_denial",
+      "status": "labeled",
+      "question": "Bewerte, ob ein zugesagter Schritt spaeter mit locator-gestuetztem Gegenbeleg verneint wird.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-promise-then-denial",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "retaliation",
+          "exclusion"
+        ],
+        "analysis_goal": "lawyer_briefing"
+      },
+      "expected_support_uids": [
+        "uid-de-pr-den-1",
+        "uid-de-pr-den-2"
+      ],
+      "expected_top_uid": "uid-de-pr-den-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-pr-den-1",
+        "uid-de-pr-den-2"
+      ],
+      "expected_source_types": [
+        "email",
+        "attachment"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-pr-den-1",
+        "uid-de-pr-den-2"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "chronological_pattern_analysis",
+        "overall_assessment"
+      ],
+      "benchmark_pack": {
+        "slice_a": {
+          "exact_support_source_ids": [
+            "email:uid-de-pr-den-1",
+            "email:uid-de-pr-den-2"
+          ],
+          "forbidden_exact_source_ids": [
+            "email:uid-de-pr-den-wrong"
+          ],
+          "require_locator_coverage": true,
+          "required_contradiction_pairs": 1
+        }
+      },
+      "triage_tags": [
+        "slice_a_promise_denial",
+        "hard_negative"
+      ],
+      "notes": "Kontradiktionsfall mit zwei locator-gestuetzten Quellen."
+    },
+    {
+      "id": "de-ba18-217",
+      "bucket": "committee_comparator_witness_coverage",
+      "status": "labeled",
+      "question": "Pruefe, ob Gremien-, Vergleichs- und Zeugenbezug gemeinsam abgedeckt werden.",
+      "evidence_mode": "retrieval",
+      "case_scope": {
+        "case_label": "de-committee-comparator-witness",
+        "target_person": {
+          "name": "Alex Beispiel",
+          "email": "alex@example.com"
+        },
+        "comparator_actors": [
+          {
+            "name": "Pat Kollegin",
+            "email": "pat@example.com",
+            "role_hint": "employee"
+          }
+        ],
+        "suspected_actors": [
+          {
+            "name": "Morgan Leitung",
+            "email": "manager@example.com",
+            "role_hint": "manager"
+          }
+        ],
+        "allegation_focus": [
+          "unequal_treatment",
+          "exclusion"
+        ],
+        "analysis_goal": "lawyer_briefing"
+      },
+      "expected_support_uids": [
+        "uid-de-cmpr-committee-1"
+      ],
+      "expected_top_uid": "uid-de-cmpr-committee-1",
+      "expected_ambiguity": "clear",
+      "expected_case_bundle_uids": [
+        "uid-de-cmpr-committee-1"
+      ],
+      "expected_source_types": [
+        "email",
+        "meeting_minutes"
+      ],
+      "expected_timeline_uids": [
+        "uid-de-cmpr-committee-1"
+      ],
+      "expected_comparator_issue_ids": [
+        "participation_exclusion"
+      ],
+      "expected_actor_ids": [
+        "actor-target",
+        "actor-personalrat"
+      ],
+      "expected_max_claim_level": "pattern_concern",
+      "expected_report_sections": [
+        "executive_summary",
+        "power_context_analysis",
+        "overall_assessment"
+      ],
+      "benchmark_pack": {
+        "slice_a": {
+          "required_source_types": [
+            "email",
+            "meeting_minutes"
+          ]
+        }
+      },
+      "triage_tags": [
+        "slice_a_comparator_coverage"
+      ],
+      "notes": "Deckt Committee-, Comparator- und Witness-relevante Signale in einem Fall ab."
+    }
+  ]
+}

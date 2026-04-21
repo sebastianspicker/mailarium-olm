@@ -17,6 +17,7 @@ from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup, escape
 
 from .formatting import strip_html_tags, write_html_or_pdf
+from .repo_paths import validate_new_output_path
 
 if TYPE_CHECKING:
     from .email_db import EmailDatabase
@@ -55,7 +56,7 @@ class EvidenceExporter:
         def _strip_html_safe(value: str | None) -> Markup:
             """Strip HTML tags then escape for safe Jinja2 rendering."""
             cleaned = strip_html_tags(value)
-            return Markup(escape(cleaned))  # nosec B704 — input is escaped before Markup
+            return Markup(escape(cleaned))  # nosec
 
         self._env.filters["strip_html"] = _strip_html_safe
 
@@ -194,8 +195,9 @@ class EvidenceExporter:
         """
         if fmt.lower() == "csv":
             result = self.export_csv(min_relevance=min_relevance, category=category)
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            Path(output_path).write_text(result["csv"], encoding="utf-8")
+            output = validate_new_output_path(output_path)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(result["csv"], encoding="utf-8")
             return {
                 "output_path": output_path,
                 "format": "csv",

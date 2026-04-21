@@ -8,7 +8,7 @@ from src.query_suggestions import QuerySuggester
 def _make_mock_db():
     db = MagicMock()
     db.top_senders.return_value = [
-        {"sender_name": "Alice", "sender_email": "alice@example.com", "message_count": 50},
+        {"sender_name": "Alice", "sender_email": "employee@example.test", "message_count": 50},
         {"sender_name": "Bob", "sender_email": "bob@example.com", "message_count": 30},
     ]
     db.folder_counts.return_value = {"Inbox": 200, "Sent": 100, "Archive": 50}
@@ -33,7 +33,7 @@ def test_suggest_senders():
     suggester = QuerySuggester(db)
     result = suggester.suggest(limit=5)
     assert len(result["senders"]) == 2
-    assert result["senders"][0]["value"] == "alice@example.com"
+    assert result["senders"][0]["value"] == "employee@example.test"
 
 
 def test_suggest_folders():

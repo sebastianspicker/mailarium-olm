@@ -10,6 +10,7 @@ from src.storage import (
     get_collection,
     iter_collection_ids,
     iter_collection_metadatas,
+    modify_collection_metadata,
     to_builtin_list,
 )
 
@@ -88,6 +89,31 @@ def test_get_collection_applies_search_ef(tmp_path):
     collection = get_collection(client, "test_emails")
     metadata = collection.metadata or {}
     assert metadata.get("hnsw:search_ef") == 128
+
+
+def test_modify_collection_metadata_strips_immutable_hnsw_space():
+    class _Collection:
+        def __init__(self):
+            self.metadata = {
+                "hnsw:space": "cosine",
+                "hnsw:search_ef": 32,
+                "custom": "value",
+            }
+            self.modified_metadata = None
+
+        def modify(self, *, metadata):
+            self.modified_metadata = dict(metadata)
+            self.metadata = dict(metadata)
+
+    collection = _Collection()
+    modified = modify_collection_metadata(collection, {"hnsw:search_ef": 128, "index_revision": "123"})
+
+    assert modified == {
+        "hnsw:search_ef": 128,
+        "custom": "value",
+        "index_revision": "123",
+    }
+    assert collection.modified_metadata == modified
 
 
 # ── iter_collection_ids ──────────────────────────────────────────────

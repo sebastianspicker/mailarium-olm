@@ -1,10 +1,20 @@
+import warnings
+
 import pytest
 
 
-def test_parse_args_supports_filter_flags():
+def _parse_legacy_args(argv: list[str]):
     from src.cli import parse_args
 
-    args = parse_args(
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        args = parse_args(argv)
+    assert any(issubclass(item.category, DeprecationWarning) for item in caught)
+    return args
+
+
+def test_parse_args_supports_filter_flags():
+    args = _parse_legacy_args(
         [
             "--query",
             "budget",
@@ -43,14 +53,14 @@ def test_parse_args_supports_filter_flags():
 def test_parse_args_rejects_invalid_dates():
     from src.cli import parse_args
 
-    with pytest.raises(SystemExit):
-        parse_args(["--query", "test", "--date-from", "2023/01/01"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("always")
+        with pytest.raises(SystemExit):
+            parse_args(["--query", "test", "--date-from", "2023/01/01"])
 
 
 def test_parse_args_supports_format_json():
-    from src.cli import parse_args
-
-    args = parse_args(
+    args = _parse_legacy_args(
         [
             "--query",
             "security review",
@@ -64,17 +74,17 @@ def test_parse_args_supports_format_json():
 
 
 def test_resolve_output_format_prefers_explicit_format():
-    from src.cli import parse_args, resolve_output_format
+    from src.cli import resolve_output_format
 
-    args = parse_args(["--query", "security review", "--format", "text"])
+    args = _parse_legacy_args(["--query", "security review", "--format", "text"])
 
     assert resolve_output_format(args) == "text"
 
 
 def test_resolve_output_format_supports_legacy_json_flag():
-    from src.cli import parse_args, resolve_output_format
+    from src.cli import resolve_output_format
 
-    args = parse_args(["--query", "security review", "--json"])
+    args = _parse_legacy_args(["--query", "security review", "--json"])
 
     assert resolve_output_format(args) == "json"
 
@@ -82,5 +92,7 @@ def test_resolve_output_format_supports_legacy_json_flag():
 def test_parse_args_cc_requires_query():
     from src.cli import parse_args
 
-    with pytest.raises(SystemExit):
-        parse_args(["--cc", "finance-team"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("always")
+        with pytest.raises(SystemExit):
+            parse_args(["--cc", "finance-team"])

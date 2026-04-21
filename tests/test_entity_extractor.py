@@ -1,5 +1,6 @@
 """Tests for entity extraction."""
 
+import src.entity_extractor as entity_extractor_module
 from src.email_db import EmailDatabase
 from src.entity_extractor import extract_entities
 from src.parse_olm import Email
@@ -13,10 +14,10 @@ class TestExtractEntities:
         assert any("example.com" in e.normalized_form for e in urls)
 
     def test_extract_emails(self):
-        entities = extract_entities("Contact alice@example.com for details")
+        entities = extract_entities("Contact employee@example.test for details")
         emails = [e for e in entities if e.entity_type == "email"]
         assert len(emails) == 1
-        assert emails[0].normalized_form == "alice@example.com"
+        assert emails[0].normalized_form == "employee@example.test"
 
     def test_extract_phone_german(self):
         entities = extract_entities("Call +49 89 1234567 or 089/1234567")
@@ -40,18 +41,28 @@ class TestExtractEntities:
         assert len(mentions) == 2
 
     def test_extract_organization_from_sender(self):
-        entities = extract_entities("Hello", sender_email="john@acme-corp.com")
+        entities = extract_entities("Hello", sender_email="john@example.com")
         orgs = [e for e in entities if e.entity_type == "organization"]
         assert len(orgs) == 1
-        assert orgs[0].normalized_form == "acme-corp.com"
+        assert orgs[0].normalized_form == "example.com"
 
-    def test_common_providers_excluded(self):
-        entities = extract_entities("Hello", sender_email="john@gmail.com")
+    def test_common_providers_excluded(self, monkeypatch):
+        monkeypatch.setattr(
+            entity_extractor_module,
+            "_COMMON_PROVIDERS",
+            entity_extractor_module._COMMON_PROVIDERS | {"example.com"},
+        )
+        entities = extract_entities("Hello", sender_email="john@example.com")
         orgs = [e for e in entities if e.entity_type == "organization"]
         assert len(orgs) == 0
 
-    def test_gmx_excluded(self):
-        entities = extract_entities("Hello", sender_email="user@gmx.de")
+    def test_gmx_excluded(self, monkeypatch):
+        monkeypatch.setattr(
+            entity_extractor_module,
+            "_COMMON_PROVIDERS",
+            entity_extractor_module._COMMON_PROVIDERS | {"example.net"},
+        )
+        entities = extract_entities("Hello", sender_email="user@example.net")
         orgs = [e for e in entities if e.entity_type == "organization"]
         assert len(orgs) == 0
 
@@ -83,7 +94,7 @@ class TestExtractEntities:
 
     def test_empty_input(self):
         assert extract_entities("") == []
-        assert extract_entities("", sender_email="x@y.com") == []
+        assert extract_entities("", sender_email="x@example.test") == []
 
     def test_no_sender(self):
         entities = extract_entities("Hello world")
@@ -119,7 +130,7 @@ class TestEntitySQLiteRoundtrip:
             "message_id": "<msg1@example.com>",
             "subject": "Hello",
             "sender_name": "Alice",
-            "sender_email": "alice@acme.com",
+            "sender_email": "alice@example.com",
             "to": ["Bob <bob@example.com>"],
             "cc": [],
             "bcc": [],
@@ -141,13 +152,13 @@ class TestEntitySQLiteRoundtrip:
         tuples = [(e.text, e.entity_type, e.normalized_form) for e in entities]
         db.insert_entities_batch(email.uid, tuples)
 
-        results = db.search_by_entity("acme", entity_type="organization")
+        results = db.search_by_entity("example", entity_type="organization")
         assert len(results) >= 1
 
     def test_top_entities(self):
         db = EmailDatabase(":memory:")
-        e1 = self._make_email(message_id="<m1@ex.com>")
-        e2 = self._make_email(message_id="<m2@ex.com>")
+        e1 = self._make_email(message_id="<m1@example.test>")
+        e2 = self._make_email(message_id="<m2@example.test>")
         db.insert_email(e1)
         db.insert_email(e2)
 

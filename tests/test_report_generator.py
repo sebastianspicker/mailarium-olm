@@ -4,6 +4,8 @@ import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.report_generator import ReportGenerator
 
 
@@ -15,9 +17,9 @@ def _mock_email_db():
     db.folder_counts.return_value = {"Inbox": 800, "Sent": 500, "Archive": 200}
     db.date_range.return_value = ("2023-01-15T08:00:00", "2024-06-30T18:00:00")
     db.top_senders.return_value = [
-        {"sender_email": "alice@co.com", "sender_name": "Alice", "message_count": 120},
-        {"sender_email": "bob@co.com", "sender_name": "Bob", "message_count": 85},
-        {"sender_email": "carol@co.com", "sender_name": "Carol", "message_count": 60},
+        {"sender_email": "alice@example.test", "sender_name": "Alice", "message_count": 120},
+        {"sender_email": "bob@example.test", "sender_name": "Bob", "message_count": 85},
+        {"sender_email": "carol@example.test", "sender_name": "Carol", "message_count": 60},
     ]
     db.top_entities.return_value = [
         {"entity_text": "Acme Corp", "entity_type": "organization", "total_mentions": 50, "email_count": 30},
@@ -56,8 +58,8 @@ def test_generate_contains_top_senders():
     db = _mock_email_db()
     gen = ReportGenerator(db)
     html = gen.generate()
-    assert "alice@co.com" in html
-    assert "bob@co.com" in html
+    assert "alice@example.test" in html
+    assert "bob@example.test" in html
 
 
 def test_generate_contains_folders():
@@ -102,14 +104,23 @@ def test_generate_custom_title():
     assert "My Custom Archive" in html
 
 
+def test_generate_redacted_archive_report_banner_and_contacts():
+    db = _mock_email_db()
+    gen = ReportGenerator(db)
+    html = gen.generate(privacy_mode="witness_sharing")
+    assert "Privacy Mode: witness_sharing" in html
+    assert "[REDACTED: participant_identity]" in html
+    assert "alice@example.test" not in html
+
+
 def test_generate_with_response_times():
     """Report includes response times when available."""
     db = _mock_email_db()
     db.response_pairs.return_value = [
         {
-            "reply_sender": "bob@co.com",
+            "reply_sender": "bob@example.test",
             "reply_date": "2023-06-15T10:00:00",
-            "original_sender": "alice@co.com",
+            "original_sender": "alice@example.test",
             "original_date": "2023-06-15T08:00:00",
         },
     ]
@@ -127,8 +138,19 @@ def test_generate_creates_parent_dirs():
         assert os.path.exists(output)
 
 
-def test_generate_without_jinja2():
-    """Graceful degradation if Jinja2 is missing."""
+def test_generate_records_warning_when_optional_sections_degrade():
+    db = _mock_email_db()
+    db.top_entities.side_effect = RuntimeError("entities offline")
+    gen = ReportGenerator(db)
+
+    html = gen.generate()
+
+    assert "<!DOCTYPE html>" in html
+    assert gen.last_warnings == ["top_entities unavailable: RuntimeError"]
+
+
+def test_generate_without_jinja2_raises_report_generation_error():
+    """Missing Jinja2 should fail explicitly."""
     db = _mock_email_db()
     with patch.dict("sys.modules", {"jinja2": None}):
         # Reimport to trigger ImportError
@@ -138,14 +160,23 @@ def test_generate_without_jinja2():
 
         importlib.reload(mod)
         gen2 = mod.ReportGenerator(db)
-        html = gen2.generate()
-        assert "Jinja2" in html or "<!DOCTYPE html>" in html
+        with pytest.raises(mod.ReportGenerationError, match="Jinja2 is required"):
+            gen2.generate()
     # Reload to restore original
     import importlib
 
     import src.report_generator as mod
 
     importlib.reload(mod)
+
+
+def test_generate_raises_when_template_lookup_fails():
+    db = _mock_email_db()
+    gen = ReportGenerator(db)
+
+    with patch("jinja2.Environment.get_template", side_effect=RuntimeError("missing template")):
+        with pytest.raises(Exception, match="Archive report rendering failed"):
+            gen.generate()
 
 
 # ── GraphML export tests ─────────────────────────────────────
@@ -156,8 +187,8 @@ def test_export_graphml_creates_file():
 
     db = MagicMock()
     db.all_edges.return_value = [
-        ("alice@co.com", "bob@co.com", 10),
-        ("bob@co.com", "carol@co.com", 5),
+        ("alice@example.test", "bob@example.test", 10),
+        ("bob@example.test", "carol@example.test", 5),
     ]
     net = CommunicationNetwork(db)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -186,21 +217,21 @@ def test_export_graphml_content_valid():
     from src.network_analysis import CommunicationNetwork
 
     db = MagicMock()
-    db.all_edges.return_value = [("a@x.com", "b@x.com", 3)]
+    db.all_edges.return_value = [("a@example.test", "b@example.test", 3)]
     net = CommunicationNetwork(db)
     with tempfile.TemporaryDirectory() as tmpdir:
         output = os.path.join(tmpdir, "valid.graphml")
         net.export_graphml(output)
         content = open(output, encoding="utf-8").read()
         assert "graphml" in content.lower()
-        assert "a@x.com" in content
+        assert "a@example.test" in content
 
 
 def test_export_graphml_creates_parent_dirs():
     from src.network_analysis import CommunicationNetwork
 
     db = MagicMock()
-    db.all_edges.return_value = [("a@x.com", "b@x.com", 1)]
+    db.all_edges.return_value = [("a@example.test", "b@example.test", 1)]
     net = CommunicationNetwork(db)
     with tempfile.TemporaryDirectory() as tmpdir:
         output = os.path.join(tmpdir, "sub", "dir", "graph.graphml")
@@ -223,7 +254,7 @@ def test_cli_generate_report_default():
     from src.cli import parse_args
 
     args = parse_args(["--generate-report"])
-    assert args.generate_report == "report.html"
+    assert args.generate_report == "private/exports/report.html"
 
 
 def test_cli_export_network_flag_parsed():
@@ -237,7 +268,7 @@ def test_cli_export_network_default():
     from src.cli import parse_args
 
     args = parse_args(["--export-network"])
-    assert args.export_network == "network.graphml"
+    assert args.export_network == "private/exports/network.graphml"
 
 
 def test_cli_report_mutually_exclusive_with_stats():

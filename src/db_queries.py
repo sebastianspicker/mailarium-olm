@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,7 @@ from .db_schema import _escape_like
 
 if TYPE_CHECKING:
     pass  # conn declared below for mypy
+
 
 class QueryMixin:
     """Read queries, full-body retrieval, browsing, and consistency checks."""
@@ -69,6 +71,23 @@ class QueryMixin:
         row = self.conn.execute("SELECT 1 FROM emails WHERE uid = ?", (uid,)).fetchone()
         return row is not None
 
+    def completed_ingest_uids(
+        self,
+        *,
+        attachment_required: bool = False,
+    ) -> set[str]:
+        """Return UIDs whose relational and vector ingest state is complete enough to skip."""
+        manageres = ["state.vector_status = 'completed'"]
+        if attachment_required:
+            manageres.append("(state.attachment_status = 'completed' OR emails.has_attachments = 0)")
+        rows = self.conn.execute(
+            "SELECT state.email_uid "
+            "FROM email_ingest_state AS state "
+            "JOIN emails ON emails.uid = state.email_uid "
+            f"WHERE {' AND '.join(manageres)}",  # nosec
+        ).fetchall()
+        return {str(row["email_uid"]) for row in rows if str(row["email_uid"] or "")}
+
     def emails_by_sender(self, sender_email: str, limit: int = 100) -> list[dict]:
         """Get emails from a specific sender.
 
@@ -87,6 +106,76 @@ class QueryMixin:
             (f"%{_escape_like(sender_email)}%", limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def search_message_segments(
+        self,
+        query: str,
+        *,
+        segment_types: tuple[str, ...] = ("quoted_reply", "forwarded_message"),
+        limit: int = 20,
+    ) -> list[dict]:
+        """Search persisted quoted/forwarded message segments with lexical matching.
+
+        This is an additive retrieval lane for historical quoted context that is
+        intentionally conservative and SQLite-backed. Results are scored
+        synthetically from phrase and token overlap and are not meant to replace
+        semantic retrieval.
+        """
+        compact_query = " ".join(str(query or "").split()).strip()
+        if not compact_query or not segment_types:
+            return []
+
+        tokens = [token for token in re.findall(r"[\w@.-]{4,}", compact_query.casefold()) if token]
+        like_patterns = [compact_query.casefold(), *tokens]
+        if not like_patterns:
+            return []
+
+        segment_placeholders = ",".join("?" for _ in segment_types)
+        conditions = ["LOWER(ms.text) LIKE ? ESCAPE '\\'" for _ in like_patterns]
+        params: list[object] = [*segment_types, *[f"%{_escape_like(pattern)}%" for pattern in like_patterns], limit * 8]
+        rows = self.conn.execute(
+            "SELECT ms.email_uid AS uid, "
+            "ms.ordinal, ms.segment_type, ms.depth, ms.text AS segment_text, "
+            "ms.source_surface, e.subject, e.sender_email, e.sender_name, "
+            "e.date, e.conversation_id, e.folder, e.has_attachments, "
+            "e.attachment_count, e.detected_language, e.detected_language_confidence "
+            "FROM message_segments ms "
+            "JOIN emails e ON e.uid = ms.email_uid "
+            f"WHERE ms.segment_type IN ({segment_placeholders}) "  # nosec
+            f"AND ({' OR '.join(conditions)}) "
+            "ORDER BY e.date DESC, ms.ordinal ASC "
+            "LIMIT ?",
+            params,
+        ).fetchall()
+
+        ranked: list[dict] = []
+        normalized_phrase = compact_query.casefold()
+        for row in rows:
+            item = dict(row)
+            haystack = " ".join(str(item.get("segment_text") or "").split()).casefold()
+            if not haystack:
+                continue
+            matched_tokens = [token for token in tokens if token in haystack]
+            phrase_match = normalized_phrase in haystack
+            if not phrase_match and not matched_tokens:
+                continue
+            score = 0.35 + (0.4 if phrase_match else 0.0)
+            if tokens:
+                score += min(0.2, (len(matched_tokens) / len(tokens)) * 0.2)
+            if str(item.get("segment_type") or "") == "quoted_reply":
+                score += 0.05
+            item["score"] = round(min(score, 0.99), 4)
+            item["matched_tokens"] = matched_tokens
+            ranked.append(item)
+
+        ranked.sort(
+            key=lambda item: (
+                -float(item.get("score") or 0.0),
+                str(item.get("date") or ""),
+                int(item.get("ordinal") or 0),
+            )
+        )
+        return ranked[:limit]
 
     # ------------------------------------------------------------------
     # Category / Calendar / Attachment queries (schema v7)

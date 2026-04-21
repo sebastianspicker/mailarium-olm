@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "First labeled core evaluation set for email_answer_context, derived from real messages in .example/my-export.olm.",
+  "description": "First labeled core evaluation set for email_answer_context, derived from synthetic fixtures in synthetic-eval-corpus.olm.",
   "cases": [
     {
       "id": "fact-101",
@@ -9,13 +9,13 @@
       "question": "Who sent the HARICA certificate mail?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "pki@hfmt-koeln.de sent the HARICA certificate reply.",
+      "expected_answer": "cert-admin@example.org sent the HARICA certificate reply.",
       "expected_support_uids": [
         "31692630078d4d3689505120c1b61631"
       ],
       "expected_top_uid": "31692630078d4d3689505120c1b61631",
       "expected_ambiguity": "clear",
-      "notes": "Real reply in _wichtig: subject AW: Zertifikat Harica."
+      "notes": "Synthetic reply in _wichtig: subject AW: Zertifikat Harica."
     },
     {
       "id": "fact-102",
@@ -30,7 +30,7 @@
       ],
       "expected_top_uid": "099aa2e0070e2a4b9d8dfeaf41a68a02",
       "expected_ambiguity": "clear",
-      "notes": "Real original in memo: Notizen und Dateien in die Notizen-App importieren - Apple Support (DE)."
+      "notes": "Synthetic original in memo: Notizen und Dateien in die Notizen-App importieren - Apple Support (DE)."
     },
     {
       "id": "fact-103",
@@ -45,31 +45,31 @@
       ],
       "expected_top_uid": "05cfd57c33128f29ea8ad85c30281dc6",
       "expected_ambiguity": "clear",
-      "notes": "Real original in _wichtig from 2021-10-07."
+      "notes": "Synthetic original in _wichtig from 2021-10-07."
     },
     {
       "id": "fact-104",
       "bucket": "fact_lookup",
       "status": "labeled",
-      "question": "Who announced that the Zammad test version was created?",
+      "question": "Who announced that the ticket system test version was created?",
       "evidence_mode": "retrieval",
       "filters": {},
-      "expected_answer": "lukas.jacobs@hfmt-koeln.de announced the Zammad test version.",
+      "expected_answer": "service-owner@example.org announced the ticket system test version.",
       "expected_support_uids": [
         "addd6fad46c354177e7b59e32bb9b86a"
       ],
       "expected_top_uid": "addd6fad46c354177e7b59e32bb9b86a",
       "expected_ambiguity": "clear",
-      "notes": "Real original in _wichtig: Zammad Testversion."
+      "notes": "Synthetic original in _wichtig: ticket system Testversion."
     },
     {
       "id": "thread-101",
       "bucket": "thread_process",
       "status": "labeled",
-      "question": "When did the Zammad Reboot 2026 thread begin?",
+      "question": "When did the ticket system Reboot 2026 thread begin?",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "The earliest labeled message in the Zammad Reboot 2026 thread is from 2025-11-26T06:19:41.",
+      "expected_answer": "The earliest labeled message in the ticket system Reboot 2026 thread is from 2025-11-26T06:19:41.",
       "expected_support_uids": [
         "75731355ee4f0fa764eb6ef7e7fdb127"
       ],
@@ -84,10 +84,10 @@
       "id": "thread-102",
       "bucket": "thread_process",
       "status": "labeled",
-      "question": "Which messages belong to the Zammad Reboot 2026 conversation?",
+      "question": "Which messages belong to the ticket system Reboot 2026 conversation?",
       "evidence_mode": "hybrid",
       "filters": {},
-      "expected_answer": "The core labeled Zammad Reboot 2026 conversation contains the sampled Sent Items replies and follow-ups from 2025-11-26 through 2025-12-04.",
+      "expected_answer": "The core labeled ticket system Reboot 2026 conversation contains the sampled Sent Items replies and follow-ups from 2025-11-26 through 2025-12-04.",
       "expected_support_uids": [
         "75731355ee4f0fa764eb6ef7e7fdb127",
         "5cb183c64ca1e16abbd16f3ecf3ab3c5",
@@ -127,12 +127,12 @@
       "id": "attach-102",
       "bucket": "attachment_lookup",
       "status": "labeled",
-      "question": "Which email had the manual attachment for zammad agent manual?",
+      "question": "Which email had the manual attachment for ticket system agent manual?",
       "evidence_mode": "retrieval",
       "filters": {
         "has_attachments": true
       },
-      "expected_answer": "The Sent Items original zammad agent manual email had the manual attachment.",
+      "expected_answer": "The Sent Items original ticket system agent manual email had the manual attachment.",
       "expected_support_uids": [
         "9d5eecd15bba2b424fbad161a4155c39"
       ],
@@ -165,10 +165,10 @@
       "id": "ambig-102",
       "bucket": "ambiguity_stress",
       "status": "labeled",
-      "question": "Which source-shell message discussed zammad DNS and certificate?",
+      "question": "Which source-shell message discussed ticket system DNS and certificate?",
       "evidence_mode": "forensic",
       "filters": {},
-      "expected_answer": "The source-shell message AW: zammad DNS und Zertifikat matches, but the visible body remains weak.",
+      "expected_answer": "The source-shell message AW: ticket system DNS und Zertifikat matches, but the visible body remains weak.",
       "expected_support_uids": [
         "2606da536f3e533033cd6c2a8544f3a3"
       ],

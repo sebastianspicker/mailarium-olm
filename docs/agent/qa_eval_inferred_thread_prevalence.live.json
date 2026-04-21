@@ -1,7 +1,7 @@
 {
   "artifact_type": "natural_inferred_thread_prevalence",
-  "source_corpus": ".example/my-export.olm",
-  "db_path": "/tmp/aq30_prevalence_eval.db",
+  "source_corpus": "synthetic-eval-corpus.olm",
+  "db_path": "<tmp>/aq30_prevalence_eval.db",
   "sample_limit": 1500,
   "sample_email_count": 1490,
   "inserted_email_count": 1490,
@@ -13,5 +13,5 @@
   "inferred_parent_uid_rate": 0.0,
   "inferred_only_email_rate": 0.0,
   "decision": "deprioritize",
-  "recommendation": "Natural inferred-thread prevalence is zero on the measured deterministic slice; further inferred-thread work should stay deprioritized until a richer real corpus shows non-zero rows."
+  "recommendation": "Natural inferred-thread prevalence is zero on the measured deterministic slice; further inferred-thread work should stay deprioritized until a richer sanitized validation corpus shows non-zero rows."
 }

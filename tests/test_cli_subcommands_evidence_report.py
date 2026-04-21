@@ -37,7 +37,7 @@ class TestExportSubcommand:
         args = parse_args(["export", "report"])
         assert args.subcommand == "export"
         assert args.export_action == "report"
-        assert args.output == "report.html"
+        assert args.output == "private/exports/report.html"
 
     def test_export_report_custom_output(self) -> None:
         args = parse_args(["export", "report", "--output", "custom.html"])
@@ -47,7 +47,7 @@ class TestExportSubcommand:
         args = parse_args(["export", "network"])
         assert args.subcommand == "export"
         assert args.export_action == "network"
-        assert args.output == "network.graphml"
+        assert args.output == "private/exports/network.graphml"
 
 
 class TestEvidenceSubcommand:

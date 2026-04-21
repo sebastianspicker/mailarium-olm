@@ -56,6 +56,23 @@ class TestEvidenceAdd:
         finally:
             MockDeps._email_db = old_db
 
+    @pytest.mark.asyncio
+    async def test_add_evidence_accepts_workflow_neutral_category(self):
+        fake_mcp = register_tools()
+        fn = fake_mcp._tools["evidence_add"]
+        from src.mcp_models import EvidenceAddInput
+
+        params = EvidenceAddInput(
+            email_uid="uid-1",
+            category="contradiction",
+            key_quote="go with vendor A",
+            summary="Tracks a contradiction anchor.",
+            relevance=4,
+        )
+        result = await fn(params)
+        data = json.loads(result)
+        assert data["category"] == "contradiction"
+
 
 class TestEvidenceAddBatch:
     @pytest.mark.asyncio

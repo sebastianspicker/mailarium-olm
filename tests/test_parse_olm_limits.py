@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 import src.parse_olm as parse_olm_mod
+from src.olm_xml_helpers import _read_limited_bytes as helper_read_limited_bytes
 
 
 def _write_xml_zip(path: Path, count: int) -> None:
@@ -71,6 +72,10 @@ def test_read_limited_bytes_accepts_stream_within_limit():
     data = parse_olm_mod._read_limited_bytes(stream, byte_limit=10)
 
     assert data == b"hello"
+
+
+def test_parse_olm_keeps_read_limited_bytes_compat_reexport():
+    assert parse_olm_mod._read_limited_bytes is helper_read_limited_bytes
 
 
 def test_parse_olm_accepts_uppercase_xml_extension(tmp_path: Path):

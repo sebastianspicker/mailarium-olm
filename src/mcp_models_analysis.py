@@ -6,11 +6,12 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from .mcp_models_analysis_case_events import TriggerEventInput
+from .mcp_models_analysis_case_events import AdverseActionInput, TriggerEventInput
 from .mcp_models_analysis_case_parties import (
     BehavioralOrgContextInput,
     CasePartyInput,
     DependencyRelationInput,
+    InstitutionalActorInput,
     ReportingLineInput,
     RoleFactInput,
     VulnerabilityContextInput,
@@ -25,6 +26,7 @@ from .mcp_models_base import (
 
 __all__ = [
     "ActionItemsInput",
+    "AdverseActionInput",
     "BehavioralCaseScopeInput",
     "BehavioralOrgContextInput",
     "CasePartyInput",
@@ -43,6 +45,7 @@ __all__ = [
     "EntityNetworkInput",
     "EntitySearchInput",
     "EntityTimelineInput",
+    "InstitutionalActorInput",
     "ListEntitiesInput",
     "NetworkAnalysisInput",
     "RelationshipPathsInput",
@@ -313,7 +316,7 @@ class EmailTemporalInput(DateRangeInput, StrictInput):
 
     analysis='volume': email volume over time (day/week/month).
     analysis='activity': hour-of-day x day-of-week heatmap.
-    analysis='response_times': average response times per sender.
+    analysis='response_times': recent-sample response times per sender based on canonical reply pairs.
     """
 
     analysis: Literal["volume", "activity", "response_times"] = Field(
@@ -325,7 +328,7 @@ class EmailTemporalInput(DateRangeInput, StrictInput):
         description="Aggregation period for volume: 'day', 'week', or 'month'.",
     )
     sender: str | None = Field(default=None, description="Filter by sender email.")
-    limit: int = Field(default=20, ge=1, le=100, description="Max results for response_times.")
+    limit: int = Field(default=20, ge=1, le=100, description="Max sender rows for the response_times recent-sample output.")
 
 
 class EmailQualityInput(PlainInput):
@@ -370,12 +373,24 @@ class EmailReportInput(StrictInput):
         description="Report type: 'archive', 'network', or 'writing'.",
     )
     output_path: str = Field(
-        default="report.html",
+        default="private/exports/report.html",
         description="Output file path (for archive/network types).",
     )
     title: str = Field(
         default="Email Archive Report",
         description="Report title (for archive type).",
+    )
+    privacy_mode: Literal[
+        "full_access",
+        "external_counsel_export",
+        "internal_complaint_use",
+        "witness_sharing",
+    ] = Field(
+        default="full_access",
+        description=(
+            "Archive-report privacy mode. Redacted modes suppress direct contact data and, where applicable, "
+            "medical or privileged detail in the rendered report."
+        ),
     )
     sender: str | None = Field(
         default=None,
@@ -385,8 +400,8 @@ class EmailReportInput(StrictInput):
 
     @field_validator("output_path")
     @classmethod
-    def validate_output_path(cls, v: str) -> str:
-        return _validate_output_path(v)  # type: ignore[return-value]
+    def validate_output_path(cls, v: str | None) -> str | None:
+        return _validate_output_path(v)
 
 
 class EmailAttachmentsInput(StrictInput):

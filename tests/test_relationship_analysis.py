@@ -17,34 +17,70 @@ def db():
 
         # Insert sample emails and recipients for relationship analysis
         _insert_email(
-            database, "uid-1", "alice@co.com", "Alice", "2024-01-01T10:00:00", "Meeting notes", to=["bob@co.com", "carol@co.com"]
+            database,
+            "uid-1",
+            "alice@example.test",
+            "Alice",
+            "2024-01-01T10:00:00",
+            "Meeting notes",
+            to=["bob@example.test", "carol@example.test"],
         )
         _insert_email(
             database,
             "uid-2",
-            "bob@co.com",
+            "bob@example.test",
             "Bob",
             "2024-01-01T11:00:00",
             "Re: Meeting notes",
-            to=["alice@co.com", "carol@co.com"],
+            to=["alice@example.test", "carol@example.test"],
         )
-        _insert_email(database, "uid-3", "alice@co.com", "Alice", "2024-01-02T09:00:00", "Follow-up", to=["dave@co.com"])
         _insert_email(
-            database, "uid-4", "carol@co.com", "Carol", "2024-01-02T10:00:00", "New topic", to=["bob@co.com", "dave@co.com"]
+            database,
+            "uid-3",
+            "alice@example.test",
+            "Alice",
+            "2024-01-02T09:00:00",
+            "Follow-up",
+            to=["dave@example.test"],
         )
-        _insert_email(database, "uid-5", "dave@co.com", "Dave", "2024-01-03T15:00:00", "External matter", to=["eve@ext.com"])
-        _insert_email(database, "uid-6", "bob@co.com", "Bob", "2024-01-01T12:00:00", "Quick question", to=["carol@co.com"])
+        _insert_email(
+            database,
+            "uid-4",
+            "carol@example.test",
+            "Carol",
+            "2024-01-02T10:00:00",
+            "New topic",
+            to=["bob@example.test", "dave@example.test"],
+        )
+        _insert_email(
+            database,
+            "uid-5",
+            "dave@example.test",
+            "Dave",
+            "2024-01-03T15:00:00",
+            "External matter",
+            to=["eve@example.test"],
+        )
+        _insert_email(
+            database,
+            "uid-6",
+            "bob@example.test",
+            "Bob",
+            "2024-01-01T12:00:00",
+            "Quick question",
+            to=["carol@example.test"],
+        )
 
         # Build communication edges
         edges = [
-            ("alice@co.com", "bob@co.com", 1),
-            ("alice@co.com", "carol@co.com", 1),
-            ("alice@co.com", "dave@co.com", 1),
-            ("bob@co.com", "alice@co.com", 1),
-            ("bob@co.com", "carol@co.com", 2),
-            ("carol@co.com", "bob@co.com", 1),
-            ("carol@co.com", "dave@co.com", 1),
-            ("dave@co.com", "eve@ext.com", 1),
+            ("alice@example.test", "bob@example.test", 1),
+            ("alice@example.test", "carol@example.test", 1),
+            ("alice@example.test", "dave@example.test", 1),
+            ("bob@example.test", "alice@example.test", 1),
+            ("bob@example.test", "carol@example.test", 2),
+            ("carol@example.test", "bob@example.test", 1),
+            ("carol@example.test", "dave@example.test", 1),
+            ("dave@example.test", "eve@example.test", 1),
         ]
         for sender, recipient, count in edges:
             database.conn.execute(
@@ -79,21 +115,21 @@ def _insert_email(db, uid, sender_email, sender_name, date, subject, to=None):
 
 def test_shared_recipients_finds_common_recipients(db):
     """Should find recipients who received from multiple senders."""
-    results = db.shared_recipients_query(["alice@co.com", "bob@co.com"])
+    results = db.shared_recipients_query(["alice@example.test", "bob@example.test"])
     recipients = [r["recipient"] for r in results]
-    assert "carol@co.com" in recipients
+    assert "carol@example.test" in recipients
 
 
 def test_shared_recipients_empty_for_no_overlap(db):
     """Should return empty when senders have no common recipients."""
-    results = db.shared_recipients_query(["alice@co.com", "dave@co.com"])
+    results = db.shared_recipients_query(["alice@example.test", "dave@example.test"])
     # alice sends to bob, carol, dave; dave sends to eve — minimal overlap
     assert isinstance(results, list)
 
 
 def test_shared_recipients_returns_sender_list(db):
     """Each result should include which senders share that recipient."""
-    results = db.shared_recipients_query(["alice@co.com", "bob@co.com"])
+    results = db.shared_recipients_query(["alice@example.test", "bob@example.test"])
     for r in results:
         assert "senders" in r
         assert isinstance(r["senders"], list)
@@ -102,7 +138,7 @@ def test_shared_recipients_returns_sender_list(db):
 
 def test_shared_recipients_single_sender_returns_empty(db):
     """Should return empty for a single sender (need at least 2)."""
-    results = db.shared_recipients_query(["alice@co.com"])
+    results = db.shared_recipients_query(["alice@example.test"])
     assert results == []
 
 
@@ -111,15 +147,15 @@ def test_shared_recipients_single_sender_returns_empty(db):
 
 def test_sender_activity_timeline_ordered(db):
     """Timeline should be ordered by date ascending."""
-    results = db.sender_activity_timeline(["alice@co.com", "bob@co.com"])
+    results = db.sender_activity_timeline(["alice@example.test", "bob@example.test"])
     dates = [r["date"] for r in results]
     assert dates == sorted(dates)
 
 
 def test_sender_activity_timeline_filters_senders(db):
     """Should only include specified senders."""
-    results = db.sender_activity_timeline(["alice@co.com"])
-    assert all(r["sender_email"] == "alice@co.com" for r in results)
+    results = db.sender_activity_timeline(["alice@example.test"])
+    assert all(r["sender_email"] == "alice@example.test" for r in results)
     assert len(results) == 2  # uid-1 and uid-3
 
 
@@ -136,11 +172,11 @@ def test_find_paths_direct_connection(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    paths = net.find_paths("alice@co.com", "bob@co.com")
+    paths = net.find_paths("alice@example.test", "bob@example.test")
     assert len(paths) >= 1
     assert paths[0]["hops"] == 1
-    assert paths[0]["nodes"][0] == "alice@co.com"
-    assert paths[0]["nodes"][-1] == "bob@co.com"
+    assert paths[0]["nodes"][0] == "alice@example.test"
+    assert paths[0]["nodes"][-1] == "bob@example.test"
 
 
 def test_find_paths_multi_hop(db):
@@ -148,7 +184,7 @@ def test_find_paths_multi_hop(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    paths = net.find_paths("alice@co.com", "eve@ext.com", max_hops=4)
+    paths = net.find_paths("alice@example.test", "eve@example.test", max_hops=4)
     assert len(paths) >= 1
     # alice -> dave -> eve or alice -> carol -> dave -> eve
     assert paths[0]["hops"] >= 2
@@ -159,7 +195,7 @@ def test_find_paths_respects_max_hops(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    paths = net.find_paths("alice@co.com", "eve@ext.com", max_hops=1)
+    paths = net.find_paths("alice@example.test", "eve@example.test", max_hops=1)
     # eve is not directly connected to alice
     assert len(paths) == 0
 
@@ -169,7 +205,7 @@ def test_find_paths_no_path(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    paths = net.find_paths("alice@co.com", "unknown@nowhere.com")
+    paths = net.find_paths("alice@example.test", "unknown@example.test")
     assert paths == []
 
 
@@ -178,7 +214,7 @@ def test_find_paths_respects_top_k(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    paths = net.find_paths("alice@co.com", "eve@ext.com", max_hops=5, top_k=1)
+    paths = net.find_paths("alice@example.test", "eve@example.test", max_hops=5, top_k=1)
     assert len(paths) <= 1
 
 
@@ -187,7 +223,7 @@ def test_find_paths_source_equals_target(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    result = net.find_paths("alice@co.com", "alice@co.com")
+    result = net.find_paths("alice@example.test", "alice@example.test")
     assert len(result) == 1
     assert "error" in result[0]
     assert "same address" in result[0]["error"]
@@ -201,7 +237,7 @@ def test_shared_recipients_via_network(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    results = net.shared_recipients(["alice@co.com", "bob@co.com"])
+    results = net.shared_recipients(["alice@example.test", "bob@example.test"])
     assert isinstance(results, list)
 
 
@@ -215,7 +251,7 @@ def test_coordinated_timing_detects_overlap(db):
     net = CommunicationNetwork(db)
     # alice and bob both email on 2024-01-01 (3 total: uid-1, uid-2, uid-6)
     windows = net.coordinated_timing(
-        ["alice@co.com", "bob@co.com"],
+        ["alice@example.test", "bob@example.test"],
         window_hours=24,
         min_events=2,
     )
@@ -230,7 +266,7 @@ def test_coordinated_timing_empty_for_non_overlapping(db):
     net = CommunicationNetwork(db)
     # alice (Jan 1, Jan 2) and dave (Jan 3) with 1-hour window
     windows = net.coordinated_timing(
-        ["alice@co.com", "dave@co.com"],
+        ["alice@example.test", "dave@example.test"],
         window_hours=1,
         min_events=2,
     )
@@ -242,7 +278,7 @@ def test_coordinated_timing_single_sender_returns_empty(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    windows = net.coordinated_timing(["alice@co.com"])
+    windows = net.coordinated_timing(["alice@example.test"])
     assert windows == []
 
 
@@ -254,9 +290,9 @@ def test_relationship_summary_returns_profile(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    profile = net.relationship_summary("alice@co.com")
+    profile = net.relationship_summary("alice@example.test")
 
-    assert profile["email"] == "alice@co.com"
+    assert profile["email"] == "alice@example.test"
     assert "top_contacts" in profile
     assert "community" in profile
     assert "bridge_score" in profile
@@ -269,7 +305,7 @@ def test_relationship_summary_has_send_receive(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    profile = net.relationship_summary("alice@co.com")
+    profile = net.relationship_summary("alice@example.test")
 
     # alice sends to bob(1), carol(1), dave(1) = 3 total
     assert profile["send_count"] == 3
@@ -282,8 +318,8 @@ def test_relationship_summary_unknown_email(db):
     from src.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
-    profile = net.relationship_summary("unknown@nowhere.com")
+    profile = net.relationship_summary("unknown@example.test")
 
-    assert profile["email"] == "unknown@nowhere.com"
+    assert profile["email"] == "unknown@example.test"
     assert profile["send_count"] == 0
     assert profile["receive_count"] == 0

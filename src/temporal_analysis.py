@@ -154,8 +154,9 @@ class TemporalAnalyzer:
         ]
 
     def response_times(self, sender: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
-        """Average response times per replier (in hours)."""
-        pairs = self._db.response_pairs(sender=sender, limit=500)
+        """Recent-sample response times per replier (in hours)."""
+        pair_limit = 500
+        pairs = self._db.response_pairs(sender=sender, limit=pair_limit)
         if not pairs:
             return []
 
@@ -190,6 +191,8 @@ class TemporalAnalyzer:
                         "replier": email,
                         "avg_response_hours": round(avg, 1),
                         "response_count": len(times),
+                        "response_sample_scope": "recent_canonical_reply_pairs",
+                        "response_sample_pair_limit": pair_limit,
                     }
                 )
 

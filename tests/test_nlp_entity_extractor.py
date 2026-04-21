@@ -148,7 +148,7 @@ class TestFallbackToRegex:
         mod._nlp_models.clear()
         mod._nlp_load_attempted = True
 
-        entities = mod.extract_nlp_entities("Visit https://example.com", sender_email="john@acme-corp.com")
+        entities = mod.extract_nlp_entities("Visit https://example.com", sender_email="john@example.test")
         types = {e.entity_type for e in entities}
         assert "url" in types
         assert "organization" in types
@@ -183,7 +183,7 @@ class TestMergeSpacyAndRegex:
         mod = _setup_module_with_fake_nlp()
         entities = mod.extract_nlp_entities(
             "John Smith from Acme Corp at https://acme.com called +49 89 1234567",
-            sender_email="info@acme-corp.com",
+            sender_email="info@example.test",
         )
         types = {e.entity_type for e in entities}
         assert "person" in types  # from spaCy
@@ -193,7 +193,7 @@ class TestMergeSpacyAndRegex:
     def test_spacy_org_takes_priority_over_regex_domain(self):
         """When spaCy finds ORG, it appears alongside regex domain org."""
         mod = _setup_module_with_fake_nlp()
-        entities = mod.extract_nlp_entities("Acme Corp", sender_email="john@acme-corp.com")
+        entities = mod.extract_nlp_entities("Acme Corp", sender_email="john@example.test")
         orgs = [e for e in entities if e.entity_type == "organization"]
         # Should have spaCy "Acme Corp" and regex "acme-corp.com"
         assert len(orgs) >= 1
@@ -213,7 +213,7 @@ class TestMergeSpacyAndRegex:
             )
 
         mod._nlp_models["en"] = _overlap_nlp
-        entities = mod.extract_nlp_entities("Hello", sender_email="john@acme-corp.com")
+        entities = mod.extract_nlp_entities("Hello", sender_email="john@example.test")
         orgs = [e for e in entities if e.entity_type == "organization"]
         # Should deduplicate by normalized form
         org_norms = [e.normalized_form for e in orgs]
@@ -222,7 +222,7 @@ class TestMergeSpacyAndRegex:
     def test_empty_text_returns_empty(self):
         """Empty text returns no entities (regex returns [] for empty text)."""
         mod = _setup_module_with_fake_nlp()
-        entities = mod.extract_nlp_entities("", sender_email="alice@company.io")
+        entities = mod.extract_nlp_entities("", sender_email="alice@example.test")
         # Regex extract_entities returns [] for empty text, so no entities
         assert entities == []
 
@@ -240,8 +240,8 @@ class TestPeopleInEmails:
             message_id="<m1@test>",
             subject="Meeting",
             sender_name="Alice",
-            sender_email="alice@co.com",
-            to=["bob@co.com"],
+            sender_email="alice@example.test",
+            to=["bob@example.test"],
             cc=[],
             bcc=[],
             date="2024-01-15T10:00:00",
@@ -279,8 +279,8 @@ class TestPeopleInEmails:
             message_id="<m2@test>",
             subject="Report",
             sender_name="Bob",
-            sender_email="bob@co.com",
-            to=["alice@co.com"],
+            sender_email="bob@example.test",
+            to=["alice@example.test"],
             cc=[],
             bcc=[],
             date="2024-02-01T09:00:00",
@@ -310,8 +310,8 @@ class TestPeopleInEmails:
                 message_id=f"<m{i}@test>",
                 subject=f"Email {i}",
                 sender_name="Sender",
-                sender_email="sender@co.com",
-                to=["recv@co.com"],
+                sender_email="sender@example.test",
+                to=["recv@example.test"],
                 cc=[],
                 bcc=[],
                 date=f"2024-01-{i + 10:02d}T10:00:00",
@@ -344,8 +344,8 @@ class TestEntityTimeline:
                 message_id=f"<t{i}@test>",
                 subject=f"Email {i}",
                 sender_name="Alice",
-                sender_email="alice@co.com",
-                to=["bob@co.com"],
+                sender_email="alice@example.test",
+                to=["bob@example.test"],
                 cc=[],
                 bcc=[],
                 date=date,
@@ -378,8 +378,8 @@ class TestEntityTimeline:
             message_id="<td1@test>",
             subject="Daily",
             sender_name="Alice",
-            sender_email="alice@co.com",
-            to=["bob@co.com"],
+            sender_email="alice@example.test",
+            to=["bob@example.test"],
             cc=[],
             bcc=[],
             date="2024-03-15T10:00:00",
@@ -416,8 +416,8 @@ class TestEntityTimeline:
             message_id="<tw1@test>",
             subject="Weekly",
             sender_name="Alice",
-            sender_email="alice@co.com",
-            to=["bob@co.com"],
+            sender_email="alice@example.test",
+            to=["bob@example.test"],
             cc=[],
             bcc=[],
             date="2024-03-15T10:00:00",

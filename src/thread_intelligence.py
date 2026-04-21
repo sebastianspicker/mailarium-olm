@@ -11,19 +11,26 @@ from typing import Any
 _ACTION_PATTERNS = [
     # Direct requests
     re.compile(r"(?:please|pls|kindly)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:bitte)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:need to|needs to|have to|has to)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:wir\s+müssen|du\s+musst|sie\s+müssen|bitte\s+um)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:can you|could you|would you)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:kannst du|könntest du|können sie)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     # Self-commitments
     re.compile(r"(?:I(?:'ll| will| am going to))\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:ich\s+werde|wir\s+werden)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     # Explicit markers
     re.compile(r"(?:action required|action item|todo|to do|follow up|follow-up)[:\s]+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:maßnahme|aufgabe|to-do|erledigen|nachfassen)[:\s]+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     # Deadline patterns
     re.compile(r"(?:by|before|deadline|due(?:\s+date)?)[:\s]+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:bis|frist|spätestens|fällig(?:keit)?)[:\s]+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
 ]
 
 _DEADLINE_RE = re.compile(
     r"(?:by|before|deadline|due(?:\s+date)?)[:\s]*"
-    r"(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|\w+day|end of (?:week|month|day)|tomorrow|ASAP|EOD|EOW|EOM)",
+    r"(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|\w+day|end of (?:week|month|day)|"
+    r"tomorrow|ASAP|EOD|EOW|EOM|heute|morgen|übermorgen|ende der woche|ende des monats)",
     re.IGNORECASE,
 )
 
@@ -37,6 +44,10 @@ _URGENCY_WORDS = frozenset(
         "high priority",
         "time-sensitive",
         "deadline",
+        "dringend",
+        "sofort",
+        "zeitkritisch",
+        "eilig",
     }
 )
 
@@ -45,12 +56,19 @@ _URGENCY_WORDS = frozenset(
 
 _DECISION_PATTERNS = [
     re.compile(r"(?:we decided|we've decided|it was decided)\s+(?:to\s+)?(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:wir\s+haben\s+entschieden|es\s+wurde\s+entschieden)\s+(?:zu\s+)?(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:agreed to|have agreed|agreement to)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:wir\s+haben\s+vereinbart|vereinbart\s+wurde)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:confirmed that|confirming that)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:bestätigt(?:\s+wurde)?|wir\s+bestätigen)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:approved|approval for)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:genehmigt|freigegeben)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:will proceed with|proceeding with|going ahead with)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:wir\s+werden\s+fortfahren\s+mit|wir\s+gehen\s+weiter\s+mit)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:go ahead with|let's go with|let us go with)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:wir\s+gehen\s+mit|lasst\s+uns\s+mit)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:final decision|the decision is)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
+    re.compile(r"(?:die\s+entscheidung\s+ist|endgültig\s+entschieden)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
 ]
 
 

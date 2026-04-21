@@ -353,6 +353,12 @@ def render_results_impl(
                 uid = metadata.get("uid", "")
                 uid_short = uid[:12] + "..." if len(uid) > 12 else uid
                 st_module.caption(f"UID: {uid_short} | Chunk: {result.chunk_id}")
+                inferred_thread_id = str(metadata.get("inferred_thread_id", "") or "").strip()
+                if not conv_id and inferred_thread_id:
+                    st_module.caption(
+                        "Thread view in Streamlit is currently limited to canonical conversation IDs. "
+                        "Use CLI or MCP answer-context workflows for inferred-thread review."
+                    )
 
 
 def render_results_summary_impl(

@@ -42,6 +42,17 @@ class MockEmailDB:
             "last_date": "2025-06-01",
         }
 
+    def close(self) -> None:
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
 
 class MockCommunicationNetwork:
     """Stub for CommunicationNetwork used by run_with_network."""
@@ -51,7 +62,7 @@ class MockCommunicationNetwork:
             "nodes": top_n,
             "edges": 50,
             "top_centrality": [
-                {"email": "alice@example.com", "centrality": 0.85},
+                {"email": "employee@example.test", "centrality": 0.85},
             ],
         }
 
@@ -145,7 +156,7 @@ class TestEmailContacts:
         fn = fake_mcp._tools["email_contacts"]
         from src.mcp_models import EmailContactsInput
 
-        params = EmailContactsInput(email_address="alice@example.com", limit=10)
+        params = EmailContactsInput(email_address="employee@example.test", limit=10)
         result = await fn(params)
         data = json.loads(result)
         assert isinstance(data, list)
@@ -158,7 +169,7 @@ class TestEmailContacts:
         from src.mcp_models import EmailContactsInput
 
         params = EmailContactsInput(
-            email_address="alice@example.com",
+            email_address="employee@example.test",
             compare_with="bob@example.com",
         )
         result = await fn(params)
@@ -213,7 +224,7 @@ class TestRelationshipPaths:
         from src.mcp_models import RelationshipPathsInput
 
         params = RelationshipPathsInput(
-            source="alice@example.com",
+            source="employee@example.test",
             target="dave@example.com",
             max_hops=3,
             top_k=5,
@@ -237,7 +248,7 @@ class TestSharedRecipients:
         from src.mcp_models import SharedRecipientsInput
 
         params = SharedRecipientsInput(
-            email_addresses=["alice@example.com", "bob@example.com"],
+            email_addresses=["employee@example.test", "bob@example.com"],
             min_shared=2,
             limit=10,
         )
@@ -256,7 +267,7 @@ class TestSharedRecipients:
         from src.mcp_models import SharedRecipientsInput
 
         params = SharedRecipientsInput(
-            email_addresses=["alice@example.com", "bob@example.com"],
+            email_addresses=["employee@example.test", "bob@example.com"],
             limit=1,
         )
         result = await fn(params)
@@ -276,7 +287,7 @@ class TestCoordinatedTiming:
         from src.mcp_models import CoordinatedTimingInput
 
         params = CoordinatedTimingInput(
-            email_addresses=["alice@example.com", "bob@example.com"],
+            email_addresses=["employee@example.test", "bob@example.com"],
             window_hours=24,
             min_events=3,
             limit=10,
@@ -295,7 +306,7 @@ class TestCoordinatedTiming:
         from src.mcp_models import CoordinatedTimingInput
 
         params = CoordinatedTimingInput(
-            email_addresses=["alice@example.com", "bob@example.com"],
+            email_addresses=["employee@example.test", "bob@example.com"],
             limit=1,
         )
         result = await fn(params)
@@ -314,12 +325,12 @@ class TestRelationshipSummary:
         from src.mcp_models import RelationshipSummaryInput
 
         params = RelationshipSummaryInput(
-            email_address="alice@example.com",
+            email_address="employee@example.test",
             limit=10,
         )
         result = await fn(params)
         data = json.loads(result)
-        assert data["email"] == "alice@example.com"
+        assert data["email"] == "employee@example.test"
         assert "top_contacts" in data
         assert "bridge_score" in data
 
@@ -337,7 +348,7 @@ class TestNetworkDBUnavailable:
         try:
             from src.mcp_models import EmailContactsInput
 
-            params = EmailContactsInput(email_address="alice@example.com")
+            params = EmailContactsInput(email_address="employee@example.test")
             result = await fn(params)
             data = json.loads(result)
             assert "error" in data
@@ -354,8 +365,8 @@ class TestNetworkDBUnavailable:
             from src.mcp_models import RelationshipPathsInput
 
             params = RelationshipPathsInput(
-                source="a@b.com",
-                target="c@d.com",
+                source="a@example.test",
+                target="c@example.test",
             )
             result = await fn(params)
             data = json.loads(result)

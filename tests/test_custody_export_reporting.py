@@ -49,7 +49,7 @@ def test_email_provenance_returns_email_data(db_with_email: EmailDatabase) -> No
     provenance = db_with_email.email_provenance("test-uid-1")
     assert "email" in provenance
     assert provenance["email"]["uid"] == "test-uid-1"
-    assert provenance["email"]["sender_email"] == "alice@test.com"
+    assert provenance["email"]["sender_email"] == "alice@example.test"
 
 
 def test_email_provenance_includes_ingestion_run(db_with_email: EmailDatabase) -> None:
@@ -72,10 +72,10 @@ def test_email_provenance_uses_ingestion_run_id(db: EmailDatabase) -> None:
 
     fake_email = FakeEmail(
         uid="prov-uid-1",
-        message_id="<prov@test.com>",
+        message_id="<prov@example.test>",
         subject="Provenance Test",
         sender_name="Alice",
-        sender_email="alice@test.com",
+        sender_email="alice@example.test",
         date="2024-01-15",
         conversation_id="",
         base_subject="Provenance Test",

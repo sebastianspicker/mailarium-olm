@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+from .mcp_models_base import _resolve_local_path
 
 
-def get_email_db_safe_impl() -> Any | None:
+def get_email_db_safe_impl(sqlite_path: str | None = None) -> Any | None:
     try:
         from .config import get_settings
         from .email_db import EmailDatabase
@@ -15,8 +16,17 @@ def get_email_db_safe_impl() -> Any | None:
         from src.email_db import EmailDatabase
 
     settings = get_settings()
-    if settings.sqlite_path and Path(settings.sqlite_path).exists():
-        return EmailDatabase(settings.sqlite_path)
+    db_path = sqlite_path or settings.sqlite_path
+    if db_path:
+        try:
+            resolved_path = _resolve_local_path(db_path, field_name="SQLite path")
+        except ValueError:
+            return None
+        if resolved_path is not None and resolved_path.exists():
+            try:
+                return EmailDatabase(str(resolved_path))
+            except (OSError, RuntimeError, ValueError):
+                return None
     return None
 
 
@@ -52,7 +62,8 @@ def render_dashboard_page_impl(*, st_module: Any, get_email_db_safe_fn: Any) -> 
     heatmap_grid = prepare_heatmap_data(analyzer)
     if any(any(row) for row in heatmap_grid):
         days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        df_heat = pd.DataFrame(heatmap_grid, index=days, columns=[f"{hour:02d}" for hour in range(24)])
+        hour_columns = [f"{hour:02d}" for hour in range(24)]
+        df_heat = pd.DataFrame(heatmap_grid, index=cast(Any, days), columns=cast(Any, hour_columns))
         st_module.dataframe(df_heat, use_container_width=True)
     else:
         st_module.info("No activity data available.")
@@ -68,6 +79,7 @@ def render_dashboard_page_impl(*, st_module: Any, get_email_db_safe_fn: Any) -> 
             st_module.info(f"No contacts found for {email_input}")
 
     st_module.subheader("Response Times")
+    st_module.caption("Based on up to the 500 most recent canonical reply pairs.")
     resp_data = prepare_response_times_data(analyzer, limit=15)
     if resp_data:
         df_resp = pd.DataFrame(resp_data)
@@ -191,6 +203,12 @@ def render_evidence_page_impl(
     type_badge_html_fn: Any,
 ) -> None:
     st_module.markdown("## Evidence Collection")
+    st_module.info(
+        "Exploratory evidence collection only. For authoritative lawyer-ready evidence indexes, chronology, and "
+        "counsel-facing matter review, use the MCP legal-support tools. CLI `case full-pack` / `case counsel-pack` "
+        "remain local operator wrappers for preparation and exporter checks. Web downloads here stay intentionally "
+        "limited to HTML and CSV; use CLI or MCP when you need PDF evidence export."
+    )
 
     db = get_email_db_safe_fn()
     if db is None:

@@ -13,11 +13,12 @@ from __future__ import annotations
 import json
 import logging
 import random
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .email_db import EmailDatabase
+
+from .repo_paths import validate_new_output_path
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class TrainingDataGenerator:
 
     def __init__(self, db: EmailDatabase, seed: int = 42) -> None:
         self._db = db
-        self._rng = random.Random(seed)  # nosec B311 - deterministic sampling, not security-sensitive
+        self._rng = random.Random(seed)
 
     def generate_triplets(
         self,
@@ -105,8 +106,9 @@ class TrainingDataGenerator:
         """
         triplets = self.generate_triplets(max_triplets=max_triplets, **kwargs)
 
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
+        output = validate_new_output_path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("w", encoding="utf-8") as f:
             for t in triplets:
                 f.write(json.dumps(t, ensure_ascii=False) + "\n")
 

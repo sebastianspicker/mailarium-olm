@@ -26,11 +26,25 @@ def test_saved_behavioral_analysis_report_has_expected_contract():
     assert report["questions_path"].endswith("docs/agent/qa_eval_questions.behavioral_analysis.captured.json")
     assert report["total_cases"] == len(cases)
     assert report["summary"]["total_cases"] == len(cases)
+    assert report["source_mode"] == "captured_only"
     assert report["source_counts"] == {"captured": len(cases)}
+    assert report["summary"]["support_uid_hit"]["passed"] >= 5
+    assert report["summary"]["support_source_id_hit"]["scorable"] >= 6
+    assert report["summary"]["support_source_id_hit"]["passed"] >= 5
+    assert report["summary"]["support_source_id_recall"]["average"] >= 0.8
+    assert report["summary"]["benchmark_issue_family_recovery"]["scorable"] >= 1
+    assert report["summary"]["benchmark_issue_family_recovery"]["average"] >= 1.0
+    assert report["summary"]["benchmark_report_recovery"]["scorable"] >= 1
+    assert report["summary"]["benchmark_report_recovery"]["average"] >= 1.0
     assert report["summary"]["chronology_uid_hit"]["scorable"] >= 4
     assert report["summary"]["behavior_tag_coverage"]["scorable"] >= 5
+    assert report["summary"]["behavior_tag_coverage"]["average"] >= 1.0
     assert report["summary"]["counter_indicator_quality"]["scorable"] >= 4
+    assert report["summary"]["counter_indicator_quality"]["average"] >= 1.0
     assert report["summary"]["overclaim_guard_match"]["scorable"] >= 6
+    assert report["summary"]["overclaim_guard_match"]["passed"] >= 6
     assert report["summary"]["report_completeness"]["scorable"] >= 6
     assert "failure_taxonomy" in report
     assert "ranked_categories" in report["failure_taxonomy"]
+    assert report["threshold_verdict"]["profile"] == "behavioral_analysis"
+    assert report["threshold_verdict"]["status"] == "pass"

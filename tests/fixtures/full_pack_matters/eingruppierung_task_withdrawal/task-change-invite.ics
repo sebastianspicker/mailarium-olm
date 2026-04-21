@@ -1,0 +1,11 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:20250403T100000
+DTEND:20250403T103000
+SUMMARY:Task change and evaluation discussion
+LOCATION:Room 7
+ORGANIZER:mailto:manager@example.test
+ATTENDEE:mailto:employee@example.test
+END:VEVENT
+END:VCALENDAR

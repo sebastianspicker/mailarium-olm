@@ -1,0 +1,4 @@
+2025-04-02 | manager -> employee
+Subject: Task redistribution
+
+The claimant will no longer perform the TD-heavy coordination tasks listed in the Tätigkeitsdarstellung.

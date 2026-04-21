@@ -26,13 +26,13 @@
       "id": "long-thread-502",
       "bucket": "thread_process",
       "status": "labeled",
-      "question": "Which message anchors the packed quick and dirty thread answer?",
+      "question": "Which message anchors the packed rapid review thread answer?",
       "evidence_mode": "hybrid",
       "filters": {
-        "subject": "quick and dirty",
+        "subject": "rapid review",
         "folder": "Sent Items"
       },
-      "expected_answer": "The packed quick and dirty thread answer is anchored on uid 06a9f338e135c8acd077a57769d0f390.",
+      "expected_answer": "The packed rapid review thread answer is anchored on uid 06a9f338e135c8acd077a57769d0f390.",
       "expected_support_uids": [
         "06a9f338e135c8acd077a57769d0f390"
       ],

@@ -13,14 +13,41 @@
         "has_attachments": true
       },
       "expected_answer": "The scanned invoice attachment was recovered through OCR-backed text evidence.",
+      "expected_answer_terms": [],
       "expected_support_uids": [
         "uid-att-ocr-1"
       ],
+      "expected_support_source_ids": [],
       "expected_top_uid": "uid-att-ocr-1",
       "expected_ambiguity": "clear",
       "expected_quoted_speaker_emails": [],
       "expected_thread_group_id": null,
       "expected_thread_group_source": null,
+      "benchmark_pack": {},
+      "case_scope": null,
+      "expected_case_bundle_uids": [],
+      "expected_case_bundle_source_ids": [],
+      "expected_source_types": [],
+      "expected_timeline_uids": [],
+      "expected_timeline_source_ids": [],
+      "expected_behavior_ids": [],
+      "expected_counter_indicator_markers": [],
+      "expected_max_claim_level": null,
+      "expected_report_sections": [],
+      "expected_legal_support_products": [],
+      "expected_legal_support_source_ids": [],
+      "expected_comparator_issue_ids": [],
+      "expected_dashboard_cards": [],
+      "expected_actor_ids": [],
+      "expected_checklist_group_ids": [],
+      "expected_draft_ceiling_level": null,
+      "expected_draft_sections": [],
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "forbidden_issue_ids": [],
+      "forbidden_actor_ids": [],
+      "forbidden_dashboard_cards": [],
+      "forbidden_checklist_group_ids": [],
       "triage_tags": [
         "attachment_extraction",
         "attachment_ocr"
@@ -37,14 +64,41 @@
         "has_attachments": true
       },
       "expected_answer": "The system identified the scanned archive attachment, but OCR text was not recovered.",
+      "expected_answer_terms": [],
       "expected_support_uids": [
         "uid-att-ocr-2"
       ],
+      "expected_support_source_ids": [],
       "expected_top_uid": "uid-att-ocr-2",
       "expected_ambiguity": "clear",
       "expected_quoted_speaker_emails": [],
       "expected_thread_group_id": null,
       "expected_thread_group_source": null,
+      "benchmark_pack": {},
+      "case_scope": null,
+      "expected_case_bundle_uids": [],
+      "expected_case_bundle_source_ids": [],
+      "expected_source_types": [],
+      "expected_timeline_uids": [],
+      "expected_timeline_source_ids": [],
+      "expected_behavior_ids": [],
+      "expected_counter_indicator_markers": [],
+      "expected_max_claim_level": null,
+      "expected_report_sections": [],
+      "expected_legal_support_products": [],
+      "expected_legal_support_source_ids": [],
+      "expected_comparator_issue_ids": [],
+      "expected_dashboard_cards": [],
+      "expected_actor_ids": [],
+      "expected_checklist_group_ids": [],
+      "expected_draft_ceiling_level": null,
+      "expected_draft_sections": [],
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "forbidden_issue_ids": [],
+      "forbidden_actor_ids": [],
+      "forbidden_dashboard_cards": [],
+      "forbidden_checklist_group_ids": [],
       "triage_tags": [
         "attachment_extraction",
         "attachment_ocr"
@@ -52,6 +106,8 @@
       "notes": "Captured OCR-negative attachment case."
     }
   ],
+  "source_mode": "captured_only",
+  "live_backend": null,
   "results": [
     {
       "id": "attach-ocr-101",
@@ -77,6 +133,8 @@
       "support_uid_hit": true,
       "support_uid_hit_top_3": true,
       "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
       "evidence_precision": 1.0,
       "top_uid_match": true,
       "ambiguity_match": true,
@@ -86,6 +144,8 @@
       "attachment_text_evidence_success": true,
       "attachment_ocr_text_evidence_success": true,
       "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
       "observed_quoted_speaker_emails": [],
       "matched_quoted_speaker_emails": [],
       "quote_attribution_precision": null,
@@ -94,6 +154,52 @@
       "observed_thread_group_source": "",
       "thread_group_id_match": null,
       "thread_group_source_match": null,
+      "case_bundle_present": null,
+      "investigation_blocks_present": null,
+      "case_bundle_support_uid_hit": null,
+      "case_bundle_support_uid_recall": null,
+      "case_bundle_support_source_id_hit": null,
+      "case_bundle_support_source_id_recall": null,
+      "multi_source_source_types_match": null,
+      "chronology_uid_hit": null,
+      "chronology_uid_recall": null,
+      "chronology_source_id_hit": null,
+      "chronology_source_id_recall": null,
+      "behavior_tag_coverage": null,
+      "behavior_tag_precision": null,
+      "counter_indicator_quality": null,
+      "overclaim_guard_match": null,
+      "report_completeness": null,
+      "legal_support_product_completeness": null,
+      "legal_support_grounding_hit": null,
+      "legal_support_grounding_recall": null,
+      "comparator_matrix_coverage": null,
+      "dashboard_card_coverage": null,
+      "actor_map_coverage": null,
+      "checklist_group_coverage": null,
+      "drafting_ceiling_match": null,
+      "draft_section_completeness": null,
+      "answer_content_match": false,
+      "archive_harvest_coverage_pass": null,
+      "archive_harvest_quality_pass": null,
+      "archive_harvest_mixed_source_present": null,
+      "archive_harvest_later_round_recovery": null,
+      "forbidden_support_ids_excluded": null,
+      "forbidden_issue_ids_excluded": null,
+      "forbidden_actor_ids_excluded": null,
+      "forbidden_dashboard_cards_excluded": null,
+      "forbidden_checklist_groups_excluded": null,
+      "benchmark_actor_recovery": null,
+      "benchmark_actor_recovery_total": 0,
+      "benchmark_issue_family_recovery": null,
+      "benchmark_issue_family_recovery_total": 0,
+      "benchmark_chronology_anchor_recovery": null,
+      "benchmark_chronology_anchor_recovery_total": 0,
+      "benchmark_manifest_link_recovery": null,
+      "benchmark_manifest_link_recovery_total": 0,
+      "benchmark_report_recovery": null,
+      "benchmark_report_recovery_total": 0,
+      "benchmark_detection_recovery": null,
       "expected_ambiguity": "clear",
       "observed_confidence_label": "high",
       "observed_ambiguity_reason": null
@@ -122,6 +228,8 @@
       "support_uid_hit": true,
       "support_uid_hit_top_3": true,
       "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
       "evidence_precision": 1.0,
       "top_uid_match": true,
       "ambiguity_match": true,
@@ -131,6 +239,8 @@
       "attachment_text_evidence_success": false,
       "attachment_ocr_text_evidence_success": false,
       "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
       "observed_quoted_speaker_emails": [],
       "matched_quoted_speaker_emails": [],
       "quote_attribution_precision": null,
@@ -139,6 +249,52 @@
       "observed_thread_group_source": "",
       "thread_group_id_match": null,
       "thread_group_source_match": null,
+      "case_bundle_present": null,
+      "investigation_blocks_present": null,
+      "case_bundle_support_uid_hit": null,
+      "case_bundle_support_uid_recall": null,
+      "case_bundle_support_source_id_hit": null,
+      "case_bundle_support_source_id_recall": null,
+      "multi_source_source_types_match": null,
+      "chronology_uid_hit": null,
+      "chronology_uid_recall": null,
+      "chronology_source_id_hit": null,
+      "chronology_source_id_recall": null,
+      "behavior_tag_coverage": null,
+      "behavior_tag_precision": null,
+      "counter_indicator_quality": null,
+      "overclaim_guard_match": null,
+      "report_completeness": null,
+      "legal_support_product_completeness": null,
+      "legal_support_grounding_hit": null,
+      "legal_support_grounding_recall": null,
+      "comparator_matrix_coverage": null,
+      "dashboard_card_coverage": null,
+      "actor_map_coverage": null,
+      "checklist_group_coverage": null,
+      "drafting_ceiling_match": null,
+      "draft_section_completeness": null,
+      "answer_content_match": false,
+      "archive_harvest_coverage_pass": null,
+      "archive_harvest_quality_pass": null,
+      "archive_harvest_mixed_source_present": null,
+      "archive_harvest_later_round_recovery": null,
+      "forbidden_support_ids_excluded": null,
+      "forbidden_issue_ids_excluded": null,
+      "forbidden_actor_ids_excluded": null,
+      "forbidden_dashboard_cards_excluded": null,
+      "forbidden_checklist_groups_excluded": null,
+      "benchmark_actor_recovery": null,
+      "benchmark_actor_recovery_total": 0,
+      "benchmark_issue_family_recovery": null,
+      "benchmark_issue_family_recovery_total": 0,
+      "benchmark_chronology_anchor_recovery": null,
+      "benchmark_chronology_anchor_recovery_total": 0,
+      "benchmark_manifest_link_recovery": null,
+      "benchmark_manifest_link_recovery_total": 0,
+      "benchmark_report_recovery": null,
+      "benchmark_report_recovery_total": 0,
+      "benchmark_detection_recovery": null,
       "expected_ambiguity": "clear",
       "observed_confidence_label": "medium",
       "observed_ambiguity_reason": null
@@ -164,9 +320,18 @@
       "passed": 2,
       "failed": 0
     },
+    "support_source_id_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
     "support_uid_recall": {
       "scorable": 2,
       "average": 1.0
+    },
+    "support_source_id_recall": {
+      "scorable": 0,
+      "average": 0.0
     },
     "evidence_precision": {
       "scorable": 2,
@@ -229,20 +394,215 @@
       "scorable": 0,
       "passed": 0,
       "failed": 0
+    },
+    "long_thread_answer_present": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "long_thread_structure_preserved": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "case_bundle_present": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "investigation_blocks_present": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "case_bundle_support_uid_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "case_bundle_support_uid_recall": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "case_bundle_support_source_id_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "case_bundle_support_source_id_recall": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "multi_source_source_types_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "chronology_uid_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "chronology_uid_recall": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "chronology_source_id_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "chronology_source_id_recall": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "behavior_tag_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "behavior_tag_precision": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "counter_indicator_quality": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "overclaim_guard_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "report_completeness": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "legal_support_product_completeness": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "legal_support_grounding_hit": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "legal_support_grounding_recall": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "comparator_matrix_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "dashboard_card_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "actor_map_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "checklist_group_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "drafting_ceiling_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "draft_section_completeness": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "answer_content_match": {
+      "scorable": 2,
+      "passed": 0,
+      "failed": 2
+    },
+    "archive_harvest_coverage_pass": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "archive_harvest_quality_pass": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "archive_harvest_mixed_source_present": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "archive_harvest_later_round_recovery": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "forbidden_support_ids_excluded": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "forbidden_issue_ids_excluded": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "forbidden_actor_ids_excluded": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "forbidden_dashboard_cards_excluded": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "forbidden_checklist_groups_excluded": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "benchmark_actor_recovery": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "benchmark_issue_family_recovery": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "benchmark_chronology_anchor_recovery": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "benchmark_manifest_link_recovery": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "benchmark_report_recovery": {
+      "scorable": 0,
+      "average": 0.0
     }
   },
   "failure_taxonomy": {
-    "total_flagged_cases": 1,
+    "total_flagged_cases": 2,
     "categories": {
       "attachment_extraction": {
         "category": "attachment_extraction",
-        "flagged_cases": 1,
-        "failed_cases": 0,
+        "flagged_cases": 2,
+        "failed_cases": 1,
         "weak_cases": 1,
         "case_ids": [
+          "attach-ocr-101",
           "attach-ocr-102"
         ],
         "drivers": [
+          "answer_content_mismatch",
           "weak_attachment_text_evidence",
           "weak_attachment_ocr_evidence"
         ]
@@ -251,13 +611,15 @@
     "ranked_categories": [
       {
         "category": "attachment_extraction",
-        "flagged_cases": 1,
-        "failed_cases": 0,
+        "flagged_cases": 2,
+        "failed_cases": 1,
         "weak_cases": 1,
         "case_ids": [
+          "attach-ocr-101",
           "attach-ocr-102"
         ],
         "drivers": [
+          "answer_content_mismatch",
           "weak_attachment_text_evidence",
           "weak_attachment_ocr_evidence"
         ]
@@ -266,5 +628,21 @@
   },
   "source_counts": {
     "captured": 2
+  },
+  "investigation_corpus_readiness": {
+    "live_backend": null,
+    "case_scope_case_count": 0,
+    "expected_case_bundle_uid_count": 0,
+    "corpus_populated": false,
+    "supports_case_analysis": false,
+    "known_blockers": [
+      "no_live_deps"
+    ]
+  },
+  "threshold_verdict": {
+    "profile": "default",
+    "status": "pass",
+    "failure_count": 0,
+    "failures": []
   }
 }

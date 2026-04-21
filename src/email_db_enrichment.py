@@ -116,25 +116,54 @@ def persist_inferred_match(cur: sqlite3.Cursor, email_uid: str, match) -> None:
     )
     cur.execute(
         """INSERT INTO conversation_edges(child_uid, parent_uid, edge_type, reason, confidence)
-           VALUES(?,?,?,?,?)""",
+           VALUES(?,?,?,?,?)
+           ON CONFLICT(child_uid, parent_uid, edge_type) DO UPDATE SET
+               reason = excluded.reason,
+               confidence = MAX(conversation_edges.confidence, excluded.confidence)""",
         (email_uid, match.parent_uid, "inferred", match.reason, match.confidence),
     )
+
+
+def _candidate_parent_rows(cur: sqlite3.Cursor, email: Email) -> list[sqlite3.Row]:
+    manageres = ["uid != ?"]
+    params: list[object] = [email.uid]
+
+    conversation_id = getattr(email, "conversation_id", "") or ""
+    in_reply_to = getattr(email, "in_reply_to", "") or ""
+    base_subject = getattr(email, "base_subject", "") or ""
+    parent_filters: list[str] = []
+    if conversation_id:
+        parent_filters.append("conversation_id = ?")
+        params.append(conversation_id)
+    if in_reply_to:
+        parent_filters.append("message_id = ?")
+        params.append(in_reply_to)
+    if base_subject:
+        parent_filters.append("base_subject = ?")
+        params.append(base_subject)
+    if parent_filters:
+        manageres.append(f"({' OR '.join(parent_filters)})")
+
+    email_date = getattr(email, "date", "") or ""
+    if email_date:
+        manageres.append("(date = '' OR date < ?)")
+        params.append(email_date)
+
+    query = f"""SELECT uid, message_id, subject, sender_name, sender_email, date, body_text, body_html, folder,
+                       has_attachments, conversation_id, in_reply_to, references_json, thread_topic,
+                       to_identities_json, cc_identities_json, bcc_identities_json
+                FROM emails
+                WHERE {" AND ".join(manageres)}
+                ORDER BY date DESC
+                LIMIT 200"""  # nosec B608 — `manageres` entries are hardcoded predicate strings; all values are bound as params
+    return cur.execute(query, params).fetchall()
 
 
 def infer_and_persist_match(cur: sqlite3.Cursor, email: Email) -> tuple[str, str, str, float] | None:
     inferred_parent_uid = getattr(email, "inferred_parent_uid", "") or ""
     if inferred_parent_uid:
         return None
-    candidates = [
-        candidate_email_from_row(row)
-        for row in cur.execute(
-            """SELECT message_id, subject, sender_name, sender_email, date, body_text, body_html, folder,
-                      has_attachments, conversation_id, in_reply_to, references_json, thread_topic,
-                      to_identities_json, cc_identities_json, bcc_identities_json
-               FROM emails WHERE uid != ?""",
-            (email.uid,),
-        ).fetchall()
-    ]
+    candidates = [candidate_email_from_row(row) for row in _candidate_parent_rows(cur, email)]
     match = infer_parent_candidate(email, candidates)
     if match is None:
         return None

@@ -30,7 +30,7 @@ class MockEmailDB:
     def top_entities(self, entity_type=None, limit=20):
         return [
             {"entity": "Acme Corp", "type": "organization", "count": 42},
-            {"entity": "alice@example.com", "type": "email", "count": 15},
+            {"entity": "employee@example.test", "type": "email", "count": 15},
         ]
 
     def entity_co_occurrences(self, entity, limit=20):

@@ -7,7 +7,9 @@ Achieves ~85% accuracy on texts of 50+ words.
 from __future__ import annotations
 
 from .language_detector_core import (
+    detect_language_details_impl,
     detect_language_impl,
+    language_hit_counts_impl,
     score_languages_impl,
     tokenize_impl,
 )
@@ -33,12 +35,20 @@ def detect_language(text: str) -> str:
     return detect_language_impl(text)
 
 
+def detect_language_details(text: str) -> dict[str, str | float | int]:
+    """Return language plus lightweight confidence metadata."""
+    return detect_language_details_impl(text)
+
+
 __all__ = [
     "_STOPWORDS",
     "_TOKEN_RE",
     "_tokenize",
     "detect_language",
+    "detect_language_details",
+    "detect_language_details_impl",
     "detect_language_impl",
+    "language_hit_counts_impl",
     "score_languages_impl",
     "tokenize_impl",
 ]

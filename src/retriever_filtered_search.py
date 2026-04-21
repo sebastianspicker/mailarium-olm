@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .query_expander import legal_support_query_profile
 from .result_filters import _deduplicate_by_email, _normalize_filter
 
 if TYPE_CHECKING:
@@ -65,7 +66,11 @@ def prepare_filtered_search_impl(
             attachment_type=None,
         )
 
+    legal_support_profile = legal_support_query_profile(query)
     normalized_query = retriever._expand_query(query) if expand_query and query else query
+    expansion_suffix = ""
+    if normalized_query != query and normalized_query.startswith(query):
+        expansion_suffix = normalized_query[len(query) :].strip()
     filters = _SearchFilters(
         sender=_normalize_filter(sender),
         date_from=_normalize_filter(date_from),
@@ -86,7 +91,27 @@ def prepare_filtered_search_impl(
         attachment_type=_normalize_filter(attachment_type),
     )
     retriever._validate_filtered_search(top_k=top_k, min_score=min_score, filters=filters)
-    return retriever._build_search_plan(normalized_query, top_k, filters, rerank=rerank, hybrid=hybrid), filters
+    plan = retriever._build_search_plan(normalized_query, top_k, filters, rerank=rerank, hybrid=hybrid)
+    retriever._set_last_search_debug(
+        {
+            "original_query": query,
+            "executed_query": normalized_query,
+            "used_query_expansion": normalized_query != query,
+            "query_expansion_suffix": expansion_suffix,
+            "expand_query_requested": bool(expand_query),
+            "use_hybrid": bool(plan.use_hybrid),
+            "use_rerank": bool(plan.use_rerank),
+            "top_k": int(top_k),
+            "fetch_size": int(plan.fetch_size),
+            "legal_support_profile": legal_support_profile,
+            "filter_summary": {
+                "has_filters": bool(filters.has_filters),
+                "topic_or_cluster_constrained": allowed_uids is not None,
+                "attachment_filter": bool(filters.attachment_name or filters.attachment_type),
+            },
+        }
+    )
+    return plan, filters
 
 
 def execute_filtered_search_impl(

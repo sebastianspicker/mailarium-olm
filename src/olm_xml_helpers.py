@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 import zipfile
+from collections.abc import Sequence
 from typing import IO
 
 from lxml import etree
@@ -122,13 +123,13 @@ def _parse_address_element(element: etree._Element) -> tuple[str, str]:
     Supports two OLM variants:
     - **Attribute format** (common in newer OLM exports)::
 
-        <emailAddress OPFContactEmailAddressAddress="a@b.com"
+        <emailAddress OPFContactEmailAddressAddress="a@example.test"
                       OPFContactEmailAddressName="Alice" />
 
     - **Child-element format** (older OLM exports)::
 
         <emailAddress>
-          <OPFContactEmailAddressAddress>a@b.com</OPFContactEmailAddressAddress>
+          <OPFContactEmailAddressAddress>a@example.test</OPFContactEmailAddressAddress>
           <OPFContactEmailAddressName>Alice</OPFContactEmailAddressName>
         </emailAddress>
 
@@ -287,7 +288,6 @@ def _extract_attachment_contents(
     Returns:
         List of (filename, content_bytes) tuples.
     """
-    import base64
 
     try:
         root = etree.fromstring(xml_bytes, parser=_new_xml_parser())
@@ -296,17 +296,46 @@ def _extract_attachment_contents(
         return []
 
     ns = _detect_namespace(root)
-    contents: list[tuple[str, bytes]] = []
+    payloads = _extract_attachment_payloads(root, ns, xml_path, zf)
+    return [
+        (str(payload.get("name") or ""), bytes(payload.get("content") or b""))
+        for payload in payloads
+        if payload.get("content") is not None and str(payload.get("name") or "")
+    ]
+
+
+def _extract_attachment_payloads(
+    root: etree._Element,
+    ns: dict[str, str],
+    xml_path: str,
+    zf: zipfile.ZipFile,
+) -> list[dict[str, object]]:
+    """Extract attachment payloads from an already-parsed XML tree.
+
+    Returns one row per attachment with stable recovery metadata:
+    - ``name``: attachment filename
+    - ``content``: bytes when recovered, otherwise ``None``
+    - ``extraction_state``: best-effort binary-content recovery state
+    - ``failure_reason``: explicit reason when payload recovery failed
+    """
+    import base64
 
     if ns:
         attachment_els = root.findall(".//o:OPFMessageCopyAttachmentList/o:messageAttachment", ns)
     else:
         attachment_els = root.findall(".//OPFMessageCopyAttachmentList/messageAttachment")
 
+    payloads: list[dict[str, object]] = []
     for att in attachment_els:
         name = _extract_attachment_field(att, ns, "OPFAttachmentName", attr_hint="name")
         if not name:
             continue
+        payload: dict[str, object] = {
+            "name": name,
+            "content": None,
+            "extraction_state": "extraction_failed",
+            "failure_reason": "attachment_payload_unresolved",
+        }
 
         # Strategy 1: inline base64 content
         content_data = _extract_attachment_field(
@@ -319,10 +348,18 @@ def _extract_attachment_contents(
             try:
                 decoded = base64.b64decode(content_data)
                 if len(decoded) <= MAX_ATTACHMENT_BYTES:
-                    contents.append((name, decoded))
+                    payload["content"] = decoded
+                    payload["extraction_state"] = "content_recovered"
+                    payload["failure_reason"] = ""
+                    payloads.append(payload)
+                    continue
+                payload["extraction_state"] = "binary_only"
+                payload["failure_reason"] = "attachment_content_exceeds_max_bytes"
+                payloads.append(payload)
                 continue
             except Exception:
                 logger.debug("Failed to decode base64 attachment %r", name, exc_info=True)
+                payload["failure_reason"] = "attachment_inline_base64_decode_failed"
 
         # Strategy 2: relative file path within the ZIP
         url = _extract_attachment_field(att, ns, "OPFAttachmentURL", attr_hint="url")
@@ -335,12 +372,43 @@ def _extract_attachment_contents(
                     with zf.open(candidate) as att_file:
                         data = att_file.read(MAX_ATTACHMENT_BYTES + 1)
                         if len(data) <= MAX_ATTACHMENT_BYTES:
-                            contents.append((name, data))
-                    break
+                            payload["content"] = data
+                            payload["extraction_state"] = "content_recovered"
+                            payload["failure_reason"] = ""
+                            break
+                        payload["extraction_state"] = "binary_only"
+                        payload["failure_reason"] = "attachment_content_exceeds_max_bytes"
+                        break
                 except KeyError:
                     continue
+            else:
+                payload["failure_reason"] = "attachment_url_not_found_in_archive"
+        payloads.append(payload)
+    return payloads
 
-    return contents
+
+def _apply_attachment_payload_metadata(
+    attachments: Sequence[dict],
+    payloads: Sequence[dict[str, object]],
+) -> None:
+    """Attach content-recovery state to parsed attachment metadata in-place."""
+    for index, attachment in enumerate(attachments):
+        if not isinstance(attachment, dict):
+            continue
+        payload = payloads[index] if index < len(payloads) else {}
+        extraction_state = str(payload.get("extraction_state") or "")
+        failure_reason = str(payload.get("failure_reason") or "")
+        if extraction_state:
+            attachment["extraction_state"] = extraction_state
+        if failure_reason:
+            attachment["failure_reason"] = failure_reason
+        if extraction_state in {"binary_only", "extraction_failed"}:
+            attachment["evidence_strength"] = "weak_reference"
+            attachment["ocr_used"] = False
+            attachment.setdefault("text_preview", "")
+            attachment.setdefault("extracted_text", "")
+            attachment.setdefault("text_source_path", "")
+            attachment.setdefault("text_locator", {})
 
 
 # ── References Parsing ────────────────────────────────────────

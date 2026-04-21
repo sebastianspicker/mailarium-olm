@@ -1,0 +1,40 @@
+name: Feature Request
+description: Propose an improvement using synthetic examples only.
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use synthetic examples only. Do not describe real people, institutions, mailbox contents, or private relationships.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow or limitation should this improve?
+      placeholder: A local operator needs to compare two synthetic project threads without exporting raw email bodies.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Behavior
+      description: What should the repo add or change?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: List any simpler workaround or existing command that almost solves this.
+    validations:
+      required: false
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Boundaries
+      options:
+        - label: This request can be described with synthetic data only.
+          required: true
+        - label: This request does not require checked-in private exports, screenshots, or runtime databases.
+          required: true

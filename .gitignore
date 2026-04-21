@@ -15,20 +15,16 @@ venv/
 htmlcov/
 
 # Agent worktrees and orchestration artifacts
-.claude/
-.codex/
 .agents/
-.github/codex/
-.github/workflows/codex.yml
+.codex/
+.kilo/
 AGENTS.md
 HARNESS_PRINCIPLES.md
 code_review.md
-AUDIT.md
 docs/source-audit/
 docs/agent/Prompt.md
-docs/agent/Plan.md
-docs/agent/Documentation.md
 docs/agent/Implement.md
+docs/agent/AutonomousHardStops.md
 docs/agent/RunModes.md
 docs/agent/AutonomyPolicy.md
 docs/agent/Goals.md
@@ -39,6 +35,10 @@ docs/agent/Topology.md
 docs/agent/VerificationMatrix.md
 docs/agent/Checkpoint.md
 docs/agent/Decisions.md
+docs/agent/ingestion_optimization_plan.md
+docs/agent/ingestion_optimization_progress.md
+docs/agent/qa_eval_plan.md
+docs/agent/qa_eval_captured_refresh.md
 
 # Stale planning and progress artifacts
 plans/
@@ -47,6 +47,8 @@ progress.md
 # Runtime artifacts
 *.log
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3
 *.bak
 *.orig
@@ -58,6 +60,23 @@ data/*.olm
 data/chromadb/
 data/email_metadata.db
 data/mcp_server.lock
+.example/
+
+# Private local matter workspaces
+/private/
+/data/private/
+/tests/private/
+/tests/fixtures/private/
+docs/agent/implementation_log/
+docs/agent/plan_history/
+docs/agent/matter_analysis/
+scripts/build_forensic_*.py
+scripts/build_lawyer_*.py
+scripts/reverify_evidence_sources.py
+*handoff*.pdf
+*handoff*.tex
+*handoff*.html
+*handoff*.json
 
 # Environment & secrets
 .env
@@ -72,6 +91,7 @@ data/mcp_server.lock
 credentials.json
 service_account.json
 *_secret*.json
+.streamlit/secrets.toml
 
 # IDE
 .vscode/

@@ -52,11 +52,11 @@ def test_content_sha256_fallback(db, gen):
            body_text, body_html, has_attachments, attachment_count,
            priority, is_read, body_length, content_sha256)
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 1, 10, ?)""",
-        ("uid-nohash", "test@test.com", "Test", "2024-01-20", "No Hash", "Body", "<p>Body</p>", ""),
+        ("uid-nohash", "test@example.test", "Test", "2024-01-20", "No Hash", "Body", "<p>Body</p>", ""),
     )
     db.conn.execute(
         "INSERT INTO recipients(email_uid, address, display_name, type) VALUES(?,?,?,?)",
-        ("uid-nohash", "r@test.com", "R", "to"),
+        ("uid-nohash", "r@example.test", "R", "to"),
     )
     db.conn.commit()
     db.add_evidence("uid-nohash", "general", "test quote", "Test", 1)

@@ -71,7 +71,7 @@ class TestP0SidebarHtmlEscape:
             "folders": {},
         }
         retriever.list_senders.return_value = [
-            {"name": '<img onerror="alert(1)">', "email": "evil@test.com", "count": 5},
+            {"name": '<img onerror="alert(1)">', "email": "evil@example.test", "count": 5},
         ]
 
         render_sidebar(retriever)
@@ -193,31 +193,20 @@ class TestP1LegacyVolumePeriod:
 class TestP2PathContainmentIsRelativeTo:
     """P2: Path containment must use is_relative_to(), not string prefix."""
 
-    def test_similar_prefix_directory_rejected(self):
-        from pathlib import Path
-        from unittest.mock import patch as local_patch
-
+    def test_similar_prefix_directory_rejected(self, monkeypatch):
         from src.mcp_models_base import _validate_output_path
 
-        with (
-            local_patch("src.mcp_models_base.Path.cwd", return_value=Path("/home/user")),
-            local_patch("src.mcp_models_base.Path.home", return_value=Path("/home/user")),
-        ):
-            with pytest.raises(ValueError, match="Output path must be under"):
-                _validate_output_path("/home/user2/evil.html")
+        monkeypatch.setenv("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", "/home/user/output")
 
-    def test_valid_subdirectory_accepted(self):
-        from pathlib import Path
-        from unittest.mock import patch as local_patch
+        with pytest.raises(ValueError, match="allowed output roots"):
+            _validate_output_path("/home/user2/evil.html")
 
+    def test_valid_subdirectory_accepted(self, monkeypatch):
         from src.mcp_models_base import _validate_output_path
 
-        with (
-            local_patch("src.mcp_models_base.Path.cwd", return_value=Path("/home/user")),
-            local_patch("src.mcp_models_base.Path.home", return_value=Path("/home/user")),
-        ):
-            result = _validate_output_path("/home/user/output/report.html")
-            assert result == "/home/user/output/report.html"
+        monkeypatch.setenv("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", "/home/user/output")
+        result = _validate_output_path("/home/user/output/report.html")
+        assert result == "/home/user/output/report.html"
 
 
 class TestP2TopicModelerPathValidation:

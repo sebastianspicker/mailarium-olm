@@ -345,9 +345,7 @@ def answer_task_readiness_summary_impl(
             "source_report": investigation_source_report,
             "live_backend": investigation_corpus_readiness.get("live_backend"),
             "case_scope_case_count": int(investigation_corpus_readiness.get("case_scope_case_count") or 0),
-            "expected_case_bundle_uid_count": int(
-                investigation_corpus_readiness.get("expected_case_bundle_uid_count") or 0
-            ),
+            "expected_case_bundle_uid_count": int(investigation_corpus_readiness.get("expected_case_bundle_uid_count") or 0),
             "total_emails": int(investigation_corpus_readiness.get("total_emails") or 0),
             "emails_with_segments_count": int(investigation_corpus_readiness.get("emails_with_segments_count") or 0),
             "attachment_email_count": int(investigation_corpus_readiness.get("attachment_email_count") or 0),

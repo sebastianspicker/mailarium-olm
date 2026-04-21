@@ -7,6 +7,15 @@ and this project adheres to semantic versioning principles for public interfaces
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-21
+
+### Release Polish Highlights
+
+- Public docs were tightened around one canonical first-run story: local-first privacy boundaries, first-run download expectations, runtime layout, interface choice, and go-live best practices.
+- Runtime guidance now points live operator usage at `private/runtime/current/` instead of implying that tracked `data/` is the default home for real archives.
+- Release-facing metadata and support docs were polished for public consumption, including `SECURITY.md`, `pyproject.toml`, and the docs index.
+- MCP, CLI, and Streamlit boundaries are documented more explicitly so exploratory usage is separated from authoritative export and legal-support workflows.
+
 ### Fixed
 
 #### Polish pass
@@ -27,6 +36,10 @@ and this project adheres to semantic versioning principles for public interfaces
 
 - CI: bumped `actions/checkout` to v6.0.2 and `actions/setup-python` to v6.2.0 (Dependabot PRs #5 and #6).
 - Gitignore: added `data/mcp_server.lock` (runtime PID lock file should not be tracked).
+
+### Detailed Engineering Notes
+
+The sections below retain implementation and audit detail that matters for maintainers and release-note preparation. The highlights above are the release-facing summary.
 
 #### Codebase Bug Audit — Rounds 5-7 (9 bugs)
 
@@ -60,7 +73,7 @@ and this project adheres to semantic versioning principles for public interfaces
 - `mcp_max_full_body_chars` setting (default 10000) for `email_deep_context`.
 - `serialize_results()` token budget with `max_response_tokens`.
 - `\xa0` normalization in `html_to_text()` and `truncate_body()`.
-- CLAUDE.md split — tool reference moved to `docs/CLAUDE-TOOLS.md`.
+- MCP tool reference split into dedicated operator documentation.
 
 #### OLM Metadata Extraction & Search Quality
 
@@ -159,7 +172,7 @@ and this project adheres to semantic versioning principles for public interfaces
 - `--min-relevance` — minimum relevance filter (1-5).
 
 - `src/__main__.py`: `python -m src` now starts the MCP server directly.
-- `.claude/settings.json`: project-level MCP server registration — Claude Code auto-discovers tools when the project is opened.
+- project-level MCP server registration allowed compatible MCP clients to discover tools when the project is opened.
 - `pyproject.toml`: added `[project]` and `[build-system]` sections; `pip install -e .[dev]` now works.
 
 #### Enhanced Parsing
@@ -265,7 +278,7 @@ and this project adheres to semantic versioning principles for public interfaces
 #### Other
 
 - New MCP tool `email_list_folders`: lists archive folders with email counts.
-- New MCP tool `email_ingest`: triggers `.olm` ingestion directly from Claude Code.
+- New MCP tool `email_ingest`: triggers `.olm` ingestion directly from an MCP client.
 - `--cc` filter flag for CLI search.
 - `--version` flag for CLI.
 - `list_folders()` method on `EmailRetriever`.
@@ -341,10 +354,10 @@ and this project adheres to semantic versioning principles for public interfaces
 
 ### Changed
 
-- Removed `anthropic` SDK dependency — MCP server is now the sole Claude integration point.
-- Removed `ask_claude()` synthesis from CLI; results are always shown as formatted retrieval output.
-- Removed `--no-claude` and `--raw` CLI flags (replaced by `--format {text,json}`).
-- Removed `ANTHROPIC_API_KEY` and `CLAUDE_MODEL` from configuration.
+- Removed provider-specific SDK dependency — MCP server is now the sole client integration point.
+- Removed provider-specific synthesis from CLI; results are always shown as formatted retrieval output.
+- Removed provider-specific opt-out and raw-output CLI flags (replaced by `--format {text,json}`).
+- Removed provider-specific model API configuration from the runtime surface.
 - Removed over-engineered governance docs: `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `docs/RELEASE_CHECKLIST.md`, `docs/RELEASE_FILE_MANIFEST.md`, `docs/TEST_ACCEPTANCE_MATRIX.md`, GitHub issue/PR templates, and release workflow.
 - Removed `src/converters.py`; `to_builtin_list()` moved to `src/storage.py`.
 - Removed backward-compat wrapper methods `search_by_sender()` and `search_by_date()` from `EmailRetriever`; callers now use `search_filtered()` directly.
@@ -362,7 +375,7 @@ and this project adheres to semantic versioning principles for public interfaces
 
 ### Breaking
 
-- `--no-claude` and `--raw` CLI flags removed. Use `--format {text,json}` instead.
+- Provider-specific opt-out and raw-output CLI flags removed. Use `--format {text,json}` instead.
 - `EmailRetriever.search_by_sender()` and `search_by_date()` methods removed. Use `search_filtered()`.
 - `src.converters` module removed. Import `to_builtin_list` from `src.storage`.
 

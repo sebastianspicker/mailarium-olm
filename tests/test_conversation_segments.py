@@ -53,7 +53,7 @@ def test_extract_segments_from_forwarded_header_block():
     body = (
         "FYI.\n\n"
         "-----Original Message-----\n"
-        "From: Alice <alice@example.com>\n"
+        "From: Alice <employee@example.test>\n"
         "Sent: Monday, January 1, 2025 10:00 AM\n"
         "To: Bob <bob@example.com>\n"
         "Subject: Original topic\n\n"
@@ -68,7 +68,7 @@ def test_extract_segments_from_forwarded_header_block():
         (
             "header_block",
             0,
-            "From: Alice <alice@example.com>\n"
+            "From: Alice <employee@example.test>\n"
             "Sent: Monday, January 1, 2025 10:00 AM\n"
             "To: Bob <bob@example.com>\n"
             "Subject: Original topic",
@@ -81,7 +81,7 @@ def test_extract_segments_marks_signature_and_legal_footer():
     body = (
         "Latest answer.\n\n"
         "-- \n"
-        "Alice Example\n"
+        "employee\n"
         "IT Services\n\n"
         "This email is confidential.\n"
         "It is intended only for the named recipient.\n"
@@ -93,7 +93,7 @@ def test_extract_segments_marks_signature_and_legal_footer():
 
     assert _segment_summary(segments) == [
         ("authored_body", 0, "Latest answer."),
-        ("signature", 0, "Alice Example\nIT Services"),
+        ("signature", 0, "employee\nIT Services"),
         (
             "legal_footer",
             0,

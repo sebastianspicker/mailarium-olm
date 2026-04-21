@@ -112,8 +112,8 @@ def test_paginated_includes_conversation_id():
 
 def test_paginated_date_from_filter():
     db = EmailDatabase(":memory:")
-    db.insert_email(make_email(message_id="<old@ex.com>", date="2024-01-10T08:00:00"))
-    db.insert_email(make_email(message_id="<new@ex.com>", date="2024-01-20T08:00:00"))
+    db.insert_email(make_email(message_id="<old@example.test>", date="2024-01-10T08:00:00"))
+    db.insert_email(make_email(message_id="<new@example.test>", date="2024-01-20T08:00:00"))
 
     page = db.list_emails_paginated(date_from="2024-01-15")
     assert page["total"] == 1
@@ -123,8 +123,8 @@ def test_paginated_date_from_filter():
 
 def test_paginated_date_to_filter():
     db = EmailDatabase(":memory:")
-    db.insert_email(make_email(message_id="<old@ex.com>", date="2024-01-10T08:00:00"))
-    db.insert_email(make_email(message_id="<new@ex.com>", date="2024-01-20T08:00:00"))
+    db.insert_email(make_email(message_id="<old@example.test>", date="2024-01-10T08:00:00"))
+    db.insert_email(make_email(message_id="<new@example.test>", date="2024-01-20T08:00:00"))
 
     page = db.list_emails_paginated(date_to="2024-01-10")
     assert page["total"] == 1
@@ -134,9 +134,9 @@ def test_paginated_date_to_filter():
 
 def test_paginated_date_range_filter():
     db = EmailDatabase(":memory:")
-    db.insert_email(make_email(message_id="<e1@ex.com>", date="2024-01-05T08:00:00"))
-    db.insert_email(make_email(message_id="<e2@ex.com>", date="2024-01-15T08:00:00"))
-    db.insert_email(make_email(message_id="<e3@ex.com>", date="2024-01-25T08:00:00"))
+    db.insert_email(make_email(message_id="<e1@example.test>", date="2024-01-05T08:00:00"))
+    db.insert_email(make_email(message_id="<e2@example.test>", date="2024-01-15T08:00:00"))
+    db.insert_email(make_email(message_id="<e3@example.test>", date="2024-01-25T08:00:00"))
 
     page = db.list_emails_paginated(date_from="2024-01-10", date_to="2024-01-20")
     assert page["total"] == 1

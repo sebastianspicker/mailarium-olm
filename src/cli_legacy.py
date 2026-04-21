@@ -8,10 +8,10 @@ import sys
 from .config import get_settings
 from .validation import parse_iso_date, positive_int, score_float, validate_date_window
 
-_SUBCOMMANDS = frozenset({"search", "browse", "export", "evidence", "analytics", "training", "admin"})
-_ROOT_FLAGS_WITH_VALUES = frozenset({"--chromadb-path", "--log-level"})
+_SUBCOMMANDS = frozenset({"search", "browse", "export", "case", "evidence", "analytics", "training", "admin"})
+_ROOT_FLAGS_WITH_VALUES = frozenset({"--chromadb-path", "--sqlite-path", "--log-level"})
 _ROOT_FLAGS_NO_VALUES = frozenset({"--help", "-h", "--version"})
-_ROOT_FLAG_DESTS = {"--chromadb-path": "chromadb_path", "--log-level": "log_level"}
+_ROOT_FLAG_DESTS = {"--chromadb-path": "chromadb_path", "--sqlite-path": "sqlite_path", "--log-level": "log_level"}
 
 
 def _parse_iso_date(value: str) -> str:
@@ -35,6 +35,13 @@ def _top_k_int(value: str) -> int:
     return parsed
 
 
+def _browse_page_size_arg(value: str) -> int:
+    parsed = _positive_int_arg(value)
+    if parsed > 50:
+        raise argparse.ArgumentTypeError("Value must be <= 50.")
+    return parsed
+
+
 def _score_float(value: str) -> float:
     try:
         return score_float(value)
@@ -50,7 +57,7 @@ def build_legacy_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            '  python -m src.cli --query "invoice from vendor" --sender billing@vendor.com\n'
+            '  python -m src.cli --query "invoice from vendor" --sender billing@example.test\n'
             '  python -m src.cli --query "security review" --format json\n'
             "  python -m src.cli --stats\n"
         ),
@@ -87,6 +94,7 @@ def build_legacy_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cluster-id", type=int, default=None, metavar="CLUSTER_ID", help="Filter by cluster ID.")
     parser.add_argument("--expand-query", action="store_true", help="Expand query with related terms.")
     parser.add_argument("--chromadb-path", default=None, help="Custom ChromaDB path.")
+    parser.add_argument("--sqlite-path", default=None, help="Custom SQLite metadata path.")
     parser.add_argument("--stats", action="store_true", help="Print archive statistics and exit.")
     parser.add_argument("--list-senders", type=_positive_int_arg, default=0, metavar="N", help="List top N senders and exit.")
     parser.add_argument("--reset-index", action="store_true", help="Delete and recreate the email collection.")
@@ -110,18 +118,18 @@ def build_legacy_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--generate-report",
         nargs="?",
-        const="report.html",
+        const="private/exports/report.html",
         default=None,
         metavar="OUTPUT",
-        help="Generate an HTML archive report (default: report.html) and exit.",
+        help="Generate an HTML archive report (default: private/exports/report.html) and exit.",
     )
     parser.add_argument(
         "--export-network",
         nargs="?",
-        const="network.graphml",
+        const="private/exports/network.graphml",
         default=None,
         metavar="OUTPUT",
-        help="Export communication network as GraphML (default: network.graphml) and exit.",
+        help="Export communication network as GraphML (default: private/exports/network.graphml) and exit.",
     )
     parser.add_argument(
         "--export-thread", metavar="CONVERSATION_ID", default=None, help="Export a conversation thread as HTML/PDF and exit."
@@ -177,7 +185,7 @@ def build_legacy_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fine-tune-epochs", type=int, default=3, help="Number of fine-tuning epochs (default: 3).")
     parser.add_argument("--page", type=_positive_int_arg, default=1, help="Page number for --browse (default: 1).")
     parser.add_argument(
-        "--page-size", type=_positive_int_arg, default=20, help="Emails per page for --browse (default: 20, max: 50)."
+        "--page-size", type=_browse_page_size_arg, default=20, help="Emails per page for --browse (default: 20, max: 50)."
     )
     return parser
 

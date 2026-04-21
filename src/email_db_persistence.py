@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import json
 
+from .attachment_identity import (
+    ATTACHMENT_TEXT_NORMALIZATION_VERSION,
+    ensure_attachment_identity,
+    normalize_attachment_search_text,
+)
+from .attachment_surfaces import attachment_surface_rows_for_attachment
 from .email_db_enrichment import (
     contact_row,
     edge_row,
@@ -28,6 +34,20 @@ def build_email_insert_row(db, email: Email, ingestion_run_id: int | None):
     bcc_identities_json = json.dumps(getattr(email, "bcc_identities", []) or [])
     recipient_identity_source = getattr(email, "recipient_identity_source", "") or ""
     reply_context_to_json = json.dumps(getattr(email, "reply_context_to", []) or [])
+    meeting_data_json = json.dumps(getattr(email, "meeting_data", {}) or {}, ensure_ascii=False)
+    exchange_extracted_links_json = json.dumps(getattr(email, "exchange_extracted_links", []) or [], ensure_ascii=False)
+    exchange_extracted_emails_json = json.dumps(
+        getattr(email, "exchange_extracted_emails", []) or [],
+        ensure_ascii=False,
+    )
+    exchange_extracted_contacts_json = json.dumps(
+        getattr(email, "exchange_extracted_contacts", []) or [],
+        ensure_ascii=False,
+    )
+    exchange_extracted_meetings_json = json.dumps(
+        getattr(email, "exchange_extracted_meetings", []) or [],
+        ensure_ascii=False,
+    )
     normalized_body_source = getattr(email, "clean_body_source", "body_text") or "body_text"
     body_normalization_version = (
         getattr(email, "body_normalization_version", BODY_NORMALIZATION_VERSION) or BODY_NORMALIZATION_VERSION
@@ -80,6 +100,11 @@ def build_email_insert_row(db, email: Email, ingestion_run_id: int | None):
         getattr(email, "reply_context_subject", "") or "",
         getattr(email, "reply_context_date", "") or "",
         getattr(email, "reply_context_source", "") or "",
+        meeting_data_json,
+        exchange_extracted_links_json,
+        exchange_extracted_emails_json,
+        exchange_extracted_contacts_json,
+        exchange_extracted_meetings_json,
         inferred_parent_uid,
         inferred_thread_id,
         inferred_match_reason,
@@ -99,22 +124,67 @@ def collect_category_rows(email: Email) -> list[tuple[str, str]]:
 
 
 def collect_attachment_rows(email: Email) -> list[tuple]:
-    return [
-        (
-            email.uid,
-            att.get("name", ""),
-            att.get("mime_type", ""),
-            att.get("size", 0),
-            att.get("content_id", ""),
-            int(att.get("is_inline", False)),
-            att.get("extraction_state", "") or "",
-            att.get("evidence_strength", "") or "",
-            int(bool(att.get("ocr_used", False))),
-            att.get("failure_reason", "") or "",
-            att.get("text_preview", "") or "",
+    rows: list[tuple] = []
+    for att in getattr(email, "attachments", []) or []:
+        attachment_id, content_sha256 = ensure_attachment_identity(att)
+        extracted_text = str(att.get("extracted_text", "") or "")
+        normalized_text = str(att.get("normalized_text", "") or "") or normalize_attachment_search_text(extracted_text)
+        text_normalization_version = int(att.get("text_normalization_version") or 0)
+        if normalized_text and text_normalization_version <= 0:
+            text_normalization_version = ATTACHMENT_TEXT_NORMALIZATION_VERSION
+        rows.append(
+            (
+                email.uid,
+                att.get("name", ""),
+                attachment_id,
+                att.get("mime_type", ""),
+                att.get("size", 0),
+                content_sha256,
+                att.get("content_id", ""),
+                int(att.get("is_inline", False)),
+                att.get("extraction_state", "") or "",
+                att.get("evidence_strength", "") or "",
+                int(bool(att.get("ocr_used", False))),
+                att.get("ocr_engine", "") or "",
+                att.get("ocr_lang", "") or "",
+                float(att.get("ocr_confidence", 0.0) or 0.0),
+                att.get("failure_reason", "") or "",
+                att.get("text_preview", "") or "",
+                extracted_text,
+                normalized_text,
+                text_normalization_version,
+                int(att.get("locator_version", 1) or 1),
+                att.get("text_source_path", "") or "",
+                json.dumps(att.get("text_locator") or {}, ensure_ascii=False),
+            )
         )
-        for att in (getattr(email, "attachments", []) or [])
-    ]
+    return rows
+
+
+def collect_attachment_surface_rows(
+    email: Email,
+) -> list[tuple]:
+    rows: list[tuple] = []
+    for att in getattr(email, "attachments", []) or []:
+        attachment_id, _content_sha256 = ensure_attachment_identity(att)
+        extracted_text = str(att.get("extracted_text", "") or "")
+        normalized_text = str(att.get("normalized_text", "") or "") or normalize_attachment_search_text(extracted_text)
+        rows.extend(
+            attachment_surface_rows_for_attachment(
+                email_uid=email.uid,
+                attachment_name=str(att.get("name", "") or ""),
+                attachment_id=attachment_id,
+                extracted_text=extracted_text,
+                normalized_text=normalized_text,
+                text_locator=att.get("text_locator") or {},
+                extraction_state=str(att.get("extraction_state") or ""),
+                evidence_strength=str(att.get("evidence_strength") or ""),
+                ocr_used=bool(att.get("ocr_used")),
+                ocr_confidence=float(att.get("ocr_confidence") or 0.0),
+                surfaces=att.get("surfaces"),
+            )
+        )
+    return rows
 
 
 def collect_recipients_and_pairs(email: Email) -> tuple[list[tuple], list[tuple[str, str]]]:
@@ -139,11 +209,22 @@ def persist_single_related_rows(cur, db, email: Email, *, infer_parent: bool = T
         )
 
     attachments = collect_attachment_rows(email)
+    attachment_surfaces = collect_attachment_surface_rows(email)
     if attachments:
         cur.executemany(
-            "INSERT INTO attachments(email_uid, name, mime_type, size, content_id, is_inline, "
-            "extraction_state, evidence_strength, ocr_used, failure_reason, text_preview) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO attachments(email_uid, name, attachment_id, mime_type, size, content_sha256, content_id, "
+            "is_inline, extraction_state, evidence_strength, ocr_used, ocr_engine, ocr_lang, ocr_confidence, "
+            "failure_reason, text_preview, extracted_text, normalized_text, text_normalization_version, locator_version, "
+            "text_source_path, text_locator_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             attachments,
+        )
+    if attachment_surfaces:
+        cur.executemany(
+            "INSERT OR REPLACE INTO attachment_surfaces("
+            "surface_id, attachment_id, email_uid, attachment_name, surface_kind, origin_kind, text, normalized_text, "
+            "alignment_map_json, language, language_confidence, ocr_confidence, surface_hash, locator_json, quality_json"
+            ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            attachment_surfaces,
         )
 
     recipient_rows, all_recipients = collect_recipients_and_pairs(email)
@@ -193,19 +274,27 @@ def insert_email_impl(db, email: Email, *, ingestion_run_id: int | None = None) 
     return True
 
 
-def insert_emails_batch_impl(db, emails: list[Email], *, ingestion_run_id: int | None = None) -> set[str]:
+def insert_emails_batch_impl(
+    db,
+    emails: list[Email],
+    *,
+    ingestion_run_id: int | None = None,
+    commit: bool = True,
+) -> set[str]:
     inserted_uids: set[str] = set()
     cur = db.conn.cursor()
 
     recipient_rows: list[tuple] = []
     category_rows: list[tuple] = []
     attachment_rows: list[tuple] = []
+    attachment_surface_rows: list[tuple] = []
     contact_rows: list[tuple] = []
     edge_rows: list[tuple] = []
-    inferred_edge_rows: list[tuple] = []
     segment_rows: list[tuple] = []
 
     try:
+        if commit:
+            cur.execute("BEGIN IMMEDIATE")
         for email in emails:
             cur.execute(db._email_insert_or_ignore_sql, build_email_insert_row(db, email, ingestion_run_id))
             if cur.rowcount == 0:
@@ -213,13 +302,13 @@ def insert_emails_batch_impl(db, emails: list[Email], *, ingestion_run_id: int |
 
             category_rows.extend(collect_category_rows(email))
             attachment_rows.extend(collect_attachment_rows(email))
+            attachment_surface_rows.extend(collect_attachment_surface_rows(email))
             email_recipient_rows, all_recipients = collect_recipients_and_pairs(email)
             recipient_rows.extend(email_recipient_rows)
             segment_rows.extend(segment_rows_for_email(email.uid, getattr(email, "segments", []) or []))
 
             inferred = infer_and_persist_match(cur, email)
-            if inferred is not None:
-                inferred_edge_rows.append((email.uid, inferred[0], "inferred", inferred[2], inferred[3]))
+            _ = inferred
 
             if email.sender_email:
                 contact_rows.append(contact_row(email.sender_email, email.sender_name, email.date, "sender"))
@@ -246,11 +335,6 @@ def insert_emails_batch_impl(db, emails: list[Email], *, ingestion_run_id: int |
                 ) VALUES(?,?,?,?,?,?,?)""",
                 segment_rows,
             )
-        if inferred_edge_rows:
-            cur.executemany(
-                "INSERT INTO conversation_edges(child_uid, parent_uid, edge_type, reason, confidence) VALUES(?,?,?,?,?)",
-                inferred_edge_rows,
-            )
         if category_rows:
             cur.executemany(
                 "INSERT OR IGNORE INTO email_categories(email_uid, category) VALUES(?,?)",
@@ -258,15 +342,27 @@ def insert_emails_batch_impl(db, emails: list[Email], *, ingestion_run_id: int |
             )
         if attachment_rows:
             cur.executemany(
-                "INSERT INTO attachments(email_uid, name, mime_type, size, content_id, is_inline, "
-                "extraction_state, evidence_strength, ocr_used, failure_reason, text_preview) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO attachments(email_uid, name, attachment_id, mime_type, size, content_sha256, content_id, "
+                "is_inline, extraction_state, evidence_strength, ocr_used, ocr_engine, ocr_lang, ocr_confidence, "
+                "failure_reason, text_preview, extracted_text, normalized_text, text_normalization_version, locator_version, "
+                "text_source_path, text_locator_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 attachment_rows,
+            )
+        if attachment_surface_rows:
+            cur.executemany(
+                "INSERT OR REPLACE INTO attachment_surfaces("
+                "surface_id, attachment_id, email_uid, attachment_name, surface_kind, origin_kind, text, normalized_text, "
+                "alignment_map_json, language, language_confidence, ocr_confidence, surface_hash, locator_json, quality_json"
+                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                attachment_surface_rows,
             )
 
         execute_contact_upserts(cur, contact_rows)
         execute_edge_upserts(cur, edge_rows)
-        db.conn.commit()
+        if commit:
+            db.conn.commit()
     except Exception:
-        db.conn.rollback()
+        if commit:
+            db.conn.rollback()
         raise
     return inserted_uids

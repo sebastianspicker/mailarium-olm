@@ -66,3 +66,14 @@ def test_all_negative_words():
     assert result.negative_count == 5
     assert result.positive_count == 0
     assert result.score == -1.0
+
+
+def test_german_text_with_umlauts_and_negation():
+    result = analyze("Vielen Dank für die schnelle Rückmeldung. Das ist nicht schlecht, aber leider weiterhin kritisch.")
+    assert result.positive_count > 0
+    assert result.negative_count > 0
+
+
+def test_german_negative_text():
+    result = analyze("Leider gibt es einen kritischen Fehler und die Freigabe wurde verweigert.")
+    assert result.sentiment == "negative"

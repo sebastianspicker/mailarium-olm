@@ -45,17 +45,22 @@ def test_get_email_for_reembed_returns_none_for_missing_uid():
 
 def test_uids_missing_body():
     db = EmailDatabase(":memory:")
-    db.insert_email(make_email(message_id="<m1@ex.com>", body_text="has body"))
+    db.insert_email(make_email(message_id="<m1@example.test>", body_text="has body"))
 
     db.conn.execute(
         "INSERT INTO emails(uid, message_id, subject, sender_email, date, folder) "
-        "VALUES('uid_no_body', '<m2@ex.com>', 'No body', 'x@x.com', '2024-01-01', 'Inbox')"
+        "VALUES('uid_no_body', '<m2@example.test>', 'No body', 'x@example.test', '2024-01-01', 'Inbox')"
+    )
+    db.conn.execute(
+        "INSERT INTO emails(uid, message_id, subject, sender_email, date, folder, body_text) "
+        "VALUES('uid_whitespace_body', '<m3@example.test>', 'Whitespace body', 'x@example.test', '2024-01-01', 'Inbox', '   ')"
     )
     db.conn.commit()
 
     missing = db.uids_missing_body()
     assert "uid_no_body" in missing
-    assert len(missing) == 1
+    assert "uid_whitespace_body" in missing
+    assert len(missing) == 2
     db.close()
 
 

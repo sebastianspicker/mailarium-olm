@@ -10,7 +10,7 @@ def _make_email(**overrides) -> Email:
         "message_id": "<msg1@example.com>",
         "subject": "Hello",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["Bob <bob@example.com>"],
         "cc": [],
         "bcc": [],

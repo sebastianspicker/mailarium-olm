@@ -22,6 +22,7 @@ from .result_filters import (
 from .result_filters import _email_dedup_key
 from .retriever_admin import (
     expand_query_impl,
+    expand_query_lanes_impl,
     list_senders_impl,
     resolve_semantic_uids_impl,
     stats_impl,
@@ -93,27 +94,45 @@ class EmailRetriever:
         self._colbert_reranker: ColBERTReranker | None = None
         self._bm25_index: BM25Index | None = None
         self._sparse_index: SparseIndex | None = None
-        self._sparse_build_count: int | None = None
+        self._sparse_build_count: tuple[int, str] | None = None
+        self._bm25_build_revision: tuple[int, str] | None = None
         # Bounded LRU cache — evicts oldest entry when len > _QUERY_CACHE_MAX (128).
         # See _encode_query() for eviction logic.
         self._query_cache: collections.OrderedDict[str, list[list[float]]] = collections.OrderedDict()
+        self._set_last_search_debug()
         self.client = get_chroma_client(self.chromadb_path)
         self.collection = get_collection(self.client, self.collection_name)
 
     @property
+    def last_search_debug(self) -> dict[str, Any]:
+        """Return the stable per-search diagnostics payload."""
+        debug = getattr(self, "_last_search_debug", None)
+        if isinstance(debug, dict):
+            return debug
+        self._last_search_debug = {}
+        return self._last_search_debug
+
+    def _set_last_search_debug(self, payload: dict[str, Any] | None = None) -> None:
+        """Store the last-search diagnostics in the stable compatibility slot."""
+        self._last_search_debug = dict(payload or {})
+
+    @property
     def email_db(self) -> EmailDatabase | None:
         """Lazy-loaded EmailDatabase (None if SQLite file doesn't exist)."""
-        if not getattr(self, "_email_db_checked", False):
+        cached = getattr(self, "_email_db", None)
+        if cached is not None:
             self._email_db_checked = True
-            settings = getattr(self, "settings", None)
-            sqlite_path = getattr(settings, "sqlite_path", None) if settings else None
-            if sqlite_path and Path(sqlite_path).exists():
-                from .email_db import EmailDatabase
+            return cached
 
-                self._email_db = EmailDatabase(sqlite_path)
-            else:
-                self._email_db = None
-        return getattr(self, "_email_db", None)
+        settings = getattr(self, "settings", None)
+        sqlite_path = getattr(settings, "sqlite_path", None) if settings else None
+        self._email_db_checked = True
+        if sqlite_path and Path(sqlite_path).exists():
+            from .email_db import EmailDatabase
+
+            self._email_db = EmailDatabase(sqlite_path)
+            return self._email_db
+        return None
 
     @property
     def embedder(self) -> MultiVectorEmbedder:
@@ -445,6 +464,10 @@ class EmailRetriever:
         on every call.
         """
         return expand_query_impl(self, query)
+
+    def _expand_query_lanes(self, query: str, *, max_lanes: int = 4) -> list[str]:
+        """Expand a query into deterministic retrieval lanes."""
+        return expand_query_lanes_impl(self, query, max_lanes=max_lanes)
 
     # _email_dedup_key is used by list_senders — delegate to result_filters
     _email_dedup_key = staticmethod(_email_dedup_key)

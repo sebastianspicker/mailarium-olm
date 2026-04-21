@@ -70,7 +70,7 @@ class QuerySuggester:
         """Get a flat list of suggestion strings for CLI/UI display.
 
         Returns:
-            List of suggestion strings like "From: alice@example.com",
+            List of suggestion strings like "From: employee@example.test",
             "Folder: Inbox", "[org] Acme Corp".
         """
         suggestions = self.suggest(limit=limit)

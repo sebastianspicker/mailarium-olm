@@ -1,6 +1,13 @@
 """Tests for attachment text extraction."""
 
-from src.attachment_extractor import extract_text
+import subprocess
+
+from src.attachment_extractor import (
+    attachment_format_profile,
+    extract_image_text_ocr,
+    extract_text,
+    extraction_quality_profile,
+)
 
 
 def test_extract_plain_text():
@@ -27,6 +34,27 @@ def test_extract_html():
     assert "Hello world" in result
 
 
+def test_extract_calendar_file_as_text():
+    content = b"BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Review meeting\nEND:VEVENT\nEND:VCALENDAR"
+    result = extract_text("invite.ics", content)
+    assert result is not None
+    assert "SUMMARY:Review meeting" in result
+
+
+def test_extract_uses_mime_type_when_filename_has_no_extension():
+    content = b"<html><body><p>Meeting summary</p></body></html>"
+    result = extract_text("meeting-summary", content, mime_type="text/html")
+    assert result is not None
+    assert "Meeting summary" in result
+
+
+def test_extract_uses_mime_type_when_filename_suffix_is_misleading():
+    content = b"subject,status\nReview,open"
+    result = extract_text("attachment.bin", content, mime_type="text/csv")
+    assert result is not None
+    assert "Review,open" in result
+
+
 def test_extract_unsupported_returns_none():
     result = extract_text("photo.jpg", b"\xff\xd8\xff\xe0")
     assert result is None
@@ -37,9 +65,97 @@ def test_extract_empty_returns_none():
     assert extract_text("", b"hello") is None
 
 
+def test_extract_image_text_ocr_uses_tesseract_when_available(monkeypatch):
+    monkeypatch.setattr("src.attachment_extractor.shutil.which", lambda _name: "/opt/homebrew/bin/tesseract")
+
+    def _fake_run(cmd, check, capture_output, text, timeout):
+        assert cmd[0] == "tesseract"
+        assert cmd[2] == "stdout"
+        return subprocess.CompletedProcess(cmd, 0, stdout="Recovered screenshot text", stderr="")
+
+    monkeypatch.setattr("src.attachment_extractor.subprocess.run", _fake_run)
+
+    result = extract_image_text_ocr("scan.png", b"fake-image-bytes")
+    assert result == "Recovered screenshot text"
+
+
 def test_extract_binary_skip_extensions():
     assert extract_text("archive.zip", b"PK\x03\x04") is None
     assert extract_text("program.exe", b"MZ\x90\x00") is None
+
+
+def test_attachment_format_profile_marks_scanned_pdf_as_degraded_supported():
+    profile = attachment_format_profile(
+        filename="scan.pdf",
+        mime_type="application/pdf",
+        extraction_state="ocr_text_extracted",
+        evidence_strength="strong_text",
+        ocr_used=True,
+        text_available=True,
+    )
+    quality = extraction_quality_profile(
+        extraction_state="ocr_text_extracted",
+        evidence_strength="strong_text",
+        ocr_used=True,
+        format_profile=profile,
+    )
+
+    assert profile["format_id"] == "scanned_pdf"
+    assert profile["support_level"] == "degraded_supported"
+    assert quality["quality_label"] == "ocr_text_recovered"
+    assert quality["manual_review_required"] is True
+
+
+def test_attachment_format_profile_marks_archive_bundles_as_unsupported():
+    profile = attachment_format_profile(
+        filename="records.zip",
+        mime_type="application/zip",
+        extraction_state="binary_only",
+        evidence_strength="weak_reference",
+        ocr_used=False,
+        text_available=False,
+    )
+
+    assert profile["format_id"] == "archive_bundle"
+    assert profile["support_level"] == "unsupported"
+    assert profile["degrade_reason"] == "archive_contents_not_extracted"
+
+
+def test_attachment_format_profile_marks_spreadsheets_as_lossy_but_supported():
+    profile = attachment_format_profile(
+        filename="timesheet.xlsx",
+        mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        extraction_state="text_extracted",
+        evidence_strength="strong_text",
+        ocr_used=False,
+        text_available=True,
+    )
+    quality = extraction_quality_profile(
+        extraction_state="text_extracted",
+        evidence_strength="strong_text",
+        ocr_used=False,
+        format_profile=profile,
+    )
+
+    assert profile["format_id"] == "spreadsheet_export"
+    assert profile["support_level"] == "degraded_supported"
+    assert profile["lossiness"] == "medium"
+    assert quality["quality_label"] == "native_text_extracted"
+
+
+def test_attachment_format_profile_marks_legacy_word_processing_docs_as_degraded_supported():
+    profile = attachment_format_profile(
+        filename="medical-note.rtf",
+        mime_type="application/rtf",
+        extraction_state="text_extracted",
+        evidence_strength="strong_text",
+        ocr_used=False,
+        text_available=True,
+    )
+
+    assert profile["format_id"] == "portable_word_processing_document"
+    assert profile["support_level"] == "degraded_supported"
+    assert profile["degrade_reason"] == "legacy_or_portable_word_processor_structure_flattened"
 
 
 def test_extract_text_truncation():

@@ -28,6 +28,9 @@
       "expected_support_uids": [
         "uid-host-1"
       ],
+      "expected_support_source_ids": [
+        "email:uid-host-1"
+      ],
       "expected_top_uid": "uid-host-1",
       "expected_ambiguity": "clear",
       "expected_case_bundle_uids": [
@@ -82,6 +85,9 @@
       },
       "expected_support_uids": [
         "uid-excl-1"
+      ],
+      "expected_support_source_ids": [
+        "email:uid-excl-1"
       ],
       "expected_top_uid": "uid-excl-1",
       "expected_ambiguity": "clear",
@@ -147,7 +153,22 @@
       "expected_support_uids": [
         "uid-ret-1"
       ],
+      "expected_support_source_ids": [
+        "email:uid-ret-1"
+      ],
       "expected_top_uid": "uid-ret-1",
+      "benchmark_pack": {
+        "benchmark_id": "ba18-103-detection",
+        "usage_rule": "evaluation_only_not_search_filter",
+        "seed_actors": [],
+        "issue_families": [
+          "retaliation"
+        ],
+        "required_report_sections": [
+          "overall_assessment",
+          "chronological_pattern_analysis"
+        ]
+      },
       "expected_ambiguity": "clear",
       "expected_case_bundle_uids": [
         "uid-ret-1",
@@ -213,6 +234,9 @@
       "expected_support_uids": [
         "uid-cmpr-1"
       ],
+      "expected_support_source_ids": [
+        "email:uid-cmpr-1"
+      ],
       "expected_top_uid": "uid-cmpr-1",
       "expected_ambiguity": "clear",
       "expected_case_bundle_uids": [
@@ -272,6 +296,9 @@
       "expected_support_uids": [
         "uid-conf-expected"
       ],
+      "expected_support_source_ids": [
+        "email:uid-conf-expected"
+      ],
       "expected_top_uid": "uid-conf-expected",
       "expected_ambiguity": "clear",
       "expected_case_bundle_uids": [
@@ -326,6 +353,9 @@
       },
       "expected_support_uids": [
         "uid-fp-1"
+      ],
+      "expected_support_source_ids": [
+        "email:uid-fp-1"
       ],
       "expected_top_uid": "uid-fp-1",
       "expected_ambiguity": "insufficient",

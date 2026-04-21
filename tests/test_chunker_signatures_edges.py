@@ -34,15 +34,15 @@ def test_strip_signature_sent_from_outlook():
 
 
 def test_strip_signature_closing_phrase():
-    body = "I'll handle it.\n\nBest regards,\nAlice Smith\nManager"
+    body = "I'll handle it.\n\nBest regards,\nemployee\nManager"
     stripped, had_sig = strip_signature(body)
     assert had_sig is True
     assert "I'll handle it" in stripped
-    assert "Alice Smith" not in stripped
+    assert "employee" not in stripped
 
 
 def test_strip_signature_closing_german():
-    body = "Alles erledigt.\n\nMit freundlichen Grüßen,\nHans Müller"
+    body = "Alles erledigt.\n\nMit freundlichen Grüßen,\ncolleague"
     stripped, had_sig = strip_signature(body)
     assert had_sig is True
     assert "Alles erledigt" in stripped
@@ -68,7 +68,7 @@ def test_chunk_email_strips_signature():
         "subject": "Test",
         "sender_name": "Bob",
         "sender_email": "bob@example.com",
-        "to": ["alice@example.com"],
+        "to": ["employee@example.test"],
         "cc": [],
         "date": "2025-01-01",
         "body": "Important info here.\n\n-- \nBob\nbob@example.com",
@@ -88,7 +88,7 @@ def test_chunk_email_no_signature_flag():
         "message_id": "m2",
         "subject": "Test",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "to": ["bob@example.com"],
         "cc": [],
         "date": "2025-01-01",

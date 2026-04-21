@@ -117,6 +117,30 @@ def test_record_ingestion_start_default_custodian(db: EmailDatabase) -> None:
     assert row["custodian"] == "system"
 
 
+def test_record_ingestion_failure_marks_run_failed_and_logs_event(db: EmailDatabase) -> None:
+    run_id = db.record_ingestion_start("test.olm")
+
+    db.record_ingestion_failure(
+        run_id,
+        error_message="vector store unavailable",
+        stats={"emails_parsed": 3, "emails_inserted": 1},
+    )
+
+    row = db.conn.execute(
+        "SELECT status, emails_parsed, emails_inserted, completed_at FROM ingestion_runs WHERE id=?",
+        (run_id,),
+    ).fetchone()
+    assert row["status"] == "failed"
+    assert row["emails_parsed"] == 3
+    assert row["emails_inserted"] == 1
+    assert row["completed_at"] is not None
+
+    events = db.get_custody_chain(target_type="ingestion_run", target_id=str(run_id))
+    failed_events = [event for event in events if event["action"] == "ingest_failed"]
+    assert failed_events
+    assert failed_events[0]["details"]["error_message"] == "vector store unavailable"
+
+
 def test_insert_emails_batch_computes_content_sha256(db: EmailDatabase) -> None:
     """insert_emails_batch should compute content_sha256 per email."""
     inserted = db.insert_emails_batch([FakeEmail()])

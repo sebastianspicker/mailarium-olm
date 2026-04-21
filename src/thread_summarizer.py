@@ -7,7 +7,74 @@ import re
 
 logger = logging.getLogger(__name__)
 
-_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ])")
+_GERMAN_STOP_WORDS = frozenset(
+    {
+        "aber",
+        "als",
+        "am",
+        "an",
+        "auch",
+        "auf",
+        "aus",
+        "bei",
+        "bin",
+        "bis",
+        "da",
+        "das",
+        "dass",
+        "dem",
+        "den",
+        "der",
+        "des",
+        "die",
+        "doch",
+        "durch",
+        "ein",
+        "eine",
+        "einer",
+        "eines",
+        "er",
+        "es",
+        "für",
+        "hat",
+        "hier",
+        "ich",
+        "im",
+        "in",
+        "ist",
+        "ja",
+        "mit",
+        "nach",
+        "nicht",
+        "noch",
+        "nur",
+        "oder",
+        "sie",
+        "sind",
+        "und",
+        "vom",
+        "von",
+        "vor",
+        "war",
+        "wenn",
+        "wir",
+        "wird",
+        "zu",
+        "zum",
+        "zur",
+    }
+)
+
+
+def _tfidf_stop_words() -> list[str] | str:
+    """Return a light English/German stop-word profile for TF-IDF scoring."""
+    try:
+        from sklearn.feature_extraction import text as sklearn_text
+
+        return sorted(set(sklearn_text.ENGLISH_STOP_WORDS) | _GERMAN_STOP_WORDS)
+    except ImportError:
+        return "english"
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -145,7 +212,7 @@ def _score_sentences(sentences: list[str]) -> list[float]:
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer
 
-        vectorizer = TfidfVectorizer(stop_words="english", sublinear_tf=True)
+        vectorizer = TfidfVectorizer(stop_words=_tfidf_stop_words(), sublinear_tf=True)
         tfidf_matrix = vectorizer.fit_transform(sentences)
         # Score = sum of TF-IDF weights per sentence
         return [float(tfidf_matrix[i].sum()) for i in range(len(sentences))]

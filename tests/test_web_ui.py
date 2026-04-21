@@ -125,9 +125,9 @@ def test_build_active_filter_labels_includes_to():
         date_from=None,
         date_to=None,
         min_score=None,
-        to="alice@example.com",
+        to="employee@example.test",
     )
-    assert labels == ["To: alice@example.com"]
+    assert labels == ["To: employee@example.test"]
 
 
 def test_build_active_filter_labels_includes_has_attachments():

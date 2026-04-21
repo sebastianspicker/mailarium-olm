@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from typing import Any
 
 import chromadb
@@ -25,6 +25,7 @@ HNSW_DEFAULTS: dict[str, object] = {
     "hnsw:construction_ef": 128,
     "hnsw:search_ef": 128,  # match construction_ef for maximum recall at query time
 }
+IMMUTABLE_CHROMA_METADATA_KEYS = {"hnsw:space"}
 
 
 def to_builtin_list(value: Any) -> list[list[float]]:
@@ -34,7 +35,7 @@ def to_builtin_list(value: Any) -> list[list[float]]:
     return value
 
 
-def get_chroma_client(chromadb_path: str) -> chromadb.ClientAPI:
+def get_chroma_client(chromadb_path: str) -> Any:
     """Create a persistent Chroma client at the given path."""
     os.makedirs(chromadb_path, exist_ok=True)
     return chromadb.PersistentClient(
@@ -44,11 +45,11 @@ def get_chroma_client(chromadb_path: str) -> chromadb.ClientAPI:
 
 
 def get_collection(
-    client: chromadb.ClientAPI,
+    client: Any,
     collection_name: str,
     *,
     hnsw_overrides: dict[str, object] | None = None,
-) -> chromadb.Collection:
+) -> Any:
     """Return the canonical email collection.
 
     ``hnsw_overrides`` can customise HNSW parameters for bulk-import vs. search
@@ -66,9 +67,10 @@ def get_collection(
     # search_ef is a query-time parameter that can be updated on existing
     # collections (unlike M and construction_ef which are locked at creation).
     search_ef = metadata.get("hnsw:search_ef")
-    if search_ef is not None:
+    current_metadata = dict(getattr(collection, "metadata", {}) or {})
+    if search_ef is not None and current_metadata.get("hnsw:search_ef") != search_ef:
         try:
-            collection.modify(metadata={"hnsw:search_ef": search_ef})
+            modify_collection_metadata(collection, {"hnsw:search_ef": search_ef})
         except Exception:
             import logging as _logging
 
@@ -79,6 +81,16 @@ def get_collection(
                 exc_info=True,
             )
     return collection
+
+
+def modify_collection_metadata(collection: Any, updates: Mapping[str, object]) -> dict[str, object]:
+    """Apply safe Chroma metadata updates without resubmitting immutable keys."""
+    metadata = dict(getattr(collection, "metadata", {}) or {})
+    metadata.update(dict(updates))
+    for key in IMMUTABLE_CHROMA_METADATA_KEYS:
+        metadata.pop(key, None)
+    collection.modify(metadata=metadata)
+    return metadata
 
 
 def iter_collection_ids(collection, page_size: int = DEFAULT_PAGE_SIZE) -> Generator[str, None, None]:

@@ -16,7 +16,7 @@ def _fake_email(**overrides) -> dict:
         "uid": "abc123",
         "subject": "Hello World",
         "sender_name": "Alice",
-        "sender_email": "alice@example.com",
+        "sender_email": "employee@example.test",
         "date": "2024-06-15T10:30:00",
         "folder": "Inbox",
         "email_type": "original",
@@ -69,7 +69,7 @@ def test_export_thread_html_contains_headers():
 
     result = exporter.export_thread_html("conv_001")
     html = result["html"]
-    assert "alice@example.com" in html
+    assert "employee@example.test" in html
     assert "bob@example.com" in html
     assert "carol@example.com" in html
     assert "dave@example.com" in html

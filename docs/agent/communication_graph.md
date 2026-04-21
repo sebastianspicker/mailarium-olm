@@ -27,9 +27,21 @@ This BA10 layer adds graph-based communication evidence on top of earlier text a
 - evidence basis:
   - `graph_only`
 
+### `decision_visibility_asymmetry`
+
+- the same sender handles target-relevant decision or update flow both with and without the target visible
+- evidence basis:
+  - `graph_plus_behavior`
+
 ### `selective_escalation`
 
 - same sender uses multi-recipient escalation or correction patterns in target-related messages
+- evidence basis:
+  - `graph_plus_behavior`
+
+### `escalation_visibility_asymmetry`
+
+- the same sender shows escalation or public-correction visibility patterns both with and without the target visible
 - evidence basis:
   - `graph_plus_behavior`
 
@@ -38,6 +50,12 @@ This BA10 layer adds graph-based communication evidence on top of earlier text a
 - same sender shows both included and excluded target communication inside the same thread group
 - evidence basis:
   - `graph_only`
+
+### `thread_fork_exclusion`
+
+- within one thread group, the sender branches target-relevant discussion into a target-excluded path
+- evidence basis:
+  - `graph_plus_behavior`
 
 ## Boundaries
 

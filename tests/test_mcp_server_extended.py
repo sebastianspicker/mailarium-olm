@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -115,6 +116,128 @@ class TestGetEmailDb:
             mcp_server._email_db = original_db
             mcp_server._email_db_lock = original_lock
 
+    def test_get_email_db_uses_runtime_sqlite_override(self, tmp_path):
+        """get_email_db prefers the active runtime SQLite override when present."""
+        from src import mcp_server
+
+        original_db = mcp_server._email_db
+        original_lock = mcp_server._email_db_lock
+        original_runtime = mcp_server._runtime_sqlite_path
+        db_path = tmp_path / "runtime-email.db"
+        db_path.touch()
+
+        try:
+            mcp_server._email_db = None
+            mcp_server._email_db_lock = threading.Lock()
+            mcp_server._runtime_sqlite_path = str(db_path)
+
+            with patch("src.email_db.EmailDatabase") as mock_db:
+                result = mcp_server.get_email_db()
+                mock_db.assert_called_once_with(str(db_path))
+                assert result is mock_db.return_value
+        finally:
+            mcp_server._email_db = original_db
+            mcp_server._email_db_lock = original_lock
+            mcp_server._runtime_sqlite_path = original_runtime
+
+
+class TestGetRetrieverCaching:
+    def test_get_retriever_uses_runtime_chromadb_override(self):
+        """get_retriever prefers the active runtime Chroma override when present."""
+        from src import mcp_server
+
+        original_retriever = mcp_server._retriever
+        original_lock = mcp_server._retriever_lock
+        original_runtime = mcp_server._runtime_chromadb_path
+
+        try:
+            mcp_server._retriever = None
+            mcp_server._retriever_lock = threading.Lock()
+            mcp_server._runtime_chromadb_path = "/tmp/runtime-chroma"
+
+            with patch("src.retriever.EmailRetriever") as mock_retriever:
+                result = mcp_server.get_retriever()
+                mock_retriever.assert_called_once_with(
+                    chromadb_path=str(mcp_server.normalize_local_path("/tmp/runtime-chroma", field_name="chromadb_path")),
+                    sqlite_path=str(
+                        mcp_server.normalize_local_path(mcp_server.get_settings().sqlite_path, field_name="sqlite_path")
+                    ),
+                )
+                assert result is mock_retriever.return_value
+        finally:
+            mcp_server._retriever = original_retriever
+            mcp_server._retriever_lock = original_lock
+            mcp_server._runtime_chromadb_path = original_runtime
+
+    def test_get_retriever_threads_runtime_sqlite_override(self):
+        """get_retriever must keep Chroma and SQLite runtime overrides aligned."""
+        from src import mcp_server
+
+        original_retriever = mcp_server._retriever
+        original_lock = mcp_server._retriever_lock
+        original_chroma = mcp_server._runtime_chromadb_path
+        original_sqlite = mcp_server._runtime_sqlite_path
+
+        try:
+            mcp_server._retriever = None
+            mcp_server._retriever_lock = threading.Lock()
+            mcp_server._runtime_chromadb_path = "/tmp/runtime-chroma"
+            mcp_server._runtime_sqlite_path = "/tmp/runtime-email.db"
+
+            with patch("src.retriever.EmailRetriever") as mock_retriever:
+                result = mcp_server.get_retriever()
+                mock_retriever.assert_called_once_with(
+                    chromadb_path=str(mcp_server.normalize_local_path("/tmp/runtime-chroma", field_name="chromadb_path")),
+                    sqlite_path=str(mcp_server.normalize_local_path("/tmp/runtime-email.db", field_name="sqlite_path")),
+                )
+                assert result is mock_retriever.return_value
+        finally:
+            mcp_server._retriever = original_retriever
+            mcp_server._retriever_lock = original_lock
+            mcp_server._runtime_chromadb_path = original_chroma
+            mcp_server._runtime_sqlite_path = original_sqlite
+
+
+class TestRuntimeArchivePathOverrides:
+    def test_set_runtime_archive_paths_invalidates_cached_singletons(self, tmp_path):
+        from src import mcp_server
+
+        class _DummyDb:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        original_retriever = mcp_server._retriever
+        original_email_db = mcp_server._email_db
+        original_chroma = mcp_server._runtime_chromadb_path
+        original_sqlite = mcp_server._runtime_sqlite_path
+        new_chroma = tmp_path / "runtime-chroma"
+        new_sqlite = tmp_path / "runtime-email.db"
+        new_chroma.mkdir()
+        new_sqlite.touch()
+        dummy_db = _DummyDb()
+
+        try:
+            mcp_server._retriever = object()
+            mcp_server._email_db = dummy_db
+            mcp_server._runtime_chromadb_path = str(tmp_path / "old-chroma")
+            mcp_server._runtime_sqlite_path = str(tmp_path / "old-email.db")
+
+            mcp_server.set_runtime_archive_paths(chromadb_path=str(new_chroma), sqlite_path=str(new_sqlite))
+
+            assert mcp_server._retriever is None
+            assert mcp_server._email_db is None
+            assert dummy_db.closed is True
+            assert mcp_server._runtime_chromadb_path == str(new_chroma.resolve())
+            assert mcp_server._runtime_sqlite_path == str(new_sqlite.resolve())
+        finally:
+            mcp_server._retriever = original_retriever
+            mcp_server._email_db = original_email_db
+            mcp_server._runtime_chromadb_path = original_chroma
+            mcp_server._runtime_sqlite_path = original_sqlite
+
 
 # ── ToolDeps ──────────────────────────────────────────────────────
 
@@ -142,6 +265,18 @@ class TestToolDeps:
 
         result = ToolDeps.sanitize("hello")
         assert isinstance(result, str)
+
+    def test_tool_deps_privacy_helpers(self):
+        """ToolDeps exposes shared privacy helpers to outward tools."""
+        from src.mcp_server import ToolDeps
+
+        payload, guardrails = ToolDeps.apply_privacy_guardrails(
+            {"sender_email": "employee@example.test"},
+            privacy_mode="external_counsel_export",
+        )
+        assert payload["sender_email"] == "[REDACTED: email]"
+        assert ToolDeps.privacy_mode_policy("witness_sharing")["privacy_mode"] == "witness_sharing"
+        assert guardrails["privacy_mode"] == "external_counsel_export"
 
 
 # ── _tool_annotations helpers ──────────────────────────────────────
@@ -200,12 +335,34 @@ class TestOffload:
 
 
 class TestLogStartupInfo:
-    def test_log_startup_info_runs(self):
-        """_log_startup_info should not raise."""
-        from src.mcp_server import _log_startup_info
+    def test_log_startup_info_writes_deterministic_stderr_summary(self, capsys):
+        """_log_startup_info should emit startup diagnostics even without logging config."""
+        from src import mcp_server
 
-        # Should complete without error
-        _log_startup_info()
+        class _Settings:
+            mcp_model_profile = "balanced"
+            mcp_max_body_chars = 1000
+            mcp_max_response_tokens = 2000
+            mcp_max_full_body_chars = 3000
+            mcp_max_json_response_chars = 4000
+            mcp_max_triage_results = 50
+            mcp_max_search_results = 30
+
+        with (
+            patch.object(mcp_server, "_resolved_runtime_paths", return_value=("/tmp/chroma", "/tmp/email.db")),
+            patch.object(mcp_server, "get_settings", return_value=_Settings()),
+            patch("os.path.exists", return_value=True),
+            patch("os.path.isdir", return_value=False),
+        ):
+            mcp_server._log_startup_info()
+
+        stderr = capsys.readouterr().err
+        assert "MCP server starting | pid=" in stderr
+        assert "runtime | sqlite=/tmp/email.db (exists=True) | chromadb=/tmp/chroma (exists=False)" in stderr
+        assert (
+            "limits | profile=balanced | body=1000 | tokens=2000 | full=3000 | json=4000 | triage_cap=50 | search_cap=30"
+            in stderr
+        )
 
 
 class TestMain:
@@ -236,6 +393,22 @@ class TestMain:
         ):
             mcp_server.main([])
 
+        mock_lock.assert_called_once()
+        mock_log.assert_called_once()
+        mock_run.assert_called_once()
+
+    def test_main_applies_runtime_archive_overrides(self):
+        from src import mcp_server
+
+        with (
+            patch.object(mcp_server, "_acquire_instance_lock") as mock_lock,
+            patch.object(mcp_server, "_log_startup_info") as mock_log,
+            patch.object(mcp_server, "set_runtime_archive_paths") as mock_paths,
+            patch.object(mcp_server.mcp, "run") as mock_run,
+        ):
+            mcp_server.main(["--chromadb-path", "/tmp/chroma", "--sqlite-path", "/tmp/email.db"])
+
+        mock_paths.assert_called_once_with(chromadb_path="/tmp/chroma", sqlite_path="/tmp/email.db")
         mock_lock.assert_called_once()
         mock_log.assert_called_once()
         mock_run.assert_called_once()
@@ -290,6 +463,41 @@ class TestAcquireInstanceLock:
                     with pytest.raises(SystemExit):
                         mcp_server._acquire_instance_lock()
         finally:
+            mcp_server._lock_fd = original_fd
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="fcntl not available on Windows")
+    def test_acquire_lock_preserves_existing_pid_on_contention(self, tmp_path):
+        """A contending process must not truncate the active lock holder PID."""
+        import fcntl
+
+        from src import mcp_server
+
+        lock_path = tmp_path / "mcp_server.lock"
+        sqlite_path = tmp_path / "email_metadata.db"
+        sqlite_path.write_text("")
+
+        original_fd = mcp_server._lock_fd
+        existing_pid = "4242"
+        holder = open(lock_path, "w+")
+        try:
+            holder.write(existing_pid)
+            holder.flush()
+            fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            mcp_server._lock_fd = None
+            with patch("src.mcp_server.get_settings") as mock_settings:
+                settings = MagicMock()
+                settings.sqlite_path = str(sqlite_path)
+                mock_settings.return_value = settings
+
+                with patch("src.mcp_server.os.kill") as mock_kill:
+                    mock_kill.return_value = None
+                    with pytest.raises(SystemExit):
+                        mcp_server._acquire_instance_lock()
+
+            assert lock_path.read_text().strip() == existing_pid
+        finally:
+            holder.close()
             mcp_server._lock_fd = original_fd
 
 

@@ -20,7 +20,7 @@ class TestP0ContactUpsertNullDates:
         db.insert_email(make_email(message_id="<m2@ex>", date="2024-06-01T10:00:00"))
 
         contact = db.conn.execute(
-            "SELECT first_seen, last_seen FROM contacts WHERE email_address = 'alice@example.com'"
+            "SELECT first_seen, last_seen FROM contacts WHERE email_address = 'employee@example.test'"
         ).fetchone()
         assert contact["first_seen"] == "2024-06-01T10:00:00"
         assert contact["last_seen"] == "2024-06-01T10:00:00"
@@ -32,7 +32,7 @@ class TestP0ContactUpsertNullDates:
         db.insert_email(make_email(message_id="<m2@ex>", date=""))
 
         contact = db.conn.execute(
-            "SELECT first_seen, last_seen FROM contacts WHERE email_address = 'alice@example.com'"
+            "SELECT first_seen, last_seen FROM contacts WHERE email_address = 'employee@example.test'"
         ).fetchone()
         assert contact["first_seen"] == "2024-03-01T08:00:00"
         assert contact["last_seen"] == "2024-03-01T08:00:00"
@@ -44,7 +44,7 @@ class TestP0ContactUpsertNullDates:
         db.insert_email(make_email(message_id="<m2@ex>", date="2024-01-01T08:00:00"))
 
         contact = db.conn.execute(
-            "SELECT first_seen, last_seen FROM contacts WHERE email_address = 'alice@example.com'"
+            "SELECT first_seen, last_seen FROM contacts WHERE email_address = 'employee@example.test'"
         ).fetchone()
         assert contact["first_seen"] == "2024-01-01T08:00:00"
         assert contact["last_seen"] == "2024-06-01T10:00:00"
@@ -56,7 +56,7 @@ class TestP0ContactUpsertNullDates:
         db.insert_email(make_email(message_id="<m2@ex>", date="2024-05-15T12:00:00"))
 
         edge = db.conn.execute(
-            "SELECT first_date, last_date FROM communication_edges WHERE sender_email = 'alice@example.com'"
+            "SELECT first_date, last_date FROM communication_edges WHERE sender_email = 'employee@example.test'"
         ).fetchone()
         assert edge["first_date"] == "2024-05-15T12:00:00"
         assert edge["last_date"] == "2024-05-15T12:00:00"
@@ -147,9 +147,9 @@ class TestP3DateRangeExcludesEmptyStrings:
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         conn.execute("CREATE TABLE emails (date TEXT, sender_email TEXT, sender_name TEXT, folder TEXT)")
-        conn.execute("INSERT INTO emails VALUES ('', 'a@b.com', 'A', 'Inbox')")
-        conn.execute("INSERT INTO emails VALUES ('2024-03-15', 'b@b.com', 'B', 'Inbox')")
-        conn.execute("INSERT INTO emails VALUES ('2024-06-20', 'c@b.com', 'C', 'Inbox')")
+        conn.execute("INSERT INTO emails VALUES ('', 'a@example.test', 'A', 'Inbox')")
+        conn.execute("INSERT INTO emails VALUES ('2024-03-15', 'b@example.test', 'B', 'Inbox')")
+        conn.execute("INSERT INTO emails VALUES ('2024-06-20', 'c@example.test', 'C', 'Inbox')")
         conn.commit()
 
         row = conn.execute("SELECT MIN(NULLIF(date, '')) AS min_d, MAX(NULLIF(date, '')) AS max_d FROM emails").fetchone()

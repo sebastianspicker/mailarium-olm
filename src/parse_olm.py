@@ -30,7 +30,10 @@ from .olm_xml_helpers import (
     _NS_OUTLOOK,  # noqa: F401 — re-exported for backward compat
     _extract_attachment_field,  # noqa: F401 — re-exported for backward compat
     _parse_address_element,  # noqa: F401 — re-exported for backward compat
-    )
+)
+from .olm_xml_helpers import (
+    _read_limited_bytes as _read_limited_bytes_impl,
+)
 from .parse_olm_normalization import (
     BODY_NORMALIZATION_VERSION,  # noqa: F401 - re-exported for backward compat
     NormalizedBody,
@@ -74,11 +77,16 @@ MAX_XML_BYTES = int(os.environ.get("OLM_MAX_XML_BYTES", 50_000_000))  # 50 MB de
 MAX_XML_FILES = int(os.environ.get("OLM_MAX_XML_FILES", 500_000))
 MAX_TOTAL_XML_BYTES = 20_000_000_000  # 20 GB — safe because parse_olm is a generator
 
+# Stable compatibility seam for older imports and direct tests.
+_read_limited_bytes = _read_limited_bytes_impl
+
 
 _RE_FW_PREFIX = re.compile(
     r"^(RE|AW|FW|WG|SV|VS|Antw|Doorst)\s*:\s*",
     re.IGNORECASE,
 )
+
+
 def _extract_identity_addresses(addresses: list[str]) -> list[str]:
     """Extract normalized email identities from parsed recipient strings."""
     identities: list[str] = []

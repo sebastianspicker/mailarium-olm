@@ -14,6 +14,8 @@ This BA5 layer is limited to per-message rhetorical cues. It is not a behavioura
   - `as already stated`
   - `please just`
   - `simply`
+  - `wie schon mehrfach mitgeteilt`
+  - `nochmals zur Klarstellung`
 
 ### `ridicule`
 
@@ -34,6 +36,8 @@ This BA5 layer is limited to per-message rhetorical cues. It is not a behavioura
   - `as you surely know`
   - `for your understanding`
   - `perhaps you are unaware`
+  - `zu Ihrer Orientierung`
+  - `ich führe das gern noch einmal aus`
 
 ### `implicit_accusation`
 
@@ -53,6 +57,8 @@ This BA5 layer is limited to per-message rhetorical cues. It is not a behavioura
   - `misunderstood`
   - `unreliable`
   - `not capable`
+  - `Ihre Darstellung ist unzutreffend`
+  - `das scheint Sie zu überfordern`
 
 ### `institutional_pressure_framing`
 
@@ -74,6 +80,44 @@ This BA5 layer is limited to per-message rhetorical cues. It is not a behavioura
   - `it appears`
   - `it seems`
   - `questions remain`
+  - `nach hiesigem Kenntnisstand`
+  - `der Eindruck entsteht`
+
+### `selective_politeness`
+
+- Meaning:
+  - formal courtesy markers used together with distancing or corrective framing that can read as selectively cold
+- Example cues:
+  - `with all due respect`
+  - `kindly note`
+  - `wir bitten Sie höflich um Kenntnisnahme`
+
+### `procedural_intimidation`
+
+- Meaning:
+  - documentation, escalation, or rule-based language that can function as pressure rather than neutral coordination
+- Example cues:
+  - `this will be documented`
+  - `wir sehen uns gehalten, dies festzuhalten`
+  - `eine weitere Eskalation behalten wir uns vor`
+
+### `passive_aggressive_deflection`
+
+- Meaning:
+  - apparently neutral closure language that redirects responsibility or shuts down further discussion
+- Example cues:
+  - `I trust this clarifies matters`
+  - `weitere Rückfragen erübrigen sich`
+  - `ich gehe davon aus, dass damit alles geklärt ist`
+
+### `status_marking`
+
+- Meaning:
+  - hierarchy or institutional status is foregrounded in a way that can add pressure beyond the substance
+- Example cues:
+  - `as your manager`
+  - `als Leitung`
+  - `als zuständige Stelle`
 
 ### `gaslighting_like_contradiction`
 
@@ -84,6 +128,8 @@ This BA5 layer is limited to per-message rhetorical cues. It is not a behavioura
   - `you are mistaken`
   - `you misunderstood`
   - `you are confused`
+  - `wie schon mehrfach mitgeteilt`
+  - `Ihre Darstellung ist unzutreffend`
 
 ## Boundaries
 
@@ -91,4 +137,5 @@ This BA5 layer is limited to per-message rhetorical cues. It is not a behavioura
 - BA5 keeps authored text and quoted text separate.
 - Quoted-block analysis stays subordinate to quote-attribution uncertainty.
 - A rhetorical signal does not by itself prove hostility, retaliation, discrimination, or mobbing.
+- German formal office language is not automatically hostile; cues should be read conservatively and often need behavior or recurrence support.
 - Later BA phases must add behavioural tagging, recurrence, counter-indicators, and evidence-strength scoring before stronger conclusions are made.

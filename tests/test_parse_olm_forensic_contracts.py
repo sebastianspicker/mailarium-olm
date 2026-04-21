@@ -6,7 +6,7 @@ def test_to_dict_includes_forensic_fields():
         message_id="forensic-1",
         subject="Forensic",
         sender_name="Alice",
-        sender_email="alice@example.com",
+        sender_email="employee@example.test",
         to=["bob@example.com"],
         cc=[],
         bcc=[],

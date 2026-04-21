@@ -235,6 +235,18 @@ def test_add_chunks_handles_pre_embedded_chunks(tmp_path):
     assert embedder.count() == 2
 
 
+def test_add_chunks_skip_existing_check_avoids_existing_id_scan(tmp_path, monkeypatch):
+    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+
+    def _should_not_be_called(*_args, **_kwargs):
+        raise AssertionError("get_existing_ids should not be called when skip_existing_check=True")
+
+    monkeypatch.setattr(embedder, "get_existing_ids", _should_not_be_called)
+    added = embedder.add_chunks([_make_chunk(uid="fast", index=0)], batch_size=100, skip_existing_check=True)
+    assert added == 1
+    assert embedder.count() == 1
+
+
 def test_upsert_chunks_encodes_all_at_once(tmp_path, monkeypatch):
     """upsert_chunks() should call encode_all() exactly once."""
     embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))

@@ -26,6 +26,11 @@ class TestSplitSentences:
         for s in sentences:
             assert "   " not in s
 
+    def test_german_sentence_split_supports_umlauts(self):
+        text = "Änderung ist abgestimmt. Übermorgen senden wir die Freigabe. Öffentliche Rückmeldung folgt später."
+        sentences = _split_sentences(text)
+        assert len(sentences) == 3
+
 
 class TestSummarizeEmail:
     def test_empty_text(self):
@@ -92,19 +97,19 @@ class TestSummarizeThread:
             {
                 "clean_body": "The project kickoff is next Monday. Everyone should prepare their updates.",
                 "sender_name": "Alice",
-                "sender_email": "alice@co.com",
+                "sender_email": "alice@example.test",
                 "date": "2024-01-10",
             },
             {
                 "clean_body": "I have my section ready for the presentation. Will share the slides today.",
                 "sender_name": "Bob",
-                "sender_email": "bob@co.com",
+                "sender_email": "bob@example.test",
                 "date": "2024-01-11",
             },
             {
                 "clean_body": "Great work on the slides Bob. The client meeting is confirmed for Thursday.",
                 "sender_name": "Alice",
-                "sender_email": "alice@co.com",
+                "sender_email": "alice@example.test",
                 "date": "2024-01-12",
             },
         ]
@@ -131,6 +136,25 @@ class TestSummarizeThread:
         ]
         result = summarize_thread(emails, max_sentences=3)
         assert isinstance(result, str) and result
+
+    def test_german_thread_summary_keeps_informative_sentences(self):
+        emails = [
+            {
+                "clean_body": (
+                    "Bitte prüfen Sie die Eingruppierung erneut. "
+                    "Die medizinische Empfehlung liegt seit gestern vor. "
+                    "Wir benötigen eine schriftliche Rückmeldung bis Freitag."
+                ),
+                "sender_name": "Alex",
+            },
+            {
+                "clean_body": ("Die SBV wurde bislang nicht beteiligt. Bitte bestätigen Sie den weiteren Ablauf schriftlich."),
+                "sender_name": "Morgan",
+            },
+        ]
+
+        result = summarize_thread(emails, max_sentences=3)
+        assert "Eingruppierung" in result or "SBV" in result or "Rückmeldung" in result
 
     def test_thread_with_empty_bodies(self):
         emails = [

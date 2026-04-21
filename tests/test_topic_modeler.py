@@ -150,8 +150,8 @@ class TestKeywordTopicSQLite:
             message_id="<m1@test>",
             subject="Budget Review",
             sender_name="Alice",
-            sender_email="alice@co.com",
-            to=["bob@co.com"],
+            sender_email="alice@example.test",
+            to=["bob@example.test"],
             cc=[],
             bcc=[],
             date="2024-01-15T10:00:00",
@@ -180,9 +180,9 @@ class TestKeywordTopicSQLite:
     def test_keywords_filtered_by_sender(self):
         db, email = self._make_db()
         db.insert_keywords_batch(email.uid, [("budget", 0.85)])
-        result = db.top_keywords(sender="alice@co.com")
+        result = db.top_keywords(sender="alice@example.test")
         assert len(result) == 1
-        result2 = db.top_keywords(sender="other@co.com")
+        result2 = db.top_keywords(sender="other@example.test")
         assert len(result2) == 0
 
     def test_keywords_filtered_by_folder(self):

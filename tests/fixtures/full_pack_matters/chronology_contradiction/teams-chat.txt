@@ -1,0 +1,2 @@
+[2025-03-17 17:00] employee: Will the written summary arrive before tomorrow?
+[2025-03-17 17:08] manager: We may skip the summary if the process needs to move faster.
