@@ -8,7 +8,7 @@ from typing import Any, cast
 import pytest
 
 import src.web_app as web_app
-from src.mcp_models_base import _resolve_local_path
+from src.repo_paths import validate_runtime_path
 
 
 def test_render_sidebar_delegates_to_impl(monkeypatch):
@@ -86,6 +86,7 @@ def test_main_routes_search_to_render_search_page(monkeypatch):
 def test_main_routes_dashboard_with_sqlite_path(monkeypatch):
     calls: list[object] = []
     retriever_calls: list[tuple[object, object]] = []
+    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", "/tmp")
 
     monkeypatch.setattr(web_app, "inject_styles", lambda: None)
     monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
@@ -108,7 +109,7 @@ def test_main_routes_dashboard_with_sqlite_path(monkeypatch):
 
     web_app.main()
 
-    assert calls == [str(_resolve_local_path("/tmp/archive.db", field_name="SQLite path"))]
+    assert calls == [str(validate_runtime_path("/tmp/archive.db", field_name="SQLite path"))]
     assert retriever_calls == []
 
 
@@ -142,6 +143,35 @@ def test_main_surfaces_runtime_path_errors_instead_of_crashing(monkeypatch):
     assert "runtime paths" in errors[0].lower()
 
 
+def test_main_rejects_web_runtime_paths_outside_allowed_roots(monkeypatch):
+    errors: list[str] = []
+    calls: list[object] = []
+
+    monkeypatch.setattr(web_app, "inject_styles", lambda: None)
+    monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
+    monkeypatch.setattr(web_app, "render_search_page", lambda retriever: calls.append(retriever))
+    monkeypatch.setattr(web_app, "get_retriever", lambda _chroma, _sqlite=None: "retriever")
+
+    sidebar_inputs = iter(["", "/etc/archive.db"])
+    fake_sidebar = SimpleNamespace(
+        radio=lambda *args, **kwargs: "Search",
+        text_input=lambda *args, **kwargs: next(sidebar_inputs),
+    )
+    fake_streamlit = SimpleNamespace(
+        sidebar=fake_sidebar,
+        markdown=lambda *args, **kwargs: None,
+        info=lambda *args, **kwargs: None,
+        error=lambda message: errors.append(str(message)),
+    )
+    monkeypatch.setattr(web_app, "st", fake_streamlit)
+
+    web_app.main()
+
+    assert calls == []
+    assert errors
+    assert "allowed runtime roots" in errors[0]
+
+
 @pytest.mark.parametrize(
     ("page_name", "handler_name"),
     [
@@ -153,6 +183,7 @@ def test_main_surfaces_runtime_path_errors_instead_of_crashing(monkeypatch):
 )
 def test_main_uses_resolved_sqlite_path_for_all_non_search_pages(monkeypatch, page_name, handler_name):
     calls: list[object] = []
+    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", "/tmp")
 
     monkeypatch.setattr(web_app, "inject_styles", lambda: None)
     monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
@@ -173,4 +204,4 @@ def test_main_uses_resolved_sqlite_path_for_all_non_search_pages(monkeypatch, pa
 
     web_app.main()
 
-    assert calls == [str(_resolve_local_path("/tmp/archive.db", field_name="SQLite path"))]
+    assert calls == [str(validate_runtime_path("/tmp/archive.db", field_name="SQLite path"))]

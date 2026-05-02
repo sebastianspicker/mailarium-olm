@@ -8,7 +8,7 @@ mcp[cli]>=1.0.0
 pydantic>=2.0.0
 
 # Email parsing
-lxml>=5.0.0
+lxml>=6.1.0
 
 # Analysis
 networkx>=3.2

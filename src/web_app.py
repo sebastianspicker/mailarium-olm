@@ -8,7 +8,7 @@ import streamlit as st
 
 try:
     from .formatting import format_date
-    from .mcp_models_base import _resolve_local_path
+    from .repo_paths import validate_runtime_path
     from .retriever import EmailRetriever
     from .validation import validate_date_window
     from .web_app_pages import (
@@ -34,7 +34,7 @@ try:
     from .web_ui import build_active_filter_labels, build_export_payload, build_filter_chip_html, sort_search_results
 except ImportError:  # pragma: no cover
     from src.formatting import format_date
-    from src.mcp_models_base import _resolve_local_path
+    from src.repo_paths import validate_runtime_path
     from src.retriever import EmailRetriever
     from src.validation import validate_date_window
     from src.web_app_pages import (
@@ -195,8 +195,8 @@ def main() -> None:
     chromadb_path = st.sidebar.text_input("ChromaDB Path", value="") or None
     sqlite_path = st.sidebar.text_input("SQLite Path", value="") or None
     try:
-        resolved_chromadb_path = str(_resolve_local_path(chromadb_path, field_name="ChromaDB path")) if chromadb_path else None
-        resolved_sqlite_path = str(_resolve_local_path(sqlite_path, field_name="SQLite path")) if sqlite_path else None
+        resolved_chromadb_path = str(validate_runtime_path(chromadb_path, field_name="ChromaDB path")) if chromadb_path else None
+        resolved_sqlite_path = str(validate_runtime_path(sqlite_path, field_name="SQLite path")) if sqlite_path else None
     except ValueError as exc:
         st.error(f"Runtime paths are invalid: {exc}")
         return
