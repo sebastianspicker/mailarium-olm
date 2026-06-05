@@ -205,17 +205,18 @@ class TestMainDispatch:
         output = capsys.readouterr().out
         assert "Index has been reset" in output
 
-    def test_main_sets_sqlite_override(self):
+    def test_main_sets_sqlite_override(self, tmp_path):
         """main() forwards a custom SQLite path to the DB-backed CLI layer."""
         from src.cli import main
 
+        custom_db = str(tmp_path / "custom-email.db")
         mock_retriever = _make_retriever(results=[_make_result()])
         with patch("src.cli.parse_args") as mock_parse:
             mock_parse.return_value = argparse.Namespace(
                 subcommand="search",
                 log_level=None,
                 chromadb_path=None,
-                sqlite_path="/tmp/custom-email.db",
+                sqlite_path=custom_db,
                 query="test",
                 format=None,
                 json=False,
@@ -247,4 +248,4 @@ class TestMainDispatch:
             ):
                 main(["search", "test"])
 
-        mock_set_sqlite.assert_called_once_with("/tmp/custom-email.db")
+        mock_set_sqlite.assert_called_once_with(custom_db)

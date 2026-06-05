@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -104,16 +106,17 @@ class TestAutoDownload:
                 result = embedder._auto_download()
                 assert result is None
 
-    def test_huggingface_hub_download_success(self):
+    def test_huggingface_hub_download_success(self, tmp_path):
         """Successful download returns path (lines 164-171)."""
         embedder = ImageEmbedder.__new__(ImageEmbedder)
 
+        weights_path = str(tmp_path / "downloaded_weights.pth")
         mock_hf_hub = MagicMock()
-        mock_hf_hub.hf_hub_download.return_value = "/tmp/downloaded_weights.pth"
+        mock_hf_hub.hf_hub_download.return_value = weights_path
 
         with patch.dict("sys.modules", {"huggingface_hub": mock_hf_hub}):
             result = embedder._auto_download()
-            assert result == "/tmp/downloaded_weights.pth"
+            assert result == weights_path
             mock_hf_hub.hf_hub_download.assert_called_once()
 
     def test_huggingface_hub_download_failure(self):
@@ -291,7 +294,7 @@ class TestAttachmentsToolRegistration:
 
         # register() should call mcp.tool() to register the function
         register(mock_mcp, mock_deps)
-        mock_mcp.tool.assert_called_once()
+        mock_mcp.tool.assert_called_once()  # pylint: disable=no-member
 
     @pytest.mark.asyncio
     async def test_email_attachments_list_mode(self):
@@ -300,7 +303,7 @@ class TestAttachmentsToolRegistration:
         from src.tools.attachments import register
 
         mock_mcp = MagicMock()
-        captured_fn = None
+        captured_fn: Callable[..., Any] | None = None
 
         def mock_tool(**kwargs):
             def decorator(fn):
@@ -324,7 +327,7 @@ class TestAttachmentsToolRegistration:
         assert captured_fn is not None
 
         params = EmailAttachmentsInput(mode="list")
-        result = await captured_fn(params)
+        result = await captured_fn(params)  # pylint: disable=not-callable
         parsed = json.loads(result)
         assert isinstance(parsed, list)
 
@@ -335,7 +338,7 @@ class TestAttachmentsToolRegistration:
         from src.tools.attachments import register
 
         mock_mcp = MagicMock()
-        captured_fn = None
+        captured_fn: Callable[..., Any] | None = None
 
         def mock_tool(**kwargs):
             def decorator(fn):
@@ -356,9 +359,10 @@ class TestAttachmentsToolRegistration:
         mock_deps.offload = AsyncMock(side_effect=lambda fn: fn())
 
         register(mock_mcp, mock_deps)
+        assert captured_fn is not None
 
         params = EmailAttachmentsInput(mode="search")
-        result = await captured_fn(params)
+        result = await captured_fn(params)  # pylint: disable=not-callable
         parsed = json.loads(result)
         assert "emails" in parsed
         assert parsed["count"] == 1
@@ -370,7 +374,7 @@ class TestAttachmentsToolRegistration:
         from src.tools.attachments import register
 
         mock_mcp = MagicMock()
-        captured_fn = None
+        captured_fn: Callable[..., Any] | None = None
 
         def mock_tool(**kwargs):
             def decorator(fn):
@@ -391,9 +395,10 @@ class TestAttachmentsToolRegistration:
         mock_deps.offload = AsyncMock(side_effect=lambda fn: fn())
 
         register(mock_mcp, mock_deps)
+        assert captured_fn is not None
 
         params = EmailAttachmentsInput(mode="stats")
-        result = await captured_fn(params)
+        result = await captured_fn(params)  # pylint: disable=not-callable
         parsed = json.loads(result)
         assert parsed["total"] == 42
 
@@ -414,7 +419,7 @@ class TestAttachmentsToolRegistration:
         from src.tools.attachments import register
 
         mock_mcp = MagicMock()
-        captured_fn = None
+        captured_fn: Callable[..., Any] | None = None
 
         def mock_tool(**kwargs):
             def decorator(fn):
@@ -433,8 +438,9 @@ class TestAttachmentsToolRegistration:
         mock_deps.offload = AsyncMock(side_effect=lambda fn: fn())
 
         register(mock_mcp, mock_deps)
+        assert captured_fn is not None
 
         params = EmailAttachmentsInput(mode="list")
-        result = await captured_fn(params)
+        result = await captured_fn(params)  # pylint: disable=not-callable
         parsed = json.loads(result)
         assert "error" in parsed

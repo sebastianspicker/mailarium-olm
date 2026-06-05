@@ -1,4 +1,5 @@
 """Actor identity resolution helpers for behavioural-analysis workflows."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

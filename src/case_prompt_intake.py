@@ -1,4 +1,5 @@
 """Bounded prompt-to-intake preflight for legal-support case workflows."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

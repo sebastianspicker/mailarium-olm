@@ -11,6 +11,7 @@ Strategy:
 
 from __future__ import annotations
 
+# pylint: disable=too-many-arguments,too-many-locals,too-many-positional-arguments
 import hashlib
 import json
 import re

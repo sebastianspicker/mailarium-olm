@@ -1,4 +1,5 @@
 """Shared wave-execution workflow exposed through both CLI and MCP."""
+# pylint: disable=too-many-arguments,too-many-locals
 
 from __future__ import annotations
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING, Any
 
+from .db_schema import _sql_in_placeholders
+
 
 class EventMixin:
     """Persist and query source-aware extracted event records."""
@@ -87,14 +89,14 @@ class EventMixin:
         if not uids:
             return {}
         result: dict[str, list[dict[str, Any]]] = {uid: [] for uid in uids if uid}
-        placeholders = ",".join("?" for _ in uids)
+        placeholders = _sql_in_placeholders(uids)
         rows = self.conn.execute(
             "SELECT email_uid, event_key, event_kind, source_scope, surface_scope, "
             "segment_ordinal, char_start, char_end, trigger_text, event_date, "
             "surface_hash, detected_language, confidence, extractor_version, "
             "provenance_json, created_at, updated_at "
             "FROM event_records "
-            f"WHERE email_uid IN ({placeholders}) "  # nosec
+            f"WHERE email_uid IN ({placeholders}) "  # nosec B608
             "ORDER BY email_uid, COALESCE(segment_ordinal, 999999), "
             "COALESCE(char_start, 999999), event_kind",
             uids,

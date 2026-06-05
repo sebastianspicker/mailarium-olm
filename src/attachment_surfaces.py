@@ -1,4 +1,5 @@
 """Helpers for durable attachment surface payloads and persistence rows."""
+# pylint: disable=too-many-arguments,too-many-locals
 
 from __future__ import annotations
 

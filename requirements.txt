@@ -1,7 +1,7 @@
 # Embedding & Vector DB
 sentence-transformers>=2.7.0
 transformers>=5.0.0rc3,<6
-chromadb>=0.5.0
+chromadb>=0.5.0,<1.0.0  # avoid CVE-2026-45829 in ChromaDB Python server 1.x until a fixed release exists
 
 # MCP Server
 mcp[cli]>=1.0.0

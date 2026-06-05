@@ -1,11 +1,14 @@
 """Diagnostic and maintenance MCP tools."""
+# pylint: disable=too-many-locals,too-many-return-statements
 
 from __future__ import annotations
 
 import logging
+import sqlite3
 from pathlib import Path
 from typing import Any
 
+from .._sql_validation import validate_sql_identifier as _validate_sql_identifier
 from ..mcp_models import EmailAdminInput
 from . import diagnostics_summary as summary_family
 from .search import invalidate_mcp_singletons
@@ -24,8 +27,9 @@ def _table_columns(db, table: str) -> set[str]:
     if conn is None:
         return set()
     try:
-        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    except Exception:
+        safe_table = _validate_sql_identifier(table)
+        rows = conn.execute("SELECT * FROM pragma_table_info(?)", (safe_table,)).fetchall()
+    except sqlite3.Error:
         logger.debug("Diagnostics PRAGMA failed for table %s", table, exc_info=True)
         return set()
     return {str(row["name"] if not isinstance(row, tuple) else row[1]) for row in rows}
@@ -34,7 +38,7 @@ def _table_columns(db, table: str) -> set[str]:
 def _count_rows(db, query: str) -> dict[str, int]:
     try:
         rows = db.conn.execute(query).fetchall()
-    except Exception:
+    except sqlite3.Error:
         logger.debug("Diagnostics counter query failed: %s", query, exc_info=True)
         return {}
     return {str(row["label"]): int(row["count"]) for row in rows if row["label"]}
@@ -43,7 +47,7 @@ def _count_rows(db, query: str) -> dict[str, int]:
 def _scalar_count(db, query: str) -> int:
     try:
         row = db.conn.execute(query).fetchone()
-    except Exception:
+    except sqlite3.Error:
         logger.debug("Diagnostics scalar query failed: %s", query, exc_info=True)
         return 0
     if not row:
@@ -234,7 +238,7 @@ async def email_diagnostics(deps: ToolDepsProto) -> str:
             sparse_idx = getattr(retriever, "_sparse_index", None)
             if sparse_idx:
                 info["sparse_index_built"] = getattr(sparse_idx, "_built", False)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Sparse index diagnostics unavailable", exc_info=True)
         return json_response(info)
 
@@ -253,7 +257,7 @@ async def email_reingest_bodies(deps: ToolDepsProto, olm_path: str, force: bool 
             return json_response(result)
         except FileNotFoundError:
             return json_error(f"OLM file not found: {olm_path}")
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             return json_error(f"Body reingestion failed: {type(exc).__name__}")
 
     return await deps.offload(_run)
@@ -269,7 +273,7 @@ async def email_reembed(deps: ToolDepsProto, batch_size: int = 100) -> str:
             result = reembed(batch_size=batch_size)
             invalidate_mcp_singletons()
             return json_response(result)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             return json_error(f"Re-embedding failed: {type(exc).__name__}")
 
     return await deps.offload(_run)
@@ -287,7 +291,7 @@ async def email_reingest_metadata(deps: ToolDepsProto, olm_path: str) -> str:
             return json_response(result)
         except FileNotFoundError:
             return json_error(f"OLM file not found: {olm_path}")
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             return json_error(f"Metadata reingestion failed: {type(exc).__name__}")
 
     return await deps.offload(_run)
@@ -303,7 +307,7 @@ async def email_reingest_analytics(deps: ToolDepsProto) -> str:
             result = reingest_analytics()
             invalidate_mcp_singletons()
             return json_response(result)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             return json_error(f"Analytics reingestion failed: {type(exc).__name__}")
 
     return await deps.offload(_run)
@@ -311,7 +315,7 @@ async def email_reingest_analytics(deps: ToolDepsProto) -> str:
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     """Register admin tools."""
-    global _deps
+    global _deps  # pylint: disable=global-statement
     _deps = deps
 
     @mcp_instance.tool(

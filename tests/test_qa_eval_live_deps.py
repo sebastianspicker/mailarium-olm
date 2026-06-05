@@ -174,16 +174,10 @@ def test_sqlite_live_retriever_uses_attachment_text_preview_in_result_text(tmp_p
     assert "Budget Q4 total: 25000 EUR" in attachment_results[0].text
 
 
-def test_live_payload_preserves_strong_attachment_text_with_sqlite_preview(tmp_path: Path, monkeypatch):
-    import asyncio
-
-    from src.config import get_settings
+def _setup_attachment_db(tmp_path: Path) -> tuple:
     from src.email_db import EmailDatabase
-    from src.qa_eval import QuestionCase, _live_payload, resolve_live_deps
-    from src.tools import search as search_tools
 
-    sqlite_path = tmp_path / "email_metadata.db"
-    db = EmailDatabase(str(sqlite_path))
+    db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     email = make_email(
         subject="Budget spreadsheet",
         sender_email="employee@example.test",
@@ -205,6 +199,16 @@ def test_live_payload_preserves_strong_attachment_text_with_sqlite_preview(tmp_p
         }
     ]
     db.insert_email(email)
+    return db, email
+
+
+def test_live_payload_preserves_strong_attachment_text_with_sqlite_preview(tmp_path: Path, monkeypatch):
+    from src.config import get_settings
+    from src.qa_eval import QuestionCase, _live_payload, resolve_live_deps
+    from src.tools import search as search_tools
+
+    sqlite_path = tmp_path / "email_metadata.db"
+    db, email = _setup_attachment_db(tmp_path)
     db.close()
 
     monkeypatch.setenv("SQLITE_PATH", str(sqlite_path))

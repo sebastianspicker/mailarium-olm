@@ -1,5 +1,9 @@
 """Tests for relationship analysis features (Phase 2)."""
 
+# pylint: disable=redefined-outer-name
+# W0621: pytest fixture injection — test functions receive ``db`` fixture as a parameter,
+# which pylint misidentifies as shadowing the module-level fixture definition.
+
 import os
 import tempfile
 
@@ -94,7 +98,7 @@ def db():
         database.close()
 
 
-def _insert_email(db, uid, sender_email, sender_name, date, subject, to=None):
+def _insert_email(db, uid, sender_email, sender_name, date, subject, to=None):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     """Helper to insert a test email."""
     db.conn.execute(
         """INSERT INTO emails (uid, sender_email, sender_name, date, subject,

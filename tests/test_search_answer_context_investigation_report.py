@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pylint: disable=unused-wildcard-import,wildcard-import
 import json
 from types import SimpleNamespace
 

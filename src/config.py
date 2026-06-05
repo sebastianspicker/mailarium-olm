@@ -1,12 +1,15 @@
 """Application configuration and logging helpers."""
+# pylint: disable=too-many-instance-attributes
 
 from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any
+
+from .repo_paths import validate_runtime_path
 
 # ── Model-aware MCP response profiles ─────────────────────────
 #
@@ -297,8 +300,8 @@ class Settings:
             runtime_profile_name = cls.runtime_profile
 
         return cls(
-            chromadb_path=os.getenv("CHROMADB_PATH", cls.chromadb_path),
-            sqlite_path=os.getenv("SQLITE_PATH", cls.sqlite_path),
+            chromadb_path=_runtime_path_from_env("CHROMADB_PATH", cls.chromadb_path, field_name="chromadb_path"),
+            sqlite_path=_runtime_path_from_env("SQLITE_PATH", cls.sqlite_path, field_name="sqlite_path"),
             embedding_model=os.getenv("EMBEDDING_MODEL", cls.embedding_model),
             collection_name=os.getenv("COLLECTION_NAME", cls.collection_name),
             top_k=_int_from_env("TOP_K", cls.top_k, min_value=1, max_value=1000),
@@ -338,18 +341,34 @@ class Settings:
         )
 
 
-@lru_cache(maxsize=1)  # maxsize=1: only one Settings instance is ever cached
+_settings_cache_lock = threading.Lock()
+_settings_cache: Settings | None = None
+
+
 def get_settings() -> Settings:
     """Return process-level cached settings.
 
-    Thread-safety note: ``functools.lru_cache`` is thread-safe in CPython
-    3.9+ — concurrent calls may compute the value twice during the first
-    race, but the cache will store exactly one instance and all subsequent
-    calls return it without locking.  Since ``Settings`` is a frozen
-    dataclass and ``from_env()`` is side-effect-free, a redundant call is
-    harmless.
+    Unlike ``functools.lru_cache``, this guarantees concurrent first callers
+    receive the same frozen Settings object, which keeps singleton users from
+    observing separate instances during startup races.
     """
-    return Settings.from_env()
+    global _settings_cache  # pylint: disable=global-statement
+    if _settings_cache is not None:
+        return _settings_cache
+    with _settings_cache_lock:
+        if _settings_cache is None:
+            _settings_cache = Settings.from_env()
+        return _settings_cache
+
+
+def clear_settings_cache() -> None:
+    """Clear cached settings after environment-loading or test setup changes."""
+    global _settings_cache  # pylint: disable=global-statement
+    with _settings_cache_lock:
+        _settings_cache = None
+
+
+get_settings.cache_clear = clear_settings_cache  # type: ignore[attr-defined]
 
 
 def resolve_runtime_settings(
@@ -364,9 +383,9 @@ def resolve_runtime_settings(
     base = Settings.from_env()
     overrides: dict[str, str] = {}
     if chromadb_path:
-        overrides["chromadb_path"] = chromadb_path
+        overrides["chromadb_path"] = _runtime_path_override(chromadb_path, field_name="chromadb_path")
     if sqlite_path:
-        overrides["sqlite_path"] = sqlite_path
+        overrides["sqlite_path"] = _runtime_path_override(sqlite_path, field_name="sqlite_path")
     if embedding_model:
         overrides["embedding_model"] = embedding_model
     if collection_name:
@@ -423,6 +442,17 @@ def _int_from_env(name: str, default: int, min_value: int = 1, max_value: int | 
         return value
     except ValueError:
         return default
+
+
+def _runtime_path_from_env(name: str, default: str, *, field_name: str) -> str:
+    value = os.getenv(name, default)
+    validate_runtime_path(value, field_name=field_name)
+    return value
+
+
+def _runtime_path_override(value: str, *, field_name: str) -> str:
+    validate_runtime_path(value, field_name=field_name)
+    return value
 
 
 def _bool_from_env(name: str, default: bool) -> bool:

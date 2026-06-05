@@ -1,4 +1,5 @@
 """Formatting helpers for retriever output surfaces."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

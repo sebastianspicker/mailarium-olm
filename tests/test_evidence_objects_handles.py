@@ -191,9 +191,11 @@ def test_get_evidence_valid():
     db.insert_email(email)
     added = db.add_evidence(email.uid, "bossing", "not welcome", "Test.", 3)
 
-    item = db.get_evidence(added["id"])
+    item = db.get_evidence(added["id"])  # pylint: disable=assignment-from-no-return
     assert item is not None
+    # pylint: disable-next=unsubscriptable-object
     assert item["id"] == added["id"]
+    # pylint: disable-next=unsubscriptable-object
     assert item["category"] == "bossing"
     db.close()
 
@@ -213,9 +215,12 @@ def test_update_evidence_fields():
     updated = db.update_evidence(added["id"], category="bossing", relevance=4, notes="Updated note")
     assert updated is True
 
-    item = db.get_evidence(added["id"])
+    item = db.get_evidence(added["id"])  # pylint: disable=assignment-from-no-return
+    # pylint: disable-next=unsubscriptable-object
     assert item["category"] == "bossing"
+    # pylint: disable-next=unsubscriptable-object
     assert item["relevance"] == 4
+    # pylint: disable-next=unsubscriptable-object
     assert item["notes"] == "Updated note"
     db.close()
 
@@ -231,15 +236,15 @@ def test_update_evidence_reverifies_quote():
     email = make_email(body_text="Original text here. New quote in body.")
     db.insert_email(email)
     added = db.add_evidence(email.uid, "general", "Original text here", "Test.", 2)
-    assert db.get_evidence(added["id"])["verified"] == 1
+    assert db.get_evidence(added["id"])["verified"] == 1  # pylint: disable=unsubscriptable-object
 
     db.update_evidence(added["id"], key_quote="This quote is fabricated")
-    item = db.get_evidence(added["id"])
-    assert item["verified"] == 0
+    item = db.get_evidence(added["id"])  # pylint: disable=assignment-from-no-return
+    assert item["verified"] == 0  # pylint: disable=unsubscriptable-object
 
     db.update_evidence(added["id"], key_quote="New quote in body")
-    item = db.get_evidence(added["id"])
-    assert item["verified"] == 1
+    item = db.get_evidence(added["id"])  # pylint: disable=assignment-from-no-return
+    assert item["verified"] == 1  # pylint: disable=unsubscriptable-object
     db.close()
 
 
@@ -253,11 +258,11 @@ def test_update_evidence_reverifies_quote_from_forensic_body():
     )
     db.insert_email(email)
     added = db.add_evidence(email.uid, "general", "Hi Lara", "Initial.", 2)
-    assert db.get_evidence(added["id"])["verified"] == 1
+    assert db.get_evidence(added["id"])["verified"] == 1  # pylint: disable=unsubscriptable-object
 
     db.update_evidence(added["id"], key_quote="The mobile-work arrangement remains in place.")
-    item = db.get_evidence(added["id"])
-    assert item["verified"] == 1
+    item = db.get_evidence(added["id"])  # pylint: disable=assignment-from-no-return
+    assert item["verified"] == 1  # pylint: disable=unsubscriptable-object
     db.close()
 
 

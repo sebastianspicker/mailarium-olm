@@ -1,4 +1,5 @@
 """Post-processing helpers for parsed OLM email fields."""
+# pylint: disable=too-many-branches,too-many-instance-attributes
 
 from __future__ import annotations
 
@@ -171,7 +172,7 @@ def derive_email_enrichments(
 
     try:
         segments = extract_segments(parts.body_text, parts.body_html, parts.raw_source, email_type)
-    except Exception:  # pragma: no cover - defensive guard for optional enrichment
+    except Exception:  # pragma: no cover - defensive guard for optional enrichment  # pylint: disable=broad-exception-caught
         logger.exception("Failed to segment conversation body for %s", source_path)
         segments = []
 

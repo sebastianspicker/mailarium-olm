@@ -160,7 +160,7 @@ def test_export_thread_file_html(tmp_path):
     assert result["format"] == "html"
     assert result["output_path"] == out
     assert Path(out).exists()
-    content = Path(out).read_text()
+    content = Path(out).read_text(encoding="utf-8")
     assert "<html" in content.lower()
 
 

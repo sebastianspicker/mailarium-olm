@@ -1,4 +1,5 @@
 """Core ingestion pipeline implementation."""
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-nested-blocks,too-many-statements
 
 from __future__ import annotations
 
@@ -424,9 +425,9 @@ def ingest_impl(
     attachment_ocr_extractor = None
     classify_text_extraction_state: Any = None
     if extract_attachments:
-        from .attachment_extractor import classify_text_extraction_state, extract_attachment_text_ocr, extract_text
+        from .attachment_extractor import classify_text_extraction_state, extract_attachment_text_ocr, extract_text_with_reason
 
-        attachment_extractor = extract_text
+        attachment_extractor = extract_text_with_reason
         attachment_ocr_extractor = extract_attachment_text_ocr
 
     image_embedder_fn = None
@@ -665,7 +666,7 @@ def ingest_impl(
                             image_chunk_count += 1
                         continue
 
-                    att_text = attachment_extractor(att_name, att_bytes, mime_type=mime_type)
+                    att_text, extraction_failure_reason = attachment_extractor(att_name, att_bytes, mime_type=mime_type)
                     ocr_used = False
                     extraction_state = "text_extracted"
                     failure_reason = None
@@ -757,12 +758,16 @@ def ingest_impl(
                         if embedder:
                             pending_chunks.extend(att_chunks)
                     else:
-                        extraction_state, failure_reason = _textless_attachment_state_with_ocr(
-                            filename=att_name,
-                            mime_type=mime_type,
-                            ocr_attempted=bool(attachment_ocr_extractor),
-                            ocr_available=attachment_ocr_available_for(att_name, mime_type=mime_type),
-                        )
+                        if extraction_failure_reason:
+                            extraction_state = "extraction_failed"
+                            failure_reason = extraction_failure_reason
+                        else:
+                            extraction_state, failure_reason = _textless_attachment_state_with_ocr(
+                                filename=att_name,
+                                mime_type=mime_type,
+                                ocr_attempted=bool(attachment_ocr_extractor),
+                                ocr_available=attachment_ocr_available_for(att_name, mime_type=mime_type),
+                            )
                         _set_attachment_evidence(
                             email,
                             att_index=att_i,
@@ -944,7 +949,7 @@ def ingest_impl(
                 worker_error = pipeline.abort()
                 if worker_error is not None and worker_error is not exc:
                     logger.warning("Background ingest pipeline error during abort: %s", worker_error)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.warning("Background ingest pipeline abort failed", exc_info=True)
         if bookkeeping_db and ingestion_run_id is not None:
             sqlite_inserted = pipeline.sqlite_inserted if pipeline else 0
@@ -972,7 +977,7 @@ def ingest_impl(
     finally:
         try:
             progress.close()
-        except Exception:
+        except OSError:
             pass
         if control_db:
             control_db.close()

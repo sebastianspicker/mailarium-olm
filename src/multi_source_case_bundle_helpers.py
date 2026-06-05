@@ -1,5 +1,5 @@
 # mypy: disable-error-code=name-defined
-# ruff: noqa: F403, F405, RUF022
+# ruff: noqa: I001, RUF022
 """Compatibility facade for split multi-source case-bundle helpers."""
 
 from __future__ import annotations
@@ -9,11 +9,67 @@ from . import multi_source_case_bundle_common as _multi_source_case_bundle_commo
 from . import multi_source_case_bundle_linking as _multi_source_case_bundle_linking
 from . import multi_source_case_bundle_reliability as _multi_source_case_bundle_reliability
 from . import multi_source_case_bundle_sources as _multi_source_case_bundle_sources
-from .multi_source_case_bundle_chronology import *
-from .multi_source_case_bundle_common import *
-from .multi_source_case_bundle_linking import *
-from .multi_source_case_bundle_reliability import *
-from .multi_source_case_bundle_sources import *
+from .multi_source_case_bundle_common import (
+    MULTI_SOURCE_CASE_BUNDLE_VERSION,
+    _DATE_ORIGIN_PRIORITY,
+    _DATE_RANGE_EU_RE,
+    _DATE_RANGE_RE,
+    _DECLARED_SOURCE_TYPES,
+    _EMAIL_LINK_STOPWORDS,
+    _EMAIL_LINK_TOKEN_RE,
+    _EU_DATE_RE,
+    _FORMAL_DOCUMENT_EXTENSIONS,
+    _FORMAL_DOCUMENT_MIME_MARKERS,
+    _ICAL_DATETIME_RE,
+    _ICAL_FIELD_RE,
+    _INLINE_EMAIL_RE,
+    _ISO_DATE_RE,
+    _MONTH_LABEL_RE,
+    _NOTE_RECORD_KEYWORDS,
+    _PARTICIPATION_RECORD_KEYWORDS,
+    _SHEET_NAME_RE,
+    _TIME_RECORD_KEYWORDS,
+    _TITLE_DATE_RE,
+    _date_candidates_from_text,
+    _date_key,
+    _identity_tokens_for_source,
+    _iso_date_from_eu_text,
+    _issue_tokens,
+    _link_confidence,
+    _normalized_subject,
+    _normalized_text,
+)
+from .multi_source_case_bundle_linking import resolve_manifest_email_links
+from .multi_source_case_bundle_reliability import (
+    _attachment_document_kind,
+    _attachment_reliability_basis_prefix,
+    _attachment_source_type,
+    _document_locator,
+    _documentary_support_payload,
+    _is_formal_document,
+    _source_reliability_for_attachment,
+    _source_reliability_for_chat_log,
+    _source_reliability_for_email,
+    _source_reliability_for_meeting,
+    _source_review_recommendation,
+    _spreadsheet_semantics,
+    _string_list,
+    _weighting_metadata,
+)
+from .multi_source_case_bundle_sources import (
+    _chat_log_sources,
+    _meeting_note_sources,
+)
+from .multi_source_case_bundle_chronology import (
+    _calendar_semantics,
+    _chronology_anchor_for_source,
+    _chronology_text,
+    _date_range_from_text,
+    _event_date_from_text,
+    _ical_field_params,
+    _ical_to_iso,
+    _meeting_event_date,
+)
 
 _SPLIT_MODULES = (
     _multi_source_case_bundle_common,
@@ -22,16 +78,15 @@ _SPLIT_MODULES = (
     _multi_source_case_bundle_chronology,
     _multi_source_case_bundle_sources,
 )
-_WRAPPED_EXPORTS: set[str] = set()
 
 
 def _bind_split_namespace() -> None:
+    """Cross-inject all split-module exports so sub-modules see each other's names."""
     namespace = {}
     for module in _SPLIT_MODULES:
         namespace.update({name: getattr(module, name) for name in getattr(module, "__all__", ())})
     for module in _SPLIT_MODULES:
         module.__dict__.update(namespace)
-    globals().update({key: value for key, value in namespace.items() if key not in _WRAPPED_EXPORTS})
 
 
 _bind_split_namespace()

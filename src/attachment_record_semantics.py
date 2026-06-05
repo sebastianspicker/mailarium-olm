@@ -1,4 +1,5 @@
 """Structured semantics derived from durable attachment metadata and text."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-return-statements
 
 from __future__ import annotations
 

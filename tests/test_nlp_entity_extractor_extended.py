@@ -314,7 +314,7 @@ class TestLanguageDetectionCache:
         mod._nlp_models["en"] = _fake_nlp
         mod._nlp_load_attempted = True
         # Pre-populate cache with content hash of "Hello world"
-        content_hash = hashlib.md5("Hello world"[:500].encode(), usedforsecurity=False).hexdigest()
+        content_hash = hashlib.sha256("Hello world"[:500].encode()).hexdigest()
         mod._sender_lang_cache[content_hash] = "en"
 
         # This should use cache, not call detect_language

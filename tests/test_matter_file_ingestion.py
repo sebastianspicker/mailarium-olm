@@ -44,12 +44,12 @@ def test_enrich_manifest_artifact_reads_file_backed_text_and_metadata(tmp_path) 
     assert enriched["documentary_support"]["format_profile"]["support_level"] == "supported"
 
 
-def test_enrich_manifest_artifact_marks_missing_paths_as_degraded() -> None:
+def test_enrich_manifest_artifact_marks_missing_paths_as_degraded(tmp_path) -> None:
     enriched = enrich_manifest_artifact(
         {
             "source_id": "artifact:missing",
             "source_class": "formal_document",
-            "source_path": "/tmp/does-not-exist-email-rag.txt",
+            "source_path": str(tmp_path / "does-not-exist-email-rag.txt"),
             "review_status": "parsed",
         }
     )
@@ -287,7 +287,7 @@ def test_source_from_manifest_artifact_recovers_email_export_metadata_from_forma
     assert source["date"] == "2026-03-06T10:57:24"
 
 
-def test_source_from_manifest_artifact_preserves_multiline_snippet_locator_lines() -> None:
+def test_source_from_manifest_artifact_preserves_multiline_snippet_locator_lines(tmp_path) -> None:
     source = source_from_manifest_artifact(
         {
             "source_id": "manifest:file:multiline",
@@ -297,7 +297,7 @@ def test_source_from_manifest_artifact_preserves_multiline_snippet_locator_lines
             "text": "Line one\nLine two\nLine three",
             "text_locator": {
                 "kind": "full_document_text",
-                "source_path": "/tmp/timeline.txt",
+                "source_path": str(tmp_path / "timeline.txt"),
                 "content_sha256": "abc123",
                 "char_start": 0,
             },
@@ -312,7 +312,7 @@ def test_source_from_manifest_artifact_preserves_multiline_snippet_locator_lines
         "char_end": len("Line one\nLine two\nLine three"),
         "line_start": 1,
         "line_end": 3,
-        "source_path": "/tmp/timeline.txt",
+        "source_path": str(tmp_path / "timeline.txt"),
         "content_sha256": "abc123",
     }
 

@@ -1,4 +1,5 @@
 """Core search MCP tools (moved from mcp_server.py)."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
@@ -138,9 +139,26 @@ async def email_search_structured(params: EmailSearchStructuredInput) -> str:
                 retrieval_diagnostics["expand_query_requested"] = bool(debug.get("expand_query_requested"))
             if "used_query_expansion" in debug:
                 retrieval_diagnostics["used_query_expansion"] = bool(debug.get("used_query_expansion"))
+            query_expansion_status = str(debug.get("query_expansion_status") or "").strip()
+            if query_expansion_status:
+                retrieval_diagnostics["query_expansion_status"] = query_expansion_status
+            query_expansion_error_type = str(debug.get("query_expansion_error_type") or "").strip()
+            if query_expansion_error_type:
+                retrieval_diagnostics["query_expansion_error_type"] = query_expansion_error_type
+            query_expansion_error = str(debug.get("query_expansion_error") or "").strip()
+            if query_expansion_error:
+                retrieval_diagnostics["query_expansion_error"] = query_expansion_error
             expansion_suffix = str(debug.get("query_expansion_suffix") or "").strip()
             if expansion_suffix:
                 retrieval_diagnostics["query_expansion_suffix"] = expansion_suffix
+            semantic_filter_status = str(debug.get("semantic_filter_status") or "").strip()
+            if semantic_filter_status:
+                retrieval_diagnostics["semantic_filter_status"] = semantic_filter_status
+            if "semantic_filter_uid_count" in debug:
+                retrieval_diagnostics["semantic_filter_uid_count"] = int(debug.get("semantic_filter_uid_count") or 0)
+            semantic_filter_errors = debug.get("semantic_filter_errors")
+            if isinstance(semantic_filter_errors, list) and semantic_filter_errors:
+                retrieval_diagnostics["semantic_filter_errors"] = semantic_filter_errors
             if retrieval_diagnostics:
                 payload["retrieval_diagnostics"] = retrieval_diagnostics
         payload["top_k"] = effective_top_k
@@ -229,7 +247,7 @@ async def email_ingest(params: EmailIngestInput) -> str:
             )
         except FileNotFoundError:
             return json_error(f"OLM file not found: {params.olm_path}")
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             return json_error(f"Ingestion failed: {type(exc).__name__}: {exc}")
 
         payload: dict[str, Any] = dict(stats)
@@ -237,7 +255,9 @@ async def email_ingest(params: EmailIngestInput) -> str:
         # Invalidate cached singletons only when ingestion targeted the active
         # runtime archive. Ingesting into an alternate archive is explicit and
         # does not silently retarget future searches in this server process.
-        if not params.dry_run:
+        if params.dry_run:
+            payload["ingest_archive_status"] = "dry_run"
+        else:
             import src.mcp_server as _server
 
             active_chromadb_path, active_sqlite_path = _server._resolved_runtime_paths()
@@ -250,7 +270,9 @@ async def email_ingest(params: EmailIngestInput) -> str:
             ) == normalize_local_path(active_sqlite_path, field_name="sqlite_path")
             if target_is_active_archive:
                 invalidate_mcp_singletons()
+                payload["ingest_archive_status"] = "active_archive_updated"
             else:
+                payload["ingest_archive_status"] = "inactive_target_success"
                 payload["runtime_archive_unchanged"] = True
                 payload["searches_continue_against_active_archive"] = True
                 payload["active_archive_switch_required"] = True
@@ -298,7 +320,7 @@ def _archive_stats_hint(retriever: Any) -> dict[str, Any]:
             "date_range": f"{dr.get('earliest', '?')} to {dr.get('latest', '?')}",
             "unique_senders": s.get("unique_senders", 0),
         }
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return {}
 
 
@@ -359,7 +381,7 @@ async def email_triage(params: EmailTriageInput) -> str:
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     """Register core search tools."""
-    global _deps
+    global _deps  # pylint: disable=global-statement
     _deps = deps
 
     ann = deps.tool_annotations

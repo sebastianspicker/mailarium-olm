@@ -1,4 +1,5 @@
 """Communication-graph and exclusion analytics for behavioural-analysis cases."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

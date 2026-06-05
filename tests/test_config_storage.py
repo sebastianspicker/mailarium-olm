@@ -49,17 +49,42 @@ def test_resolve_runtime_settings_uses_defaults(monkeypatch):
     assert settings.collection_name == "emails"
 
 
-def test_resolve_runtime_settings_applies_overrides():
+def test_resolve_runtime_settings_applies_overrides(tmp_path):
     from src.config import resolve_runtime_settings
 
+    chromadb_path = tmp_path / "db"
     settings = resolve_runtime_settings(
-        chromadb_path="/tmp/db",
+        chromadb_path=str(chromadb_path),
         embedding_model="mini-test-model",
         collection_name="mail-test",
     )
-    assert settings.chromadb_path == "/tmp/db"
+    assert settings.chromadb_path == str(chromadb_path)
     assert settings.embedding_model == "mini-test-model"
     assert settings.collection_name == "mail-test"
+
+
+def test_resolve_runtime_settings_rejects_runtime_paths_outside_roots():
+    from src.config import resolve_runtime_settings
+
+    try:
+        resolve_runtime_settings(sqlite_path="/etc/passwd")
+    except ValueError as exc:
+        assert "allowed runtime roots" in str(exc)
+    else:
+        raise AssertionError("resolve_runtime_settings accepted a runtime path outside allowed roots")
+
+
+def test_settings_from_env_rejects_runtime_paths_outside_roots(monkeypatch):
+    from src.config import Settings
+
+    monkeypatch.setenv("SQLITE_PATH", "/etc/passwd")
+
+    try:
+        Settings.from_env()
+    except ValueError as exc:
+        assert "allowed runtime roots" in str(exc)
+    else:
+        raise AssertionError("Settings.from_env accepted a runtime path outside allowed roots")
 
 
 def test_settings_device_from_env(monkeypatch):

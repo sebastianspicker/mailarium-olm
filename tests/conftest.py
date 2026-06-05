@@ -168,7 +168,7 @@ def _ensure_mcp_stub() -> None:
             return None
 
     class ToolAnnotations:
-        def __init__(
+        def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             title=None,
             readOnlyHint=None,

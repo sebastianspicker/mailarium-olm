@@ -1,5 +1,7 @@
 """Shared validation helpers for date-like CLI/MCP/UI inputs."""
 
+# pylint: disable=redefined-outer-name
+
 from __future__ import annotations
 
 from datetime import date

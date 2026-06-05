@@ -1,12 +1,13 @@
-# ruff: noqa: F403
+# ruff: noqa: F403,F405
+# pylint: disable=unused-wildcard-import,wildcard-import
+
+
 from ._investigation_report_assessment_cases import *
 from ._investigation_report_issue_compact_cases import *
 from ._investigation_report_rendering_cases import *
 
 
 def test_build_investigation_report_threads_requested_language_contract() -> None:
-    from src.investigation_report import build_investigation_report
-
     report = build_investigation_report(
         case_bundle={
             "scope": {

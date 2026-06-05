@@ -1,4 +1,7 @@
 # ruff: noqa: F401
+# pylint: disable=no-member,c-extension-no-member
+
+
 """Extended tests for src/parse_olm.py — targeting uncovered lines."""
 
 from __future__ import annotations

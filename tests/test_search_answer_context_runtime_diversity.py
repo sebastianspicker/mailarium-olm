@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from src.retriever_models import SearchResult
-from src.tools.search_answer_context_runtime import _search_across_query_lanes, _support_type_for_result
+from src.tools.search_answer_context_runtime_ranking import _support_type_for_result
+from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
 
 class _FakeRetriever:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 from typing import Any
@@ -181,7 +181,7 @@ def test_prepare_case_inputs_builds_full_pack_overrides_from_curated_case_json(t
                 "source_scope": "mixed_case_file",
                 "chat_exports": [
                     {
-                        "source_path": "/tmp/chat-export.html",
+                        "source_path": str(tmp_path / "chat-export.html"),
                         "platform": "Teams",
                     }
                 ],
@@ -212,7 +212,7 @@ def test_prepare_case_inputs_builds_full_pack_overrides_from_curated_case_json(t
     assert overrides["source_scope"] == "mixed_case_file"
     assert overrides["chat_exports"] == [
         {
-            "source_path": "/tmp/chat-export.html",
+            "source_path": str(tmp_path / "chat-export.html"),
             "platform": "Teams",
         }
     ]

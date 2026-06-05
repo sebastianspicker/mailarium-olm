@@ -1,4 +1,7 @@
 # ruff: noqa: F401,I001
+# pylint: disable=no-member,c-extension-no-member
+
+
 from pathlib import Path
 
 from lxml import etree

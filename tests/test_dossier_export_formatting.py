@@ -19,7 +19,7 @@ def test_generate_file_writes_html(gen):
         assert result["format"] == "html"
         assert os.path.exists(path)
 
-        content = open(path, encoding="utf-8").read()
+        content = open(path, encoding="utf-8").read()  # pylint: disable=consider-using-with
         assert "File Test" in content
 
 

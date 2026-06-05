@@ -1,4 +1,5 @@
 """SQLite relational store for email metadata and relationships."""
+# pylint: disable=too-many-arguments,too-many-instance-attributes,too-many-locals,too-many-positional-arguments,too-many-public-methods
 
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ from .db_events import EventMixin
 from .db_evidence import EvidenceMixin
 from .db_matter import MatterMixin
 from .db_queries import QueryMixin
-from .db_schema import _escape_like, init_schema
+from .db_schema import _escape_like, _sql_in_placeholders, _validate_sql_identifiers, init_schema
 from .email_db_enrichment import parse_address
 from .email_db_enrichment import (
     upsert_communication_edge as _upsert_communication_edge_impl,
@@ -103,12 +104,13 @@ _EMAIL_INSERT_COLUMNS = (
     "references_json",
     "ingestion_run_id",
 )
-_EMAIL_INSERT_SQL = f"""INSERT INTO emails ({", ".join(_EMAIL_INSERT_COLUMNS)})
-VALUES ({",".join("?" for _ in _EMAIL_INSERT_COLUMNS)})"""  # nosec B608 — column names are compile-time constants in _EMAIL_INSERT_COLUMNS; no user input
+_EMAIL_INSERT_COLUMNS_VALIDATED = _validate_sql_identifiers(list(_EMAIL_INSERT_COLUMNS))
+_EMAIL_INSERT_SQL = f"""INSERT INTO emails ({", ".join(_EMAIL_INSERT_COLUMNS_VALIDATED)})
+VALUES ({_sql_in_placeholders(_EMAIL_INSERT_COLUMNS_VALIDATED)})"""
 _EMAIL_INSERT_OR_IGNORE_SQL = _EMAIL_INSERT_SQL.replace("INSERT INTO", "INSERT OR IGNORE INTO", 1)
 
 
-class EmailDatabase(
+class EmailDatabase(  # pylint: disable=too-many-ancestors
     CustodyMixin,
     EvidenceMixin,
     MatterMixin,
@@ -169,7 +171,7 @@ class EmailDatabase(
         """Best-effort close to avoid leaked SQLite handles during teardown."""
         try:
             self.close()
-        except Exception:
+        except (OSError, sqlite3.Error):
             pass
 
     # ------------------------------------------------------------------

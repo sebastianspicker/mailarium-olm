@@ -1,4 +1,5 @@
 """Shared helper primitives for retaliation-style timing analysis."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

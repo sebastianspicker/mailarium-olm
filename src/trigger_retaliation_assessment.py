@@ -1,4 +1,7 @@
 """Assessment and timeline assembly helpers for retaliation analysis."""
+# pylint: disable=too-many-arguments,too-many-locals
+
+
 # ruff: noqa: E501
 
 from __future__ import annotations

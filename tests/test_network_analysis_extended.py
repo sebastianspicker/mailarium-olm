@@ -84,12 +84,12 @@ class TestNetworkxNotInstalled:
         assert len(result) == 1
         assert "error" in result[0]
 
-    def test_export_graphml_without_networkx(self):
+    def test_export_graphml_without_networkx(self, tmp_path):
         """export_graphml returns error when networkx is missing."""
         db = _populated_db()
         net = CommunicationNetwork(db)
         with patch.object(net, "_ensure_graph", return_value=None):
-            result = net.export_graphml("/tmp/test.graphml")
+            result = net.export_graphml(str(tmp_path / "test.graphml"))
         assert "error" in result
 
 

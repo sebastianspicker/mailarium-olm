@@ -1,4 +1,5 @@
 """Quoted reply-context extraction from embedded mail-header blocks."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

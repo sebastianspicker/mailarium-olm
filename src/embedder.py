@@ -1,4 +1,5 @@
 """Embedding and ChromaDB storage."""
+# pylint: disable=too-many-branches,too-many-instance-attributes,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
@@ -105,7 +106,7 @@ class EmailEmbedder:
         """Bump a collection-level revision marker after successful writes."""
         try:
             modify_collection_metadata(self.collection, {"index_revision": str(time.time_ns())})
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Could not update collection revision metadata", exc_info=True)
 
     def add_chunks(
@@ -251,7 +252,7 @@ class EmailEmbedder:
             inserted = db.insert_sparse_batch(ids, sparse_vectors)
             logger.debug("Stored %d sparse vectors in SQLite.", inserted)
             return int(inserted)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             self.sparse_store_failures += 1
             logger.warning("Failed to store sparse vectors", exc_info=True)
             return 0

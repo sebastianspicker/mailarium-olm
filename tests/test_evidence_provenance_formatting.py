@@ -51,9 +51,9 @@ def test_verify_evidence_quotes_uses_forensic_body_text():
     assert result["verified"] == 1
     assert result["failed"] == 0
     assert result["total"] == 1
-    refreshed = db.get_evidence(item["id"])
+    refreshed = db.get_evidence(item["id"])  # pylint: disable=assignment-from-no-return
     assert refreshed is not None
-    assert refreshed["verified"] == 1
+    assert refreshed["verified"] == 1  # pylint: disable=unsubscriptable-object
     db.close()
 
 
@@ -78,9 +78,9 @@ def test_verify_evidence_quotes_tolerates_smart_quotes_and_dash_drift():
     result = db.verify_evidence_quotes()
     assert result["verified"] == 1
     assert result["failed"] == 0
-    refreshed = db.get_evidence(item["id"])
+    refreshed = db.get_evidence(item["id"])  # pylint: disable=assignment-from-no-return
     assert refreshed is not None
-    assert refreshed["verified"] == 1
+    assert refreshed["verified"] == 1  # pylint: disable=unsubscriptable-object
     db.close()
 
 
@@ -154,9 +154,9 @@ def test_verify_evidence_quotes_marks_german_transliteration_as_near_exact() -> 
     assert result["verified"] == 0
     assert result["near_exact"] == 1
     assert result["failed"] == 0
-    refreshed = db.get_evidence(item["id"])
+    refreshed = db.get_evidence(item["id"])  # pylint: disable=assignment-from-no-return
     assert refreshed is not None
-    assert refreshed["verified"] == 0
+    assert refreshed["verified"] == 0  # pylint: disable=unsubscriptable-object
     db.close()
 
 

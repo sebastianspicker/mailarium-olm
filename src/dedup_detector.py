@@ -1,4 +1,5 @@
 """Near-duplicate email detection using character n-gram Jaccard similarity."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 
@@ -69,11 +70,10 @@ class DuplicateDetector:
                     ngram_cache.append((uid, body, ngrams))
 
             # Compare all pairs within the group
-            for i in range(len(ngram_cache)):
+            for i, (uid_a, _, ngrams_a) in enumerate(ngram_cache):
                 if len(duplicates) >= limit:
                     break
                 for j in range(i + 1, len(ngram_cache)):
-                    uid_a, _, ngrams_a = ngram_cache[i]
                     uid_b, _, ngrams_b = ngram_cache[j]
                     sim = _jaccard_similarity(ngrams_a, ngrams_b)
                     if sim >= self.threshold:

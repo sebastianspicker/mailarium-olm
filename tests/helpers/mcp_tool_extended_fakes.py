@@ -22,7 +22,7 @@ from src.sanitization import sanitize_untrusted_text
 # ── Shared Test Infrastructure ───────────────────────────────
 
 
-def _make_result(
+def _make_result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     uid="uid-1",
     text="Please review the budget proposal.",
     subject="Budget Review",
@@ -147,7 +147,7 @@ class MockEmailDB:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def list_emails_paginated(
+    def list_emails_paginated(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self, offset=0, limit=10, folder=None, sender=None, category=None, sort_order="DESC", date_from=None, date_to=None
     ):
         return {
@@ -200,7 +200,7 @@ class MockEmailDB:
     def __del__(self) -> None:
         try:
             self.close()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
 
 

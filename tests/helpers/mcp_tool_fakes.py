@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from src.config import get_settings
 
 
-def _make_result(chunk_id="x", text="hello", distance=0.25, uid="uid-1", conversation_id="conv-1", date="2025-06-01"):
+def _make_result(chunk_id="x", text="hello", distance=0.25, uid="uid-1", conversation_id="conv-1", date="2025-06-01"):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     from src.retriever import SearchResult
 
     return SearchResult(

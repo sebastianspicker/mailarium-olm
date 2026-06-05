@@ -240,7 +240,7 @@ class TestInstanceLock:
 
         try:
             # Manually test the lock logic without triggering module-level code
-            fd = open(lock_path, "w")
+            fd = open(lock_path, "w", encoding="utf-8")  # pylint: disable=consider-using-with
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fd.write(str(os.getpid()))
             fd.flush()
@@ -265,7 +265,7 @@ class TestBrowseTruncation:
 
         body = "x" * 1000
         result = truncate_body(body, 500)
-        assert len(result.split("\n")[0]) == 500
+        assert len(result.split("\n", maxsplit=1)[0]) == 500
         assert "truncated" in result
 
 

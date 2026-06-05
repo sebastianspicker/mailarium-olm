@@ -1,4 +1,5 @@
 """Extractive summarization for email threads using TF-IDF sentence scoring."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

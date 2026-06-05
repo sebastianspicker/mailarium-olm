@@ -64,6 +64,26 @@ Key properties:
 - Semantic search works even when you do not remember the exact words.
 - The same local runtime supports evidence, chronology, analytics, export, and legal-support workflows.
 
+## Current Local Checkout State
+
+This branch currently contains a broad local refactor and quality-policy update.
+The public interfaces below reflect the current local checkout, but they should
+not be treated as release-ready until the documented verification gates pass.
+
+Locally visible state:
+
+- MCP currently registers 68 tools.
+- CLI subcommands are the recommended interface; legacy flat flags remain
+  deprecated but supported for the `0.1.x` compatibility window.
+- `case execute-wave`, `case execute-all-waves`, and `case gather-evidence`
+  share the campaign execution contract with matching MCP `email_case_*`
+  campaign tools.
+- Retrieval and archive-harvest payloads expose lane and expansion diagnostics
+  so widened evidence does not look like direct retrieval coverage.
+- Tooling policy treats source Bandit, PyLint/Codacy policy findings, and
+  publication privacy scans as separate gates. Local Codacy or PyLint evidence
+  is not Codacy Cloud closure.
+
 ## Choose Your Interface
 
 | Surface | Best use | Avoid when |
@@ -350,6 +370,8 @@ Temporal analysis includes recent-sample response times per sender based on cano
 - `email_deep_context.max_body_chars` uses `None` as a profile-default sentinel (`MCP_MAX_FULL_BODY_CHARS`), while `0` means unlimited.
 - `email_ingest` ingests into the requested target but does not silently switch the active runtime archive for later searches.
 - Topic contract note: the default ingest workflow does not populate topic tables yet.
+- `topics build` is available as a CLI subcommand, but topic data is still a
+  conditional surface unless the runtime has populated topic tables.
 - Write/output paths are validated against allowlisted local roots and must not overwrite existing files; defaults write below `private/exports/`. Extend roots explicitly with `EMAIL_RAG_ALLOWED_OUTPUT_ROOTS` when needed.
 - Privacy boundary remains unchanged: Email content stays local.
 - First-run model weights are downloaded from Hugging Face when not cached.

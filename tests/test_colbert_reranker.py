@@ -78,7 +78,7 @@ def _make_embedder(has_colbert: bool = True):
         result = []
         for i, t in enumerate(texts):
             n_tokens = max(3, len(t.split()))
-            vecs = np.random.RandomState(i).rand(n_tokens, 4).astype(np.float32)
+            vecs = np.random.RandomState(i).rand(n_tokens, 4).astype(np.float32)  # pylint: disable=no-member
             result.append(vecs)
         return result
 

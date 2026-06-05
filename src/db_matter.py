@@ -1,4 +1,5 @@
 """Persisted matter workspace and snapshot helpers for EmailDatabase."""
+# pylint: disable=too-many-arguments,too-many-positional-arguments
 
 from __future__ import annotations
 
@@ -104,13 +105,16 @@ class MatterMixin:
                 return None
             manageres.append(f"review_state IN ({', '.join('?' for _ in normalized_states)})")
             params.extend(normalized_states)
-        row = self.conn.execute(
+        query = (
             "SELECT snapshot_id, workspace_id, matter_id, review_mode, source_scope, "
             "review_state, coverage_summary_json, created_at "
             "FROM matter_snapshots "
-            f"WHERE {' AND '.join(manageres)} "  # nosec
+            f"WHERE {' AND '.join(manageres)} "
             "ORDER BY created_at DESC, rowid DESC "
-            "LIMIT 1",
+            "LIMIT 1"
+        )
+        row = self.conn.execute(
+            query,
             params,
         ).fetchone()
         if not row:

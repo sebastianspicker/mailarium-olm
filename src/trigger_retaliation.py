@@ -1,4 +1,5 @@
 """Trigger-event and retaliation-style before/after analysis helpers."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

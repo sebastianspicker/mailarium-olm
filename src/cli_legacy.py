@@ -1,4 +1,5 @@
 """Legacy CLI compatibility helpers."""
+# pylint: disable=too-many-boolean-expressions,too-many-branches,too-many-return-statements,too-many-statements
 
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ import sys
 from .config import get_settings
 from .validation import parse_iso_date, positive_int, score_float, validate_date_window
 
-_SUBCOMMANDS = frozenset({"search", "browse", "export", "case", "evidence", "analytics", "training", "admin"})
+_SUBCOMMANDS = frozenset({"search", "browse", "export", "case", "evidence", "analytics", "training", "admin", "topics"})
 _ROOT_FLAGS_WITH_VALUES = frozenset({"--chromadb-path", "--sqlite-path", "--log-level"})
 _ROOT_FLAGS_NO_VALUES = frozenset({"--help", "-h", "--version"})
 _ROOT_FLAG_DESTS = {"--chromadb-path": "chromadb_path", "--sqlite-path": "sqlite_path", "--log-level": "log_level"}

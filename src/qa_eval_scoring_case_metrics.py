@@ -1,4 +1,5 @@
 # mypy: disable-error-code=name-defined
+# pylint: disable=E0602  # cross-module names injected by compatibility facade
 """Split QA evaluation scoring helpers (qa_eval_scoring_case_metrics)."""
 
 from __future__ import annotations

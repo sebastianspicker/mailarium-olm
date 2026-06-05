@@ -1,4 +1,5 @@
 """Shared chronology helper primitives and entry builders."""
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-return-statements,too-many-statements
 
 from __future__ import annotations
 

@@ -33,7 +33,7 @@ class FakeFlagModel:
         self.device = device
         self.use_fp16 = use_fp16
 
-    def encode(
+    def encode(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         texts,
         batch_size=16,

@@ -1,4 +1,5 @@
 """Writing style and readability analysis for emails."""
+# pylint: disable=too-many-instance-attributes,too-many-locals
 
 from __future__ import annotations
 
@@ -125,9 +126,9 @@ class WritingAnalyzer:
         ts = self._get_textstat()
         if ts and word_count >= 10:
             try:
-                readability_score = round(ts.flesch_reading_ease(text), 1)
-                grade_level = round(ts.flesch_kincaid_grade(text), 1)
-            except Exception:
+                readability_score = round(ts.flesch_reading_ease(text), 1)  # pylint: disable=no-member
+                grade_level = round(ts.flesch_kincaid_grade(text), 1)  # pylint: disable=no-member
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug("textstat scoring failed", exc_info=True)
 
         return WritingMetrics(

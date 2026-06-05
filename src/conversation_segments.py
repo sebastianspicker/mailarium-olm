@@ -1,4 +1,5 @@
 """Conversation segmentation for email bodies."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-positional-arguments
 
 from __future__ import annotations
 
@@ -209,7 +210,7 @@ def _extract_html_blockquote_segments(body_html: str) -> list[ConversationSegmen
     try:
         root = lxml_html.fragment_fromstring(body_html, create_parent="div")
         authored_root = lxml_html.fragment_fromstring(body_html, create_parent="div")
-    except (ValueError, lxml_html.ParserError):
+    except (ValueError, lxml_html.ParserError):  # pylint: disable=no-member
         return []
 
     segments: list[ConversationSegment] = []

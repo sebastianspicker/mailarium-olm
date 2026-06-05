@@ -29,7 +29,10 @@ from src.parse_olm_normalization import BODY_NORMALIZATION_VERSION
 # ── Email.uid fallback (lines 98-99) ─────────────────────────
 
 
-class TestCleanBodyHtmlInBodyText:
+# ── Clean body HTML ─────────────────────────────────────────────
+
+
+class TestCleanBodyHtml:
     def test_clean_body_html_in_body_text_field(self):
         """When body_text contains HTML, clean_body strips HTML tags."""
         email = Email(
@@ -96,6 +99,11 @@ class TestCleanBodyHtmlInBodyText:
         assert email.clean_body == "Hello"
         assert email.clean_body_source == "body_text_html"
 
+
+# ── Signatures and footers ──────────────────────────────────────
+
+
+class TestCleanBodySignatures:
     def test_clean_body_strips_mobile_signature_in_normalized_body(self):
         email = Email(
             message_id="<m@test>",
@@ -149,6 +157,29 @@ class TestCleanBodyHtmlInBodyText:
         )
         assert email.clean_body == "Just a regular email without a signature."
 
+    def test_clean_body_strips_get_outlook_ios_footer_in_normalized_body(self):
+        email = Email(
+            message_id="<m@test>",
+            subject="Test",
+            sender_name="",
+            sender_email="",
+            to=[],
+            cc=[],
+            bcc=[],
+            date="",
+            body_text="Please see the attached file.\n\nGet Outlook for iOS",
+            body_html="",
+            folder="Inbox",
+            has_attachments=False,
+        )
+        assert email.clean_body == "Please see the attached file."
+        assert email.body_normalization_version == BODY_NORMALIZATION_VERSION
+
+
+# ── Legal disclaimers ──────────────────────────────────────────
+
+
+class TestCleanBodyLegalDisclaimers:
     def test_clean_body_strips_multiline_legal_disclaimer_tail(self):
         email = Email(
             message_id="<m@test>",
@@ -189,6 +220,11 @@ class TestCleanBodyHtmlInBodyText:
         )
         assert "Confidentiality notice" in email.clean_body
 
+
+# ── English reply / forward header stripping ──────────────────
+
+
+class TestCleanBodyEnglishReplyHeaders:
     def test_clean_body_strips_reply_quote_tail_before_persistence(self):
         email = Email(
             message_id="<m@test>",
@@ -330,6 +366,58 @@ class TestCleanBodyHtmlInBodyText:
         assert email.email_type == "original"
         assert "From: Alice <employee@example.test>" in email.clean_body
 
+    def test_clean_body_strips_leading_forward_header_block_and_keeps_forwarded_content(self):
+        email = Email(
+            message_id="<m@test>",
+            subject="FW: Status",
+            sender_name="",
+            sender_email="",
+            to=[],
+            cc=[],
+            bcc=[],
+            date="",
+            body_text=(
+                "From: Alice <employee@example.test>\n"
+                "Sent: Monday, January 1, 2025 10:00 AM\n"
+                "To: Bob <bob@example.com>\n"
+                "Subject: Status\n\n"
+                "Forwarded content starts here."
+            ),
+            body_html="",
+            folder="Inbox",
+            has_attachments=False,
+        )
+        assert email.clean_body == "Forwarded content starts here."
+
+    def test_clean_body_strips_leading_forward_header_block_after_outlook_separator(self):
+        email = Email(
+            message_id="<m@test>",
+            subject="FW: Status",
+            sender_name="",
+            sender_email="",
+            to=[],
+            cc=[],
+            bcc=[],
+            date="",
+            body_text=(
+                "________________________________\n"
+                "From: Alice <employee@example.test>\n"
+                "Sent: Monday, January 1, 2025 10:00 AM\n"
+                "To: Bob <bob@example.com>\n"
+                "Subject: Status\n\n"
+                "Forwarded content starts here."
+            ),
+            body_html="",
+            folder="Inbox",
+            has_attachments=False,
+        )
+        assert email.clean_body == "Forwarded content starts here."
+
+
+# ── German reply header stripping ─────────────────────────────
+
+
+class TestCleanBodyGermanReplyHeaders:
     def test_clean_body_strips_german_reply_header_tail_before_persistence(self):
         email = Email(
             message_id="<m@test>",
@@ -459,6 +547,11 @@ class TestCleanBodyHtmlInBodyText:
         assert email.email_type == "original"
         assert "Von: Alice <employee@example.test>" in email.clean_body
 
+
+# ── Non-English reply header stripping (PT, PL) ──────────────
+
+
+class TestCleanBodyNonEnglishReplyHeaders:
     def test_clean_body_strips_portuguese_reply_header_tail_before_persistence(self):
         email = Email(
             message_id="<m@test>",
@@ -508,68 +601,3 @@ class TestCleanBodyHtmlInBodyText:
         assert email.email_type == "reply"
         assert email.clean_body == "Aktualna odpowiedz."
         assert email.body_normalization_version == BODY_NORMALIZATION_VERSION
-
-    def test_clean_body_strips_get_outlook_ios_footer_in_normalized_body(self):
-        email = Email(
-            message_id="<m@test>",
-            subject="Test",
-            sender_name="",
-            sender_email="",
-            to=[],
-            cc=[],
-            bcc=[],
-            date="",
-            body_text="Please see the attached file.\n\nGet Outlook for iOS",
-            body_html="",
-            folder="Inbox",
-            has_attachments=False,
-        )
-        assert email.clean_body == "Please see the attached file."
-        assert email.body_normalization_version == BODY_NORMALIZATION_VERSION
-
-    def test_clean_body_strips_leading_forward_header_block_and_keeps_forwarded_content(self):
-        email = Email(
-            message_id="<m@test>",
-            subject="FW: Status",
-            sender_name="",
-            sender_email="",
-            to=[],
-            cc=[],
-            bcc=[],
-            date="",
-            body_text=(
-                "From: Alice <employee@example.test>\n"
-                "Sent: Monday, January 1, 2025 10:00 AM\n"
-                "To: Bob <bob@example.com>\n"
-                "Subject: Status\n\n"
-                "Forwarded content starts here."
-            ),
-            body_html="",
-            folder="Inbox",
-            has_attachments=False,
-        )
-        assert email.clean_body == "Forwarded content starts here."
-
-    def test_clean_body_strips_leading_forward_header_block_after_outlook_separator(self):
-        email = Email(
-            message_id="<m@test>",
-            subject="FW: Status",
-            sender_name="",
-            sender_email="",
-            to=[],
-            cc=[],
-            bcc=[],
-            date="",
-            body_text=(
-                "________________________________\n"
-                "From: Alice <employee@example.test>\n"
-                "Sent: Monday, January 1, 2025 10:00 AM\n"
-                "To: Bob <bob@example.com>\n"
-                "Subject: Status\n\n"
-                "Forwarded content starts here."
-            ),
-            body_html="",
-            folder="Inbox",
-            has_attachments=False,
-        )
-        assert email.clean_body == "Forwarded content starts here."

@@ -1,4 +1,5 @@
 # mypy: disable-error-code=name-defined
+# pylint: disable=E0602  # cross-module names injected by compatibility facade
 """Split helpers for search answer-context runtime (search_answer_context_runtime_budgeting)."""
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
 """Guarded wording policy for workplace-conflict behavioural-analysis output."""
+# pylint: disable=too-many-return-statements
 
 from __future__ import annotations
 

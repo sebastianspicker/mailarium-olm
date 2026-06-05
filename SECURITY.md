@@ -29,7 +29,9 @@ Primary security-sensitive areas include:
 
 - **OLM/XML parsing**: mitigated with XXE-safe parsing limits and local-file handling constraints.
 - **Local file and export paths**: write/export paths are validated against allowlisted local roots.
-- **SQLite and query handling**: mitigated with parameterized queries and constrained input models.
+- **SQLite and query handling**: mitigated with parameterized queries,
+  constrained input models, and shared validation for dynamic SQL identifiers or
+  placeholder fragments.
 - **Dependency supply chain**: monitored with CI checks including `bandit` and the bounded `scripts/dependency_audit.py` wrapper around `pip-audit`.
 - **Untrusted content rendering**: ANSI/control-character stripping and output sanitization reduce terminal/rendering abuse.
 
@@ -52,6 +54,9 @@ Current threat model:
 - Operator-supplied paths must be authorized by purpose: runtime stores under allowed runtime roots, read inputs under allowed local-read roots, and generated artifacts under allowed output roots.
 - Email bodies, attachments, generated reports, and legal-support bundles are sensitive even when synthetic test data is committed publicly.
 - Model-loading paths may contact external model registries unless offline/local-only settings are used.
+- Dynamic SQL fragments are allowed only when the identifier or placeholder
+  shape is validated first. Plain string formatting is not an authorization or
+  injection boundary.
 
 Finding fixed in this review:
 

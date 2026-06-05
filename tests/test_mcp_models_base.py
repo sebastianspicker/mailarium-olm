@@ -6,7 +6,7 @@ import pytest
 
 from src.mcp_models import EmailCaseAnalysisInput, EvidenceUpdateInput
 from src.mcp_models_evidence import EvidenceExportInput
-from src.mcp_models_search import EmailExportInput, EmailIngestInput
+from src.mcp_models_search import EmailExportInput, EmailIngestInput, EmailSearchStructuredInput
 from src.repo_paths import repo_root
 
 from .helpers.case_analysis_fixtures import case_payload
@@ -117,3 +117,27 @@ def test_email_ingest_input_rejects_runtime_paths_outside_runtime_roots(tmp_path
 
     with pytest.raises(ValueError, match="allowed runtime roots"):
         EmailIngestInput.model_validate({"olm_path": str(olm_path), "sqlite_path": "/etc/passwd"})
+
+
+def test_mcp_date_range_inputs_trim_whitespace_and_empty_values() -> None:
+    params = EmailSearchStructuredInput.model_validate(
+        {
+            "query": "budget",
+            "date_from": " 2024-01-01 ",
+            "date_to": "   ",
+        }
+    )
+
+    assert params.date_from == "2024-01-01"
+    assert params.date_to is None
+
+
+def test_mcp_date_range_rejects_inverted_range_after_trimming() -> None:
+    with pytest.raises(ValueError, match="date_from cannot be later"):
+        EmailSearchStructuredInput.model_validate(
+            {
+                "query": "budget",
+                "date_from": " 2024-12-31 ",
+                "date_to": " 2024-01-01 ",
+            }
+        )

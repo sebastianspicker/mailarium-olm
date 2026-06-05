@@ -71,7 +71,7 @@ def get_collection(
     if search_ef is not None and current_metadata.get("hnsw:search_ef") != search_ef:
         try:
             modify_collection_metadata(collection, {"hnsw:search_ef": search_ef})
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             import logging as _logging
 
             _logging.getLogger(__name__).debug(

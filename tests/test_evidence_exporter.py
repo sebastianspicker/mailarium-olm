@@ -226,7 +226,7 @@ def test_export_file_html(tmp_path):
     assert result["format"] == "html"
     assert result["output_path"] == out
     assert Path(out).exists()
-    content = Path(out).read_text()
+    content = Path(out).read_text(encoding="utf-8")
     assert "Evidence Report" in content
     db.close()
 
@@ -240,7 +240,7 @@ def test_export_file_csv(tmp_path):
 
     assert result["format"] == "csv"
     assert Path(out).exists()
-    content = Path(out).read_text()
+    content = Path(out).read_text(encoding="utf-8")
     assert "category" in content
     db.close()
 

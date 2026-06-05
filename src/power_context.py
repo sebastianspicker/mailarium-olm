@@ -1,4 +1,5 @@
 """Role, hierarchy, and power-context enrichment helpers for BA3."""
+# pylint: disable=too-many-branches
 
 from __future__ import annotations
 

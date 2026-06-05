@@ -339,6 +339,52 @@ def test_build_case_patterns_adds_corpus_level_response_and_coordination_reviews
     assert corpus_review["double_standards"][0]["sender_actor_id"] == "actor-manager"
 
 
+def test_build_case_patterns_coordination_windows_handle_mixed_timezone_dates() -> None:
+    patterns = build_case_patterns(
+        candidates=[
+            {
+                "uid": "u1",
+                "date": "2026-03-03T11:00:00+00:00",
+                "sender_actor_id": "actor-manager",
+                "thread_group_id": "thread-c",
+                "recipients_summary": {
+                    "visible_recipient_emails": ["alex@example.com", "hr@example.com"],
+                    "signature": "alex@example.com|hr@example.com",
+                },
+                "message_findings": {
+                    "authored_text": {
+                        "behavior_candidates": [
+                            {"behavior_id": "deadline_pressure", "confidence": "medium", "taxonomy_ids": ["unequal_demands"]},
+                        ],
+                    }
+                },
+            },
+            {
+                "uid": "u2",
+                "date": "2026-03-03T18:00:00",
+                "sender_actor_id": "actor-director",
+                "thread_group_id": "thread-d",
+                "recipients_summary": {
+                    "visible_recipient_emails": ["hr@example.com", "alex@example.com"],
+                    "signature": "hr@example.com|alex@example.com",
+                },
+                "message_findings": {
+                    "authored_text": {
+                        "behavior_candidates": [
+                            {"behavior_id": "escalation", "confidence": "medium", "taxonomy_ids": ["escalation_pressure"]},
+                        ],
+                    }
+                },
+            },
+        ]
+    )
+
+    windows = patterns["corpus_behavioral_review"]["coordination_windows"]
+
+    assert windows[0]["actor_ids"] == ["actor-director", "actor-manager"]
+    assert windows[0]["message_uids"] == ["u1", "u2"]
+
+
 def test_build_case_patterns_uses_event_records_for_sequence_signals() -> None:
     patterns = build_case_patterns(
         candidates=[

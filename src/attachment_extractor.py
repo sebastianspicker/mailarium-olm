@@ -1,10 +1,11 @@
 """Extract text content from common attachment file types."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from pathlib import Path
 
@@ -36,11 +37,24 @@ from .attachment_extractor_text import (
 from .attachment_identity import DEFAULT_ATTACHMENT_OCR_LANG
 from .image_embedder import _IMAGE_EXTENSIONS
 
-_image_embedder = None
+_image_embedder = None  # pylint: disable=invalid-name
+
+
+def _run_ocr_process(command: list[str], *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+    executable = Path(command[0]).name if command else ""
+    if executable not in {"tesseract", "pdftoppm"}:
+        raise ValueError(f"Unsupported OCR executable: {executable!r}")
+    return subprocess.run(  # nosemgrep
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+    )
 
 
 def _get_image_embedder():
-    global _image_embedder
+    global _image_embedder  # pylint: disable=global-statement
     if _image_embedder is None:
         from .image_embedder import ImageEmbedder
 
@@ -56,40 +70,53 @@ def extract_image_embedding(filename: str, content: bytes) -> list[float] | None
         if not embedder.is_available:
             return None
         return embedder.encode_image(content, filename=filename)
-    except Exception:
+    except (RuntimeError, ValueError, OSError):
         return None
 
 
-def _extract_pdf(content: bytes) -> str | None:
-    return _optional_extract(content, "PyPDF2", "PdfReader", _pdf_extractor, "PDF")
+def _extract_pdf(content: bytes, failure_recorder=None) -> str | None:
+    return _optional_extract(content, "PyPDF2", "PdfReader", _pdf_extractor, "PDF", failure_recorder=failure_recorder)
 
 
-def _extract_docx(content: bytes) -> str | None:
-    return _optional_extract(content, "docx", "Document", _docx_extractor, "DOCX")
+def _extract_docx(content: bytes, failure_recorder=None) -> str | None:
+    return _optional_extract(content, "docx", "Document", _docx_extractor, "DOCX", failure_recorder=failure_recorder)
 
 
-def _extract_xlsx(content: bytes) -> str | None:
-    return _optional_extract(content, "openpyxl", "load_workbook", _xlsx_extractor, "XLSX")
+def _extract_xlsx(content: bytes, failure_recorder=None) -> str | None:
+    return _optional_extract(content, "openpyxl", "load_workbook", _xlsx_extractor, "XLSX", failure_recorder=failure_recorder)
 
 
-def _extract_pptx(content: bytes) -> str | None:
-    return _optional_extract(content, "pptx", "Presentation", _pptx_extractor, "PPTX")
+def _extract_pptx(content: bytes, failure_recorder=None) -> str | None:
+    return _optional_extract(content, "pptx", "Presentation", _pptx_extractor, "PPTX", failure_recorder=failure_recorder)
 
 
 def extract_text(filename: str, content: bytes, *, mime_type: str | None = None) -> str | None:
-    return _extract_text_with_dispatch(
+    text, _failure_reason = extract_text_with_reason(filename, content, mime_type=mime_type)
+    return text
+
+
+def extract_text_with_reason(filename: str, content: bytes, *, mime_type: str | None = None) -> tuple[str | None, str | None]:
+    failure_reason: str | None = None
+
+    def record_failure(reason: str) -> None:
+        nonlocal failure_reason
+        if not failure_reason:
+            failure_reason = reason
+
+    text = _extract_text_with_dispatch(
         filename,
         content,
         mime_type=mime_type,
         plain_text_extractor=_extract_plain_text,
         html_extractor=_extract_html,
-        pdf_extractor=_extract_pdf,
-        docx_extractor=_extract_docx,
-        xlsx_extractor=_extract_xlsx,
+        pdf_extractor=lambda data: _extract_pdf(data, failure_recorder=record_failure),
+        docx_extractor=lambda data: _extract_docx(data, failure_recorder=record_failure),
+        xlsx_extractor=lambda data: _extract_xlsx(data, failure_recorder=record_failure),
         ods_extractor=_extract_ods,
         legacy_office_extractor=lambda data, label: _extract_legacy_binary_office(data, format_label=label),
-        pptx_extractor=_extract_pptx,
+        pptx_extractor=lambda data: _extract_pptx(data, failure_recorder=record_failure),
     )
+    return text, failure_reason
 
 
 def image_ocr_available() -> bool:
@@ -128,23 +155,25 @@ def extract_image_text_ocr(filename: str, content: bytes, *, timeout_seconds: in
         return None
     suffix = Path(filename).suffix or ".img"
     temp_path = ""
+    tesseract_path = shutil.which("tesseract")
+    if not tesseract_path:
+        return None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             temp_file.write(content)
             temp_path = temp_file.name
-        command = ["tesseract", temp_path, "stdout", "--psm", os.environ.get("ATTACHMENT_OCR_PSM", "6")]
+        psm_value = str(os.environ.get("ATTACHMENT_OCR_PSM", "6")).strip()
+        if not psm_value or not psm_value.isdigit():
+            psm_value = "6"
+        else:
+            psm_value = str(max(0, min(13, int(psm_value))))
+        command = [tesseract_path, temp_path, "stdout", "--psm", psm_value]
         language_hint = str(os.environ.get("ATTACHMENT_OCR_LANG", DEFAULT_ATTACHMENT_OCR_LANG) or "").strip()
-        if not language_hint:
+        if not language_hint or " " in language_hint:
             language_hint = DEFAULT_ATTACHMENT_OCR_LANG
         if language_hint:
             command.extend(["-l", language_hint])
-        result = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-        )
+        result = _run_ocr_process(command, timeout_seconds=timeout_seconds)
         if result.returncode != 0:
             return None
         text = _truncate(str(result.stdout or "").strip())
@@ -171,13 +200,18 @@ def extract_pdf_text_ocr(filename: str, content: bytes, *, timeout_seconds: int 
             temp_file.write(content)
             temp_pdf = temp_file.name
         output_prefix = str(Path(temp_dir) / "page")
-        max_pages = max(1, int(os.environ.get("ATTACHMENT_PDF_OCR_MAX_PAGES", "5")))
-        render = subprocess.run(
-            ["pdftoppm", "-f", "1", "-l", str(max_pages), "-png", temp_pdf, output_prefix],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
+        pdftoppm_path = shutil.which("pdftoppm")
+        if not pdftoppm_path:
+            return None
+        max_pages_str = str(os.environ.get("ATTACHMENT_PDF_OCR_MAX_PAGES", "5")).strip()
+        try:
+            max_pages_val = max(1, min(50, int(max_pages_str)))
+        except (ValueError, TypeError):
+            max_pages_val = 5
+        max_pages = max(1, max_pages_val)
+        render = _run_ocr_process(
+            [pdftoppm_path, "-f", "1", "-l", str(max_pages), "-png", temp_pdf, output_prefix],
+            timeout_seconds=timeout_seconds,
         )
         if render.returncode != 0:
             return None
@@ -260,6 +294,7 @@ __all__ = [
     "extract_image_text_ocr",
     "extract_pdf_text_ocr",
     "extract_text",
+    "extract_text_with_reason",
     "extraction_quality_profile",
     "image_ocr_available",
     "is_image_attachment",

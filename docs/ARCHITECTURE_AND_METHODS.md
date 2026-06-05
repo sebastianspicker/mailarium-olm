@@ -233,6 +233,27 @@ scales. A chunk that appears high in both semantic and lexical lists receives a
 strong fused rank; a keyword-only result can still be recovered when semantic
 search misses it.
 
+### Multi-Lane Retrieval Diagnostics
+
+The current local checkout also uses multi-lane query execution for
+question-to-evidence and campaign workflows. Instead of collapsing all query
+phrases into one opaque query string, the runtime can execute separate lanes,
+reserve lane-diverse candidates, and record which lane and query recovered each
+evidence-bank item.
+
+The diagnostic payload is part of the evidence-quality contract:
+
+- `matched_query_lanes` and `matched_query_queries` show how a result entered
+  the candidate bank.
+- lane diagnostics expose result counts, executed query text, expansion terms,
+  recovered expansion terms, and progressive-scan exclusions.
+- archive-harvest diagnostics report whether later thread or attachment
+  expansion added context after direct retrieval.
+
+These diagnostics are not evidence by themselves. They prevent false success by
+showing whether a candidate was directly retrieved for the question or only
+added later as context.
+
 ### ColBERT MaxSim Reranking
 
 ColBERT reranking compares query and document at token-vector level. For query

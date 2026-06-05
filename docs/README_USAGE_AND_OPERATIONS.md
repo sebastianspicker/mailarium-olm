@@ -22,6 +22,24 @@ a fully synthetic end-to-end example, see
 - HTML export is the safest baseline. PDF export may depend on optional runtime support in your environment.
 - `email_admin(action="diagnostics")` is the fastest way to confirm what runtime profile, backend, and limits are actually active.
 
+## Current Local Checkout State
+
+This local checkout includes broad source, test, tooling, and documentation
+changes. Treat public docs as describing the current local interface shape, not
+as release-readiness evidence. Before relying on this checkout for serious
+operator work, run the go-live checklist below and the relevant verification
+gates for the changed surface.
+
+Current local facts:
+
+- MCP registers 68 tools.
+- CLI subcommands are preferred; legacy flat flags remain deprecated but
+  supported for `0.1.x`.
+- `topics build` is available, but topic tables remain conditional on runtime
+  data population.
+- Local PyLint/Codacy/Bandit policy changes should be read as local verification
+  policy, not remote service closure.
+
 ## Environment Bootstrap
 
 Start from a clean virtual environment:
@@ -66,7 +84,7 @@ python -m src.cli --help
 python -m src.ingest --help
 ```
 
-Supports 8 subcommand groups (`search`, `browse`, `export`, `case`, `evidence`, `analytics`, `training`, `admin`). See [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) for the full reference.
+Supports 9 subcommand groups (`search`, `browse`, `export`, `case`, `evidence`, `analytics`, `training`, `admin`, `topics`). See [CLI_REFERENCE.md](CLI_REFERENCE.md) for the full reference.
 Temporal analytics bucket timestamps in `ANALYTICS_TIMEZONE` (default: local system timezone). Set an IANA zone such as `Europe/Berlin` to make charts and heatmaps use one explicit display timezone.
 Topic filters and `email_topics` remain present in the codebase, but the default ingest workflow does not populate topic tables yet.
 

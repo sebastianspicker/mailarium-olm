@@ -89,6 +89,44 @@ def test_stats_aggregates_paginated_metadata():
     assert stats["date_range"]["earliest"] == "2023-01-01"
     assert stats["date_range"]["latest"] == "2023-03-01"
     assert stats["folders"]["Inbox"] == 2
+    assert stats["metadata_source"] == "chromadb_fallback"
+
+
+def test_stats_sqlite_failure_reports_chromadb_fallback_warning() -> None:
+    retriever = EmailRetriever.__new__(EmailRetriever)
+
+    class FailingEmailDB:
+        def email_count(self):
+            raise RuntimeError("sqlite unavailable")
+
+    class DummyCollection:
+        def count(self):
+            return 1
+
+        def get(self, include, limit, offset):
+            if offset == 0:
+                return {
+                    "metadatas": [
+                        {
+                            "uid": "1",
+                            "sender_email": "a@example.com",
+                            "date": "2023-01-01T00:00:00Z",
+                            "folder": "Inbox",
+                        }
+                    ]
+                }
+            return {"metadatas": []}
+
+    retriever._email_db = FailingEmailDB()
+    retriever._email_db_checked = True
+    retriever.collection = DummyCollection()
+
+    stats = retriever.stats()
+
+    assert stats["total_emails"] == 1
+    assert stats["metadata_source"] == "chromadb_fallback"
+    assert stats["metadata_warning"] == "sqlite_stats_failed_chromadb_fallback"
+    assert stats["metadata_error_type"] == "RuntimeError"
 
 
 def test_format_results_includes_untrusted_data_warning():

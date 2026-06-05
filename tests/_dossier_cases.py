@@ -66,12 +66,12 @@ def db_empty():
 
 
 @pytest.fixture()
-def gen(db):
+def gen(db):  # pylint: disable=redefined-outer-name
     """DossierGenerator with populated database."""
     return DossierGenerator(db)
 
 
 @pytest.fixture()
-def gen_empty(db_empty):
+def gen_empty(db_empty):  # pylint: disable=redefined-outer-name
     """DossierGenerator with empty database."""
     return DossierGenerator(db_empty)

@@ -2,86 +2,86 @@ from __future__ import annotations
 
 from src.master_chronology import build_master_chronology
 
-
-def test_build_master_chronology_adds_source_linkage_and_date_precision() -> None:
-    payload = build_master_chronology(
-        case_bundle={
-            "scope": {
-                "employment_issue_tracks": [
-                    "disability_disadvantage",
-                    "retaliation_after_protected_event",
-                    "participation_duty_gap",
-                ],
-                "employment_issue_tags": ["sbv_participation"],
-                "context_notes": "SBV participation concerns arose after the complaint and disability context was known.",
-                "org_context": {
-                    "vulnerability_contexts": [
-                        {
-                            "context_type": "disability",
-                        }
-                    ]
-                },
-                "trigger_events": [
-                    {
-                        "trigger_type": "complaint",
-                        "date": "2026-02-11",
-                    }
-                ],
+_CHRONOLOGY_SOURCE_LINKAGE_CASE_BUNDLE = {
+    "scope": {
+        "employment_issue_tracks": [
+            "disability_disadvantage",
+            "retaliation_after_protected_event",
+            "participation_duty_gap",
+        ],
+        "employment_issue_tags": ["sbv_participation"],
+        "context_notes": "SBV participation concerns arose after the complaint and disability context was known.",
+        "org_context": {
+            "vulnerability_contexts": [
+                {
+                    "context_type": "disability",
+                }
+            ]
+        },
+        "trigger_events": [
+            {
+                "trigger_type": "complaint",
+                "date": "2026-02-11",
             }
-        },
-        timeline={
-            "events": [
-                {
-                    "uid": "uid-1",
-                    "date": "2026-02-12T10:00:00",
-                    "subject": "Status",
-                    "conversation_id": "conv-1",
-                },
-                {
-                    "uid": "uid-9",
-                    "date": "2026-03-01T10:30",
-                    "subject": "Fallback",
-                    "conversation_id": "conv-9",
-                },
-            ]
-        },
-        multi_source_case_bundle={
-            "chronology_anchors": [
-                {
-                    "source_id": "email:uid-1",
-                    "source_type": "email",
-                    "document_kind": "email_body",
-                    "date": "2026-02-12T10:00:00",
-                    "title": "Status",
-                    "reliability_level": "high",
-                }
-            ],
-            "sources": [
-                {
-                    "source_id": "email:uid-1",
-                    "source_type": "email",
-                    "uid": "uid-1",
-                    "title": "Status",
-                    "date": "2026-02-12T10:00:00",
-                    "snippet": "For the record, SBV participation was still missing after the complaint.",
-                    "provenance": {"evidence_handle": "email:uid-1"},
-                }
-            ],
-        },
-        finding_evidence_index={
-            "findings": [
-                {
-                    "finding_id": "finding-1",
-                    "supporting_evidence": [
-                        {"citation_id": "c-1", "message_or_document_id": "uid-1"},
-                        {"citation_id": "c-9", "message_or_document_id": "uid-9"},
-                    ],
-                }
-            ]
-        },
-    )
+        ],
+    }
+}
 
-    assert payload is not None
+_CHRONOLOGY_SOURCE_LINKAGE_TIMELINE = {
+    "events": [
+        {
+            "uid": "uid-1",
+            "date": "2026-02-12T10:00:00",
+            "subject": "Status",
+            "conversation_id": "conv-1",
+        },
+        {
+            "uid": "uid-9",
+            "date": "2026-03-01T10:30",
+            "subject": "Fallback",
+            "conversation_id": "conv-9",
+        },
+    ]
+}
+
+_CHRONOLOGY_SOURCE_LINKAGE_MULTI_SOURCE = {
+    "chronology_anchors": [
+        {
+            "source_id": "email:uid-1",
+            "source_type": "email",
+            "document_kind": "email_body",
+            "date": "2026-02-12T10:00:00",
+            "title": "Status",
+            "reliability_level": "high",
+        }
+    ],
+    "sources": [
+        {
+            "source_id": "email:uid-1",
+            "source_type": "email",
+            "uid": "uid-1",
+            "title": "Status",
+            "date": "2026-02-12T10:00:00",
+            "snippet": "For the record, SBV participation was still missing after the complaint.",
+            "provenance": {"evidence_handle": "email:uid-1"},
+        }
+    ],
+}
+
+_CHRONOLOGY_SOURCE_LINKAGE_FINDINGS = {
+    "findings": [
+        {
+            "finding_id": "finding-1",
+            "supporting_evidence": [
+                {"citation_id": "c-1", "message_or_document_id": "uid-1"},
+                {"citation_id": "c-9", "message_or_document_id": "uid-9"},
+            ],
+        }
+    ]
+}
+
+
+def _assert_chronology_basics(payload):
     assert payload["entry_count"] == 3
     assert payload["primary_entry_count"] == 2
     assert payload["scope_supplied_entry_count"] == 1
@@ -90,15 +90,13 @@ def test_build_master_chronology_adds_source_linkage_and_date_precision() -> Non
         "source_event": 1,
         "timeline_event": 1,
     }
+
+
+def _assert_date_precision(payload):
     assert payload["summary"]["date_precision_counts"] == {
         "day": 1,
         "second": 1,
         "minute": 1,
-    }
-    assert payload["summary"]["source_evidence_status_counts"] == {
-        "linked_record": 1,
-        "scope_only": 1,
-        "timeline_only": 1,
     }
     assert payload["summary"]["date_range"] == {
         "first": "2026-02-12T10:00:00",
@@ -108,7 +106,6 @@ def test_build_master_chronology_adds_source_linkage_and_date_precision() -> Non
         "first": "2026-02-11",
         "last": "2026-03-01T10:30",
     }
-    assert payload["summary"]["source_linked_entry_count"] == 2
     assert payload["summary"]["date_gap_count"] == 1
     assert payload["summary"]["largest_gap_days"] == 17
     gap = payload["summary"]["date_gaps_and_unexplained_sequences"][0]
@@ -116,6 +113,15 @@ def test_build_master_chronology_adds_source_linkage_and_date_precision() -> Non
     assert gap["priority"] == "high"
     assert gap["from_chronology_id"] == "CHR-002"
     assert gap["to_chronology_id"] == "CHR-003"
+
+
+def _assert_source_linkage(payload):
+    assert payload["summary"]["source_evidence_status_counts"] == {
+        "linked_record": 1,
+        "scope_only": 1,
+        "timeline_only": 1,
+    }
+    assert payload["summary"]["source_linked_entry_count"] == 2
 
     source_entry = next(entry for entry in payload["entries"] if entry["entry_type"] == "source_event")
     assert source_entry["source_linkage"]["source_ids"] == ["email:uid-1"]
@@ -134,6 +140,21 @@ def test_build_master_chronology_adds_source_linkage_and_date_precision() -> Non
     assert fallback_entry["source_linkage"]["source_ids"] == ["email:uid-9"]
     assert fallback_entry["source_linkage"]["evidence_handles"] == ["email:uid-9"]
     assert payload["summary"]["event_read_status_counts"]["ordinary_managerial_explanation:plausible_alternative"] == 2
+
+
+def test_build_master_chronology_adds_source_linkage_and_date_precision() -> None:
+    payload = build_master_chronology(
+        case_bundle=_CHRONOLOGY_SOURCE_LINKAGE_CASE_BUNDLE,
+        timeline=_CHRONOLOGY_SOURCE_LINKAGE_TIMELINE,
+        multi_source_case_bundle=_CHRONOLOGY_SOURCE_LINKAGE_MULTI_SOURCE,
+        finding_evidence_index=_CHRONOLOGY_SOURCE_LINKAGE_FINDINGS,
+    )
+
+    assert payload is not None
+    _assert_chronology_basics(payload)
+    _assert_date_precision(payload)
+    _assert_source_linkage(payload)
+
     neutral_view = payload["views"]["short_neutral_chronology"]
     assert neutral_view["entry_count"] == 2
     assert neutral_view["items"][0]["chronology_id"] == "CHR-002"

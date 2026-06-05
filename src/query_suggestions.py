@@ -40,14 +40,14 @@ class QuerySuggester:
                 for s in senders
                 if s.get("sender_email")
             ]
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Failed to get sender suggestions", exc_info=True)
 
         try:
             folders = self.db.folder_counts()
             folder_list = sorted(folders.items(), key=lambda x: x[1], reverse=True)[:limit]
             suggestions["folders"] = [{"label": name, "value": name, "count": count} for name, count in folder_list]
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Failed to get folder suggestions", exc_info=True)
 
         try:
@@ -61,7 +61,7 @@ class QuerySuggester:
                 }
                 for e in entities
             ]
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Failed to get entity suggestions", exc_info=True)
 
         return suggestions

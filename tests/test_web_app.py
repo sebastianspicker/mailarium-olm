@@ -5,7 +5,7 @@ import io
 from src.retriever import SearchResult
 
 
-def _result(
+def _result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     chunk_id: str = "c1",
     score_distance: float = 0.2,
     date: str = "2024-01-15",

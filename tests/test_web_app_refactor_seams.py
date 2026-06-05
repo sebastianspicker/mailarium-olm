@@ -25,7 +25,7 @@ def test_render_sidebar_delegates_to_impl(monkeypatch):
     assert calls == [(web_app.st, retriever)]
 
 
-def test_render_dashboard_page_delegates_to_impl(monkeypatch):
+def test_render_dashboard_page_delegates_to_impl(monkeypatch, tmp_path):
     calls: list[tuple[object, object]] = []
 
     def fake_impl(*, st_module, get_email_db_safe_fn):
@@ -33,7 +33,7 @@ def test_render_dashboard_page_delegates_to_impl(monkeypatch):
 
     monkeypatch.setattr(web_app, "render_dashboard_page_impl", fake_impl)
 
-    web_app.render_dashboard_page("/tmp/email.db")
+    web_app.render_dashboard_page(str(tmp_path / "email.db"))
 
     assert len(calls) == 1
     assert calls[0][0] is web_app.st
@@ -83,10 +83,10 @@ def test_main_routes_search_to_render_search_page(monkeypatch):
     assert calls == ["retriever"]
 
 
-def test_main_routes_dashboard_with_sqlite_path(monkeypatch):
+def test_main_routes_dashboard_with_sqlite_path(monkeypatch, tmp_path):
     calls: list[object] = []
     retriever_calls: list[tuple[object, object]] = []
-    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", "/tmp")
+    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", str(tmp_path))
 
     monkeypatch.setattr(web_app, "inject_styles", lambda: None)
     monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
@@ -95,7 +95,7 @@ def test_main_routes_dashboard_with_sqlite_path(monkeypatch):
         web_app, "get_retriever", lambda chroma, sqlite=None: retriever_calls.append((chroma, sqlite)) or "retriever"
     )
 
-    sidebar_inputs = iter(["", "/tmp/archive.db"])
+    sidebar_inputs = iter(["", str(tmp_path / "archive.db")])
     fake_sidebar = SimpleNamespace(
         radio=lambda *args, **kwargs: "Dashboard",
         text_input=lambda *args, **kwargs: next(sidebar_inputs),
@@ -109,11 +109,11 @@ def test_main_routes_dashboard_with_sqlite_path(monkeypatch):
 
     web_app.main()
 
-    assert calls == [str(validate_runtime_path("/tmp/archive.db", field_name="SQLite path"))]
+    assert calls == [str(validate_runtime_path(str(tmp_path / "archive.db"), field_name="SQLite path"))]
     assert retriever_calls == []
 
 
-def test_main_surfaces_runtime_path_errors_instead_of_crashing(monkeypatch):
+def test_main_surfaces_runtime_path_errors_instead_of_crashing(monkeypatch, tmp_path):
     errors: list[str] = []
 
     monkeypatch.setattr(web_app, "inject_styles", lambda: None)
@@ -127,7 +127,7 @@ def test_main_surfaces_runtime_path_errors_instead_of_crashing(monkeypatch):
 
     fake_sidebar = SimpleNamespace(
         radio=lambda *args, **kwargs: "Search",
-        text_input=lambda *args, **kwargs: "/tmp/bad-path",
+        text_input=lambda *args, **kwargs: str(tmp_path / "bad-path"),
     )
     fake_streamlit = SimpleNamespace(
         sidebar=fake_sidebar,
@@ -181,16 +181,16 @@ def test_main_rejects_web_runtime_paths_outside_allowed_roots(monkeypatch):
         ("Evidence", "render_evidence_page"),
     ],
 )
-def test_main_uses_resolved_sqlite_path_for_all_non_search_pages(monkeypatch, page_name, handler_name):
+def test_main_uses_resolved_sqlite_path_for_all_non_search_pages(monkeypatch, tmp_path, page_name, handler_name):
     calls: list[object] = []
-    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", "/tmp")
+    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", str(tmp_path))
 
     monkeypatch.setattr(web_app, "inject_styles", lambda: None)
     monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
     monkeypatch.setattr(web_app, "get_retriever", lambda _chroma, _sqlite=None: "retriever")
     monkeypatch.setattr(web_app, handler_name, lambda sqlite_path=None: calls.append(sqlite_path))
 
-    sidebar_inputs = iter(["", "/tmp/archive.db"])
+    sidebar_inputs = iter(["", str(tmp_path / "archive.db")])
     fake_sidebar = SimpleNamespace(
         radio=lambda *args, **kwargs: page_name,
         text_input=lambda *args, **kwargs: next(sidebar_inputs),
@@ -204,4 +204,4 @@ def test_main_uses_resolved_sqlite_path_for_all_non_search_pages(monkeypatch, pa
 
     web_app.main()
 
-    assert calls == [str(validate_runtime_path("/tmp/archive.db", field_name="SQLite path"))]
+    assert calls == [str(validate_runtime_path(str(tmp_path / "archive.db"), field_name="SQLite path"))]

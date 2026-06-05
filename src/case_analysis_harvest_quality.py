@@ -1,4 +1,8 @@
 # mypy: disable-error-code=name-defined
+# pylint: disable=too-many-locals,too-many-statements
+
+
+# pylint: disable=E0602  # cross-module names injected by compatibility facade
 """Split archive-harvest helpers (case_analysis_harvest_quality)."""
 
 from __future__ import annotations

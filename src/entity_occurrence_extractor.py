@@ -1,4 +1,5 @@
 """Occurrence-level entity extraction helpers for ingest pipelines."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

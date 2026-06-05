@@ -1,4 +1,5 @@
 """Public investigation-report entrypoint with stable helper imports."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
 """Compatibility collector for split ingest pipeline cases."""
+# pylint: disable=unused-wildcard-import,wildcard-import
 
 from ._ingest_pipeline_core_cases import *  # noqa: F403
 from ._ingest_pipeline_metadata_cases import *  # noqa: F403

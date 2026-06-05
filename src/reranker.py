@@ -1,4 +1,5 @@
 """Cross-encoder reranking for improved search precision."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

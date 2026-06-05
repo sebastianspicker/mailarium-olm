@@ -1,4 +1,5 @@
 """Compile-only full-pack intake for prompt plus materials workflows."""
+# pylint: disable=too-many-return-statements
 
 from __future__ import annotations
 

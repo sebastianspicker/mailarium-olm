@@ -11,6 +11,7 @@ Requires: FlagEmbedding >= 1.3.0
 
 from __future__ import annotations
 
+# pylint: disable=too-many-arguments,too-many-locals,too-many-positional-arguments
 import json
 import logging
 from pathlib import Path
@@ -201,7 +202,7 @@ class FineTuner:
         triplet_count: int,
     ) -> dict[str, Any]:
         """Fallback training using SentenceTransformers."""
-        from sentence_transformers import InputExample, SentenceTransformer, losses
+        from sentence_transformers import InputExample, SentenceTransformer, losses  # pylint: disable=no-name-in-module
         from torch.utils.data import DataLoader
 
         model = SentenceTransformer(self.base_model, device=self.device)

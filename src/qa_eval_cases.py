@@ -1,4 +1,5 @@
 """Case definitions and JSON loading helpers for QA evaluation."""
+# pylint: disable=too-many-instance-attributes
 
 from __future__ import annotations
 

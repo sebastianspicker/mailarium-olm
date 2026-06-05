@@ -17,7 +17,7 @@ from src.sanitization import sanitize_untrusted_text
 # ── Shared Test Infrastructure ───────────────────────────────
 
 
-def _make_result(
+def _make_result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     uid="uid-1",
     text="Budget proposal review.",
     subject="Budget Review",
@@ -359,7 +359,7 @@ class TestEmailDiscovery:
         old_db = MockDeps._email_db
 
         class NoKeywords(MockEmailDB):
-            def top_keywords(self, **kwargs):
+            def top_keywords(self, sender=None, folder=None, limit=30, **_unused):
                 return []
 
         MockDeps._email_db = NoKeywords()

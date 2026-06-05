@@ -1,4 +1,5 @@
 """Hybrid retrieval helpers extracted from ``src.retriever``."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ def _collection_revision(instance: EmailRetriever) -> tuple[int, str]:
         return (0, "")
     try:
         count = int(collection.count())
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         count = -1
     metadata = dict(getattr(collection, "metadata", {}) or {})
     return (count, str(metadata.get("index_revision") or ""))
@@ -164,7 +165,7 @@ def merge_hybrid_impl(
                         metadata=meta_dict,
                         distance=0.5,
                     )
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug(
                     "Hybrid merge: failed to fetch %d keyword-only results",
                     len(missing_ids),
@@ -188,7 +189,7 @@ def merge_hybrid_impl(
     except ImportError:
         logger.warning("rank_bm25 not installed; hybrid search disabled")
         return semantic_results
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("Hybrid merge failed, returning semantic-only results", exc_info=True)
         return semantic_results
 
@@ -216,7 +217,7 @@ def get_sparse_results_impl(instance: EmailRetriever, query: str, top_k: int) ->
                 if last_count != (collection_count, collection_revision):
                     instance._sparse_index.build_from_db(db)
                     instance._sparse_build_count = (collection_count, collection_revision)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug("Skipping sparse index staleness check", exc_info=True)
 
         if not instance._sparse_index.is_built or instance._sparse_index.doc_count == 0:
@@ -257,7 +258,7 @@ def get_sparse_results_impl(instance: EmailRetriever, query: str, top_k: int) ->
         results = instance._sparse_index.search(query_sparse[0], top_k=top_k)
         _record_sparse_diagnostic(instance, "status", "ok")
         return [chunk_id for chunk_id, _ in results] if results else None
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         _record_sparse_diagnostic(instance, "status", "error")
         logger.debug("Sparse retrieval failed", exc_info=True)
         return None
@@ -278,7 +279,7 @@ def get_bm25_results_impl(instance: EmailRetriever, query: str, top_k: int) -> l
                 if getattr(instance, "_bm25_build_revision", None) != current_revision:
                     instance._bm25_index.build_from_collection(instance.collection)
                     instance._bm25_build_revision = current_revision
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug("Skipping BM25 staleness check", exc_info=True)
 
         if not instance._bm25_index.is_built:
@@ -297,6 +298,6 @@ def get_bm25_results_impl(instance: EmailRetriever, query: str, top_k: int) -> l
         return [chunk_id for chunk_id, _ in results] if results else None
     except ImportError:
         return None
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.debug("BM25 retrieval failed", exc_info=True)
         return None

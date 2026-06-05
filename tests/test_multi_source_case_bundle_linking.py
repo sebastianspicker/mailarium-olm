@@ -4,7 +4,7 @@ from __future__ import annotations
 from src.multi_source_case_bundle import append_chat_log_sources, append_manifest_sources, build_multi_source_case_bundle
 
 
-def test_append_manifest_sources_accounts_for_supplied_artifacts_and_source_classes() -> None:
+def test_append_manifest_sources_accounts_for_supplied_artifacts_and_source_classes(tmp_path) -> None:
     bundle = append_manifest_sources(
         {
             "version": "1",
@@ -44,7 +44,7 @@ def test_append_manifest_sources_accounts_for_supplied_artifacts_and_source_clas
                     "date_start": "2026-03-01",
                     "date_end": "2026-03-31",
                     "date_is_approximate": True,
-                    "text_source_path": "/tmp/personnel-file.pdf",
+                    "text_source_path": str(tmp_path / "personnel-file.pdf"),
                     "text_locator": {"kind": "full_document_text", "page_hint": 2},
                     "review_status": "parsed",
                 },
@@ -68,7 +68,7 @@ def test_append_manifest_sources_accounts_for_supplied_artifacts_and_source_clas
                     "review_status": "degraded",
                     "weak_format_semantics": {
                         "recovery_mode": "sidecar_transcript",
-                        "sidecar_source_path": "/tmp/screenshot.ocr.txt",
+                        "sidecar_source_path": str(tmp_path / "screenshot.ocr.txt"),
                         "original_format_family": "image",
                     },
                 },
@@ -99,7 +99,7 @@ def test_append_manifest_sources_accounts_for_supplied_artifacts_and_source_clas
         "is_approximate": True,
         "has_range": True,
     }
-    assert manifest_doc["document_locator"]["text_source_path"] == "/tmp/personnel-file.pdf"
+    assert manifest_doc["document_locator"]["text_source_path"] == str(tmp_path / "personnel-file.pdf")
     assert manifest_doc["document_locator"]["text_locator"] == {"kind": "full_document_text", "page_hint": 2}
     assert manifest_doc["document_locator"]["snippet_locator"] == {
         "kind": "quoted_snippet",

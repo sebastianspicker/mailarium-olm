@@ -14,6 +14,7 @@ OPFMessageCopySource), fields are extracted from the raw RFC 2822 headers.
 
 from __future__ import annotations
 
+# pylint: disable=too-many-instance-attributes
 import hashlib
 import logging
 import os
@@ -175,6 +176,11 @@ class Email:
         When ``message_id`` is available, hashes it directly.  For the
         fallback case (no Message-ID), includes a body hash to reduce
         collision risk when subject+date+sender are identical.
+
+        Uses MD5 as a stable non-security identifier hash. This is NOT a
+        cryptographic digest — changing the algorithm would change all
+        existing email UIDs and break deduplication with previously
+        ingested archives.
         """
         if self.message_id:
             return hashlib.md5(self.message_id.encode(), usedforsecurity=False).hexdigest()

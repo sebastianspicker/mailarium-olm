@@ -1,4 +1,5 @@
 """Scan session management MCP tool for progressive multi-pass search."""
+# pylint: disable=too-many-return-statements
 
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ def _d() -> ToolDepsProto:
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     """Register scan session tool."""
-    global _deps
+    global _deps  # pylint: disable=global-statement
     _deps = deps
 
     @mcp_instance.tool(

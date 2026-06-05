@@ -1,4 +1,5 @@
 """Communication network analysis using NetworkX."""
+# pylint: disable=too-many-branches,too-many-locals
 
 from __future__ import annotations
 
@@ -77,7 +78,7 @@ class CommunicationNetwork:
                 comms = nx.community.label_propagation_communities(undirected)
             communities = [sorted(c) for c in comms]
             communities.sort(key=len, reverse=True)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Community detection failed", exc_info=True)
 
         result = {
@@ -115,7 +116,7 @@ class CommunicationNetwork:
                 betweenness = nx.betweenness_centrality(cost_graph, weight="cost", k=min(n_nodes, 100))
             else:
                 betweenness = nx.betweenness_centrality(cost_graph, weight="cost")
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("betweenness_centrality failed", exc_info=True)
             betweenness = {}
         self._betweenness_cache[cache_key] = betweenness
@@ -322,7 +323,7 @@ class CommunicationNetwork:
             try:
                 betweenness = self._get_betweenness(nx)
                 bridge_score = round(betweenness.get(email_address, 0.0), 4)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug("bridge_score failed for %r", email_address, exc_info=True)
 
             # Community — reuse cached analysis for consistency
@@ -333,7 +334,7 @@ class CommunicationNetwork:
                     if email_address in members:
                         community = members
                         break
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug("community detection failed for %r", email_address, exc_info=True)
 
             # Send/receive counts from graph edges

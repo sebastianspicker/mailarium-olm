@@ -1,9 +1,10 @@
 """Precision-first inferred parent/thread matching."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING
 
@@ -23,12 +24,15 @@ def _parse_dt(value: str) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         try:
-            return parsedate_to_datetime(value)
+            parsed = parsedate_to_datetime(value)
         except (TypeError, ValueError):
             return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
 
 
 def _participant_set(email: Email) -> set[str]:

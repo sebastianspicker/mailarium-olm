@@ -1,4 +1,5 @@
 """Thread intelligence MCP tools."""
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 

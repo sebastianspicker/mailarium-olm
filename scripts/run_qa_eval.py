@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
+
+
 """Run a minimal answer-context evaluation against labeled mailbox questions."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
@@ -123,9 +126,19 @@ def _project_venv_python() -> Path:
 def _interpreter_has_module(module_name: str) -> bool:
     try:
         __import__(module_name)
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return False
     return True
+
+
+def _run_project_reexec(command: list[str]) -> subprocess.CompletedProcess[bytes]:
+    if len(command) < 2 or Path(command[1]).resolve() != Path(__file__).resolve():
+        raise ValueError("QA eval re-exec must target this script")
+    return subprocess.run(  # nosemgrep
+        command,
+        check=False,
+        cwd=ROOT,
+    )
 
 
 def _maybe_reexec_embedding(argv: list[str], *, live_backend: str) -> int | None:
@@ -136,7 +149,7 @@ def _maybe_reexec_embedding(argv: list[str], *, live_backend: str) -> int | None
     venv_python = _project_venv_python()
     if not venv_python.exists():
         return None
-    completed = subprocess.run([str(venv_python), str(Path(__file__).resolve()), *argv], cwd=ROOT)
+    completed = _run_project_reexec([str(venv_python), str(Path(__file__).resolve()), *argv])
     return int(completed.returncode)
 
 
@@ -251,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.check_thresholds and str(threshold_verdict.get("status") or "") != "pass":
             return 2
         return 0
-    except Exception as exc:
+    except (RuntimeError, ValueError, OSError, ImportError) as exc:
         if not args.live:
             raise
         report = _blocked_live_report(

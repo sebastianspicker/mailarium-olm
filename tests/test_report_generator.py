@@ -77,7 +77,7 @@ def test_generate_writes_to_file():
         output = os.path.join(tmpdir, "report.html")
         html = gen.generate(output_path=output)
         assert os.path.exists(output)
-        contents = open(output, encoding="utf-8").read()
+        contents = open(output, encoding="utf-8").read()  # pylint: disable=consider-using-with
         assert contents == html
 
 
@@ -222,7 +222,7 @@ def test_export_graphml_content_valid():
     with tempfile.TemporaryDirectory() as tmpdir:
         output = os.path.join(tmpdir, "valid.graphml")
         net.export_graphml(output)
-        content = open(output, encoding="utf-8").read()
+        content = open(output, encoding="utf-8").read()  # pylint: disable=consider-using-with
         assert "graphml" in content.lower()
         assert "a@example.test" in content
 

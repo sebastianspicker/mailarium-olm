@@ -1,9 +1,10 @@
 """Cross-message aggregation helpers for behavioural-analysis case patterns."""
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals
 
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any, Literal, TypedDict
 
@@ -46,9 +47,12 @@ def _parse_datetime(value: str) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
 
 
 def _date_key(value: str) -> tuple[int, str]:
@@ -58,6 +62,8 @@ def _date_key(value: str) -> tuple[int, str]:
     try:
         normalized = value.replace("Z", "+00:00")
         parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(UTC).replace(tzinfo=None)
         return (0, parsed.isoformat())
     except ValueError:
         return (0, value)

@@ -1,4 +1,5 @@
 """Helper rules and extraction functions for prompt-to-intake preflight."""
+# pylint: disable=too-many-arguments
 
 from __future__ import annotations
 

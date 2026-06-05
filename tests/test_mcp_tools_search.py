@@ -19,6 +19,8 @@ from ._mcp_tools_cases import (
     test_email_answer_context_returns_ranked_evidence_bundle,
     test_email_answer_context_separates_attachment_candidates,
     test_email_search_structured_emits_strict_json,
+    test_email_search_structured_exposes_query_expansion_failure_diagnostics,
+    test_email_search_structured_exposes_semantic_filter_failure_diagnostics,
     test_email_search_structured_forwards_attachment_filters,
     test_email_search_structured_forwards_email_type,
     test_email_search_structured_forwards_new_filters,

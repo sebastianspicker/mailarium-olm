@@ -84,6 +84,30 @@ def test_refresh_captured_reports_check_mode_includes_full_pack_goldens(tmp_path
     assert check_exit == 0
 
 
+def test_refresh_captured_reports_check_mode_does_not_rewrite_stale_full_pack_golden(tmp_path: Path) -> None:
+    from scripts import refresh_qa_eval_captured_reports as runner
+    from src.legal_support_acceptance_goldens import legal_support_golden_scenarios
+
+    docs_agent_dir = tmp_path / "docs_agent"
+    docs_agent_dir.mkdir(parents=True, exist_ok=True)
+    scenario = legal_support_golden_scenarios()[0]
+    golden_copy = docs_agent_dir / Path(scenario.golden_path).name
+    golden_copy.write_text("{}\n", encoding="utf-8")
+
+    check_exit = runner.main(
+        [
+            "--check",
+            "--scenario",
+            scenario.name,
+            "--docs-agent-dir",
+            str(docs_agent_dir),
+        ]
+    )
+
+    assert check_exit == 1
+    assert golden_copy.read_text(encoding="utf-8") == "{}\n"
+
+
 def test_build_golden_projection_reads_nested_chronology_and_skeptical_shapes() -> None:
     from src.legal_support_acceptance_projection import build_golden_projection
 

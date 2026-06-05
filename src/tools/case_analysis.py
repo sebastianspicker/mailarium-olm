@@ -103,7 +103,7 @@ async def _email_case_full_pack_impl(params: EmailCaseFullPackInput) -> str:
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     """Register the dedicated case-analysis MCP tool."""
-    global _deps
+    global _deps  # pylint: disable=global-statement
     _deps = deps
     mcp_instance.tool(
         name="email_case_analysis_exploratory",

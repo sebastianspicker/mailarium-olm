@@ -47,7 +47,7 @@ class TestThreadTools:
         from src.tools import threads
 
         class EmptyRetriever(MockRetriever):
-            def search_by_thread(self, **kwargs):
+            def search_by_thread(self, conversation_id=None, top_k=50, **_unused):
                 return []
 
         fake_mcp = FakeMCP()

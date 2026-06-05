@@ -1,4 +1,5 @@
 """Analytics command-family implementations for the CLI."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 
@@ -28,8 +29,8 @@ def run_top_contacts_impl(db, email_address: str) -> None:
         max_count = max(c["total"] for c in contacts) if contacts else 1
         for i, contact in enumerate(contacts, 1):
             bar_len = int((contact["total"] / max_count) * 20) if max_count else 0
-            bar = "\u2588" * bar_len
-            table.add_row(str(i), f"{contact['total']:,}", f"{contact['partner']}  [dim]{bar}[/]")
+            volume_bar = "\u2588" * bar_len
+            table.add_row(str(i), f"{contact['total']:,}", f"{contact['partner']}  [dim]{volume_bar}[/]")
         console.print(table)
     except ImportError:
         print(f"\nTop contacts for {email_address}:\n")
@@ -57,9 +58,9 @@ def run_volume_impl(db, period: str) -> None:
         lines: list[str] = []
         for row in data:
             bar_len = int((row["count"] / max_count) * 40) if max_count else 0
-            bar = "\u2588" * bar_len
+            volume_bar = "\u2588" * bar_len
             count_str = f"{row['count']:>5}"
-            lines.append(f"  {row['period']}  {count_str}  [cyan]{bar}[/]")
+            lines.append(f"  {row['period']}  {count_str}  [cyan]{volume_bar}[/]")
 
         body = "\n".join(lines)
         console.print(
@@ -73,8 +74,8 @@ def run_volume_impl(db, period: str) -> None:
     except ImportError:
         print(f"\nEmail volume by {period}:\n")
         for row in data:
-            bar = "\u2588" * min(50, row["count"])
-            print(f"  {row['period']}  {row['count']:>5}  {bar}")
+            volume_bar = "\u2588" * min(50, row["count"])
+            print(f"  {row['period']}  {row['count']:>5}  {volume_bar}")
 
 
 def run_entities_impl(db, entity_type: str | None) -> None:

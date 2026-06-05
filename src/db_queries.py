@@ -1,4 +1,5 @@
 """Query mixin for EmailDatabase: read operations, full-body retrieval, browsing."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-positional-arguments,too-many-public-methods
 
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from .db_queries_browse import (
     recipients_for_uid_impl,
     recipients_for_uids_impl,
 )
-from .db_schema import _escape_like
+from .db_schema import _escape_like, _sql_in_placeholders
 
 if TYPE_CHECKING:
     pass  # conn declared below for mypy
@@ -84,7 +85,7 @@ class QueryMixin:
             "SELECT state.email_uid "
             "FROM email_ingest_state AS state "
             "JOIN emails ON emails.uid = state.email_uid "
-            f"WHERE {' AND '.join(manageres)}",  # nosec
+            f"WHERE {' AND '.join(manageres)}",  # nosec B608
         ).fetchall()
         return {str(row["email_uid"]) for row in rows if str(row["email_uid"] or "")}
 
@@ -130,9 +131,10 @@ class QueryMixin:
         if not like_patterns:
             return []
 
-        segment_placeholders = ",".join("?" for _ in segment_types)
+        segment_placeholders = _sql_in_placeholders(segment_types)
         conditions = ["LOWER(ms.text) LIKE ? ESCAPE '\\'" for _ in like_patterns]
         params: list[object] = [*segment_types, *[f"%{_escape_like(pattern)}%" for pattern in like_patterns], limit * 8]
+        where_clause = f"WHERE ms.segment_type IN ({segment_placeholders}) AND ({' OR '.join(conditions)})"
         rows = self.conn.execute(
             "SELECT ms.email_uid AS uid, "
             "ms.ordinal, ms.segment_type, ms.depth, ms.text AS segment_text, "
@@ -141,8 +143,7 @@ class QueryMixin:
             "e.attachment_count, e.detected_language, e.detected_language_confidence "
             "FROM message_segments ms "
             "JOIN emails e ON e.uid = ms.email_uid "
-            f"WHERE ms.segment_type IN ({segment_placeholders}) "  # nosec
-            f"AND ({' OR '.join(conditions)}) "
+            f"{where_clause} "  # nosec B608
             "ORDER BY e.date DESC, ms.ordinal ASC "
             "LIMIT ?",
             params,
@@ -355,7 +356,7 @@ class QueryMixin:
             ChromaDB), ``chromadb_only`` (UIDs with chunks in ChromaDB but
             missing from SQLite), and counts.
         """
-        sqlite_uids = self.all_uids()
+        sqlite_uids = self.all_uids()  # pylint: disable=assignment-from-no-return
 
         # Extract email UIDs from chunk IDs: "uid__0" -> "uid"
         chromadb_email_uids: set[str] = set()

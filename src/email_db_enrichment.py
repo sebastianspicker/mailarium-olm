@@ -155,7 +155,7 @@ def _candidate_parent_rows(cur: sqlite3.Cursor, email: Email) -> list[sqlite3.Ro
                 FROM emails
                 WHERE {" AND ".join(manageres)}
                 ORDER BY date DESC
-                LIMIT 200"""  # nosec B608 — `manageres` entries are hardcoded predicate strings; all values are bound as params
+                LIMIT 200"""
     return cur.execute(query, params).fetchall()
 
 

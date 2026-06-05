@@ -1,4 +1,5 @@
 """Evidence management mixin for EmailDatabase."""
+# pylint: disable=too-many-arguments,too-many-boolean-expressions,too-many-branches,too-many-locals,too-many-positional-arguments,too-many-return-statements
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import logging
 import sqlite3
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from ._sql_validation import validate_column_update_pairs as _validate_column_update_pairs
 from .db_evidence_queries import (
     evidence_candidate_stats_impl,
     evidence_categories_impl,
@@ -428,13 +430,13 @@ class EvidenceMixin:
         new_hash = self.compute_content_hash(f"{existing['email_uid']}|{category}|{key_quote}")
         updates["content_hash"] = new_hash
 
-        set_managere = ", ".join(f"{k} = ?" for k in updates)
+        set_managere = _validate_column_update_pairs(updates, allowed_columns=allowed | {"content_hash", "verified"})
         set_managere += ", updated_at = datetime('now')"
         params = [*updates.values(), evidence_id]
 
         try:
             cur = self.conn.execute(
-                f"UPDATE evidence_items SET {set_managere} WHERE id = ?",  # nosec
+                f"UPDATE evidence_items SET {set_managere} WHERE id = ?",  # nosec B608
                 params,
             )
 
@@ -826,7 +828,7 @@ class EvidenceMixin:
             manageres.append("apply_on_refresh = 1")
         rows = self.conn.execute(
             "SELECT * FROM matter_review_overrides "
-            f"WHERE {' AND '.join(manageres)} "  # nosec
+            f"WHERE {' AND '.join(manageres)} "  # nosec B608
             "ORDER BY target_type, target_id",
             params,
         ).fetchall()

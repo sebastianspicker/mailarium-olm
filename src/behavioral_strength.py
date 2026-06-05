@@ -1,4 +1,5 @@
 """Rule-backed strength scoring for behavioural-analysis findings."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

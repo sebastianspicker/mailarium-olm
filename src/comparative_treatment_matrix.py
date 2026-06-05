@@ -1,4 +1,5 @@
 """Matrix and shared-point helpers for comparative-treatment analysis."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-return-statements
 
 from __future__ import annotations
 

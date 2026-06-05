@@ -7,7 +7,7 @@ from src.email_clusterer import EmailClusterer
 
 def _make_embeddings(n_samples: int = 30, n_features: int = 8, n_groups: int = 3):
     """Create synthetic embeddings with clear cluster structure."""
-    rng = np.random.RandomState(42)
+    rng = np.random.RandomState(42)  # pylint: disable=no-member
     embeddings = []
     uids = []
     per_group = n_samples // n_groups

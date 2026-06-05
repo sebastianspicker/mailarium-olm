@@ -32,7 +32,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TextIO, cast
 
 from dotenv import load_dotenv
 
@@ -45,14 +45,15 @@ try:
     from mcp.types import ToolAnnotations as _MCPToolAnnotations
 
     _MCP_IMPORT_ERROR: ModuleNotFoundError | None = None
-    FastMCP = cast(Any, _FastMCP)
+    FastMCP = cast(Any, _FastMCP)  # pylint: disable=invalid-name  # re-export of external class
     ToolAnnotations = cast(Any, _MCPToolAnnotations)
 except ModuleNotFoundError as exc:  # pragma: no cover - exercised in interpreter-specific entrypoint tests
     _MCP_IMPORT_ERROR = exc
-    FastMCP = cast(Any, None)
+    FastMCP = cast(Any, None)  # pylint: disable=invalid-name  # fallback when MCP is unavailable
 
     @dataclass
-    class _FallbackToolAnnotations:
+    class _FallbackToolAnnotations:  # pylint: disable=invalid-name
+        # camelCase attributes are MCP protocol spec contract names.
         title: str
         readOnlyHint: bool
         destructiveHint: bool
@@ -61,8 +62,8 @@ except ModuleNotFoundError as exc:  # pragma: no cover - exercised in interprete
 
     ToolAnnotations = cast(Any, _FallbackToolAnnotations)
 
-from .config import get_settings
-from .repo_paths import normalize_local_path
+from .config import clear_settings_cache, get_settings
+from .repo_paths import normalize_local_path, validate_runtime_path
 from .sanitization import (
     apply_privacy_guardrails,
     privacy_mode_policy,
@@ -73,26 +74,25 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 # Clear any previously cached settings so they reflect the .env values
-# loaded above (the lru_cache in get_settings() would otherwise return
-# a stale Settings instance built before load_dotenv ran).
-get_settings.cache_clear()
+# loaded above instead of a stale Settings instance built before load_dotenv ran.
+clear_settings_cache()
 
 # ── Instance lock ─────────────────────────────────────────────
 
-_lock_fd = None
+_lock_fd: TextIO | None = None  # module-level mutable singleton, not a constant
 
 
 def _acquire_instance_lock() -> None:
     """Acquire an exclusive file lock to prevent concurrent instances.
 
-    Uses ``fcntl.flock`` (Unix) with ``LOCK_EX | LOCK_NB``.  On Windows
-    (no ``fcntl``), logs a warning and continues without locking.
+    Uses ``fcntl.flock`` (Unix) with ``LOCK_EX | LOCK_NB``. On platforms where
+    ``fcntl`` is unavailable, log a warning and continue without locking.
     """
-    global _lock_fd
+    global _lock_fd  # pylint: disable=global-statement
     try:
         import fcntl
     except ImportError:
-        logger.warning("fcntl not available (Windows?) — skipping instance lock")
+        logger.warning("fcntl is not available; continuing without an MCP instance lock.")
         return
 
     _chromadb_path, sqlite_path = _resolved_runtime_paths()
@@ -101,14 +101,14 @@ def _acquire_instance_lock() -> None:
     lock_path = data_dir / "mcp_server.lock"
 
     lock_path.touch(exist_ok=True)
-    fd = open(lock_path, "r+")
+    fd = open(lock_path, "r+", encoding="utf-8")  # pylint: disable=consider-using-with
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         try:
             fd.seek(0)
             existing_pid = fd.read().strip()
-        except Exception:
+        except (OSError, ValueError):
             existing_pid = "unknown"
 
         # Check if the locking process is still alive.  A stale lock from
@@ -126,7 +126,7 @@ def _acquire_instance_lock() -> None:
                 existing_pid,
             )
             fd.close()
-            fd = open(lock_path, "r+")
+            fd = open(lock_path, "r+", encoding="utf-8")  # pylint: disable=consider-using-with
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError:
@@ -150,11 +150,11 @@ def _acquire_instance_lock() -> None:
 
 
 def _release_lock() -> None:
-    global _lock_fd
+    global _lock_fd  # pylint: disable=global-statement
     if _lock_fd is not None:
         try:
             _lock_fd.close()
-        except Exception:
+        except OSError:
             logger.debug("Failed to close MCP server lock during shutdown", exc_info=True)
         _lock_fd = None
 
@@ -207,41 +207,53 @@ class _MissingFastMCP:
 
 mcp = FastMCP("email_mcp") if FastMCP is not None else _MissingFastMCP("email_mcp")
 
-_retriever = None
+_retriever = None  # pylint: disable=invalid-name  # lazy singleton, mutated at runtime
 _retriever_lock = threading.Lock()
 _runtime_chromadb_path: str | None = None
 _runtime_sqlite_path: str | None = None
 
 
-def set_runtime_archive_paths(*, chromadb_path: str | None = None, sqlite_path: str | None = None) -> None:
-    """Persist runtime archive overrides for later read tools in this server process."""
-    global _email_db, _retriever, _runtime_chromadb_path, _runtime_sqlite_path
-    changed = False
-    if chromadb_path is not None:
-        normalized_chromadb_path = str(normalize_local_path(chromadb_path, field_name="chromadb_path"))
-        if normalized_chromadb_path != _runtime_chromadb_path:
-            _runtime_chromadb_path = normalized_chromadb_path
-            changed = True
-    if sqlite_path is not None:
-        normalized_sqlite_path = str(normalize_local_path(sqlite_path, field_name="sqlite_path"))
-        if normalized_sqlite_path != _runtime_sqlite_path:
-            _runtime_sqlite_path = normalized_sqlite_path
-            changed = True
-    if not changed:
-        return
+def _runtime_path_override_changed(path: str | None, *, field_name: str, current: str | None) -> tuple[str | None, bool]:
+    if path is None:
+        return current, False
+    normalized = str(validate_runtime_path(path, field_name=field_name))
+    return normalized, normalized != current
 
+
+def _reset_runtime_clients() -> None:
+    global _email_db, _retriever  # pylint: disable=used-before-assignment,global-statement
     with _retriever_lock:
         _retriever = None
     old_email_db = None
     with _email_db_lock:
-        old_email_db = _email_db
+        old_email_db = _email_db  # pylint: disable=used-before-assignment
         _email_db = None
     close = getattr(old_email_db, "close", None)
-    if callable(close):
+    if close is not None and callable(close):
         try:
-            close()
-        except Exception:
+            close()  # pylint: disable=not-callable
+        except OSError:
             pass
+
+
+def set_runtime_archive_paths(*, chromadb_path: str | None = None, sqlite_path: str | None = None) -> None:
+    """Persist runtime archive overrides for later read tools in this server process."""
+    global _runtime_chromadb_path, _runtime_sqlite_path  # pylint: disable=global-statement
+    new_chromadb_path, chromadb_changed = _runtime_path_override_changed(
+        chromadb_path,
+        field_name="chromadb_path",
+        current=_runtime_chromadb_path,
+    )
+    new_sqlite_path, sqlite_changed = _runtime_path_override_changed(
+        sqlite_path,
+        field_name="sqlite_path",
+        current=_runtime_sqlite_path,
+    )
+    if not (chromadb_changed or sqlite_changed):
+        return
+    _runtime_chromadb_path = new_chromadb_path
+    _runtime_sqlite_path = new_sqlite_path
+    _reset_runtime_clients()
 
 
 def _resolved_runtime_paths() -> tuple[str, str]:
@@ -274,7 +286,7 @@ def get_retriever() -> EmailRetriever:
     rechecks to prevent duplicate initialization.  Once initialized,
     the retriever is read-only and shared across all worker threads.
     """
-    global _retriever
+    global _retriever  # pylint: disable=global-statement
     if _retriever is not None:
         return _retriever
     with _retriever_lock:
@@ -298,7 +310,7 @@ def get_retriever() -> EmailRetriever:
 
 # ── EmailDatabase helper ──────────────────────────────────────
 
-_email_db = None
+_email_db = None  # pylint: disable=invalid-name  # lazy singleton, mutated at runtime
 _email_db_lock = threading.Lock()
 
 _DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available. Run ingestion first."})
@@ -313,7 +325,7 @@ def get_email_db() -> EmailDatabase | None:
     reads from multiple ``asyncio.to_thread`` workers.  Write operations
     (evidence_add, etc.) are serialized by SQLite's internal WAL locking.
     """
-    global _email_db
+    global _email_db  # pylint: disable=global-statement
     if _email_db is not None:
         return _email_db
     with _email_db_lock:

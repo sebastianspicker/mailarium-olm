@@ -336,8 +336,6 @@ class TestJsonResponseSizeGuard:
         data = {"text": "x" * 5000}
         result = json_response(data, max_chars=100)
         # Result should be valid JSON with truncation metadata
-        import json
-
         parsed = json.loads(result)
         assert parsed["_truncated"]["field"] == "text"
         assert parsed["text"] != ""

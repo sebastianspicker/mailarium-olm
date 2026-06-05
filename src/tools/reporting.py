@@ -97,7 +97,7 @@ def _writing_analysis(deps: ToolDepsProto, db: Any, sender: str | None, limit: i
                 if uids:
                     full_map = db.get_emails_full_batch(uids)
                     return [full.get("body_text", "") for full in full_map.values() if full and full.get("body_text")][:max_texts]
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug("SQLite query failed for sender %r, falling back", sender_filter, exc_info=True)
 
         # Fallback: use search_filtered with a generic query
@@ -108,7 +108,7 @@ def _writing_analysis(deps: ToolDepsProto, db: Any, sender: str | None, limit: i
                 sender=sender_filter,
             )
             return [r.text for r in results if r.text]
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("search_filtered failed for sender %r", sender_filter, exc_info=True)
             return []
 
@@ -127,7 +127,7 @@ def _writing_analysis(deps: ToolDepsProto, db: Any, sender: str | None, limit: i
 
     try:
         senders = db.top_senders(limit=limit)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return json_error("Could not fetch sender list.")
 
     profiles = []

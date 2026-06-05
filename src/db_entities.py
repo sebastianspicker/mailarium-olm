@@ -1,4 +1,5 @@
 """Entity management mixin for EmailDatabase."""
+# pylint: disable=too-many-arguments,too-many-locals
 
 from __future__ import annotations
 
@@ -6,7 +7,7 @@ import hashlib
 import sqlite3
 from typing import TYPE_CHECKING, Any
 
-from .db_schema import _escape_like
+from .db_schema import _escape_like, _sql_in_placeholders
 
 
 def _safe_optional_int(value: Any) -> int | None:
@@ -257,7 +258,7 @@ class EntityMixin:
         if not normalized_uids:
             return {}
         result: dict[str, list[dict[str, Any]]] = {uid: [] for uid in normalized_uids}
-        placeholders = ",".join("?" for _ in normalized_uids)
+        placeholders = _sql_in_placeholders(normalized_uids)
         rows = self.conn.execute(
             "SELECT eo.id, eo.email_uid, eo.source_scope, eo.surface_scope, "
             "eo.segment_ordinal, eo.char_start, eo.char_end, "
@@ -266,7 +267,7 @@ class EntityMixin:
             "ent.entity_text, ent.entity_type, ent.normalized_form "
             "FROM entity_occurrences eo "
             "JOIN entities ent ON ent.id = eo.entity_id "
-            f"WHERE eo.email_uid IN ({placeholders}) "  # nosec
+            f"WHERE eo.email_uid IN ({placeholders}) "  # nosec B608
             "ORDER BY eo.email_uid, COALESCE(eo.segment_ordinal, 999999), "
             "COALESCE(eo.char_start, 999999), eo.id",
             normalized_uids,
@@ -395,14 +396,21 @@ class EntityMixin:
         else:
             date_expr = "substr(e.date, 1, 7)"
 
-        rows = self.conn.execute(
-            f"SELECT {date_expr} AS period, COUNT(*) AS count"  # nosec
+        _date_expr_allowlist = {"substr(e.date, 1, 10)", "substr(e.date, 1, 7)"}
+        if date_expr not in _date_expr_allowlist:
+            date_expr = "substr(e.date, 1, 7)"
+
+        query = (
+            f"SELECT {date_expr} AS period, COUNT(*) AS count"
             f" FROM entity_mentions em"
             f" JOIN entities ent ON em.entity_id = ent.id"
             f" JOIN emails e ON em.email_uid = e.uid"
             r" WHERE ent.normalized_form LIKE ? ESCAPE '\'"
             f" GROUP BY period"
-            f" ORDER BY period",
+            f" ORDER BY period"
+        )
+        rows = self.conn.execute(
+            query,
             (f"%{_escape_like(entity_text.lower())}%",),
         ).fetchall()
 

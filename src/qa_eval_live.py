@@ -1,4 +1,5 @@
 """Live QA-eval dependency resolution and SQLite fallback retrieval."""
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
@@ -223,6 +224,57 @@ def _query_requests_membership(query_text: str) -> bool:
     return "belong" in query_text or "conversation" in query_text
 
 
+def _sender_matches_filter(email: dict[str, Any], sender: str | None) -> bool:
+    if not sender:
+        return True
+    sender_text = f"{email.get('sender_email') or ''} {email.get('sender_name') or ''}".casefold()
+    return sender.casefold() in sender_text
+
+
+def _text_field_matches_filter(email: dict[str, Any], field: str, expected: str | None) -> bool:
+    return not expected or expected.casefold() in str(email.get(field) or "").casefold()
+
+
+def _date_matches_eval_filters(email_date: str, *, date_from: str | None, date_to: str | None) -> bool:
+    if date_from and email_date < date_from[:10]:
+        return False
+    return not (date_to and email_date > date_to[:10])
+
+
+def _metadata_matches_eval_filters(
+    email: dict[str, Any],
+    *,
+    has_attachments: bool | None,
+    email_type: str | None,
+) -> bool:
+    if has_attachments is not None and bool(email.get("has_attachments")) != has_attachments:
+        return False
+    return not (email_type and str(email.get("email_type") or "") != email_type)
+
+
+def _email_matches_eval_filters(
+    email: dict[str, Any],
+    *,
+    sender: str | None,
+    subject: str | None,
+    folder: str | None,
+    has_attachments: bool | None,
+    email_type: str | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> bool:
+    if not _sender_matches_filter(email, sender):
+        return False
+    if not _text_field_matches_filter(email, "subject", subject):
+        return False
+    if not _text_field_matches_filter(email, "folder", folder):
+        return False
+    if not _metadata_matches_eval_filters(email, has_attachments=has_attachments, email_type=email_type):
+        return False
+    email_date = str(email.get("date") or "")[:10]
+    return _date_matches_eval_filters(email_date, date_from=date_from, date_to=date_to)
+
+
 class _SQLiteEvalRetriever:
     """Fallback retriever for live QA eval when Chroma is unavailable."""
 
@@ -242,33 +294,21 @@ class _SQLiteEvalRetriever:
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
-        conditions: list[str] = []
-        params: list[Any] = []
-        if sender:
-            conditions.append("(sender_email LIKE ? ESCAPE '\\' OR sender_name LIKE ? ESCAPE '\\')")
-            needle = f"%{sender}%"
-            params.extend([needle, needle])
-        if subject:
-            conditions.append("subject LIKE ? ESCAPE '\\'")
-            params.append(f"%{subject}%")
-        if folder:
-            conditions.append("folder LIKE ? ESCAPE '\\'")
-            params.append(f"%{folder}%")
-        if has_attachments is not None:
-            conditions.append("has_attachments = ?")
-            params.append(1 if has_attachments else 0)
-        if email_type:
-            conditions.append("email_type = ?")
-            params.append(email_type)
-        if date_from:
-            conditions.append("SUBSTR(date, 1, 10) >= ?")
-            params.append(date_from[:10])
-        if date_to:
-            conditions.append("SUBSTR(date, 1, 10) <= ?")
-            params.append(date_to[:10])
-        where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
-        rows = self.email_db.conn.execute(f"SELECT * FROM emails{where}", params).fetchall()  # nosec
-        return [dict(row) for row in rows]
+        rows = [dict(row) for row in self.email_db.conn.execute("SELECT * FROM emails").fetchall()]
+        return [
+            email
+            for email in rows
+            if _email_matches_eval_filters(
+                email,
+                sender=sender,
+                subject=subject,
+                folder=folder,
+                has_attachments=has_attachments,
+                email_type=email_type,
+                date_from=date_from,
+                date_to=date_to,
+            )
+        ]
 
     def _body_result(self, email: dict[str, Any], score: float, *, rank_score: float | None = None) -> _SQLiteEvalSearchResult:
         uid = str(email.get("uid") or "")
@@ -476,7 +516,7 @@ def _resolve_live_retriever(email_db: Any, *, preferred_backend: str = "auto") -
     except ModuleNotFoundError as exc:
         if preferred_backend == "embedding":
             raise
-        if exc.name and exc.name.startswith("chromadb"):
+        if exc.name and exc.name.startswith("chromadb"):  # pylint: disable=no-member
             return _SQLiteEvalRetriever(email_db)
         raise
     except ImportError as exc:

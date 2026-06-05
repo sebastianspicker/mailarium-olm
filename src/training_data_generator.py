@@ -10,6 +10,7 @@ Output format: JSONL compatible with FlagEmbedding's training API.
 
 from __future__ import annotations
 
+# pylint: disable=too-many-arguments,too-many-locals,too-many-positional-arguments
 import json
 import logging
 import random
@@ -28,7 +29,7 @@ class TrainingDataGenerator:
 
     def __init__(self, db: EmailDatabase, seed: int = 42) -> None:
         self._db = db
-        self._rng = random.Random(seed)
+        self._rng = random.Random(seed)  # nosec B311
 
     def generate_triplets(
         self,

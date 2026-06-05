@@ -41,7 +41,7 @@ _SPACY_MODELS = {
 
 def _load_models() -> None:
     """Lazy-load all available spaCy models."""
-    global _nlp_load_attempted
+    global _nlp_load_attempted  # pylint: disable=global-statement
     if _nlp_load_attempted:
         return
     _nlp_load_attempted = True
@@ -187,7 +187,7 @@ def extract_nlp_entities(text: str, sender_email: str | None = None, lang: str |
         import hashlib as _hashlib
 
         text_prefix = text[:500] if text else ""
-        cache_key = _hashlib.md5(text_prefix.encode(), usedforsecurity=False).hexdigest()
+        cache_key = _hashlib.sha256(text_prefix.encode()).hexdigest()
         if cache_key in _sender_lang_cache:
             _sender_lang_cache.move_to_end(cache_key)  # LRU: mark as recently used
             lang = _sender_lang_cache[cache_key]
@@ -233,7 +233,7 @@ def extract_nlp_entities(text: str, sender_email: str | None = None, lang: str |
 
 def reset_model_cache() -> None:
     """Reset the model cache (useful for testing)."""
-    global _nlp_load_attempted
+    global _nlp_load_attempted  # pylint: disable=global-statement
     _nlp_models.clear()
     _nlp_load_attempted = False
     _sender_lang_cache.clear()

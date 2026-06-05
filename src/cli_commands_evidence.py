@@ -1,4 +1,5 @@
 """Evidence/dossier command-family implementations for the CLI."""
+# pylint: disable=too-many-locals,too-many-statements
 
 from __future__ import annotations
 
@@ -198,8 +199,8 @@ def run_evidence_stats_impl(
             max_cat_count = max((c for _, c in cat_pairs), default=1)
             for cat_name, cat_count in cat_pairs:
                 bar_len = int((cat_count / max_cat_count) * 20) if max_cat_count else 0
-                bar = "[cyan]" + "\u2588" * bar_len + "[/]"
-                cat_table.add_row(str(cat_name), str(cat_count), bar)
+                category_bar = "[cyan]" + "\u2588" * bar_len + "[/]"
+                cat_table.add_row(str(cat_name), str(cat_count), category_bar)
             console.print(cat_table)
     except ImportError:
         print_rich_or_plain(

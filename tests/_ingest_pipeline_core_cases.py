@@ -353,7 +353,7 @@ def test_ingest_image_chunks_use_normalized_attachment_metadata(monkeypatch, tmp
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
     monkeypatch.setattr(ingest_mod, "chunk_email", lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}])
     monkeypatch.setattr(ingest_mod, "should_enable_image_embedding", lambda: True)
-    monkeypatch.setattr("src.attachment_extractor._get_image_embedder", lambda: type("Probe", (), {"is_available": True})())
+    monkeypatch.setattr("src.attachment_extractor._get_image_embedder", type)
     monkeypatch.setattr("src.attachment_extractor.extract_image_embedding", lambda *_args, **_kwargs: [0.1, 0.2, 0.3])
 
     class _TrackingEmbedder:
@@ -696,7 +696,7 @@ def test_update_ingest_checkpoint_safe_skips_locked_checkpoint(monkeypatch):
 
 
 def test_embed_pipeline_subbatches_large_chunk_groups():
-    from typing import Any, cast
+    from typing import cast
 
     from src.chunker import EmailChunk
 
@@ -721,12 +721,9 @@ def test_embed_pipeline_subbatches_large_chunk_groups():
     assert pipeline.chunks_added == 25
 
 
-def test_producer_parse_exception_aborts_pipeline_before_db_close(monkeypatch, tmp_path):
-    import src.ingest as ingest_mod
-    import src.ingest_pipeline as ingest_pipeline_mod
-
-    events: list[str] = []
-
+def _build_abort_pipeline_fakes(
+    events: list[str],
+) -> tuple:
     class _FakeEmbedder:
         def count(self):
             return 0
@@ -753,11 +750,13 @@ def test_producer_parse_exception_aborts_pipeline_before_db_close(monkeypatch, t
             self.chunks_added = 0
             self.batches_written = 0
             self.sqlite_inserted = 0
-            self.embed_seconds = 0.0
-            self.write_seconds = 0.0
-            self.sqlite_seconds = 0.0
-            self.entity_seconds = 0.0
-            self.analytics_seconds = 0.0
+            self._timing = {
+                "embed_seconds": 0.0,
+                "write_seconds": 0.0,
+                "sqlite_seconds": 0.0,
+                "entity_seconds": 0.0,
+                "analytics_seconds": 0.0,
+            }
 
         def start(self):
             events.append("pipeline.start")
@@ -775,6 +774,16 @@ def test_producer_parse_exception_aborts_pipeline_before_db_close(monkeypatch, t
     def _parse_then_fail(_path, **_kwargs):
         yield _make_mock_email(1)
         raise RuntimeError("parse exploded")
+
+    return _FakeEmbedder, _FakeEmailDB, _FakePipeline, _parse_then_fail
+
+
+def test_producer_parse_exception_aborts_pipeline_before_db_close(monkeypatch, tmp_path):
+    import src.ingest as ingest_mod
+    import src.ingest_pipeline as ingest_pipeline_mod
+
+    events: list[str] = []
+    _FakeEmbedder, _FakeEmailDB, _FakePipeline, _parse_then_fail = _build_abort_pipeline_fakes(events)
 
     monkeypatch.setattr(ingest_pipeline_mod, "_build_runtime", lambda **_kwargs: (_FakeEmbedder(), _FakeEmailDB()))
     monkeypatch.setattr(ingest_mod, "parse_olm", _parse_then_fail)

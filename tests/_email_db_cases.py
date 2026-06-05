@@ -1,4 +1,7 @@
 # ruff: noqa: F403,I001
+# pylint: disable=unused-wildcard-import,wildcard-import
+
+
 from .helpers.email_db_builders import *
 from .helpers.email_db_builders import _make_email  # noqa: F401
 from ._email_db_core_cases import *

@@ -24,7 +24,7 @@ from .helpers.diagnostics_fakes import FakeMCP, MockDeps, MockEmailDB, MockRetri
 
 class TestReingestBodies:
     @pytest.mark.asyncio
-    async def test_reingest_bodies_happy_path(self):
+    async def test_reingest_bodies_happy_path(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
         from src import mcp_server
@@ -44,7 +44,7 @@ class TestReingestBodies:
                 mock_fn.return_value = {"updated": 10, "skipped": 5}
                 params = EmailAdminInput(
                     action="reingest_bodies",
-                    olm_path="/tmp/test.olm",
+                    olm_path=str(tmp_path / "test.olm"),
                 )
                 result = await fn(params)
                 data = json.loads(result)
@@ -85,7 +85,7 @@ class TestReingestBodies:
             assert "error" in data
 
     @pytest.mark.asyncio
-    async def test_reingest_bodies_generic_error(self):
+    async def test_reingest_bodies_generic_error(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
         from src.mcp_models import EmailAdminInput
@@ -93,14 +93,14 @@ class TestReingestBodies:
         with patch("src.ingest.reingest_bodies", side_effect=RuntimeError("disk full")):
             params = EmailAdminInput(
                 action="reingest_bodies",
-                olm_path="/tmp/test.olm",
+                olm_path=str(tmp_path / "test.olm"),
             )
             result = await fn(params)
             data = json.loads(result)
             assert "error" in data
 
     @pytest.mark.asyncio
-    async def test_reingest_bodies_with_force(self):
+    async def test_reingest_bodies_with_force(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
         from src.mcp_models import EmailAdminInput
@@ -109,13 +109,13 @@ class TestReingestBodies:
             mock_fn.return_value = {"updated": 20, "skipped": 0}
             params = EmailAdminInput(
                 action="reingest_bodies",
-                olm_path="/tmp/test.olm",
+                olm_path=str(tmp_path / "test.olm"),
                 force=True,
             )
             result = await fn(params)
             data = json.loads(result)
             assert data["updated"] == 20
-            mock_fn.assert_called_once_with("/tmp/test.olm", force=True)
+            mock_fn.assert_called_once_with(str(tmp_path / "test.olm"), force=True)
 
 
 class TestReembed:
@@ -166,7 +166,7 @@ class TestReembed:
 
 class TestReingestMetadata:
     @pytest.mark.asyncio
-    async def test_reingest_metadata_happy_path(self):
+    async def test_reingest_metadata_happy_path(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
         from src import mcp_server
@@ -186,7 +186,7 @@ class TestReingestMetadata:
                 mock_fn.return_value = {"updated": 15}
                 params = EmailAdminInput(
                     action="reingest_metadata",
-                    olm_path="/tmp/test.olm",
+                    olm_path=str(tmp_path / "test.olm"),
                 )
                 result = await fn(params)
                 data = json.loads(result)
@@ -227,7 +227,7 @@ class TestReingestMetadata:
             assert "error" in data
 
     @pytest.mark.asyncio
-    async def test_reingest_metadata_generic_error(self):
+    async def test_reingest_metadata_generic_error(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
         from src.mcp_models import EmailAdminInput
@@ -235,7 +235,7 @@ class TestReingestMetadata:
         with patch("src.ingest.reingest_metadata", side_effect=RuntimeError("bad XML")):
             params = EmailAdminInput(
                 action="reingest_metadata",
-                olm_path="/tmp/test.olm",
+                olm_path=str(tmp_path / "test.olm"),
             )
             result = await fn(params)
             data = json.loads(result)

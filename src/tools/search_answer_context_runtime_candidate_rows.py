@@ -1,4 +1,8 @@
 # mypy: disable-error-code=name-defined
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-statements
+
+
+# pylint: disable=E0602  # cross-module names injected by compatibility facade
 """Candidate-row builders for answer-context runtime payloads."""
 
 from __future__ import annotations

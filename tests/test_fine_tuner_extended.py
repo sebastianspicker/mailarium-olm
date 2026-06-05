@@ -17,7 +17,7 @@ class TestTrainWithFlagEmbedding:
     def _make_training_data(self, tmpdir: Path, n: int = 5) -> str:
         """Create a JSONL file with n triplets."""
         data_path = tmpdir / "data.jsonl"
-        with open(data_path, "w") as f:
+        with open(data_path, "w", encoding="utf-8") as f:
             for i in range(n):
                 f.write(
                     json.dumps(
@@ -73,7 +73,7 @@ class TestTrainWithFlagEmbedding:
             # Verify config file was written
             config_path = Path(result["config_path"])
             assert config_path.exists()
-            config_data = json.loads(config_path.read_text())
+            config_data = json.loads(config_path.read_text(encoding="utf-8"))
             assert config_data["base_model"] == "BAAI/bge-m3"
             assert config_data["num_train_epochs"] == 2
             assert config_data["per_device_train_batch_size"] == 4
@@ -123,7 +123,7 @@ class TestTrainWithFlagEmbedding:
                 triplet_count=1,
             )
 
-            config_data = json.loads(Path(result["config_path"]).read_text())
+            config_data = json.loads(Path(result["config_path"]).read_text(encoding="utf-8"))
             assert config_data["fp16"] is True
 
 
@@ -134,7 +134,7 @@ class TestTrainWithSentenceTransformers:
     def _make_training_data(self, tmpdir: Path, n: int = 5) -> str:
         """Create a JSONL file with n triplets."""
         data_path = tmpdir / "data.jsonl"
-        with open(data_path, "w") as f:
+        with open(data_path, "w", encoding="utf-8") as f:
             for i in range(n):
                 f.write(
                     json.dumps(
@@ -157,7 +157,7 @@ class TestTrainWithSentenceTransformers:
             def __init__(self, name, device=None):
                 self.max_seq_length = 512
 
-            def fit(self, train_objectives, epochs, warmup_steps, output_path, show_progress_bar):
+            def fit(self, train_objectives, epochs, warmup_steps, output_path, show_progress_bar):  # pylint: disable=too-many-arguments,too-many-positional-arguments
                 Path(output_path).mkdir(parents=True, exist_ok=True)
 
         class MockInputExample:
@@ -327,7 +327,7 @@ class TestFineTuneFallback:
     def test_fine_tune_falls_back_to_sentence_transformers(self, tmp_path):
         """When FlagEmbedding import fails, fine_tune falls back to ST."""
         data_path = tmp_path / "data.jsonl"
-        with open(data_path, "w") as f:
+        with open(data_path, "w", encoding="utf-8") as f:
             for i in range(3):
                 f.write(
                     json.dumps(

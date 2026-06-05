@@ -1,4 +1,5 @@
 """Body normalization helpers extracted from ``src.parse_olm``."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-return-statements
 
 from __future__ import annotations
 

@@ -14,7 +14,7 @@ from src.retriever import SearchResult
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _result(
+def _result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     chunk_id: str = "c1",
     score_distance: float = 0.2,
     date: str = "2024-01-15",
@@ -70,7 +70,7 @@ def _setup_evidence_st(mock_st, *, selectbox_side_effect=None, slider_val=1, tex
     mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
 
 
-def _setup_main_search_st(
+def _setup_main_search_st(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     mock_st,
     *,
     search_clicked=False,

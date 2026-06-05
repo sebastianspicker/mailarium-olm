@@ -80,7 +80,7 @@ class TestMainSessionStateEdges:
     @patch("src.web_app.inject_styles")
     @patch("src.web_app.get_retriever")
     @patch("src.web_app.st")
-    def test_main_sort_label_from_session(
+    def test_main_sort_label_from_session(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         mock_st,
         mock_get_retriever,

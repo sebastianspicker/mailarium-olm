@@ -58,6 +58,38 @@ def test_infer_parent_candidate_recovers_high_confidence_parent():
     assert "reply_context_from" in match.reason
 
 
+def test_infer_parent_candidate_handles_aware_child_and_naive_parent_dates():
+    parent = _make_email(
+        message_id="<parent@example.com>",
+        subject="Budget Review",
+        sender_name="Alice",
+        sender_email="employee@example.test",
+        to=["Bob <bob@example.com>"],
+        to_identities=["bob@example.com"],
+        date="2024-01-15T10:00:00",
+        conversation_id="conv-1",
+    )
+    child = _make_email(
+        message_id="<child@example.com>",
+        subject="RE: Budget Review",
+        sender_name="Bob",
+        sender_email="bob@example.com",
+        to=["Alice <employee@example.test>"],
+        to_identities=["employee@example.test"],
+        date="2024-01-15T10:30:00+00:00",
+        in_reply_to="",
+        references=[],
+        reply_context_from="employee@example.test",
+        reply_context_to=["bob@example.com"],
+        reply_context_subject="Budget Review",
+    )
+
+    match = infer_parent_candidate(child, [parent])
+
+    assert match is not None
+    assert match.parent_uid == parent.uid
+
+
 def test_infer_parent_candidate_returns_none_for_ambiguous_matches():
     candidate_a = _make_email(
         message_id="<parent-a@example.com>",

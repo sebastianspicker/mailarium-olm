@@ -1,4 +1,8 @@
 # mypy: disable-error-code=name-defined
+# pylint: disable=too-many-locals,too-many-statements
+
+
+# pylint: disable=E0602  # cross-module names injected by compatibility facade
 """Split helpers for search answer-context runtime (search_answer_context_runtime_lanes)."""
 
 from __future__ import annotations
@@ -61,7 +65,7 @@ def _segment_search_results(
 
     try:
         rows = db.search_message_segments(lane_query, limit=limit)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return [], {"segment_result_count": 0, "segment_excluded_count": 0}
 
     segment_results = [

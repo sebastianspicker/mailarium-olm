@@ -18,7 +18,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .repo_paths import normalize_local_path, validate_local_read_path, validate_output_path, validate_runtime_path
-from .validation import parse_iso_date
+from .validation import normalize_optional_iso_date
 from .validation import validate_date_window as ensure_valid_date_window
 
 
@@ -136,9 +136,7 @@ class DateRangeInput(BaseModel):
     @field_validator("date_from", "date_to")
     @classmethod
     def validate_iso_date(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        return parse_iso_date(value)
+        return normalize_optional_iso_date(value)
 
     @model_validator(mode="after")
     def validate_date_window(self):

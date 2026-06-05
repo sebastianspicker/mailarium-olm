@@ -1,4 +1,5 @@
 """Operational timing warnings for legal-support workflows."""
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals
 
 from __future__ import annotations
 

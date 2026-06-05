@@ -36,7 +36,16 @@ class TestEvidenceAdd:
         old_db = MockDeps._email_db
 
         class FailDB(MockDeps._email_db.__class__):
-            def add_evidence(self, **kwargs):
+            def add_evidence(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+                self,
+                email_uid=None,
+                category=None,
+                key_quote=None,
+                summary=None,
+                relevance=None,
+                notes="",
+                **_unused,
+            ):
                 raise ValueError("Quote not found in email body")
 
         MockDeps._email_db = FailDB()
@@ -112,7 +121,16 @@ class TestEvidenceAddBatch:
         call_count = [0]
 
         class PartialFailDB(MockDeps._email_db.__class__):
-            def add_evidence(self, **kwargs):
+            def add_evidence(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+                self,
+                email_uid=None,
+                category=None,
+                key_quote=None,
+                summary=None,
+                relevance=None,
+                notes="",
+                **kwargs,
+            ):
                 call_count[0] += 1
                 if call_count[0] == 2:
                     raise ValueError("Bad quote")

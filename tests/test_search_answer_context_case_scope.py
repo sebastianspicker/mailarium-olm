@@ -182,7 +182,7 @@ async def test_email_answer_context_emits_case_bundle_and_applies_case_scope_dat
 
 
 def test_case_scope_query_lanes_add_actor_and_attachment_context() -> None:
-    from src.tools.search_answer_context_runtime import _derive_query_lanes
+    from src.tools.search_answer_context_runtime_lanes import _derive_query_lanes
 
     class _Retriever:
         pass
@@ -214,7 +214,7 @@ def test_case_scope_query_lanes_add_actor_and_attachment_context() -> None:
 
 
 def test_case_scope_exact_wording_query_lanes_keep_quote_safe_case_anchors() -> None:
-    from src.tools.search_answer_context_runtime import _derive_query_lanes
+    from src.tools.search_answer_context_runtime_lanes import _derive_query_lanes
 
     class _Retriever:
         pass

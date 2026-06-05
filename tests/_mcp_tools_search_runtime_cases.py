@@ -19,8 +19,8 @@ async def test_email_search_structured_forwards_new_filters(monkeypatch):
     captured = {}
 
     class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, **kwargs):
-            captured.update(kwargs)
+        def search_filtered(self, query=None, top_k=10, **kwargs):
+            captured.update({"query": query, "top_k": top_k, **kwargs})
             return []
 
     _patch_search_deps(monkeypatch, DummyRetriever())
@@ -54,8 +54,8 @@ async def test_email_search_structured_accepts_legacy_aliases(monkeypatch):
     captured = {}
 
     class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, **kwargs):
-            captured.update(kwargs)
+        def search_filtered(self, query=None, top_k=10, **kwargs):
+            captured.update({"query": query, "top_k": top_k, **kwargs})
             return []
 
     _patch_search_deps(monkeypatch, DummyRetriever())
@@ -120,6 +120,72 @@ async def test_email_search_structured_exposes_retrieval_diagnostics(monkeypatch
     assert data["retrieval_diagnostics"]["executed_query"].endswith("sbv timeline")
     assert data["retrieval_diagnostics"]["expand_query_requested"] is True
     assert data["retrieval_diagnostics"]["used_query_expansion"] is True
+
+
+@pytest.mark.asyncio
+async def test_email_search_structured_exposes_semantic_filter_failure_diagnostics(monkeypatch):
+    from src.mcp_models import EmailSearchStructuredInput
+    from src.tools.search import email_search_structured
+
+    class DummyRetriever(_BasicRetriever):
+        @property
+        def last_search_debug(self):
+            return {
+                "original_query": "budget",
+                "executed_query": "budget",
+                "semantic_filter_status": "error",
+                "semantic_filter_uid_count": 0,
+                "semantic_filter_errors": [
+                    {
+                        "filter": "topic_id",
+                        "value": 7,
+                        "error_type": "RuntimeError",
+                        "message": "topic lookup failed",
+                    }
+                ],
+            }
+
+    _patch_search_deps(monkeypatch, DummyRetriever())
+
+    params = EmailSearchStructuredInput(query="budget", topic_id=7)
+    payload = await email_search_structured(params)
+    data = json.loads(payload)
+
+    diagnostics = data["retrieval_diagnostics"]
+    assert diagnostics["semantic_filter_status"] == "error"
+    assert diagnostics["semantic_filter_uid_count"] == 0
+    assert diagnostics["semantic_filter_errors"][0]["filter"] == "topic_id"
+    assert diagnostics["semantic_filter_errors"][0]["error_type"] == "RuntimeError"
+
+
+@pytest.mark.asyncio
+async def test_email_search_structured_exposes_query_expansion_failure_diagnostics(monkeypatch):
+    from src.mcp_models import EmailSearchStructuredInput
+    from src.tools.search import email_search_structured
+
+    class DummyRetriever(_BasicRetriever):
+        @property
+        def last_search_debug(self):
+            return {
+                "original_query": "budget",
+                "executed_query": "budget",
+                "expand_query_requested": True,
+                "used_query_expansion": False,
+                "query_expansion_status": "error",
+                "query_expansion_error_type": "RuntimeError",
+                "query_expansion_error": "cannot import query expander",
+            }
+
+    _patch_search_deps(monkeypatch, DummyRetriever())
+
+    params = EmailSearchStructuredInput(query="budget", expand_query=True)
+    payload = await email_search_structured(params)
+    data = json.loads(payload)
+
+    diagnostics = data["retrieval_diagnostics"]
+    assert diagnostics["query_expansion_status"] == "error"
+    assert diagnostics["query_expansion_error_type"] == "RuntimeError"
+    assert diagnostics["query_expansion_error"] == "cannot import query expander"
 
 
 @pytest.mark.asyncio
@@ -233,23 +299,29 @@ async def test_email_ingest_does_not_mutate_runtime_archive_paths(monkeypatch, t
     olm_path = tmp_path / "test.olm"
     olm_path.write_text("olm", encoding="utf-8")
 
+    active_chroma = str(tmp_path / "active-chroma")
+    active_db = str(tmp_path / "active.db")
+    custom_chroma = str(tmp_path / "custom-chroma")
+    custom_db = str(tmp_path / "custom-email.db")
+
     with (
         patch("src.mcp_server.set_runtime_archive_paths") as mock_set_paths,
-        patch("src.mcp_server._resolved_runtime_paths", return_value=("/tmp/active-chroma", "/tmp/active.db")),
+        patch("src.mcp_server._resolved_runtime_paths", return_value=(active_chroma, active_db)),
         patch("src.tools.search.invalidate_mcp_singletons") as mock_invalidate,
     ):
         params = EmailIngestInput(
             olm_path=str(olm_path),
-            chromadb_path="/tmp/custom-chroma",
-            sqlite_path="/tmp/custom-email.db",
+            chromadb_path=custom_chroma,
+            sqlite_path=custom_db,
         )
         output = await email_ingest(params)
 
     data = json.loads(output)
     assert data["emails_parsed"] == 1
+    assert data["ingest_archive_status"] == "inactive_target_success"
     assert data["runtime_archive_unchanged"] is True
     assert data["active_archive_switch_required"] is True
-    assert data["active_archive"]["sqlite_path"] == "/tmp/active.db"
+    assert data["active_archive"]["sqlite_path"] == active_db
     mock_set_paths.assert_not_called()
     mock_invalidate.assert_not_called()
 
@@ -276,19 +348,23 @@ async def test_email_ingest_invalidates_cache_when_target_matches_active_runtime
     olm_path = tmp_path / "test.olm"
     olm_path.write_text("olm", encoding="utf-8")
 
+    active_chroma = str(tmp_path / "active-chroma")
+    active_db = str(tmp_path / "active.db")
+
     with (
-        patch("src.mcp_server._resolved_runtime_paths", return_value=("/tmp/active-chroma", "/tmp/active.db")),
+        patch("src.mcp_server._resolved_runtime_paths", return_value=(active_chroma, active_db)),
         patch("src.tools.search.invalidate_mcp_singletons") as mock_invalidate,
     ):
         params = EmailIngestInput(
             olm_path=str(olm_path),
-            chromadb_path="/tmp/active-chroma",
-            sqlite_path="/tmp/active.db",
+            chromadb_path=active_chroma,
+            sqlite_path=active_db,
         )
         output = await email_ingest(params)
 
     data = json.loads(output)
     assert data["emails_parsed"] == 1
+    assert data["ingest_archive_status"] == "active_archive_updated"
     assert "runtime_archive_unchanged" not in data
     mock_invalidate.assert_called_once()
 
@@ -321,8 +397,8 @@ async def test_email_search_structured_forwards_email_type(monkeypatch):
     captured = {}
 
     class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, **kwargs):
-            captured.update(kwargs)
+        def search_filtered(self, query=None, top_k=10, **kwargs):
+            captured.update({"query": query, "top_k": top_k, **kwargs})
             return []
 
     _patch_search_deps(monkeypatch, DummyRetriever())
@@ -399,8 +475,8 @@ async def test_email_search_structured_forwards_attachment_filters(monkeypatch):
     captured = {}
 
     class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, **kwargs):
-            captured.update(kwargs)
+        def search_filtered(self, query=None, top_k=10, **kwargs):
+            captured.update({"query": query, "top_k": top_k, **kwargs})
             return []
 
     _patch_search_deps(monkeypatch, DummyRetriever())

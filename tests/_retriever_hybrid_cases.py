@@ -242,7 +242,7 @@ class TestGetSparseResults:
 
         result = r._get_sparse_results("test", 10)
         assert result == ["c1"]
-        mock_sparse.build_from_db.assert_called_once_with(r._email_db)
+        mock_sparse.build_from_db.assert_called_once_with(r._email_db)  # pylint: disable=no-member
 
 
 class TestGetBM25Results:

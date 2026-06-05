@@ -1,4 +1,8 @@
 # mypy: disable-error-code=name-defined
+# pylint: disable=too-many-locals,too-many-statements
+
+
+# pylint: disable=E0602  # cross-module names injected by compatibility facade
 """Split archive-harvest helpers (case_analysis_harvest_bundle)."""
 
 from __future__ import annotations
@@ -6,6 +10,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, Any, cast
 
+from .case_analysis_harvest_expansion_diagnostics import _aggregate_expansion_diagnostics
 from .case_analysis_scope import derive_case_analysis_query
 from .case_operator_intake import ingest_chat_exports
 from .matter_file_ingestion import enrich_matter_manifest, infer_matter_manifest_authorized_roots

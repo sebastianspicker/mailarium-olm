@@ -437,7 +437,6 @@ class TestPipelineSkipAlreadyInserted:
 
     def test_ingest_marks_run_failed_when_pipeline_raises(self, monkeypatch, tmp_path):
         import src.ingest as ingest_mod
-        from src.email_db import EmailDatabase
 
         emails = [_make_email(1)]
         monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)

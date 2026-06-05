@@ -7,6 +7,7 @@ existing imports (``from src.cli import _cmd_search``) keep working.
 
 from __future__ import annotations
 
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-positional-arguments
 import argparse
 import inspect
 import json
@@ -31,7 +32,7 @@ _CLI_SQLITE_PATH_OVERRIDE: str | None = None
 
 def set_cli_sqlite_path_override(sqlite_path: str | None) -> None:
     """Set a process-local SQLite override for DB-backed CLI commands."""
-    global _CLI_SQLITE_PATH_OVERRIDE
+    global _CLI_SQLITE_PATH_OVERRIDE  # pylint: disable=global-statement
     _CLI_SQLITE_PATH_OVERRIDE = sqlite_path or None
 
 
@@ -240,7 +241,6 @@ def _cmd_export(args: argparse.Namespace) -> None:
     else:
         print("Usage: python -m src.cli export {thread,email,report,network}")
         sys.exit(2)
-        return  # unreachable; satisfies static analysis
     sys.exit(0)
 
 

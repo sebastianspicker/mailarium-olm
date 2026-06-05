@@ -1,4 +1,5 @@
 """Shared actor-map and witness-map builders for counsel-facing outputs."""
+# pylint: disable=too-many-arguments,too-many-boolean-expressions,too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

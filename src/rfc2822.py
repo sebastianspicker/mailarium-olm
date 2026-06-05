@@ -1,8 +1,10 @@
 """RFC 2822 header/body parsing, MIME decoding, and iCalendar text extraction."""
+# pylint: disable=too-many-branches,too-many-statements
 
 from __future__ import annotations
 
 import email
+import email.errors
 import email.policy
 import functools
 import logging
@@ -62,7 +64,7 @@ def _normalize_date(value: str) -> str:
         if dt.tzinfo is not None:
             dt = dt.astimezone(UTC)
         return dt.isoformat()
-    except Exception:
+    except (ValueError, TypeError, OverflowError):
         logger.debug("Failed to parse date: %s", value[:80])
         return ""
 
@@ -87,8 +89,7 @@ def _extract_body_from_source(raw_source: str) -> tuple[str, str]:
     """
     try:
         msg = email.message_from_string(raw_source, policy=email.policy.default)
-    except Exception:
-        # Fallback: simple header/body split
+    except email.errors.MessageError:
         parts = raw_source.split("\n\n", 1)
         if len(parts) == 2:
             return parts[1].strip(), ""
@@ -104,7 +105,7 @@ def _extract_body_from_source(raw_source: str) -> tuple[str, str]:
             if ct == "text/plain" and not body_text:
                 try:
                     payload = part.get_content()
-                except Exception:
+                except (email.errors.MessageError, LookupError):
                     logger.debug("Failed to decode text/plain MIME part", exc_info=True)
                     continue
                 if isinstance(payload, str):
@@ -112,7 +113,7 @@ def _extract_body_from_source(raw_source: str) -> tuple[str, str]:
             elif ct == "text/html" and not body_html:
                 try:
                     payload = part.get_content()
-                except Exception:
+                except (email.errors.MessageError, LookupError):
                     logger.debug("Failed to decode text/html MIME part", exc_info=True)
                     continue
                 if isinstance(payload, str):
@@ -120,7 +121,7 @@ def _extract_body_from_source(raw_source: str) -> tuple[str, str]:
             elif ct == "text/calendar" and not calendar_text:
                 try:
                     payload = part.get_content()
-                except Exception:
+                except (email.errors.MessageError, LookupError):
                     logger.debug("Failed to decode text/calendar MIME part", exc_info=True)
                     continue
                 if isinstance(payload, str):
@@ -129,7 +130,7 @@ def _extract_body_from_source(raw_source: str) -> tuple[str, str]:
         ct = msg.get_content_type()
         try:
             payload = msg.get_content()
-        except Exception:
+        except (email.errors.MessageError, LookupError):
             logger.debug("Failed to decode single-part message content", exc_info=True)
             payload = None
         if isinstance(payload, str):
@@ -215,7 +216,7 @@ def _decode_mime_words(value: str) -> str:
 
     try:
         parts = decode_header(value)
-    except Exception:
+    except email.errors.HeaderParseError:
         return value
     decoded: list[str] = []
     for part, charset in parts:
@@ -274,7 +275,7 @@ def _extract_name_from_header(source: str, header_name: str) -> str:
         name, _addr = parseaddr(raw)
         if name:
             return name
-    except Exception:
+    except (ValueError, TypeError):
         logger.debug("parseaddr failed for header: %s", raw[:100], exc_info=True)
     # Unquoted Name <email>
     match = re.search(r"^([^<]+)<", raw)

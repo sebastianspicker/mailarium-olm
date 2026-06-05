@@ -5,7 +5,16 @@ from __future__ import annotations
 import logging
 import sqlite3
 
+# isort: off
 from . import db_schema_migrations as migration_family
+from ._sql_validation import (  # noqa: F401  # re-exported for downstream modules
+    sql_in_placeholders as _sql_in_placeholders,
+    validate_column_update_pairs as _validate_column_update_pairs,
+    validate_order_by as _validate_order_by,
+    validate_sql_identifier as _validate_sql_identifier,
+    validate_sql_identifiers as _validate_sql_identifiers,
+)
+# isort: on
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +27,10 @@ def _escape_like(text: str) -> str:
 def _table_columns(cur: sqlite3.Cursor, table: str) -> set[str]:
     """Return the set of column names for *table* using PRAGMA table_info.
 
-    Safety: *table* is always a hardcoded string from migration functions
-    (e.g. ``"emails"``, ``"ingestion_runs"``), never user input.
+    Safety: *table* is validated as a safe SQL identifier.
     """
-    return {row[1] for row in cur.execute(f"PRAGMA table_info({table})").fetchall()}
+    safe_table = _validate_sql_identifier(table)
+    return {row[1] for row in cur.execute("SELECT * FROM pragma_table_info(?)", (safe_table,)).fetchall()}
 
 
 _SCHEMA_VERSION = 34

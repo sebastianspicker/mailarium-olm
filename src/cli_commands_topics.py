@@ -1,4 +1,5 @@
 """Topics/cluster build command implementation for the CLI."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

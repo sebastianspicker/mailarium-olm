@@ -313,16 +313,16 @@ def test_parse_args_generate_report_custom():
     assert args.generate_report == "custom.html"
 
 
-def test_main_threads_sqlite_override_into_retriever() -> None:
+def test_main_threads_sqlite_override_into_retriever(tmp_path) -> None:
     with (
         patch("src.retriever.EmailRetriever") as mock_retriever,
         patch("src.cli._cmd_search", side_effect=lambda _args, get_retriever: get_retriever()) as mock_search,
         patch("src.cli.set_cli_sqlite_path_override") as mock_set_sqlite,
     ):
-        main(["search", "budget", "--chromadb-path", "/tmp/chroma", "--sqlite-path", "/tmp/email.db"])
+        main(["search", "budget", "--chromadb-path", str(tmp_path / "chroma"), "--sqlite-path", str(tmp_path / "email.db")])
 
-    mock_retriever.assert_called_once_with(chromadb_path="/tmp/chroma", sqlite_path="/tmp/email.db")
-    mock_set_sqlite.assert_called_once_with("/tmp/email.db")
+    mock_retriever.assert_called_once_with(chromadb_path=str(tmp_path / "chroma"), sqlite_path=str(tmp_path / "email.db"))
+    mock_set_sqlite.assert_called_once_with(str(tmp_path / "email.db"))
     mock_search.assert_called_once()
 
 

@@ -250,7 +250,7 @@ class TestFineTuner:
     def test_fine_tune_empty_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             data_path = str(Path(tmpdir) / "empty.jsonl")
-            Path(data_path).write_text("")
+            Path(data_path).write_text("", encoding="utf-8")
             result = FineTuner().fine_tune(
                 training_data_path=data_path,
                 output_dir=str(Path(tmpdir) / "output"),
@@ -271,7 +271,7 @@ class TestFineTuner:
         """Verify fine_tune produces a result with valid triplet count."""
         with tempfile.TemporaryDirectory() as tmpdir:
             data_path = str(Path(tmpdir) / "data.jsonl")
-            with open(data_path, "w") as f:
+            with open(data_path, "w", encoding="utf-8") as f:
                 for i in range(5):
                     f.write(
                         json.dumps(
@@ -315,8 +315,8 @@ def test_count_lines_normal():
     assert _count_lines(path) == 3
 
 
-def test_count_lines_missing():
-    assert _count_lines("/tmp/nonexistent_file_12345.jsonl") == 0
+def test_count_lines_missing(tmp_path):
+    assert _count_lines(str(tmp_path / "nonexistent.jsonl")) == 0
 
 
 def test_count_lines_empty():

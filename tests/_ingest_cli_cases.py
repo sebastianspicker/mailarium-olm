@@ -32,9 +32,9 @@ def test_main_handles_invalid_archive_path_gracefully(tmp_path, capsys):
     assert "Invalid OLM archive" in out
 
 
-def test_main_handles_missing_archive_gracefully(capsys):
+def test_main_handles_missing_archive_gracefully(tmp_path, capsys):
     with pytest.raises(SystemExit) as excinfo:
-        main(["/tmp/does-not-exist.olm", "--dry-run"])
+        main([str(tmp_path / "does-not-exist.olm"), "--dry-run"])
 
     assert excinfo.value.code == 2
     out = capsys.readouterr().out

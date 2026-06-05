@@ -1,4 +1,5 @@
 """Shared modern CLI parser construction helpers."""
+# pylint: disable=too-many-locals,too-many-statements
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
 """Attachment text and image embedding extraction helpers."""
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-positional-arguments,too-many-return-statements
 
 from __future__ import annotations
 
@@ -124,7 +125,7 @@ def _dispatch_extension(filename: str, mime_type: str | None = None) -> str:
 
 def _get_image_embedder():
     """Return the module-level ImageEmbedder singleton (lazy-init)."""
-    global _image_embedder
+    global _image_embedder  # pylint: disable=global-statement
     if _image_embedder is None:
         from .image_embedder import ImageEmbedder
 
@@ -142,7 +143,7 @@ def extract_image_embedding(filename: str, content: bytes) -> list[float] | None
         if not embedder.is_available:
             return None
         return embedder.encode_image(content, filename=filename)
-    except Exception:
+    except (RuntimeError, ValueError, OSError):
         logger.debug("Failed to encode image attachment: %s", filename, exc_info=True)
         return None
 
@@ -246,7 +247,7 @@ def _extract_html(content: bytes) -> str | None:
 def _extract_eml(content: bytes) -> str | None:
     try:
         message = email.message_from_bytes(content, policy=cast(Any, email.policy.default))
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
         logger.debug("Failed to parse .eml attachment.", exc_info=True)
         message = None
     raw_source = _decode_text_bytes(content)
@@ -304,20 +305,25 @@ def _optional_extract(
     import_from: str,
     extractor: Callable[[Any, io.BytesIO], str | None],
     fmt_label: str,
+    failure_recorder: Callable[[str], None] | None = None,
 ) -> str | None:
     try:
         mod = __import__(import_name)
         imported = getattr(mod, import_from)
     except (ImportError, AttributeError):
         logger.debug("%s not installed; skipping %s extraction.", import_name, fmt_label)
+        if failure_recorder:
+            failure_recorder(f"dependency_missing:{import_name}")
         return None
     try:
         text = extractor(imported, io.BytesIO(content))
         if text:
             return _truncate(text)
         return None
-    except Exception:
+    except (RuntimeError, ValueError, OSError, TypeError) as exc:
         logger.debug("Failed to extract %s text from attachment.", fmt_label, exc_info=True)
+        if failure_recorder:
+            failure_recorder(f"text_extraction_failed:{fmt_label}:{type(exc).__name__}")
         return None
 
 
@@ -386,8 +392,8 @@ def _extract_zip_archive(
     return None
 
 
-def _pdf_extractor(PdfReader, stream):
-    reader = PdfReader(stream)
+def _pdf_extractor(pdf_reader_cls, stream):
+    reader = pdf_reader_cls(stream)
     pages: list[str] = []
     for page_index, page in enumerate(reader.pages, start=1):
         page_text = page.extract_text()
@@ -396,8 +402,8 @@ def _pdf_extractor(PdfReader, stream):
     return "\n\n".join(pages).strip()
 
 
-def _docx_extractor(Document, stream):
-    doc = Document(stream)
+def _docx_extractor(document_cls, stream):
+    doc = document_cls(stream)
     paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
     return "\n".join(paragraphs).strip()
 
@@ -426,7 +432,7 @@ def _extract_ods(content: bytes) -> str | None:
 
     try:
         decoded = _decode_text_bytes(xml_text)
-    except Exception:
+    except (UnicodeDecodeError, ValueError):
         logger.debug("Failed to decode ODS content.xml.", exc_info=True)
         return None
 
@@ -457,8 +463,8 @@ def _extract_legacy_binary_office(content: bytes, *, format_label: str) -> str |
     return _truncate(text)
 
 
-def _pptx_extractor(Presentation, stream):
-    prs = Presentation(stream)
+def _pptx_extractor(presentation_cls, stream):
+    prs = presentation_cls(stream)
     lines: list[str] = []
     for slide_num, slide in enumerate(prs.slides, 1):
         lines.append(f"[Slide {slide_num}]")

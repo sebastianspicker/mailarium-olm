@@ -203,7 +203,7 @@ async def test_email_answer_context_merges_query_lanes(monkeypatch):
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
             if "Protokoll" in query:
-                self._last_search_debug = {
+                self._last_search_debug = {  # pylint: disable=attribute-defined-outside-init
                     "executed_query": query,
                     "used_query_expansion": False,
                     "expand_query_requested": False,
@@ -214,7 +214,7 @@ async def test_email_answer_context_merges_query_lanes(monkeypatch):
                     "legal_support_profile": {"is_legal_support": True, "intents": ["chronology"], "suggested_terms": []},
                 }
                 return [_make_result(uid="uid-wave-1", chunk_id="chunk-wave-1", text="PR-Sitzung mit Protokoll.", distance=0.1)]
-            self._last_search_debug = {
+            self._last_search_debug = {  # pylint: disable=attribute-defined-outside-init
                 "executed_query": query,
                 "used_query_expansion": False,
                 "expand_query_requested": False,
@@ -298,11 +298,11 @@ async def test_email_answer_context_merges_query_lanes(monkeypatch):
 
 
 def test_search_across_query_lanes_preserves_unique_lane_hits_with_scan_state() -> None:
-    from src.tools.search_answer_context_runtime import _search_across_query_lanes
+    from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
-            self._last_search_debug = {
+            self._last_search_debug = {  # pylint: disable=attribute-defined-outside-init
                 "executed_query": query,
                 "used_query_expansion": False,
             }

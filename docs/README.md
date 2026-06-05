@@ -30,6 +30,36 @@ Use these rules when deciding where to start:
 - MCP `email_ingest` does not silently switch the active runtime archive used by later searches.
 - Keep checked-in `data/` and `tests/fixtures/` content sanitized.
 
+## Current Local Checkout State
+
+The current local checkout includes broad in-progress source, test, tooling, and
+documentation changes. Public docs should describe verified interface facts, but
+must not imply release readiness from dirty-checkout evidence alone.
+
+Current local interface facts:
+
+- MCP registers 68 tools.
+- CLI subcommands are the preferred interface; legacy flat flags remain
+  deprecated but supported for `0.1.x`.
+- CLI `case execute-wave`, `case execute-all-waves`, and
+  `case gather-evidence` share campaign execution with the matching MCP
+  `email_case_*` campaign tools.
+- `topics build` exists as a CLI subcommand, while topic tables remain a
+  conditional runtime surface.
+- Local Codacy, PyLint, and Bandit findings are local verification signals, not
+  remote service closure.
+
+## Repository Maintenance
+
+- GitHub issue and pull-request templates require synthetic reproductions and
+  explicit privacy checks.
+- Dependency automation targets the `dev` branch and groups Python runtime and
+  development updates separately.
+- Use `python scripts/privacy_scan.py --tracked-only --json` before publishing
+  docs, fixtures, screenshots, or generated examples.
+- Use `git check-ignore -v` when changing private, runtime, archive, or local
+  agent artifact boundaries.
+
 ## Public Vs Advanced Docs
 
 The public reading path should stay in the files above unless you are intentionally working on advanced legal-support or operator material.
@@ -50,4 +80,6 @@ Treat [`agent/README.md`](agent/README.md) as the single entry point for advance
 
 `agent/Documentation.md` is a verification/change log, not the public docs map.
 
-Historical audit artifacts live under [`agent/deprecated/`](agent/deprecated/) and remain archive-only context, not current execution inputs.
+Historical audit artifacts live under
+[`archive/2026-05-16-remediation-closure/`](archive/2026-05-16-remediation-closure/)
+and remain archive-only context, not current execution inputs.

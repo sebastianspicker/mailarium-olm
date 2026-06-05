@@ -17,6 +17,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+_SMOKE_RUNTIME_ROOT = ROOT / "tests" / "private" / "ingest-smoke"
+
+
+def _smoke_runtime_root() -> Path:
+    """Return the allowed runtime root used by this smoke script."""
+    _SMOKE_RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
+    return _SMOKE_RUNTIME_ROOT
+
 
 def _build_smoke_olm(path: Path) -> None:
     xml_path = "Accounts/test@example.com/com.microsoft.__Messages/Inbox/message-1.xml"
@@ -213,7 +221,7 @@ def main() -> int:
     _configure_offline_runtime()
     from src.ingest import ingest
 
-    with tempfile.TemporaryDirectory(prefix="ingest-smoke-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="run-", dir=_smoke_runtime_root()) as tmp:
         tmp_path = Path(tmp)
         olm_path = tmp_path / "smoke.olm"
         sqlite_path = tmp_path / "email_metadata.db"
@@ -256,7 +264,7 @@ def main() -> int:
                     timing=True,
                 )
                 runtime_mode = "native_runtime"
-            except Exception as exc:
+            except (RuntimeError, ImportError, OSError, ValueError) as exc:
                 if not _should_fallback_to_fake_runtime(exc):
                     raise
                 _reset_fake_runtime()

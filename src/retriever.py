@@ -1,4 +1,5 @@
 """Retrieval logic for searching and inspecting the email vector database."""
+# pylint: disable=too-many-arguments,too-many-instance-attributes,too-many-locals,too-many-positional-arguments
 
 from __future__ import annotations
 
@@ -96,6 +97,7 @@ class EmailRetriever:
         self._sparse_index: SparseIndex | None = None
         self._sparse_build_count: tuple[int, str] | None = None
         self._bm25_build_revision: tuple[int, str] | None = None
+        self._last_search_debug: dict[str, Any] = {}
         # Bounded LRU cache — evicts oldest entry when len > _QUERY_CACHE_MAX (128).
         # See _encode_query() for eviction logic.
         self._query_cache: collections.OrderedDict[str, list[list[float]]] = collections.OrderedDict()

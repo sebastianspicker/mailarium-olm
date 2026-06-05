@@ -30,12 +30,12 @@ def _read_json(path: str, *, label: str) -> Any:
     try:
         payload_path = validate_local_read_path(path, field_name=label)
         return json.loads(payload_path.read_text(encoding="utf-8"))
-    except ValueError as exc:
-        raise SystemExit(f"{label} path rejected: {exc}") from exc
     except FileNotFoundError as exc:
         raise SystemExit(f"{label} not found: {path}") from exc
     except json.JSONDecodeError as exc:
         raise SystemExit(f"{label} is not valid JSON: {payload_path} ({exc})") from exc
+    except ValueError as exc:
+        raise SystemExit(f"{label} path rejected: {exc}") from exc
 
 
 def _write_json(path: str, payload: Any) -> Path:

@@ -1,6 +1,7 @@
 # ruff: noqa: F401, F403
 from __future__ import annotations
 
+# pylint: disable=unused-wildcard-import,wildcard-import
 import pytest
 
 from src.case_analysis import (
@@ -14,6 +15,77 @@ from src.question_execution_waves import derive_wave_query_lane_specs
 
 from ._case_analysis_integration_cases import *
 from .helpers.case_analysis_fixtures import case_payload as _case_payload
+
+
+def _assert_core_transform_results(
+    transformed: dict,
+    answer_payload: dict,
+) -> None:
+    assert transformed["case_analysis_version"] == "1"
+    assert transformed["workflow"] == "case_analysis"
+    assert transformed["review_classification"]["classification"] == "retrieval_bounded_exploratory_review"
+    assert transformed["review_classification"]["may_be_presented_as_full_matter_review"] is False
+    assert transformed["search"] == answer_payload["search"]
+    assert transformed["bilingual_workflow"]["output_language"] == "en"
+    assert transformed["bilingual_workflow"]["primary_source_language"] == "de"
+    assert transformed["case_scope_quality"]["status"] == "degraded"
+    assert "retaliation_focus_without_trigger_events" in transformed["case_scope_quality"]["downgrade_reasons"]
+    assert "power_focused_review_without_org_context" in transformed["case_scope_quality"]["downgrade_reasons"]
+    assert "high_stakes_goal_without_context_notes" in transformed["case_scope_quality"]["downgrade_reasons"]
+    assert transformed["matter_evidence_index"]["row_count"] == 2
+    assert transformed["matter_evidence_index"]["rows"][0]["source_language"] == "de"
+    assert transformed["matter_evidence_index"]["rows"][0]["quoted_evidence"]["original_text"].startswith("Wir werden")
+    assert transformed["lawyer_issue_matrix"]["row_count"] == 0
+    assert transformed["lawyer_issue_matrix"]["bilingual_rendering"]["output_language"] == "en"
+
+
+def _assert_legal_analysis_sections(transformed: dict) -> None:
+    assert transformed["retaliation_timeline_assessment"]["overall_evidentiary_rating"]["rating"] == "insufficient_timing_record"
+    assert transformed["retaliation_timeline_assessment"]["anchor_requirement_status"] == (
+        "explicit_trigger_confirmation_required"
+    )
+    assert transformed["retaliation_timeline_assessment"]["protected_activity_candidate_count"] == 2
+    assert transformed["actor_identity_graph"]["actors"][0]["actor_id"] == "actor-manager"
+    assert transformed["actor_map"]["actor_count"] == 1
+    assert transformed["actor_map"]["actors"][0]["status"]["decision_maker"] is False
+    assert transformed["witness_map"]["primary_decision_makers"] == []
+    assert transformed["witness_question_packs"]["pack_count"] >= 1
+    assert transformed["promise_contradiction_analysis"]["summary"]["promise_action_row_count"] >= 1
+    assert transformed["promise_contradiction_analysis"]["summary"]["contradiction_row_count"] >= 1
+    assert transformed["lawyer_briefing_memo"]["memo_format"] == "lawyer_onboarding_brief"
+    assert transformed["lawyer_briefing_memo"]["sections"]["executive_summary"]
+    assert transformed["lawyer_briefing_memo"]["bilingual_rendering"]["preserve_original_quotations"] is True
+    assert transformed["controlled_factual_drafting"]["drafting_format"] == "controlled_factual_drafting"
+    assert transformed["controlled_factual_drafting"]["framing_preflight"]["allegation_ceiling"]["ceiling_level"]
+    assert transformed["controlled_factual_drafting"]["bilingual_rendering"]["translation_mode"] == "translation_aware"
+    assert transformed["case_dashboard"]["dashboard_format"] == "refreshable_case_dashboard"
+    assert transformed["case_dashboard"]["cards"]["main_claims_or_issues"] == []
+    assert transformed["case_dashboard"]["bilingual_rendering"]["output_language"] == "en"
+    assert transformed["deadline_warnings"]["summary"]["warning_count"] >= 1
+    assert transformed["case_dashboard"]["cards"]["timing_warnings"]
+    assert transformed["document_request_checklist"]["deadline_warnings"]["summary"]["warning_count"] >= 1
+    assert transformed["cross_output_consistency"]["summary"]["check_count"] >= 1
+    assert transformed["cross_output_consistency"]["overall_status"] in {"consistent", "review_required"}
+    assert transformed["skeptical_employer_review"]["summary"]["weakness_count"] >= 1
+    assert transformed["document_request_checklist"]["group_count"] >= 1
+
+
+def _assert_case_scope_and_appendix(transformed: dict) -> None:
+    warnings = transformed["case_scope_quality"]["warnings"]
+    assert any(item["code"] == "power_focused_review_without_org_context" for item in warnings)
+    assert [item["field"] for item in transformed["case_scope_quality"]["recommended_next_inputs"]] == [
+        "trigger_events",
+        "alleged_adverse_actions",
+        "org_context",
+        "context_notes",
+    ]
+    assert transformed["message_appendix"]["included"] is True
+    assert transformed["message_appendix"]["review_table_version"] == "2"
+    assert transformed["message_appendix"]["row_count"] == 1
+    assert transformed["message_appendix"]["rows"][0]["tone_summary"] == "Tense and directive."
+    assert transformed["message_appendix"]["rows"][0]["communication_classification"]["primary_class"] == "controlling"
+    assert transformed["message_appendix"]["rows"][0]["relevant_wording"][0]["text"] == "Please comply today."
+    assert transformed["message_appendix"]["rows"][0]["excluded_actors"] == ["SBV"]
 
 
 def test_transform_case_analysis_payload_adds_quality_and_message_appendix() -> None:
@@ -178,65 +250,9 @@ def test_transform_case_analysis_payload_adds_quality_and_message_appendix() -> 
     }
 
     transformed = transform_case_analysis_payload(answer_payload, params)
-    assert transformed["case_analysis_version"] == "1"
-    assert transformed["workflow"] == "case_analysis"
-    assert transformed["review_classification"]["classification"] == "retrieval_bounded_exploratory_review"
-    assert transformed["review_classification"]["may_be_presented_as_full_matter_review"] is False
-    assert transformed["search"] == answer_payload["search"]
-    assert transformed["bilingual_workflow"]["output_language"] == "en"
-    assert transformed["bilingual_workflow"]["primary_source_language"] == "de"
-    assert transformed["case_scope_quality"]["status"] == "degraded"
-    assert "retaliation_focus_without_trigger_events" in transformed["case_scope_quality"]["downgrade_reasons"]
-    assert "power_focused_review_without_org_context" in transformed["case_scope_quality"]["downgrade_reasons"]
-    assert "high_stakes_goal_without_context_notes" in transformed["case_scope_quality"]["downgrade_reasons"]
-    assert transformed["matter_evidence_index"]["row_count"] == 2
-    assert transformed["matter_evidence_index"]["rows"][0]["source_language"] == "de"
-    assert transformed["matter_evidence_index"]["rows"][0]["quoted_evidence"]["original_text"].startswith("Wir werden")
-    assert transformed["lawyer_issue_matrix"]["row_count"] == 0
-    assert transformed["lawyer_issue_matrix"]["bilingual_rendering"]["output_language"] == "en"
-    assert transformed["retaliation_timeline_assessment"]["overall_evidentiary_rating"]["rating"] == "insufficient_timing_record"
-    assert transformed["retaliation_timeline_assessment"]["anchor_requirement_status"] == (
-        "explicit_trigger_confirmation_required"
-    )
-    assert transformed["retaliation_timeline_assessment"]["protected_activity_candidate_count"] == 2
-    assert transformed["actor_identity_graph"]["actors"][0]["actor_id"] == "actor-manager"
-    assert transformed["actor_map"]["actor_count"] == 1
-    assert transformed["actor_map"]["actors"][0]["status"]["decision_maker"] is False
-    assert transformed["witness_map"]["primary_decision_makers"] == []
-    assert transformed["witness_question_packs"]["pack_count"] >= 1
-    assert transformed["promise_contradiction_analysis"]["summary"]["promise_action_row_count"] >= 1
-    assert transformed["promise_contradiction_analysis"]["summary"]["contradiction_row_count"] >= 1
-    assert transformed["lawyer_briefing_memo"]["memo_format"] == "lawyer_onboarding_brief"
-    assert transformed["lawyer_briefing_memo"]["sections"]["executive_summary"]
-    assert transformed["lawyer_briefing_memo"]["bilingual_rendering"]["preserve_original_quotations"] is True
-    assert transformed["controlled_factual_drafting"]["drafting_format"] == "controlled_factual_drafting"
-    assert transformed["controlled_factual_drafting"]["framing_preflight"]["allegation_ceiling"]["ceiling_level"]
-    assert transformed["controlled_factual_drafting"]["bilingual_rendering"]["translation_mode"] == "translation_aware"
-    assert transformed["case_dashboard"]["dashboard_format"] == "refreshable_case_dashboard"
-    assert transformed["case_dashboard"]["cards"]["main_claims_or_issues"] == []
-    assert transformed["case_dashboard"]["bilingual_rendering"]["output_language"] == "en"
-    assert transformed["deadline_warnings"]["summary"]["warning_count"] >= 1
-    assert transformed["case_dashboard"]["cards"]["timing_warnings"]
-    assert transformed["document_request_checklist"]["deadline_warnings"]["summary"]["warning_count"] >= 1
-    assert transformed["cross_output_consistency"]["summary"]["check_count"] >= 1
-    assert transformed["cross_output_consistency"]["overall_status"] in {"consistent", "review_required"}
-    assert transformed["skeptical_employer_review"]["summary"]["weakness_count"] >= 1
-    assert transformed["document_request_checklist"]["group_count"] >= 1
-    warnings = transformed["case_scope_quality"]["warnings"]
-    assert any(item["code"] == "power_focused_review_without_org_context" for item in warnings)
-    assert [item["field"] for item in transformed["case_scope_quality"]["recommended_next_inputs"]] == [
-        "trigger_events",
-        "alleged_adverse_actions",
-        "org_context",
-        "context_notes",
-    ]
-    assert transformed["message_appendix"]["included"] is True
-    assert transformed["message_appendix"]["review_table_version"] == "2"
-    assert transformed["message_appendix"]["row_count"] == 1
-    assert transformed["message_appendix"]["rows"][0]["tone_summary"] == "Tense and directive."
-    assert transformed["message_appendix"]["rows"][0]["communication_classification"]["primary_class"] == "controlling"
-    assert transformed["message_appendix"]["rows"][0]["relevant_wording"][0]["text"] == "Please comply today."
-    assert transformed["message_appendix"]["rows"][0]["excluded_actors"] == ["SBV"]
+    _assert_core_transform_results(transformed, answer_payload)
+    _assert_legal_analysis_sections(transformed)
+    _assert_case_scope_and_appendix(transformed)
 
 
 def test_transform_case_analysis_payload_preserves_matter_ingestion_report_and_review_mode() -> None:

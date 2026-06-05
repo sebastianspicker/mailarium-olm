@@ -97,6 +97,6 @@ def prepare_network_summary(db: EmailDatabase, top_n: int = 20) -> dict[str, Any
 
         net = CommunicationNetwork(db)
         return net.network_analysis(top_n=top_n)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.debug("Network analysis failed", exc_info=True)
         return {"error": "Network analysis unavailable"}

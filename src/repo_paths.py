@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-import subprocess
+import shutil
+import subprocess  # nosec B404
 from functools import lru_cache
 from pathlib import Path
 
@@ -66,8 +67,9 @@ def normalize_local_path(value: str, *, field_name: str = "path") -> Path:
 
 @lru_cache(maxsize=1)
 def _tracked_repo_paths() -> frozenset[str]:
-    completed = subprocess.run(
-        ["git", "ls-files", "-z"],
+    git_path = shutil.which("git") or "git"
+    completed = subprocess.run(  # nosemgrep
+        [git_path, "ls-files", "-z"],
         cwd=repo_root(),
         check=False,
         capture_output=True,

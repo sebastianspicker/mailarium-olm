@@ -284,7 +284,7 @@ def test_build_master_chronology_skips_timeline_event_without_date() -> None:
     timeline_entries = [e for e in payload["entries"] if "timeline" in e.get("entry_type", "")]
     assert len(timeline_entries) == 0
 
-    """Line 143: non-dict item in chronology_anchors is skipped."""
+    # Line 143: non-dict item in chronology_anchors is skipped.
     payload = build_master_chronology(
         case_bundle={"scope": {"alleged_adverse_actions": [{"action_type": "removal", "date": "2024-01-01"}]}},
         timeline={"events": []},

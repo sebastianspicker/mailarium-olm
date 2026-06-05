@@ -1,121 +1,38 @@
 # mypy: disable-error-code=name-defined
+# pylint: disable=too-many-locals
+
+
+# pylint: disable=E0602  # cross-module names injected by compatibility facade
 """Split multi-source case-bundle helpers (multi_source_case_bundle_sources)."""
 
 from __future__ import annotations
 
 import re
 from collections import Counter
-from datetime import UTC, date, datetime
-from pathlib import Path
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 
-from .attachment_extractor import (
-    attachment_format_profile,
-    extraction_quality_profile,
+from .multi_source_case_bundle_common import (
+    _DATE_ORIGIN_PRIORITY,
+    _DATE_RANGE_EU_RE,
+    _DATE_RANGE_RE,
+    _DECLARED_SOURCE_TYPES,
+    _EMAIL_LINK_STOPWORDS,
+    _EMAIL_LINK_TOKEN_RE,
+    _EU_DATE_RE,
+    _FORMAL_DOCUMENT_EXTENSIONS,
+    _FORMAL_DOCUMENT_MIME_MARKERS,
+    _ICAL_DATETIME_RE,
+    _ICAL_FIELD_RE,
+    _INLINE_EMAIL_RE,
+    _ISO_DATE_RE,
+    _MONTH_LABEL_RE,
+    _NOTE_RECORD_KEYWORDS,
+    _PARTICIPATION_RECORD_KEYWORDS,
+    _SHEET_NAME_RE,
+    _TIME_RECORD_KEYWORDS,
+    _TITLE_DATE_RE,
+    MULTI_SOURCE_CASE_BUNDLE_VERSION,
 )
-
-MULTI_SOURCE_CASE_BUNDLE_VERSION = "1"
-_DECLARED_SOURCE_TYPES = (
-    "email",
-    "attachment",
-    "meeting_note",
-    "chat_log",
-    "formal_document",
-    "note_record",
-    "time_record",
-    "participation_record",
-)
-_FORMAL_DOCUMENT_EXTENSIONS = {".doc", ".docx", ".md", ".odt", ".pdf", ".rtf", ".txt"}
-_FORMAL_DOCUMENT_MIME_MARKERS = (
-    "application/pdf",
-    "application/msword",
-    "application/rtf",
-    "application/vnd.oasis.opendocument.text",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/plain",
-    "text/markdown",
-    "text/rtf",
-)
-_NOTE_RECORD_KEYWORDS = (
-    "notes",
-    "memo",
-    "minutes",
-    "meeting summary",
-    "protokoll",
-    "gedächtnisprotokoll",
-    "gedaechtnisprotokoll",
-    "aktennotiz",
-)
-_TIME_RECORD_KEYWORDS = (
-    "timesheet",
-    "time sheet",
-    "time record",
-    "attendance",
-    "arbeitszeit",
-    "arbeitszeitnachweis",
-    "zeiterfassung",
-    "stundennachweis",
-)
-_PARTICIPATION_RECORD_KEYWORDS = (
-    "sbv",
-    "schwerbehindertenvertretung",
-    "personalrat",
-    "betriebsrat",
-    "mitbestimmung",
-    "consultation",
-    "beteiligung",
-    "anhoerung",
-    "anhörung",
-)
-_ISO_DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
-_DATE_RANGE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\s*(?:to|through|until|bis|–|-)\s*(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE)
-_EU_DATE_RE = re.compile(r"(?<!\d)(\d{1,2})[./](\d{1,2})[./](20\d{2})(?!\d)")
-_DATE_RANGE_EU_RE = re.compile(
-    r"(?<!\d)(\d{1,2}[./]\d{1,2}[./]20\d{2})\s*(?:to|through|until|bis|–|-)\s*(\d{1,2}[./]\d{1,2}[./]20\d{2})(?!\d)",
-    re.IGNORECASE,
-)
-_SHEET_NAME_RE = re.compile(r"\[Sheet:\s*([^\]]+)\]")
-_MONTH_LABEL_RE = re.compile(
-    r"(?i)\b("
-    r"january|february|march|april|may|june|july|august|september|october|november|december|"
-    r"januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember"
-    r")\b"
-)
-_ICAL_FIELD_RE = re.compile(
-    r"(?im)^(SUMMARY|DTSTART|DTEND|LOCATION|ORGANIZER|ATTENDEE|STATUS|METHOD|SEQUENCE|UID|RECURRENCE-ID|DESCRIPTION)[^:\n]*:(.+)$"
-)
-_ICAL_DATETIME_RE = re.compile(r"\b(20\d{2})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?)?")
-_EMAIL_LINK_TOKEN_RE = re.compile(r"[a-z0-9äöüß]{4,}")
-_TITLE_DATE_RE = re.compile(r"(?<!\d)(20\d{2})[-._](\d{2})[-._](\d{2})(?!\d)")
-_EMAIL_LINK_STOPWORDS = {
-    "about",
-    "after",
-    "before",
-    "document",
-    "dokument",
-    "email",
-    "formal",
-    "from",
-    "meeting",
-    "message",
-    "note",
-    "record",
-    "reply",
-    "status",
-    "subject",
-    "summary",
-    "thread",
-}
-_INLINE_EMAIL_RE = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}")
-_DATE_ORIGIN_PRIORITY = {
-    "meeting_metadata": 60,
-    "calendar_dtstart": 55,
-    "time_record_range_start": 50,
-    "document_text": 45,
-    "time_record_range_end": 35,
-    "source_timestamp": 25,
-}
 
 # ruff: noqa: F401,F821
 

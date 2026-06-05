@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
+import subprocess  # nosec B404
 import sys
 
 DEFAULT_TIMEOUT_SECONDS = 180
@@ -48,7 +48,11 @@ def main(argv: list[str] | None = None) -> int:
         command.extend(("--ignore-vuln", vulnerability_id))
 
     try:
-        completed = subprocess.run(command, check=False, timeout=args.timeout_seconds)
+        completed = subprocess.run(  # nosemgrep
+            command,
+            check=False,
+            timeout=args.timeout_seconds,
+        )
     except subprocess.TimeoutExpired:
         print(
             f"Dependency audit timed out after {args.timeout_seconds}s: {' '.join(command)}",

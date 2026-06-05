@@ -435,24 +435,28 @@ def test_harvest_wave_payload_promotes_structured_provenance_into_durable_eviden
         promote_limit_per_wave=5,
     )
 
-    evidence = db.get_evidence(result["promoted_evidence_ids"][0])
+    evidence = db.get_evidence(result["promoted_evidence_ids"][0])  # pylint: disable=assignment-from-no-return
 
     assert evidence is not None
+    # pylint: disable-next=unsubscriptable-object
     assert evidence["candidate_kind"] == "body"
+    # pylint: disable-next=unsubscriptable-object
     assert evidence["provenance"] == {
         "evidence_handle": "email:test-uid-1:retrieval:body_text:0:52",
         "chunk_id": "chunk-1",
         "snippet_start": 0,
         "snippet_end": 52,
     }
-    assert evidence["document_locator"] == {
+    assert evidence["document_locator"] == {  # pylint: disable=unsubscriptable-object
         "evidence_handle": "email:test-uid-1:retrieval:body_text:0:52",
         "chunk_id": "chunk-1",
         "snippet_start": 0,
         "snippet_end": 52,
         "body_render_source": "forensic_body_text",
     }
+    # pylint: disable-next=unsubscriptable-object
     assert evidence["context"]["wave_id"] == "wave_1"
+    # pylint: disable-next=unsubscriptable-object
     assert evidence["context"]["candidate_kind"] == "body"
     db.close()
 

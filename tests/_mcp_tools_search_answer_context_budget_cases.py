@@ -327,7 +327,6 @@ async def test_email_answer_context_explicitly_truncates_to_budget(monkeypatch):
 @pytest.mark.asyncio
 async def test_email_answer_context_packing_keeps_stronger_nonweak_evidence(monkeypatch):
     import src.tools.search as search_mod
-    from src.config import get_settings
     from src.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):

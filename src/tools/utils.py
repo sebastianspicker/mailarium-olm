@@ -1,4 +1,5 @@
 """Shared utilities for MCP tool modules — eliminates boilerplate."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-return-statements
 
 from __future__ import annotations
 
@@ -386,7 +387,7 @@ async def run_with_network(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
 
                     try:
                         net = CommunicationNetwork(db)
-                    except Exception as exc:
+                    except Exception as exc:  # pylint: disable=broad-exception-caught
                         return json_error(f"Network analysis unavailable: {type(exc).__name__}")
                     db._cached_comm_network = net  # type: ignore[attr-defined]
         return fn(db, net)

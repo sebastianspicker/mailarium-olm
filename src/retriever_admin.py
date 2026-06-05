@@ -1,4 +1,5 @@
 """Administrative and metadata helpers for the retriever facade."""
+# pylint: disable=too-many-branches,too-many-locals
 
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ def list_senders_impl(retriever: Any, limit: int = 50) -> list[dict[str, Any]]:
             rows = retriever.email_db.top_senders(limit=limit)
             if rows:
                 return [{"name": r["sender_name"], "email": r["sender_email"], "count": r["message_count"]} for r in rows]
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("SQLite list_senders failed, falling back to ChromaDB", exc_info=True)
 
     sender_counts: dict[str, dict[str, Any]] = {}
@@ -55,6 +56,7 @@ def list_senders_impl(retriever: Any, limit: int = 50) -> list[dict[str, Any]]:
 def stats_impl(retriever: Any) -> dict[str, Any]:
     """Get summary statistics about the indexed archive."""
     total_chunks = retriever.collection.count()
+    fallback_warning: dict[str, str] | None = None
 
     if retriever.email_db:
         try:
@@ -67,12 +69,28 @@ def stats_impl(retriever: Any) -> dict[str, Any]:
                     "unique_senders": retriever.email_db.unique_sender_count(),
                     "date_range": {"earliest": min_d[:10] if min_d else None, "latest": max_d[:10] if max_d else None},
                     "folders": retriever.email_db.folder_counts(),
+                    "metadata_source": "sqlite",
                 }
-        except Exception:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.debug("SQLite stats failed, falling back to ChromaDB", exc_info=True)
+            fallback_warning = {
+                "metadata_warning": "sqlite_stats_failed_chromadb_fallback",
+                "metadata_error_type": type(exc).__name__,
+                "metadata_error": str(exc),
+            }
 
     if total_chunks == 0:
-        return {"total_chunks": 0, "total_emails": 0, "unique_senders": 0, "date_range": {}, "folders": {}}
+        payload = {
+            "total_chunks": 0,
+            "total_emails": 0,
+            "unique_senders": 0,
+            "date_range": {},
+            "folders": {},
+            "metadata_source": "chromadb_fallback",
+        }
+        if fallback_warning:
+            payload.update(fallback_warning)
+        return payload
 
     unique_email_keys: set[str] = set()
     unknown_email_rows = 0
@@ -110,13 +128,17 @@ def stats_impl(retriever: Any) -> dict[str, Any]:
     for folder, count in folder_unknown_rows.items():
         folders[folder] = folders.get(folder, 0) + count
 
-    return {
+    payload = {
         "total_chunks": total_chunks,
         "total_emails": len(unique_email_keys) + unknown_email_rows,
         "unique_senders": len(unique_senders),
         "date_range": {"earliest": earliest, "latest": latest},
         "folders": dict(sorted(folders.items(), key=lambda item: item[1], reverse=True)),
+        "metadata_source": "chromadb_fallback",
     }
+    if fallback_warning:
+        payload.update(fallback_warning)
+    return payload
 
 
 def resolve_semantic_uids_impl(
@@ -125,6 +147,7 @@ def resolve_semantic_uids_impl(
     cluster_id: int | None = None,
 ) -> set[str]:
     """Pre-fetch email UIDs matching semantic filters from SQLite."""
+    retriever._last_semantic_filter_errors = []
     db = retriever.email_db
     if db is None:
         return set()
@@ -134,16 +157,32 @@ def resolve_semantic_uids_impl(
         try:
             rows = db.emails_by_topic(topic_id, limit=10_000)
             uid_sets.append({r["uid"] for r in rows})
-        except Exception:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.debug("topic_id filter failed", exc_info=True)
+            retriever._last_semantic_filter_errors.append(
+                {
+                    "filter": "topic_id",
+                    "value": topic_id,
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
             uid_sets.append(set())
 
     if cluster_id is not None:
         try:
             rows = db.emails_in_cluster(cluster_id, limit=10_000)
             uid_sets.append({r["uid"] for r in rows})
-        except Exception:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.debug("cluster_id filter failed", exc_info=True)
+            retriever._last_semantic_filter_errors.append(
+                {
+                    "filter": "cluster_id",
+                    "value": cluster_id,
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
             uid_sets.append(set())
 
     if not uid_sets:
@@ -183,11 +222,20 @@ def expand_query_impl(retriever: Any, query: str) -> str:
             "original_query": query,
             "expanded_query": expanded,
             "used_query_expansion": expanded != query,
+            "query_expansion_status": "expanded" if expanded != query else "unchanged",
             "legal_support_profile": profile,
         }
         return expanded
-    except Exception:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.debug("Query expansion failed", exc_info=True)
+        retriever._last_query_expansion = {
+            "original_query": query,
+            "expanded_query": query,
+            "used_query_expansion": False,
+            "query_expansion_status": "error",
+            "query_expansion_error_type": type(exc).__name__,
+            "query_expansion_error": str(exc),
+        }
         return query
 
 
@@ -226,6 +274,6 @@ def expand_query_lanes_impl(retriever: Any, query: str, *, max_lanes: int = 4) -
             "legal_support_profile": profile,
         }
         return lanes or [query]
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.debug("Query lane expansion failed", exc_info=True)
         return [query]

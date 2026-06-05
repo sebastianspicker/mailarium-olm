@@ -22,11 +22,35 @@ body:
       description: What should the repo add or change?
     validations:
       required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Intended Surface
+      description: Choose the primary surface this request would affect.
+      options:
+        - CLI
+        - MCP
+        - Streamlit
+        - Ingest
+        - Retrieval/search
+        - Export/reporting
+        - Documentation or repository metadata
+        - Other
+    validations:
+      required: true
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives Considered
       description: List any simpler workaround or existing command that almost solves this.
+    validations:
+      required: false
+  - type: textarea
+    id: verification
+    attributes:
+      label: Acceptance Criteria
+      description: What observable behavior would prove this feature works without relying on private data?
+      placeholder: The feature can be demonstrated with a synthetic fixture and verified by a focused CLI/MCP/Streamlit smoke check.
     validations:
       required: false
   - type: checkboxes

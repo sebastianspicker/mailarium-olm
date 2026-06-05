@@ -1,4 +1,5 @@
 """Evidence-chain and citation helpers for behavioural-analysis findings."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

@@ -112,7 +112,7 @@ class ImageEmbedder:
             finally:
                 Path(tmp_path).unlink(missing_ok=True)
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Failed to encode image", exc_info=True)
             return None
 
@@ -188,7 +188,7 @@ class ImageEmbedder:
             )
             logger.info("Visualized-BGE weights downloaded to: %s", downloaded)
             return downloaded
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.warning(
                 "Failed to download Visualized-BGE weights. Download manually from https://huggingface.co/%s and place at: %s",
                 _HF_REPO_ID,
@@ -211,5 +211,5 @@ class ImageEmbedder:
             logger.info("Visualized-BGE loaded from %s", self._weight_path)
         except ImportError:
             logger.info("FlagEmbedding visual module not available. Install FlagEmbedding >= 1.3.0 for image embedding.")
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.warning("Failed to load Visualized-BGE model", exc_info=True)

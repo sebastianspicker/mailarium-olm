@@ -83,7 +83,7 @@ class TestRunWithNetworkThreadSafety:
                     net = getattr(db, "_cached_comm_network", None)
                     if net is None:
                         net = FakeNetwork(db)
-                        db._cached_comm_network = net
+                        db._cached_comm_network = net  # pylint: disable=attribute-defined-outside-init
 
         t0 = threading.Thread(target=create_network)
         t1 = threading.Thread(target=create_network)

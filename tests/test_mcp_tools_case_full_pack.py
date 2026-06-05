@@ -123,7 +123,7 @@ async def test_email_case_full_pack_executes_realistic_fixture(monkeypatch) -> N
         return build_fixture_answer_context("retaliation_rights_assertion")
 
     monkeypatch.setattr("src.tools.search_answer_context.build_answer_context_payload", fake_build_answer_context_payload)
-    monkeypatch.setattr("src.tools.case_analysis.json_response", lambda data: json.dumps(data))
+    monkeypatch.setattr("src.tools.case_analysis.json_response", json.dumps)
 
     result = await fn(
         build_fixture_full_pack_input(

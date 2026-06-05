@@ -1,4 +1,8 @@
 # mypy: disable-error-code=name-defined
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals
+
+
+# pylint: disable=E0602  # cross-module names injected by compatibility facade
 """Split archive-harvest helpers (case_analysis_harvest_coverage)."""
 
 from __future__ import annotations
@@ -39,9 +43,9 @@ def _expanded_zero_result_lane_variants(retriever: Any, lane_query: str) -> list
     except TypeError:
         try:
             variants = expand_query_lanes(lane_query)
-        except Exception:
+        except (ValueError, AttributeError):
             return []
-    except Exception:
+    except (ValueError, AttributeError):
         return []
     if not isinstance(variants, list):
         return []

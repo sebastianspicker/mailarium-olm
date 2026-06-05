@@ -36,14 +36,14 @@ class TestArgumentValidation:
 
 
 class TestSharedFlags:
-    def test_chromadb_path_on_search(self) -> None:
-        args = parse_args(["search", "--query", "test", "--chromadb-path", "/tmp/db"])
-        assert args.chromadb_path == "/tmp/db"
+    def test_chromadb_path_on_search(self, tmp_path) -> None:
+        args = parse_args(["search", "--query", "test", "--chromadb-path", str(tmp_path / "db")])
+        assert args.chromadb_path == str(tmp_path / "db")
         assert args.subcommand == "search"
 
-    def test_sqlite_path_on_search(self) -> None:
-        args = parse_args(["search", "--query", "test", "--sqlite-path", "/tmp/email.db"])
-        assert args.sqlite_path == "/tmp/email.db"
+    def test_sqlite_path_on_search(self, tmp_path) -> None:
+        args = parse_args(["search", "--query", "test", "--sqlite-path", str(tmp_path / "email.db")])
+        assert args.sqlite_path == str(tmp_path / "email.db")
         assert args.subcommand == "search"
 
     def test_log_level_on_browse(self) -> None:
@@ -51,17 +51,17 @@ class TestSharedFlags:
         assert args.log_level == "DEBUG"
         assert args.subcommand == "browse"
 
-    def test_chromadb_path_on_analytics(self) -> None:
-        args = parse_args(["analytics", "--chromadb-path", "/tmp/db", "stats"])
-        assert args.chromadb_path == "/tmp/db"
+    def test_chromadb_path_on_analytics(self, tmp_path) -> None:
+        args = parse_args(["analytics", "--chromadb-path", str(tmp_path / "db"), "stats"])
+        assert args.chromadb_path == str(tmp_path / "db")
 
-    def test_chromadb_path_on_legacy(self) -> None:
-        args = _parse_legacy_args(["--chromadb-path", "/tmp/db", "--stats"])
-        assert args.chromadb_path == "/tmp/db"
+    def test_chromadb_path_on_legacy(self, tmp_path) -> None:
+        args = _parse_legacy_args(["--chromadb-path", str(tmp_path / "db"), "--stats"])
+        assert args.chromadb_path == str(tmp_path / "db")
 
-    def test_sqlite_path_on_legacy(self) -> None:
-        args = _parse_legacy_args(["--sqlite-path", "/tmp/email.db", "--stats"])
-        assert args.sqlite_path == "/tmp/email.db"
+    def test_sqlite_path_on_legacy(self, tmp_path) -> None:
+        args = _parse_legacy_args(["--sqlite-path", str(tmp_path / "email.db"), "--stats"])
+        assert args.sqlite_path == str(tmp_path / "email.db")
 
 
 class TestLegacyBackwardCompat:
@@ -140,24 +140,33 @@ class TestSubcommandDetection:
 
         assert _has_subcommand([]) is False
 
-    def test_has_subcommand_with_global_flags_before(self) -> None:
+    def test_has_subcommand_with_global_flags_before(self, tmp_path) -> None:
         from src.cli import _has_subcommand
 
         assert _has_subcommand(["--log-level", "DEBUG", "browse"]) is True
-        assert _has_subcommand(["--chromadb-path", "/tmp/db", "analytics"]) is True
-        assert _has_subcommand(["--sqlite-path", "/tmp/email.db", "analytics"]) is True
+        assert _has_subcommand(["--chromadb-path", str(tmp_path / "db"), "analytics"]) is True
+        assert _has_subcommand(["--sqlite-path", str(tmp_path / "email.db"), "analytics"]) is True
 
     def test_has_subcommand_all_valid_names(self) -> None:
         from src.cli import _has_subcommand
 
-        for name in ["search", "browse", "export", "evidence", "analytics", "training", "admin"]:
+        for name in ["search", "browse", "export", "evidence", "analytics", "training", "admin", "topics"]:
             assert _has_subcommand([name]) is True, f"{name} not detected"
 
-    def test_has_subcommand_ignores_flag_values(self) -> None:
+    def test_topics_subcommand_build_args(self) -> None:
+        args = parse_args(["topics", "build", "--n-topics", "7", "--n-clusters", "3", "--skip-clusters"])
+
+        assert args.subcommand == "topics"
+        assert args.topics_action == "build"
+        assert args.n_topics == 7
+        assert args.n_clusters == 3
+        assert args.skip_clusters is True
+
+    def test_has_subcommand_ignores_flag_values(self, tmp_path) -> None:
         from src.cli import _has_subcommand
 
         assert _has_subcommand(["--db-path", "analytics"]) is False
-        assert _has_subcommand(["--chromadb-path", "/tmp/admin"]) is False
+        assert _has_subcommand(["--chromadb-path", str(tmp_path / "admin")]) is False
         assert _has_subcommand(["--log-level", "search"]) is False
 
     def test_has_subcommand_with_equals_style_root_flag(self) -> None:

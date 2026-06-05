@@ -1,4 +1,5 @@
 """Proof dossier generator for legal evidence export."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-positional-arguments
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from .db_schema import _sql_in_placeholders
 from .formatting import format_date, format_file_size, strip_html_tags, write_html_or_pdf
 
 if TYPE_CHECKING:
@@ -171,9 +173,9 @@ class DossierGenerator:
         evidence_uids = list({item["email_uid"] for item in enriched_items if item.get("email_uid")})
         thread_topics: dict[str, str] = {}
         if evidence_uids:
-            ph = ",".join("?" * len(evidence_uids))
+            ph = _sql_in_placeholders(evidence_uids)
             rows = self._db.conn.execute(
-                f"SELECT uid, thread_topic FROM emails WHERE uid IN ({ph})",  # nosec
+                f"SELECT uid, thread_topic FROM emails WHERE uid IN ({ph})",  # nosec B608
                 evidence_uids,
             ).fetchall()
             thread_topics = {r["uid"]: r["thread_topic"] or "" for r in rows}

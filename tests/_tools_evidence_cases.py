@@ -38,7 +38,7 @@ class MockEmailDB:
         row = self.conn.execute("SELECT * FROM emails WHERE uid = ?", (uid,)).fetchone()
         return dict(row) if row else None
 
-    def add_evidence(self, email_uid, category, key_quote, summary, relevance, notes=""):
+    def add_evidence(self, email_uid, category, key_quote, summary, relevance, notes=""):  # pylint: disable=too-many-arguments,too-many-positional-arguments
         evidence_id = self._next_evidence_id
         self._next_evidence_id += 1
         item = {
@@ -69,7 +69,7 @@ class MockEmailDB:
     def remove_evidence(self, evidence_id):
         return self._evidence.pop(evidence_id, None) is not None
 
-    def list_evidence(self, category=None, min_relevance=None, email_uid=None, limit=25, offset=0):
+    def list_evidence(self, category=None, min_relevance=None, email_uid=None, limit=25, offset=0):  # pylint: disable=too-many-arguments,too-many-positional-arguments
         items = list(self._evidence.values())
         if category:
             items = [item for item in items if item["category"] == category]
@@ -134,7 +134,7 @@ class MockEmailDB:
     def __del__(self) -> None:
         try:
             self.close()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
 
 

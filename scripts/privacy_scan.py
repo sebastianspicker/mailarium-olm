@@ -11,12 +11,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+_GIT_PATH = shutil.which("git") or "git"
 
 
 def _term(*parts: str) -> str:
@@ -129,8 +132,8 @@ class Finding:
 
 
 def _run_git(args: list[str], *, check: bool = True) -> list[str]:
-    completed = subprocess.run(
-        ["git", *args],
+    completed = subprocess.run(  # nosemgrep
+        [_GIT_PATH, *args],
         cwd=REPO_ROOT,
         check=check,
         capture_output=True,
@@ -140,8 +143,8 @@ def _run_git(args: list[str], *, check: bool = True) -> list[str]:
 
 
 def _run_git_bytes(args: list[str], *, check: bool = True) -> bytes:
-    completed = subprocess.run(
-        ["git", *args],
+    completed = subprocess.run(  # nosemgrep
+        [_GIT_PATH, *args],
         cwd=REPO_ROOT,
         check=check,
         capture_output=True,
@@ -158,8 +161,8 @@ def _untracked_paths() -> list[str]:
 
 
 def _history_paths() -> list[str]:
-    completed = subprocess.run(
-        ["git", "log", "--all", "--name-only", "--pretty=format:"],
+    completed = subprocess.run(  # nosemgrep
+        [_GIT_PATH, "log", "--all", "--name-only", "--pretty=format:"],
         cwd=REPO_ROOT,
         check=True,
         capture_output=True,

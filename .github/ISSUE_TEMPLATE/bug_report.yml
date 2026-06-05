@@ -7,6 +7,7 @@ body:
     attributes:
       value: |
         Do not include real mailbox contents, personal records, private local paths, or institution-specific details.
+        Use the smallest synthetic reproduction that still demonstrates the defect.
   - type: textarea
     id: summary
     attributes:
@@ -24,6 +25,22 @@ body:
         1. Create a synthetic .olm fixture.
         2. Run `python -m src.ingest private/ingest/example-export.olm --max-emails 10`.
         3. Observe the error.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected Surface
+      description: Choose the primary surface where the defect appears.
+      options:
+        - CLI
+        - MCP
+        - Streamlit
+        - Ingest
+        - Retrieval/search
+        - Export/reporting
+        - Documentation or repository metadata
+        - Other
     validations:
       required: true
   - type: textarea
@@ -45,6 +62,17 @@ body:
     validations:
       required: false
   - type: textarea
+    id: runtime-state
+    attributes:
+      label: Runtime State
+      description: If the issue involves ingest, search, MCP, Streamlit, export, or legal-support workflows, include sanitized diagnostics and the exact command or tool call.
+      placeholder: |
+        Command/tool:
+        Runtime profile:
+        Sanitized diagnostics:
+    validations:
+      required: false
+  - type: textarea
     id: logs
     attributes:
       label: Sanitized Logs
@@ -52,3 +80,12 @@ body:
       render: text
     validations:
       required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy Check
+      options:
+        - label: I removed real email content, personal identifiers, local paths, and institution-specific details.
+          required: true
+        - label: Any attached artifacts are synthetic or fully redacted.
+          required: true

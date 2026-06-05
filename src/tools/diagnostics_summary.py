@@ -1,4 +1,5 @@
 """Summary and artifact-selection helpers for diagnostics tools."""
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
@@ -63,7 +64,7 @@ def load_eval_report_impl(path: Path, *, repo_root: Callable[[], Path]) -> tuple
     try:
         raw = path.read_text(encoding="utf-8")
         report = json.loads(raw)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.debug("AQ eval report could not be loaded from %s", path, exc_info=True)
         return None
     summary = report.get("summary")
@@ -80,7 +81,7 @@ def load_remediation_report_impl(path: Path, *, repo_root: Callable[[], Path]) -
     try:
         raw = path.read_text(encoding="utf-8")
         report = json.loads(raw)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.debug("AQ remediation report could not be loaded from %s", path, exc_info=True)
         return None
     if not isinstance(report, dict):
@@ -96,7 +97,7 @@ def load_inferred_thread_prevalence_impl(path: Path, *, repo_root: Callable[[], 
     try:
         raw = path.read_text(encoding="utf-8")
         report = json.loads(raw)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         logger.debug("AQ prevalence report could not be loaded from %s", path, exc_info=True)
         return None
     if not isinstance(report, dict):

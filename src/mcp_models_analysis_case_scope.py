@@ -206,7 +206,7 @@ class BehavioralCaseScopeInput(DateRangeInput, StrictInput):
 
     @model_validator(mode="after")
     def validate_actor_set(self):
-        target_email = (self.target_person.email or "").strip().lower()
+        target_email = (self.target_person.email or "").strip().lower()  # pylint: disable=no-member
         for actor in self.suspected_actors:
             actor_email = (actor.email or "").strip().lower()
             if target_email and actor_email and actor_email == target_email:

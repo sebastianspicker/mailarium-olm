@@ -260,8 +260,10 @@ class TestSqlInjectionSurface:
         result = db.update_evidence(item["id"], email_uid="injected", summary="new summary")
         assert result is True
         # email_uid should NOT have changed
-        updated = db.get_evidence(item["id"])
+        updated = db.get_evidence(item["id"])  # pylint: disable=assignment-from-no-return
+        # pylint: disable-next=unsubscriptable-object
         assert updated["email_uid"] == uid
+        # pylint: disable-next=unsubscriptable-object
         assert updated["summary"] == "new summary"
         db.close()
 

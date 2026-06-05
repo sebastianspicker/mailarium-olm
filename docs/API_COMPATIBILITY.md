@@ -23,9 +23,36 @@ in this file and [MCP_TOOLS.md](MCP_TOOLS.md) controls.
 - CLI, MCP, and Streamlit do not promise one-to-one parity for every convenience surface.
 - Streamlit web app is exploratory and outside the stable compatibility contract; runtime path overrides are validated best-effort and should not be treated as an authoritative workflow surface.
 
+## Current Local Checkout Notes
+
+The current local checkout has a broad in-progress refactor and quality-policy
+update. This file describes interface contracts visible in that checkout, but
+it is not a release-readiness claim.
+
+Local compatibility facts:
+
+- MCP currently registers 68 tools.
+- Legacy flat-flag CLI commands remain deprecated but supported for `0.1.x`.
+- The topic CLI subcommand exists as `topics build`; topic-backed filters and
+  `email_topics` remain conditional until a runtime has populated topic tables.
+- Search and answer-context diagnostics now expose degraded retrieval states,
+  including semantic-filter failures, query-expansion failures, lane coverage,
+  and archive-harvest expansion status.
+- SQL identifier and generated-fragment validation is centralized for public
+  path/runtime/query boundaries that need dynamic SQLite fragments. Plain path
+  normalization or string formatting is not an authorization boundary.
+- Local PyLint/Codacy/Bandit policy changes are verification policy, not API
+  behavior. Remote Codacy closure requires a pushed commit and Cloud reanalysis.
+
 ## CLI Compatibility Contract
 
 The following CLI capabilities are stable for `0.1.x`:
+
+Legacy flat-flag commands remain a supported compatibility surface for `0.1.x`.
+They are deprecated for new usage, but current docs and regression tests still
+cover `--query`, `--stats`, `--list-senders`, and related flat flags. Do not
+remove this path without a later compatibility-removal slice that documents user
+impact and updates the tests that intentionally exercise it.
 
 1. Query path:
    1. `--query` / `-q`

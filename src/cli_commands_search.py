@@ -1,4 +1,5 @@
 """Search/browse command-family implementations for the CLI."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-positional-arguments
 
 from __future__ import annotations
 

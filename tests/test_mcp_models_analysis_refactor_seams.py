@@ -85,5 +85,5 @@ def test_behavioral_org_context_models_round_trip_through_aggregator():
     assert scope.allegation_focus == ["retaliation", "exclusion"]
     assert scope.trigger_events[0].trigger_type == "complaint"
     assert scope.org_context is not None
-    assert scope.org_context.role_facts[0].role_type == "manager"
-    assert scope.org_context.reporting_lines[0].manager.email == "manager@example.com"
+    assert scope.org_context.role_facts[0].role_type == "manager"  # pylint: disable=no-member
+    assert scope.org_context.reporting_lines[0].manager.email == "manager@example.com"  # pylint: disable=no-member

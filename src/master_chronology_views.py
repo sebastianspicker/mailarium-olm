@@ -1,4 +1,5 @@
 """Chronology rendering views over the shared entry registry."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

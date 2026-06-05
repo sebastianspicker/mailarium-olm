@@ -13,7 +13,7 @@ class _FakeModel:
         embeddings = []
         for text in texts:
             # Simple hash-based embedding
-            rng = np.random.RandomState(hash(text) % 2**31)
+            rng = np.random.RandomState(hash(text) % 2**31)  # pylint: disable=no-member
             embeddings.append(rng.randn(8).astype(np.float32).tolist())
         return embeddings
 

@@ -1,6 +1,10 @@
 """Tests for writing style and readability analysis."""
+# pylint: disable=R0401
+# test_writing_analyzer imported in top-level; src.tools.reporting lazily imported below.
+# Codacy/PyLint misdetects a cycle: test → src.tools.reporting → src.writing_analyzer.
+# Both cross-links are lazy imports in function bodies — no runtime cycle.
 
-from src.writing_analyzer import WritingAnalyzer, WritingMetrics, _get_words, _split_sentences
+from src.writing_analyzer import WritingAnalyzer, WritingMetrics, _get_words, _split_sentences  # pylint: disable=cyclic-import
 
 
 class TestHelpers:
@@ -57,7 +61,7 @@ class TestWritingMetrics:
 
 class TestWritingAnalyzer:
     def setup_method(self):
-        self.analyzer = WritingAnalyzer()
+        self.analyzer = WritingAnalyzer()  # pylint: disable=attribute-defined-outside-init
 
     def test_analyze_empty_text(self):
         m = self.analyzer.analyze_text("")
@@ -184,6 +188,6 @@ class TestSenderProfile:
 
 class TestMCPWritingTool:
     def test_writing_analysis_tool_importable(self):
-        from src.tools import reporting  # email_writing_analysis lives in reporting module
+        from src.tools import reporting  # pylint: disable=cyclic-import  # email_writing_analysis lives in reporting module
 
         assert callable(reporting.register)

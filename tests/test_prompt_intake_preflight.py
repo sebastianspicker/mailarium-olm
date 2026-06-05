@@ -121,7 +121,7 @@ def test_prompt_preflight_builds_conservative_scaffold_without_fabricating_retal
     assert payload["workflow"] == "case_prompt_preflight"
     assert payload["analysis_goal"] == "lawyer_briefing"
     assert payload["recommended_source_scope"] == "emails_and_attachments"
-    assert payload["draft_case_scope"]["target_person"]["name"] == "Target Employee"
+    assert payload["draft_case_scope"]["target_person"]["name"] == "Target Employee"  # pylint: disable=unsubscriptable-object
     assert payload["draft_case_scope"]["suspected_actors"][0]["name"] == "Line Manager"
     assert payload["draft_case_scope"]["date_from"] == "2023-11-01"
     assert payload["draft_case_scope"]["date_to"] == "2026-04-13"

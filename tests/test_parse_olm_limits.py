@@ -1,3 +1,6 @@
+# pylint: disable=no-member,c-extension-no-member
+
+
 import io
 import zipfile
 from pathlib import Path
@@ -5,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import src.parse_olm as parse_olm_mod
+from src.olm_xml_helpers import _new_xml_parser
 from src.olm_xml_helpers import _read_limited_bytes as helper_read_limited_bytes
 
 
@@ -76,6 +80,16 @@ def test_read_limited_bytes_accepts_stream_within_limit():
 
 def test_parse_olm_keeps_read_limited_bytes_compat_reexport():
     assert parse_olm_mod._read_limited_bytes is helper_read_limited_bytes
+
+
+def test_shared_xml_parser_rejects_deeply_nested_xml():
+    from lxml import etree
+
+    depth = 1500
+    xml = ("<a>" * depth + "x" + "</a>" * depth).encode()
+
+    with pytest.raises(etree.XMLSyntaxError, match="Excessive depth"):
+        etree.fromstring(xml, parser=_new_xml_parser())
 
 
 def test_parse_olm_accepts_uppercase_xml_extension(tmp_path: Path):

@@ -1,4 +1,5 @@
 """Payload-building helpers for answer-context runtime assembly."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

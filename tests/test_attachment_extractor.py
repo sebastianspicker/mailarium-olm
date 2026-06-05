@@ -1,6 +1,6 @@
 """Tests for attachment text extraction."""
 
-import subprocess
+import subprocess  # nosec B404
 
 from src.attachment_extractor import (
     attachment_format_profile,
@@ -69,7 +69,7 @@ def test_extract_image_text_ocr_uses_tesseract_when_available(monkeypatch):
     monkeypatch.setattr("src.attachment_extractor.shutil.which", lambda _name: "/opt/homebrew/bin/tesseract")
 
     def _fake_run(cmd, check, capture_output, text, timeout):
-        assert cmd[0] == "tesseract"
+        assert cmd[0] == "/opt/homebrew/bin/tesseract"
         assert cmd[2] == "stdout"
         return subprocess.CompletedProcess(cmd, 0, stdout="Recovered screenshot text", stderr="")
 

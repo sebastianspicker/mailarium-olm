@@ -119,7 +119,7 @@ class TestEmailProvenanceInputAliases:
 # ── format_triage_results tests ───────────────────────────────
 
 
-def _make_result(
+def _make_result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     uid="u1",
     sender="a@example.test",
     date="2024-03-15T10:30:00",

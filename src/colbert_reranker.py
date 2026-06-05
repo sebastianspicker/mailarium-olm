@@ -11,6 +11,7 @@ Particularly effective for:
 
 from __future__ import annotations
 
+# pylint: disable=too-many-branches,too-many-locals
 import collections
 import logging
 from typing import TYPE_CHECKING

@@ -16,6 +16,15 @@ from src.retriever import SearchResult
 from .helpers.web_app_fixtures import _columns_side_effect, _result, _setup_evidence_st, _setup_main_search_st
 
 
+# ── Shared setup helper ────────────────────────────────────────
+
+
+def _setup_render_results_st(mock_st):
+    mock_st.expander.return_value.__enter__ = MagicMock(return_value=MagicMock())
+    mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+    mock_st.columns.side_effect = _columns_side_effect
+
+
 class TestInjectStyles:
     @patch("src.web_app.st")
     def test_inject_styles_renders_css(self, mock_st):
@@ -105,35 +114,80 @@ class TestRenderSidebar:
         assert any("anon@example.com" in c for c in markdown_calls)
 
 
-class TestRenderResults:
-    def _setup_st(self, mock_st):
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.columns.side_effect = _columns_side_effect
+# ── Basic rendering ──────────────────────────────────────────────
 
+
+class TestRenderResultsBasic:
     @patch("src.web_app.st")
     def test_render_results_basic(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         render_results([_result()], preview_chars=200)
         # Uses markdown header instead of subheader
         markdown_calls = [str(c) for c in mock_st.markdown.call_args_list]
         assert any("Matching Emails" in c for c in markdown_calls)
 
     @patch("src.web_app.st")
+    def test_render_results_no_subject(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        result = SearchResult(chunk_id="c1", text="body", metadata={}, distance=0.1)
+        render_results([result], preview_chars=200)
+        expander_title = mock_st.expander.call_args_list[0][0][0]
+        assert "(no subject)" in expander_title
+
+    @patch("src.web_app.st")
+    def test_render_results_multiple(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(chunk_id=f"c{i}") for i in range(3)], preview_chars=200)
+        assert mock_st.expander.call_count == 3
+
+    @patch("src.web_app.st")
+    def test_render_results_score_clamped(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        # A negative distance yields a high score (>1.0) which should be rendered safely
+        render_results([_result(score_distance=-0.5)], preview_chars=200)
+        # Score is rendered as a styled badge via st.markdown, not st.progress
+        markdown_calls = [str(c) for c in mock_st.markdown.call_args_list]
+        assert any("score-badge" in c for c in markdown_calls)
+
+
+# ── Body display / expanders ──────────────────────────────────
+
+
+class TestRenderResultsBodyDisplay:
+    @patch("src.web_app.st")
     def test_render_results_long_body_shows_full_expander(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         render_results([_result(text="x" * 500)], preview_chars=200)
         assert mock_st.expander.call_count >= 2
 
     @patch("src.web_app.st")
+    def test_render_results_short_body_no_full_expander(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(text="short")], preview_chars=200)
+        assert mock_st.expander.call_count == 1
+
+
+# ── Recipient handling ────────────────────────────────────────
+
+
+class TestRenderResultsRecipients:
+    @patch("src.web_app.st")
     def test_render_results_with_to_recipients_truncated(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         render_results(
             [_result(to="a@example.test, b@example.test, c@example.test, d@example.test, e@example.test")],
             preview_chars=200,
@@ -142,10 +196,30 @@ class TestRenderResults:
         mock_st.columns.assert_called()
 
     @patch("src.web_app.st")
+    def test_render_results_no_to_recipients(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(to="")], preview_chars=200)
+        # Verify it doesn't crash
+
+    @patch("src.web_app.st")
+    def test_render_results_exactly_3_recipients(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(to="a@example.test, b@example.test, c@example.test")], preview_chars=200)
+
+
+# ── Type / attachment / priority badges ───────────────────────
+
+
+class TestRenderResultsBadges:
+    @patch("src.web_app.st")
     def test_render_results_type_badge_and_att_badge(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         render_results(
             [_result(email_type="reply", attachment_count="3")],
             preview_chars=200,
@@ -156,30 +230,80 @@ class TestRenderResults:
         assert any("3 att" in c for c in markdown_calls)
 
     @patch("src.web_app.st")
+    def test_render_results_original_email_type_no_badge(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(email_type="original")], preview_chars=200)
+        expander_title = mock_st.expander.call_args_list[0][0][0]
+        assert "[ORIGINAL]" not in expander_title
+
+    @patch("src.web_app.st")
+    def test_render_results_zero_att_no_badge(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(attachment_count="0")], preview_chars=200)
+        expander_title = mock_st.expander.call_args_list[0][0][0]
+        assert "att." not in expander_title
+
+    @patch("src.web_app.st")
     def test_render_results_attachment_names_shown(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         render_results([_result(attachment_names="doc.pdf")], preview_chars=200)
         # Attachment names are now rendered via st.markdown
         markdown_calls = [str(c) for c in mock_st.markdown.call_args_list]
         assert any("doc.pdf" in c for c in markdown_calls)
 
     @patch("src.web_app.st")
+    def test_render_results_empty_attachment_names(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(attachment_names="")], preview_chars=200)
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert not any("Attachments:" in c for c in caption_calls)
+
+    @patch("src.web_app.st")
     def test_render_results_priority_shown(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         render_results([_result(priority="3")], preview_chars=200)
         # Priority is now rendered via st.markdown
         markdown_calls = [str(c) for c in mock_st.markdown.call_args_list]
         assert any("Priority" in c for c in markdown_calls)
 
     @patch("src.web_app.st")
+    def test_render_results_priority_zero_not_shown(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(priority="0")], preview_chars=200)
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert not any("Priority:" in c for c in caption_calls)
+
+    @patch("src.web_app.st")
+    def test_render_results_empty_priority_not_shown(self, mock_st):
+        from src.web_app import render_results
+
+        _setup_render_results_st(mock_st)
+        render_results([_result(priority="")], preview_chars=200)
+        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
+        assert not any("Priority:" in c for c in caption_calls)
+
+
+# ── Thread / conversation view ─────────────────────────────────
+
+
+class TestRenderResultsThread:
+    @patch("src.web_app.st")
     def test_render_results_thread_button(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         mock_st.button.return_value = False
         mock_st.session_state = {}
         render_results(
@@ -190,70 +314,10 @@ class TestRenderResults:
         mock_st.button.assert_called()
 
     @patch("src.web_app.st")
-    def test_render_results_no_subject(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        result = SearchResult(chunk_id="c1", text="body", metadata={}, distance=0.1)
-        render_results([result], preview_chars=200)
-        expander_title = mock_st.expander.call_args_list[0][0][0]
-        assert "(no subject)" in expander_title
-
-    @patch("src.web_app.st")
-    def test_render_results_short_body_no_full_expander(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(text="short")], preview_chars=200)
-        assert mock_st.expander.call_count == 1
-
-    @patch("src.web_app.st")
-    def test_render_results_no_to_recipients(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(to="")], preview_chars=200)
-        # Verify it doesn't crash
-
-    @patch("src.web_app.st")
-    def test_render_results_exactly_3_recipients(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(to="a@example.test, b@example.test, c@example.test")], preview_chars=200)
-
-    @patch("src.web_app.st")
-    def test_render_results_empty_attachment_names(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(attachment_names="")], preview_chars=200)
-        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
-        assert not any("Attachments:" in c for c in caption_calls)
-
-    @patch("src.web_app.st")
-    def test_render_results_priority_zero_not_shown(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(priority="0")], preview_chars=200)
-        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
-        assert not any("Priority:" in c for c in caption_calls)
-
-    @patch("src.web_app.st")
-    def test_render_results_empty_priority_not_shown(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(priority="")], preview_chars=200)
-        caption_calls = [str(c) for c in mock_st.caption.call_args_list]
-        assert not any("Priority:" in c for c in caption_calls)
-
-    @patch("src.web_app.st")
     def test_render_results_no_conversation_id_no_button(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         render_results(
             [_result(conversation_id="")],
             preview_chars=200,
@@ -265,7 +329,7 @@ class TestRenderResults:
     def test_render_results_no_retriever_no_button(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         render_results(
             [_result(conversation_id="conv123")],
             preview_chars=200,
@@ -277,7 +341,7 @@ class TestRenderResults:
     def test_render_results_inferred_thread_shows_scope_note(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         result = _result(conversation_id="")
         result.metadata["inferred_thread_id"] = "thread-inferred-1"
 
@@ -294,7 +358,7 @@ class TestRenderResults:
     def test_render_results_thread_button_clicked(self, mock_st):
         from src.web_app import render_results
 
-        self._setup_st(mock_st)
+        _setup_render_results_st(mock_st)
         mock_st.button.return_value = True
         mock_st.session_state = {}
 
@@ -305,43 +369,6 @@ class TestRenderResults:
         )
         assert mock_st.session_state.get("web_thread_id") == "conv_click"
         mock_st.rerun.assert_called()
-
-    @patch("src.web_app.st")
-    def test_render_results_original_email_type_no_badge(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(email_type="original")], preview_chars=200)
-        expander_title = mock_st.expander.call_args_list[0][0][0]
-        assert "[ORIGINAL]" not in expander_title
-
-    @patch("src.web_app.st")
-    def test_render_results_zero_att_no_badge(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(attachment_count="0")], preview_chars=200)
-        expander_title = mock_st.expander.call_args_list[0][0][0]
-        assert "att." not in expander_title
-
-    @patch("src.web_app.st")
-    def test_render_results_multiple(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        render_results([_result(chunk_id=f"c{i}") for i in range(3)], preview_chars=200)
-        assert mock_st.expander.call_count == 3
-
-    @patch("src.web_app.st")
-    def test_render_results_score_clamped(self, mock_st):
-        from src.web_app import render_results
-
-        self._setup_st(mock_st)
-        # A negative distance yields a high score (>1.0) which should be rendered safely
-        render_results([_result(score_distance=-0.5)], preview_chars=200)
-        # Score is rendered as a styled badge via st.markdown, not st.progress
-        markdown_calls = [str(c) for c in mock_st.markdown.call_args_list]
-        assert any("score-badge" in c for c in markdown_calls)
 
 
 class TestRenderResultsSummary:

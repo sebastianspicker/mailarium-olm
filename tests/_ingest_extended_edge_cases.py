@@ -389,12 +389,12 @@ class TestIngestEdgeCases:
 
 
 class TestParseArgsEdgeCases:
-    def test_all_flags(self):
+    def test_all_flags(self, tmp_path):
         args = parse_args(
             [
                 "data/file.olm",
                 "--chromadb-path",
-                "/tmp/chroma",
+                str(tmp_path / "chroma"),
                 "--batch-size",
                 "100",
                 "--max-emails",
@@ -404,7 +404,7 @@ class TestParseArgsEdgeCases:
                 "--embed-images",
                 "--extract-entities",
                 "--sqlite-path",
-                "/tmp/test.db",
+                str(tmp_path / "test.db"),
                 "--incremental",
                 "--reset-index",
                 "--reingest-bodies",
@@ -420,14 +420,14 @@ class TestParseArgsEdgeCases:
             ]
         )
         assert args.olm_path == "data/file.olm"
-        assert args.chromadb_path == "/tmp/chroma"
+        assert args.chromadb_path == str(tmp_path / "chroma")
         assert args.batch_size == 100
         assert args.max_emails == 50
         assert args.dry_run is True
         assert args.extract_attachments is True
         assert args.embed_images is True
         assert args.extract_entities is True
-        assert args.sqlite_path == "/tmp/test.db"
+        assert args.sqlite_path == str(tmp_path / "test.db")
         assert args.incremental is True
         assert args.reset_index is True
         assert args.reingest_bodies is True

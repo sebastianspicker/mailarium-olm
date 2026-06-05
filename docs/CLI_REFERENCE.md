@@ -36,6 +36,11 @@ email-rag-ingest --help
 
 `python -m src.cli --help` shows the same modern subcommand interface. The older flat-flag form still works for compatibility, but new usage should prefer subcommands.
 
+Current local checkout note: the CLI reference reflects a dirty local checkout
+with broad source and test changes. Treat command availability as local
+interface truth, not as a release-readiness claim unless the verification gates
+in [README_USAGE_AND_OPERATIONS.md](README_USAGE_AND_OPERATIONS.md) pass.
+
 ## Subcommands (recommended)
 
 The modern subcommand syntax is the primary interface. Root-level flags such as `--log-level` and `--chromadb-path` can appear before or after the subcommand.
@@ -79,9 +84,14 @@ python -m src.cli training fine-tune triplets.jsonl --epochs 5
 
 # Admin
 python -m src.cli admin reset-index --yes
+
+# Topics
+python -m src.cli topics build
 ```
 
 Run `python -m src.cli <subcommand> --help` for subcommand-specific help.
+`topics build` is available locally, but topic data remains conditional because
+the default ingest workflow does not populate topic tables yet.
 
 ## Dedicated workplace case analysis
 
@@ -108,6 +118,11 @@ Use `case execute-wave` when you want one documented wave to run as a real local
 Use `case execute-all-waves` when you want the full wave sequence executed locally with a machine-readable summary. Add `--include-payloads` if you need every per-wave payload instead of only the summary rows. The summary now exposes per-wave `scan_id` values, archive-harvest status, and `wave_local_views` counts so lane state, coverage, and wave-local differentiation stay auditable. This is the CLI entrypoint for the same shared campaign workflow exposed through `email_case_execute_all_waves`.
 
 Use `case gather-evidence` when archive harvest must become durable evidence collection instead of only a transient analysis input. The command runs every documented wave, harvests each wave immediately as it completes, writes harvested body and attachment candidates into the SQLite `evidence_candidates` table, and auto-promotes exact verified body quotes into `evidence_items`. This is the CLI entrypoint for the same shared evidence-harvest workflow exposed through `email_case_gather_evidence`.
+
+Archive-harvest diagnostics distinguish direct retrieval coverage from expanded
+thread or attachment context. Expanded support can be useful for review, but it
+must not be described as direct retrieval evidence unless the diagnostic payload
+says it was directly retrieved.
 
 Use `case prompt-preflight` when the operator starts with a long natural-language matter description instead of structured JSON. The output is a conservative scaffold, not a free-form legal analysis. It reports:
 

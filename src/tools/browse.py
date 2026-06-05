@@ -1,4 +1,5 @@
 """Email browsing and export MCP tools."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
@@ -391,7 +392,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
                     sender: dict = {"email": sender_email}
                     try:
                         sender["top_contacts"] = db.top_contacts(sender_email, limit=5)
-                    except Exception:
+                    except Exception:  # pylint: disable=broad-exception-caught
                         logger.debug("Failed to fetch top_contacts for %s", sender_email, exc_info=True)
                     try:
                         row = db.conn.execute(
@@ -399,7 +400,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
                             (sender_email,),
                         ).fetchone()
                         sender["total_emails_sent"] = row["c"]
-                    except Exception:
+                    except Exception:  # pylint: disable=broad-exception-caught
                         logger.debug("Failed to count emails for sender %s", sender_email, exc_info=True)
                     result["sender"] = sender
 

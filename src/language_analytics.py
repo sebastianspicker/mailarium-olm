@@ -1,4 +1,5 @@
 """Shared helpers for language and sentiment analytics body selection."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-return-statements
 
 from __future__ import annotations
 

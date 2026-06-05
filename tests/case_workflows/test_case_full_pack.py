@@ -49,8 +49,11 @@ def test_build_case_full_pack_blocks_retaliation_prompt_without_triggers(tmp_pat
     ]
     assert trigger_candidate_count >= 1
     suggestions = payload["intake_compilation"]["override_suggestions"]
+    # pylint: disable-next=unsubscriptable-object
     assert suggestions["repair_mode"] == "explicit_override_required"
+    # pylint: disable-next=unsubscriptable-object
     assert "case_scope.trigger_events" in suggestions["blocked_fields"]
+    # pylint: disable-next=unsubscriptable-object
     trigger_suggestion = next(item for item in suggestions["suggestions"] if item["field"] == "case_scope.trigger_events")
     assert trigger_suggestion["candidate_values_adequate"] is False
     assert trigger_suggestion["required_fields"] == ["trigger_type", "date"]
@@ -277,7 +280,7 @@ def test_build_case_full_pack_keeps_material_target_ambiguity_blocked(tmp_path) 
     assert "case_scope.target_person" in blocker_fields
     target_suggestion = next(
         item
-        for item in payload["intake_compilation"]["override_suggestions"]["suggestions"]
+        for item in payload["intake_compilation"]["override_suggestions"]["suggestions"]  # pylint: disable=unsubscriptable-object
         if item["field"] == "case_scope.target_person"
     )
     assert len(target_suggestion["candidate_values"]) == 2
@@ -403,10 +406,14 @@ def test_build_case_full_pack_emits_actionable_override_suggestions_from_candida
 
     payload = build_case_full_pack(params)
 
+    # pylint: disable-next=unsubscriptable-object
     suggestions = payload["intake_compilation"]["override_suggestions"]
+    # pylint: disable-next=unsubscriptable-object
     trigger_suggestion = next(item for item in suggestions["suggestions"] if item["field"] == "case_scope.trigger_events")
-    adverse_suggestion = next(
-        item for item in suggestions["suggestions"] if item["field"] == "case_scope.alleged_adverse_actions"
+    adverse_suggestion = next(  # pylint: disable=unsubscriptable-object
+        item
+        for item in suggestions["suggestions"]
+        if item["field"] == "case_scope.alleged_adverse_actions"  # pylint: disable=unsubscriptable-object
     )
     assert trigger_suggestion["candidate_values_adequate"] is True
     assert adverse_suggestion["candidate_values_adequate"] is True
@@ -419,7 +426,9 @@ def test_build_case_full_pack_emits_actionable_override_suggestions_from_candida
         "action_type": "task_withdrawal",
         "date": "2025-03-05",
     }
+    # pylint: disable-next=unsubscriptable-object
     assert suggestions["example_override_json"]["case_scope"]["trigger_events"][0]["date"] == "2025-03-01"
+    # pylint: disable-next=unsubscriptable-object
     assert suggestions["example_override_json"]["case_scope"]["alleged_adverse_actions"][0]["date"] == "2025-03-05"
 
 
@@ -462,7 +471,9 @@ def test_full_pack_prompt_family_fixtures_emit_repairable_blockers(tmp_path) -> 
             continue
         assert case["blocked_field"] in blocker_fields
         suggestions = payload["intake_compilation"]["override_suggestions"]
+        # pylint: disable-next=unsubscriptable-object
         assert suggestions["repair_mode"] == "explicit_override_required"
+        # pylint: disable-next=unsubscriptable-object
         assert case["suggested_field"] in suggestions["blocked_fields"]
 
 

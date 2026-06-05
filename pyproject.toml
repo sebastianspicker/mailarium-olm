@@ -29,7 +29,7 @@ dependencies = [
     "sentence-transformers>=2.7.0",
     "transformers>=5.0.0rc3,<6",  # patched for CVE-2026-1839; repo shims FlagEmbedding's removed FX helper
     "FlagEmbedding>=1.3.0",  # unlocks BGE-M3 sparse + ColBERT (dense-only fallback without it)
-    "chromadb>=0.5.0",
+    "chromadb>=0.5.0,<1.0.0",  # avoid CVE-2026-45829 in ChromaDB Python server 1.x until a fixed release exists
     "mcp[cli]>=1.0.0",
     "pydantic>=2.0.0",
     "lxml>=6.1.0",
@@ -77,13 +77,20 @@ dev = [
 email-rag-ingest = "src.ingest:main"
 email-rag = "src.cli:main"
 
+[tool.bandit]
+# Bandit B101 (assert): pytest uses bare assert for test validation.
+# The local bandit run (bandit -r src -q -ll -ii) already excludes tests/.
+# The blanket skip prevents accidental noise if bandit is run on the whole
+# repo. Codacy must exclude tests/ from Bandit_B101 separately.
+skips = ["B101"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
 
 [tool.ruff]
 line-length = 130
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM", "RUF", "C4", "PIE", "T20", "PLC", "PLE"]
@@ -110,8 +117,58 @@ filterwarnings = [
     "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 ]
 
+[tool.pylint.format]
+max-line-length = 130
+
+[tool.pylint.main]
+# Defer PyLint stats-cache environment warning — no persistent .pylint.d cache needed.
+persistent = false
+
+[tool.pylint."messages control"]
+disable = [
+    # Policy: Ruff line length (130) is the canonical style; PyLint C0301 is noise.
+    "C0301",
+    # Policy: missing function docstrings are acceptable; public API docs cover intent.
+    "C0116",
+    # Policy: missing class docstrings are acceptable; test class names and module paths
+    # serve as self-documentation.
+    "C0115",
+    # Policy: missing module docstrings are acceptable; module paths are self-documenting,
+    # especially for test modules where the path conveys the purpose.
+    "C0114",
+    # Policy: lazy imports (import-outside-top-level) are deliberate for optional deps.
+    "C0415",
+    # Policy: facade/export modules intentionally import names for re-export; PyLint
+    # W0611 (unused-import) is noisy with this pattern.
+    "W0611",
+    # Policy: unused arguments (W0613) are intrinsic to test fixtures, monkeypatch
+    # targets, and interface-conforming test doubles.
+    "W0613",
+    # Policy: protected-member access in tests and private-helper seam tests is intentional.
+    "W0212",
+    # Policy: broad duplicate-code detection across unrelated modules is noise.
+    "R0801",
+    # Policy: too-few-public-methods (R0903) is noise for simple test-double classes,
+    # data holders, and single-method test classes — these are idiomatic Python.
+    "R0903",
+    # Policy: implicit-booleaness (C1803) — explicit ``len(x) == 0`` can be clearer
+    # than ``not x`` for collections where truthiness is non-obvious to readers.
+    "C1803",
+    # Policy: cyclic-import (R0401) — Codacy does not honour file-level
+    # ``# pylint: disable=R0401`` directives for its built-in cyclic-import
+    # graph analysis.  All detected cycles originate from lazy imports inside
+    # function bodies (no runtime cycle).  The only "High" cluster was in
+    # tests/test_writing_analyzer.py, where the file-level disable is already
+    # present.
+    "R0401",
+    # Policy: wrong-import-position (C0413) — runtime imports placed after
+    # TYPE_CHECKING blocks are intentional to avoid circular imports at module
+    # load time.  Used in ~10 files across src/ and tests/.
+    "C0413",
+]
+
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = ["src"]
 pretty = true
 show_error_codes = true
@@ -120,6 +177,10 @@ warn_redundant_casts = true
 ignore_missing_imports = true
 
 # Heavy third-party usage (networkx/sklearn/pandas/streamlit) — suppress inference errors
+[[tool.mypy.overrides]]
+module = ["src.attachment_extractor_text"]
+check_untyped_defs = true
+
 [[tool.mypy.overrides]]
 module = [
     "src.network_analysis",

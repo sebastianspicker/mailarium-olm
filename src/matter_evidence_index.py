@@ -1,4 +1,5 @@
 """Durable exhibit-register builder for mixed-source case analysis."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

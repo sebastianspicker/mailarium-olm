@@ -1,4 +1,5 @@
 """Portable export and delivery formats for shared legal-support products."""
+# pylint: disable=too-many-locals
 
 from __future__ import annotations
 

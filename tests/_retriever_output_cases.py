@@ -214,7 +214,14 @@ def test_stats_empty_collection_without_db():
     r.collection.count.return_value = 0
 
     stats = r.stats()
-    assert stats == {"total_chunks": 0, "total_emails": 0, "unique_senders": 0, "date_range": {}, "folders": {}}
+    assert stats == {
+        "total_chunks": 0,
+        "total_emails": 0,
+        "unique_senders": 0,
+        "date_range": {},
+        "folders": {},
+        "metadata_source": "chromadb_fallback",
+    }
 
 
 def test_stats_chromadb_counts_unknown_uid_rows():
@@ -321,10 +328,10 @@ class TestSerializeResults:
         assert payload["results"][0]["text"] == text
 
 
-def test_reset_index():
+def test_reset_index(tmp_path):
     r = _bare_retriever()
     r.collection_name = "test_coll"
-    r.chromadb_path = "/tmp/test"
+    r.chromadb_path = str(tmp_path / "test")
     r.client = MagicMock()
     new_collection = MagicMock()
     r.client.get_or_create_collection = MagicMock(return_value=new_collection)

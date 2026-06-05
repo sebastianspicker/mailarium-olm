@@ -238,42 +238,42 @@ def test_ingestion_runs_table_created():
     assert row is not None
 
 
-def test_record_ingestion_start_and_complete():
+def test_record_ingestion_start_and_complete(tmp_path):
     from src.email_db import EmailDatabase
 
     db = EmailDatabase(":memory:")
-    run_id = db.record_ingestion_start("/tmp/test.olm")
+    run_id = db.record_ingestion_start(str(tmp_path / "test.olm"))
     assert run_id is not None
     assert run_id > 0
 
     db.record_ingestion_complete(run_id, {"emails_parsed": 100, "emails_inserted": 95})
 
-    last = db.last_ingestion("/tmp/test.olm")
+    last = db.last_ingestion(str(tmp_path / "test.olm"))
     assert last is not None
     assert last["status"] == "completed"
     assert last["emails_parsed"] == 100
     assert last["emails_inserted"] == 95
 
 
-def test_last_ingestion_returns_none_when_empty():
+def test_last_ingestion_returns_none_when_empty(tmp_path):
     from src.email_db import EmailDatabase
 
     db = EmailDatabase(":memory:")
     assert db.last_ingestion() is None
-    assert db.last_ingestion("/nonexistent.olm") is None
+    assert db.last_ingestion(str(tmp_path / "nonexistent.olm")) is None
 
 
-def test_last_ingestion_returns_most_recent():
+def test_last_ingestion_returns_most_recent(tmp_path):
     from src.email_db import EmailDatabase
 
     db = EmailDatabase(":memory:")
-    run1 = db.record_ingestion_start("/tmp/test.olm")
+    run1 = db.record_ingestion_start(str(tmp_path / "test.olm"))
     db.record_ingestion_complete(run1, {"emails_parsed": 50, "emails_inserted": 50})
 
-    run2 = db.record_ingestion_start("/tmp/test.olm")
+    run2 = db.record_ingestion_start(str(tmp_path / "test.olm"))
     db.record_ingestion_complete(run2, {"emails_parsed": 100, "emails_inserted": 100})
 
-    last = db.last_ingestion("/tmp/test.olm")
+    last = db.last_ingestion(str(tmp_path / "test.olm"))
     assert last["emails_parsed"] == 100
 
 

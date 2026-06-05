@@ -104,7 +104,7 @@ class TestFilterSeenThreadSafety:
                     for candidate in candidates:
                         assert "uid" in candidate
                         assert "label" in candidate
-            except Exception as exc:  # pragma: no cover - failure capture only
+            except Exception as exc:  # pragma: no cover - failure capture only  # pylint: disable=broad-exception-caught
                 errors.append(exc)
 
         thread_write = threading.Thread(target=writer)
@@ -139,7 +139,7 @@ class TestFilterSeenThreadSafety:
                     assert status is not None
                     assert "seen_count" in status
                     assert "candidate_count" in status
-            except Exception as exc:  # pragma: no cover - failure capture only
+            except Exception as exc:  # pragma: no cover - failure capture only  # pylint: disable=broad-exception-caught
                 errors.append(exc)
 
         thread_write = threading.Thread(target=writer)

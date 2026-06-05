@@ -3,11 +3,63 @@
 from __future__ import annotations
 
 import logging
-import pickle  # nosec B403
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_TOPIC_MODEL_CACHE_VERSION = 1
+_ALLOWED_CACHE_SUFFIXES = frozenset({".pkl", ".pickle"})
+
+
+def _trusted_model_codec() -> Any:
+    """Return joblib for trusted sklearn cache persistence."""
+    import joblib
+
+    return joblib
+
+
+def _topic_distribution(row: Any) -> list[tuple[int, float]]:
+    distribution = [(int(i), round(float(w), 4)) for i, w in enumerate(row) if w > 0.01]
+    distribution.sort(key=lambda item: item[1], reverse=True)
+    return distribution
+
+
+def _validate_cache_version(data: dict[str, Any]) -> None:
+    cached_version = data.get("_topic_model_cache_version", data.get("_pickle_cache_version", 0))
+    if cached_version != _TOPIC_MODEL_CACHE_VERSION:
+        raise ValueError(
+            f"Topic model cache version mismatch: "
+            f"expected {_TOPIC_MODEL_CACHE_VERSION}, got {cached_version}. "
+            f"Retrain the model with the current code version."
+        )
+
+
+def _validate_sklearn_version(saved_version: str) -> None:
+    try:
+        import sklearn
+    except ImportError:
+        logger.warning("scikit-learn not installed — cannot validate model version")
+        return
+
+    current_major = sklearn.__version__.split(".", maxsplit=1)[0]
+    saved_major = saved_version.split(".", maxsplit=1)[0] if saved_version != "unknown" else None
+    if saved_major and current_major != saved_major:
+        raise ValueError(
+            f"Topic model was saved with scikit-learn {saved_version} "
+            f"but current version is {sklearn.__version__}. "
+            f"Major version mismatch — please retrain the model."
+        )
+    if saved_version != "unknown" and saved_version != sklearn.__version__:
+        logger.warning(
+            "Topic model was saved with scikit-learn %s, current is %s. Minor version differences may cause subtle issues.",
+            saved_version,
+            sklearn.__version__,
+        )
+
+
+def _has_prediction_backend(modeler: TopicModeler) -> bool:
+    return modeler._is_fitted and modeler._vectorizer is not None and modeler._nmf_model is not None
 
 
 class TopicModeler:
@@ -113,10 +165,10 @@ class TopicModeler:
         Returns:
             List of (topic_id, weight) tuples, sorted by weight descending.
         """
-        if not self._is_fitted or not text or not text.strip():
+        if not text or not text.strip():
             return []
 
-        if self._vectorizer is None or self._nmf_model is None:
+        if not _has_prediction_backend(self):
             return []
 
         tfidf_vec = self._vectorizer.transform([text])
@@ -139,22 +191,17 @@ class TopicModeler:
         Returns:
             List of topic distribution lists, one per document.
         """
-        if not self._is_fitted or not texts:
+        if not texts:
             return []
 
-        if self._vectorizer is None or self._nmf_model is None:
+        if not _has_prediction_backend(self):
             return []
 
         valid_texts = [t if t and t.strip() else " " for t in texts]
         tfidf_matrix = self._vectorizer.transform(valid_texts)
         topic_matrix = self._nmf_model.transform(tfidf_matrix)
 
-        results = []
-        for row in topic_matrix:
-            dist = [(int(i), round(float(w), 4)) for i, w in enumerate(row) if w > 0.01]
-            dist.sort(key=lambda x: x[1], reverse=True)
-            results.append(dist)
-        return results
+        return [_topic_distribution(row) for row in topic_matrix]
 
     def save(self, path: str) -> None:
         """Save fitted model to disk.
@@ -177,10 +224,9 @@ class TopicModeler:
             "max_features": self.max_features,
             "ngram_range": self.ngram_range,
             "sklearn_version": sklearn.__version__,
+            "_topic_model_cache_version": _TOPIC_MODEL_CACHE_VERSION,
         }
-        # nosec B301
-        with open(path, "wb") as f:
-            pickle.dump(data, f)  # nosec B301
+        _trusted_model_codec().dump(data, path)
         logger.info("Topic model saved to %s", path)
 
     @classmethod
@@ -198,36 +244,17 @@ class TopicModeler:
                 version of scikit-learn (deserialization may produce wrong results).
         """
         p = Path(path)
-        if p.suffix not in {".pkl", ".pickle"}:
+        if p.suffix not in _ALLOWED_CACHE_SUFFIXES:
             raise ValueError(f"Topic model file must be .pkl or .pickle, got: {p.suffix!r}")
         if not p.is_file():
             raise FileNotFoundError(f"Topic model file not found: {path}")
-        logger.info("Loading topic model from %s (pickle — ensure this file is trusted)", path)
-        with open(path, "rb") as f:
-            data = pickle.load(f)  # nosec B301
+        logger.warning("Loading topic model from trusted cache %s. Only load controlled runtime cache files.", path)
+        data = _trusted_model_codec().load(path)
+
+        _validate_cache_version(data)
 
         # Validate scikit-learn version compatibility
-        saved_version = data.get("sklearn_version", "unknown")
-        try:
-            import sklearn
-
-            current_major = sklearn.__version__.split(".")[0]
-            saved_major = saved_version.split(".")[0] if saved_version != "unknown" else None
-            if saved_major and current_major != saved_major:
-                raise ValueError(
-                    f"Topic model was saved with scikit-learn {saved_version} "
-                    f"but current version is {sklearn.__version__}. "
-                    f"Major version mismatch — please retrain the model."
-                )
-            if saved_version != "unknown" and saved_version != sklearn.__version__:
-                logger.warning(
-                    "Topic model was saved with scikit-learn %s, current is %s. "
-                    "Minor version differences may cause subtle issues.",
-                    saved_version,
-                    sklearn.__version__,
-                )
-        except ImportError:
-            logger.warning("scikit-learn not installed — cannot validate model version")
+        _validate_sklearn_version(data.get("sklearn_version", "unknown"))
 
         instance = cls(
             n_topics=data["n_topics"],

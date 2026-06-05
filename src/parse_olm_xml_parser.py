@@ -1,4 +1,8 @@
 """Archive traversal and XML parsing helpers for ``parse_olm``."""
+# pylint: disable=no-member,c-extension-no-member
+
+
+# pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
@@ -99,7 +103,7 @@ def parse_olm_archive_impl(
                                 _apply_attachment_payload_metadata(getattr(email, "attachments", []) or [], payloads)
                             else:
                                 email.attachment_contents = _extract_attachment_contents(xml_bytes, xml_path, zf)
-                        except Exception as exc:
+                        except Exception as exc:  # pylint: disable=broad-exception-caught
                             logger.warning("Attachment extraction failed for %s: %s", xml_path, exc)
                             email.attachment_contents = []
                             transient_email._attachment_payload_extraction_failed = True
@@ -109,7 +113,7 @@ def parse_olm_archive_impl(
                             if hasattr(email, attr_name):
                                 delattr(email, attr_name)
                         yield email
-            except Exception as exc:  # pragma: no cover - defensive branch
+            except Exception as exc:  # pragma: no cover - defensive branch  # pylint: disable=broad-exception-caught
                 logger.warning("Failed to parse %s: %s", xml_path, exc)
 
 

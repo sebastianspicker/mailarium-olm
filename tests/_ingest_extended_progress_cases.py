@@ -38,31 +38,31 @@ from .helpers.ingest_extended_fixtures import _MockEmailDB, _MockEmbedder, _bloc
 
 class TestNoOpProgressBar:
     def test_update_does_nothing(self):
-        bar = _NoOpProgressBar()
-        bar.update(5)
+        pbar = _NoOpProgressBar()
+        pbar.update(5)
 
     def test_close_does_nothing(self):
-        bar = _NoOpProgressBar()
-        bar.close()
+        pbar = _NoOpProgressBar()
+        pbar.close()
 
     def test_set_postfix_does_nothing(self):
-        bar = _NoOpProgressBar()
-        bar.set_postfix(key="value")
+        pbar = _NoOpProgressBar()
+        pbar.set_postfix(key="value")
 
 
 class TestMakeProgressBar:
     def test_returns_noop_when_tqdm_unavailable(self, monkeypatch):
         """Without tqdm, should return _NoOpProgressBar."""
         monkeypatch.setattr("builtins.__import__", _block_import("tqdm"))
-        bar = _make_progress_bar(100, desc="Test", unit="it")
-        assert isinstance(bar, _NoOpProgressBar)
+        pbar = _make_progress_bar(100, desc="Test", unit="it")
+        assert isinstance(pbar, _NoOpProgressBar)
 
     def test_returns_tqdm_when_available(self):
         """With tqdm available, should return a tqdm instance."""
-        bar = _make_progress_bar(10, desc="Test", unit="item")
+        pbar = _make_progress_bar(10, desc="Test", unit="item")
         # tqdm may or may not be installed; just verify no crash
-        bar.update(1)
-        bar.close()
+        pbar.update(1)
+        pbar.close()
 
 
 class TestHashFileSha256:
@@ -127,7 +127,7 @@ class TestResolveEntityExtractor:
 
         auto_download.assert_called_once_with()
         reset_cache.assert_called_once_with()
-        assert result is mock_nlp.extract_nlp_entities
+        assert result is mock_nlp.extract_nlp_entities  # pylint: disable=no-member
 
     def test_skips_spacy_bootstrap_when_disabled_during_ingest(self, monkeypatch):
         """Operators can still opt out of spaCy bootstrap during ingest."""
@@ -143,7 +143,7 @@ class TestResolveEntityExtractor:
         result = _resolve_entity_extractor(extract_entities=True, dry_run=False)
 
         auto_download.assert_not_called()
-        mock_nlp.reset_model_cache.assert_not_called()
+        mock_nlp.reset_model_cache.assert_not_called()  # pylint: disable=no-member
         assert result is not None
 
 
@@ -176,7 +176,7 @@ class TestAutoDownloadSpacyModels:
             assert mock_check.call_count == 2  # Two models
 
     def test_handles_download_failure(self, monkeypatch):
-        import subprocess
+        import subprocess  # nosec B404
 
         monkeypatch.delenv("SPACY_AUTO_DOWNLOAD", raising=False)
         mock_spacy = MagicMock()

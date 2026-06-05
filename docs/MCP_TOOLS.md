@@ -26,6 +26,16 @@ Start broad, then narrow down:
 - `email_search_by_entity` — find emails mentioning an organization, URL, phone, or person name
 - `email_thread_lookup` — retrieve all emails in a thread by conversation_id or thread_topic
 
+Current local checkout note: this reference describes the local dirty checkout.
+Tool registration currently reports 68 tools, but local dirty-checkout evidence
+is not a release-readiness claim.
+
+Search and answer-context payloads expose diagnostics for degraded retrieval
+states. In particular, semantic-filter failures, query-expansion failures,
+multi-lane coverage, recovered expansion terms, and archive-harvest expansion
+status are surfaced so callers can distinguish direct retrieval support from
+thread or attachment context added later.
+
 ## Progressive Scan Sessions
 
 Pass `scan_id` to `email_triage`, `email_search_structured`, or `email_find_similar` to auto-exclude previously seen results across calls.
@@ -89,6 +99,9 @@ Campaign authority note:
 - wave execution is now a shared campaign surface exposed through both CLI `case execute-wave` / `case execute-all-waves` and MCP `email_case_execute_wave` / `email_case_execute_all_waves`
 - evidence harvest is now a first-class shared campaign phase exposed through CLI `case gather-evidence` and MCP `email_case_gather_evidence`
 - dedicated legal-support analytical products remain MCP-governed, are registered as idempotent write surfaces, and may refresh shared persisted matter snapshots when they rerun the exhaustive workflow
+- archive-harvest diagnostics distinguish direct retrieval coverage from
+  expanded thread or attachment context; expanded context should not be treated
+  as direct retrieval support without the matching diagnostic evidence
 
 ## How to Collect Evidence
 
@@ -151,6 +164,15 @@ Every action is logged with SHA-256 hashes and timestamps:
   - `action='reingest_analytics'`: backfill language detection and sentiment analysis
 - `email_ingest` — trigger ingestion of an .olm file
   - ingest targets the requested archive paths but does not silently switch the currently active runtime archive for future search calls
+
+## Validation And Local Policy Boundaries
+
+- Runtime, local-read, and output paths use purpose-specific validators rather
+  than plain path normalization.
+- Dynamic SQLite fragments use validated identifiers and placeholder builders
+  where the query shape cannot be fully static.
+- Local PyLint/Codacy/Bandit policy findings are verification signals. Codacy
+  Cloud closure requires Cloud reanalysis of a pushed commit.
 
 ## Legal-Support Refresh Behavior
 

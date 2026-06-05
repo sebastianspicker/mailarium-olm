@@ -1,4 +1,5 @@
 """Chain-of-custody and ingestion tracking mixin for EmailDatabase."""
+# pylint: disable=too-many-arguments,too-many-positional-arguments
 
 from __future__ import annotations
 
@@ -78,8 +79,9 @@ class CustodyMixin:
             params.append(action)
 
         where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+        query = f"SELECT * FROM custody_chain{where} ORDER BY timestamp DESC LIMIT ?"
         rows = self.conn.execute(
-            f"SELECT * FROM custody_chain{where} ORDER BY timestamp DESC LIMIT ?",  # nosec
+            query,
             [*params, limit],
         ).fetchall()
 
@@ -130,7 +132,7 @@ class CustodyMixin:
 
     def evidence_provenance(self, evidence_id: int) -> dict:
         """Full provenance for evidence: item details, source email, custody history."""
-        item = self.get_evidence(evidence_id)
+        item = self.get_evidence(evidence_id)  # pylint: disable=assignment-from-no-return
         if not item:
             return {"error": f"Evidence not found: {evidence_id}"}
 

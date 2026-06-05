@@ -1,4 +1,5 @@
 """Multi-source case-evidence fusion for behavioural-analysis cases."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

@@ -66,18 +66,18 @@ class TestCmdExport:
             assert exc_info.value.code == 0
             mock_fn.assert_called_once_with("conv-123", "html", None)
 
-    def test_export_email(self):
+    def test_export_email(self, tmp_path):
         args = argparse.Namespace(
             export_action="email",
             uid="uid-abc",
             format="pdf",
-            output="/tmp/out.pdf",
+            output=str(tmp_path / "out.pdf"),
         )
         with patch("src.cli_commands._run_export_email") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_export(args)
             assert exc_info.value.code == 0
-            mock_fn.assert_called_once_with("uid-abc", "pdf", "/tmp/out.pdf")
+            mock_fn.assert_called_once_with("uid-abc", "pdf", str(tmp_path / "out.pdf"))
 
     def test_export_report(self):
         args = argparse.Namespace(
@@ -111,22 +111,23 @@ class TestCmdExport:
 
 
 class TestRunExportThread:
-    def test_export_thread_with_output_path(self, capsys):
+    def test_export_thread_with_output_path(self, tmp_path, capsys):
         mock_db = MagicMock()
         mock_exporter = MagicMock()
+        thread_path = str(tmp_path / "thread.html")
         mock_exporter.export_thread_file.return_value = {
-            "output_path": "/tmp/thread.html",
+            "output_path": thread_path,
             "email_count": 5,
         }
         with patch("src.cli_commands._get_email_db", return_value=mock_db):
             with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
-                _run_export_thread("conv-123", "html", "/tmp/thread.html")
+                _run_export_thread("conv-123", "html", thread_path)
         output = capsys.readouterr().out
-        assert "/tmp/thread.html" in output
+        assert thread_path in output
         assert "5 emails" in output
         mock_exporter.export_thread_file.assert_called_once_with(
             "conv-123",
-            "/tmp/thread.html",
+            thread_path,
             fmt="html",
         )
 
@@ -173,17 +174,18 @@ class TestRunExportThread:
 
 
 class TestRunExportEmail:
-    def test_export_email_with_output_path(self, capsys):
+    def test_export_email_with_output_path(self, tmp_path, capsys):
         mock_db = MagicMock()
         mock_exporter = MagicMock()
+        email_path = str(tmp_path / "email.html")
         mock_exporter.export_single_file.return_value = {
-            "output_path": "/tmp/email.html",
+            "output_path": email_path,
         }
         with patch("src.cli_commands._get_email_db", return_value=mock_db):
             with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
-                _run_export_email("uid-abc", "html", "/tmp/email.html")
+                _run_export_email("uid-abc", "html", email_path)
         output = capsys.readouterr().out
-        assert "/tmp/email.html" in output
+        assert email_path in output
 
     def test_export_email_default_path(self, capsys):
         mock_db = MagicMock()

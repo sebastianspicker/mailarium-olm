@@ -19,7 +19,7 @@ def test_ensure_flagembedding_transformers_compat_adds_missing_helper(monkeypatc
     ensure_flagembedding_transformers_compat()
 
     assert hasattr(import_utils, "is_torch_fx_available")
-    assert import_utils.is_torch_fx_available() is False
+    assert import_utils.is_torch_fx_available() is False  # pylint: disable=no-member
 
 
 def test_ensure_flagembedding_transformers_compat_keeps_existing_helper(monkeypatch):
@@ -39,4 +39,4 @@ def test_ensure_flagembedding_transformers_compat_keeps_existing_helper(monkeypa
 
     ensure_flagembedding_transformers_compat()
 
-    assert import_utils.is_torch_fx_available() is sentinel
+    assert import_utils.is_torch_fx_available() is sentinel  # pylint: disable=no-member

@@ -50,7 +50,7 @@ class MockEmailDB:
     def __del__(self) -> None:
         try:
             self.close()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
 
 

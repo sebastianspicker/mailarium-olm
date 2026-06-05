@@ -333,7 +333,7 @@ async def _email_case_export_impl(params: EmailLegalSupportExportInput) -> str:
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     """Register durable legal-support MCP tools."""
-    global _deps
+    global _deps  # pylint: disable=global-statement
     _deps = deps
     mcp_instance.tool(name="email_case_issue_matrix", annotations=deps.idempotent_write_annotations("Case Issue Matrix"))(
         email_case_issue_matrix

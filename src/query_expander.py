@@ -1,4 +1,5 @@
 """Embedding-based query expansion for improved recall."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-return-statements
 
 from __future__ import annotations
 
@@ -396,7 +397,7 @@ class QueryExpander:
             logger.debug("Query expanded: '%s' → '%s'", query, expanded)
             return expanded
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Query expansion failed", exc_info=True)
             return query
 
@@ -430,7 +431,7 @@ class QueryExpander:
                 related_terms = [term for term, _score in self.get_related_terms(base_query, n_terms=max(1, n_terms * 2))]
                 if related_terms:
                     lanes.append(f"{base_query} {' '.join(related_terms[:n_terms])}".strip())
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Query lane expansion failed", exc_info=True)
 
         normalized: list[str] = []
@@ -476,6 +477,6 @@ class QueryExpander:
 
             return results
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("get_related_terms failed", exc_info=True)
             return []

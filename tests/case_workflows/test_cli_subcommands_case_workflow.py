@@ -62,9 +62,9 @@ def test_run_case_analyze_impl_writes_output(tmp_path, monkeypatch) -> None:
     assert payload["execution_authority"]["authoritative_surface"] == "mcp_server"
 
 
-def test_run_case_analyze_impl_returns_stable_missing_input_error(capsys) -> None:
+def test_run_case_analyze_impl_returns_stable_missing_input_error(tmp_path, capsys) -> None:
     class Args:
-        input = "/tmp/does-not-exist-case-analysis.json"
+        input = str(tmp_path / "does-not-exist-case-analysis.json")
         output = None
         format = "json"
 
@@ -75,8 +75,8 @@ def test_run_case_analyze_impl_returns_stable_missing_input_error(capsys) -> Non
     assert "case input read error" in capsys.readouterr().out
 
 
-def test_run_case_analyze_impl_rejects_input_outside_allowed_roots(capsys, monkeypatch) -> None:
-    monkeypatch.setenv("EMAIL_RAG_ALLOWED_LOCAL_READ_ROOTS", "/tmp/allowed-case-inputs")
+def test_run_case_analyze_impl_rejects_input_outside_allowed_roots(tmp_path, capsys, monkeypatch) -> None:
+    monkeypatch.setenv("EMAIL_RAG_ALLOWED_LOCAL_READ_ROOTS", str(tmp_path / "allowed-case-inputs"))
 
     class Args:
         input = "/etc/hosts"

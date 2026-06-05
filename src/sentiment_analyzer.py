@@ -5,6 +5,7 @@ Zero dependencies — uses keyword matching and simple heuristics.
 
 from __future__ import annotations
 
+# pylint: disable=too-many-branches
 import re
 from dataclasses import dataclass
 

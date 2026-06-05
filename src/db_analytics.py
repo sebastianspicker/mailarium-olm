@@ -7,6 +7,8 @@ import sqlite3
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from .db_schema import _sql_in_placeholders
+
 if TYPE_CHECKING:
     pass  # conn declared below for mypy
 
@@ -269,12 +271,11 @@ class AnalyticsMixin:
         if len(sender_emails) < 2:
             return []
 
-        if min_shared < 1:
-            min_shared = 1
+        min_shared = max(min_shared, 1)
 
-        placeholders = ",".join("?" for _ in sender_emails)
-        rows = self.conn.execute(
-            f"SELECT r.address AS recipient,"  # nosec
+        placeholders = _sql_in_placeholders(sender_emails)
+        query = (
+            f"SELECT r.address AS recipient,"
             f" GROUP_CONCAT(DISTINCT e.sender_email) AS senders,"
             f" COUNT(*) AS total_emails"
             f" FROM recipients r"
@@ -283,9 +284,9 @@ class AnalyticsMixin:
             f" AND r.type IN ('to', 'cc')"
             f" GROUP BY r.address"
             f" HAVING COUNT(DISTINCT e.sender_email) >= ?"
-            f" ORDER BY total_emails DESC",
-            [*sender_emails, min_shared],
-        ).fetchall()
+            f" ORDER BY total_emails DESC"
+        )
+        rows = self.conn.execute(query, [*sender_emails, min_shared]).fetchall()
 
         return [
             {
@@ -305,15 +306,15 @@ class AnalyticsMixin:
         if not sender_emails:
             return []
 
-        placeholders = ",".join("?" for _ in sender_emails)
-        rows = self.conn.execute(
-            f"SELECT sender_email, date, uid, subject"  # nosec
+        placeholders = _sql_in_placeholders(sender_emails)
+        query = (
+            f"SELECT sender_email, date, uid, subject"
             f" FROM emails"
             f" WHERE sender_email IN ({placeholders})"
             f" AND date IS NOT NULL"
-            f" ORDER BY date ASC",
-            sender_emails,
-        ).fetchall()
+            f" ORDER BY date ASC"
+        )
+        rows = self.conn.execute(query, sender_emails).fetchall()
 
         return [dict(r) for r in rows]
 

@@ -1,4 +1,5 @@
 """Browse and full-retrieval helpers for ``QueryMixin``."""
+# pylint: disable=too-many-arguments,too-many-locals
 
 from __future__ import annotations
 
@@ -6,7 +7,7 @@ import json
 import sqlite3
 from typing import Any
 
-from .db_schema import _escape_like
+from .db_schema import _escape_like, _sql_in_placeholders, _validate_order_by
 
 
 def safe_json_parse(raw: str | None, default: list | dict | None = None) -> list | dict:
@@ -58,10 +59,10 @@ def attachments_for_uids(conn: sqlite3.Connection, uids: list[str], *, batch_siz
         return attachments_by_uid
     for start in range(0, len(uids), batch_size):
         batch = uids[start : start + batch_size]
-        placeholders = ",".join("?" * len(batch))
+        placeholders = _sql_in_placeholders(batch)
         att_rows = conn.execute(
-            "SELECT name, mime_type, size, content_id, is_inline, email_uid"  # nosec
-            f" FROM attachments WHERE email_uid IN ({placeholders})",
+            "SELECT name, mime_type, size, content_id, is_inline, email_uid"
+            f" FROM attachments WHERE email_uid IN ({placeholders})",  # nosec B608
             batch,
         ).fetchall()
         for attachment in att_rows:
@@ -98,9 +99,9 @@ def recipients_for_uids_impl(db: Any, uids: list[str]) -> dict[str, dict[str, li
     batch_size = 900
     for start in range(0, len(uids), batch_size):
         batch = uids[start : start + batch_size]
-        placeholders = ",".join("?" * len(batch))
+        placeholders = _sql_in_placeholders(batch)
         rows = db.conn.execute(
-            f"SELECT address, display_name, type, email_uid FROM recipients WHERE email_uid IN ({placeholders})",  # nosec
+            f"SELECT address, display_name, type, email_uid FROM recipients WHERE email_uid IN ({placeholders})",  # nosec B608
             batch,
         ).fetchall()
         for row in rows:
@@ -142,10 +143,10 @@ def get_emails_full_batch_impl(db: Any, uids: list[str]) -> dict[str, dict]:
     batch_size = 900
     for start in range(0, len(uids), batch_size):
         batch = uids[start : start + batch_size]
-        placeholders = ",".join("?" * len(batch))
+        placeholders = _sql_in_placeholders(batch)
         rows.extend(
             db.conn.execute(
-                f"SELECT * FROM emails WHERE uid IN ({placeholders})",  # nosec
+                f"SELECT * FROM emails WHERE uid IN ({placeholders})",  # nosec B608
                 batch,
             ).fetchall()
         )
@@ -199,6 +200,48 @@ def get_inferred_thread_emails_impl(db: Any, inferred_thread_id: str) -> list[di
     )
 
 
+def _browse_filter_params(
+    *,
+    category: str | None,
+    folder: str | None,
+    sender: str | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> list[Any]:
+    sender_like = f"%{_escape_like(sender)}%" if sender else None
+    start_date = date_from[:10] if date_from else None
+    end_date = date_to[:10] if date_to else None
+    return [
+        category,
+        category,
+        folder,
+        folder,
+        sender_like,
+        sender_like,
+        start_date,
+        start_date,
+        end_date,
+        end_date,
+    ]
+
+
+BROWSE_FROM_WHERE_SQL = (
+    " FROM emails"
+    " LEFT JOIN email_categories ec ON emails.uid = ec.email_uid"
+    " WHERE (? IS NULL OR ec.category = ?)"
+    " AND (? IS NULL OR folder = ?)"
+    " AND (? IS NULL OR sender_email LIKE ? ESCAPE '\\')"
+    " AND (? IS NULL OR SUBSTR(date, 1, 10) >= ?)"
+    " AND (? IS NULL OR SUBSTR(date, 1, 10) <= ?)"
+)
+BROWSE_COUNT_SQL = "SELECT COUNT(DISTINCT emails.uid) AS c" + BROWSE_FROM_WHERE_SQL
+BROWSE_SELECT_BASE_SQL = (
+    "SELECT DISTINCT emails.uid, subject, sender_name, sender_email, date, folder,"
+    " email_type, has_attachments, attachment_count, body_length,"
+    " conversation_id" + BROWSE_FROM_WHERE_SQL
+)
+
+
 def list_emails_paginated_impl(
     db: Any,
     *,
@@ -214,46 +257,30 @@ def list_emails_paginated_impl(
 ) -> dict:
     """Return a page of emails with metadata for browsing."""
     allowed_sort = {"date", "subject", "sender_email", "folder"}
-    if sort_by not in allowed_sort:
-        sort_by = "date"
-    sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
-    if offset < 0:
-        offset = 0
-    if limit < 1:
-        limit = 1
+    try:
+        sort_by, sort_order = _validate_order_by(sort_by, sort_order, allowed_columns=allowed_sort)
+    except ValueError:
+        sort_by, sort_order = "date", "DESC"
+    offset = max(offset, 0)
+    limit = max(limit, 1)
 
-    join = ""
-    conditions = []
-    params: list[Any] = []
-    if category:
-        join = " JOIN email_categories ec ON emails.uid = ec.email_uid"
-        conditions.append("ec.category = ?")
-        params.append(category)
-    if folder:
-        conditions.append("folder = ?")
-        params.append(folder)
-    if sender:
-        conditions.append("sender_email LIKE ? ESCAPE '\\'")
-        params.append(f"%{_escape_like(sender)}%")
-    if date_from:
-        conditions.append("SUBSTR(date, 1, 10) >= ?")
-        params.append(date_from[:10])
-    if date_to:
-        conditions.append("SUBSTR(date, 1, 10) <= ?")
-        params.append(date_to[:10])
-
-    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
-
-    total_row = db.conn.execute(f"SELECT COUNT(*) AS c FROM emails{join}{where}", params).fetchone()  # nosec
+    params = _browse_filter_params(
+        category=category,
+        folder=folder,
+        sender=sender,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    # Safe: static query with bound filter parameters.
+    total_row = db.conn.execute(  # nosemgrep
+        BROWSE_COUNT_SQL,
+        params,
+    ).fetchone()
     total = total_row["c"]
 
-    rows = db.conn.execute(
-        f"SELECT emails.uid, subject, sender_name, sender_email, date, folder,"  # nosec
-        f" email_type, has_attachments, attachment_count, body_length,"
-        f" conversation_id"
-        f" FROM emails{join}{where}"
-        f" ORDER BY {sort_by} {sort_order}"
-        f" LIMIT ? OFFSET ?",
+    # Safe: validated sort column/direction, static filters, bound params.
+    rows = db.conn.execute(  # nosemgrep
+        f"{BROWSE_SELECT_BASE_SQL} ORDER BY {sort_by} {sort_order} LIMIT ? OFFSET ?",
         [*params, limit, offset],
     ).fetchall()
 

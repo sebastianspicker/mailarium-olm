@@ -7,6 +7,7 @@ Uses Jinja2 for template rendering.
 
 from __future__ import annotations
 
+# pylint: disable=too-many-locals
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
@@ -65,14 +66,14 @@ class ReportGenerator:
 
             analyzer = TemporalAnalyzer(self._db)
             return analyzer.volume_over_time(period="month")
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             self._record_warning(f"monthly_volume unavailable: {type(exc).__name__}", exc=exc)
             return []
 
     def _gather_top_entities(self, limit: int = 20) -> list[dict[str, Any]]:
         try:
             return self._db.top_entities(limit=limit)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             self._record_warning(f"top_entities unavailable: {type(exc).__name__}", exc=exc)
             return []
 
@@ -82,7 +83,7 @@ class ReportGenerator:
 
             analyzer = TemporalAnalyzer(self._db)
             return analyzer.response_times(limit=limit)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             self._record_warning(f"response_times unavailable: {type(exc).__name__}", exc=exc)
             return []
 
@@ -168,7 +169,7 @@ class ReportGenerator:
                 response_times=response_times_render,
                 privacy_guardrails=privacy_guardrails,
             )
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             raise ReportGenerationError(f"Archive report rendering failed: {type(exc).__name__}: {exc}") from exc
 
         if output_path:

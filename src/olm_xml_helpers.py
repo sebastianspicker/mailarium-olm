@@ -6,9 +6,12 @@ metadata, and miscellaneous utilities from Outlook for Mac OLM XML files.
 
 Extracted from ``parse_olm.py`` to keep each module under 500 lines.
 """
+# pylint: disable=c-extension-no-member
 
 from __future__ import annotations
 
+# pylint: disable=no-member
+# pylint: disable=too-many-locals
 import logging
 import re
 import zipfile
@@ -50,7 +53,7 @@ def _find_text(root: etree._Element, tag: str, ns: dict[str, str], default: str 
 
 def _new_xml_parser() -> etree.XMLParser:
     """Create a parser with safe defaults for untrusted XML."""
-    return etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=True)
+    return etree.XMLParser(resolve_entities=False, no_network=True)
 
 
 def _read_limited_bytes(stream: IO[bytes], byte_limit: int, chunk_size: int = 64 * 1024) -> bytes:
@@ -357,7 +360,7 @@ def _extract_attachment_payloads(
                 payload["failure_reason"] = "attachment_content_exceeds_max_bytes"
                 payloads.append(payload)
                 continue
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug("Failed to decode base64 attachment %r", name, exc_info=True)
                 payload["failure_reason"] = "attachment_inline_base64_decode_failed"
 

@@ -24,7 +24,7 @@ def db() -> EmailDatabase:
 
 
 @pytest.fixture()
-def db_with_email(db: EmailDatabase) -> EmailDatabase:
+def db_with_email(db: EmailDatabase) -> EmailDatabase:  # pylint: disable=redefined-outer-name
     """Database with a sample email inserted."""
     db.conn.execute(
         """INSERT INTO emails (uid, message_id, subject, sender_name, sender_email,
@@ -58,8 +58,12 @@ def db_with_email(db: EmailDatabase) -> EmailDatabase:
 
 
 @dataclass
-class FakeEmail:
-    """Minimal fake parsed email payload for custody tests."""
+class FakeEmail:  # pylint: disable=too-many-instance-attributes
+    """Minimal fake parsed email payload for custody tests.
+
+    Mirrors Email dataclass structure from src.parse_olm; field count is inherent
+    to the fake's purpose and cannot be reduced without breaking compatibility.
+    """
 
     uid: str = "fake-uid"
     message_id: str = "<fake@example.test>"

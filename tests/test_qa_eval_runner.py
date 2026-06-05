@@ -152,8 +152,9 @@ def test_run_qa_eval_live_embedding_reexecs_into_project_venv(monkeypatch, tmp_p
     class _Completed:
         returncode = 0
 
-    def fake_run(cmd, cwd):
+    def fake_run(cmd, check, cwd):
         seen["cmd"] = cmd
+        seen["check"] = check
         seen["cwd"] = cwd
         return _Completed()
 
@@ -162,6 +163,7 @@ def test_run_qa_eval_live_embedding_reexecs_into_project_venv(monkeypatch, tmp_p
     exit_code = runner.main(["--questions", str(questions_path), "--live", "--live-backend", "embedding"])
 
     assert exit_code == 0
+    assert seen["check"] is False
     assert seen["cmd"] == [
         str(venv_python),
         str(runner.__file__),

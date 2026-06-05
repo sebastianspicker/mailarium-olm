@@ -10,7 +10,7 @@ from src.thread_intelligence import (
 
 class TestActionItemExtraction:
     def setup_method(self):
-        self.analyzer = ThreadAnalyzer()
+        self.analyzer = ThreadAnalyzer()  # pylint: disable=attribute-defined-outside-init
 
     def test_please_pattern(self):
         text = "Please review the attached document and provide feedback."
@@ -91,7 +91,7 @@ class TestActionItemExtraction:
 
 class TestDecisionExtraction:
     def setup_method(self):
-        self.analyzer = ThreadAnalyzer()
+        self.analyzer = ThreadAnalyzer()  # pylint: disable=attribute-defined-outside-init
 
     def test_we_decided_pattern(self):
         text = "We decided to postpone the launch until next quarter."
@@ -155,7 +155,7 @@ class TestDecisionExtraction:
 
 class TestThreadAnalyzer:
     def setup_method(self):
-        self.analyzer = ThreadAnalyzer()
+        self.analyzer = ThreadAnalyzer()  # pylint: disable=attribute-defined-outside-init
 
     def test_analyze_empty_thread(self):
         result = self.analyzer.analyze_thread([])
@@ -265,8 +265,6 @@ class TestUrgencyScopeOnActionText:
     """Urgency should be checked against action item text, not the full email body."""
 
     def test_urgency_only_on_matching_item(self):
-        from src.thread_intelligence import ThreadAnalyzer
-
         ta = ThreadAnalyzer()
         body = "Please update the style guide for the website. Also, we need to finalize the budget ASAP."
         items = ta.extract_action_items(body)

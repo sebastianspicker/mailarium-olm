@@ -1,4 +1,5 @@
 """Pure helper utilities for Streamlit web UI behavior."""
+# pylint: disable=too-many-arguments,too-many-locals,too-many-positional-arguments
 
 from __future__ import annotations
 

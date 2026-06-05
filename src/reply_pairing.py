@@ -1,9 +1,10 @@
 """Conservative reply-pairing helpers for workplace case analysis."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 _EMAIL_RE = re.compile(r"(?i)(?:mailto:)?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})")
@@ -22,20 +23,21 @@ def _parse_iso_like(value: str) -> datetime | None:
     if not raw:
         return None
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
 
 
 def _extract_emails(values: list[Any]) -> list[str]:
     emails: list[str] = []
     for value in values:
-        match = _EMAIL_RE.search(str(value or ""))
-        if not match:
-            continue
-        email = match.group(1).lower()
-        if email not in emails:
-            emails.append(email)
+        for match in _EMAIL_RE.finditer(str(value or "")):
+            email = match.group(1).lower()
+            if email not in emails:
+                emails.append(email)
     return emails
 
 

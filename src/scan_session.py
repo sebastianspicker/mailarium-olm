@@ -8,6 +8,7 @@ Sessions are in-memory and auto-expire after a configurable TTL.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 import time
@@ -61,7 +62,7 @@ def _get_ttl() -> float:
         return float(_DEFAULT_SESSION_TTL)
     try:
         val = float(raw)
-        if val <= 0 or val != val:  # reject <= 0 and NaN
+        if val <= 0 or math.isnan(val):  # reject <= 0 and NaN
             return float(_DEFAULT_SESSION_TTL)
         return val
     except (ValueError, TypeError):

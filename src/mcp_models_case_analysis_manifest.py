@@ -369,17 +369,17 @@ class EmailCaseAnalysisInput(StrictInput):
     @model_validator(mode="after")
     def validate_case_scope_requirements(self):
         case_scope = self.case_scope
-        if case_scope.date_from is None:
+        if case_scope.date_from is None:  # pylint: disable=no-member
             raise ValueError(
                 "case_scope.date_from is required for dedicated case analysis. "
                 "Provide a bounded review window so chronology and before/after comparisons stay interpretable."
             )
-        if case_scope.date_to is None:
+        if case_scope.date_to is None:  # pylint: disable=no-member
             raise ValueError(
                 "case_scope.date_to is required for dedicated case analysis. "
                 "Provide a bounded review window so chronology and before/after comparisons stay interpretable."
             )
-        has_manifest_artifacts = bool(self.matter_manifest is not None and self.matter_manifest.artifacts)
+        has_manifest_artifacts = bool(self.matter_manifest is not None and self.matter_manifest.artifacts)  # pylint: disable=no-member
         if (
             self.source_scope == "mixed_case_file"
             and not self.chat_log_entries
@@ -397,7 +397,7 @@ class EmailCaseAnalysisInput(StrictInput):
         if (
             self.review_mode == "exhaustive_matter_review"
             and self.matter_manifest is not None
-            and not self.matter_manifest.artifacts
+            and not self.matter_manifest.artifacts  # pylint: disable=no-member
         ):
             raise ValueError("exhaustive_matter_review requires at least one matter_manifest artifact.")
         return self

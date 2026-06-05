@@ -1,12 +1,60 @@
 """Schema migration helpers for the email SQLite database."""
+# pylint: disable=too-many-branches,too-many-statements
 
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 from collections.abc import Callable
 
+from ._sql_validation import validate_sql_identifier as _validate_sql_identifier
+
 logger = logging.getLogger(__name__)
+
+_KNOWN_TABLES = {
+    "emails",
+    "ingestion_runs",
+    "evidence_items",
+    "attachments",
+    "entity_mentions",
+    "message_segments",
+}
+_COLUMN_TYPE_RE = re.compile(
+    r"^(TEXT|INTEGER|REAL|BLOB)"
+    r"(\s+DEFAULT\s+((\d+(\.\d+)?)|-?\d+|'[^']*'|\"\"))?"
+    r"(\s+NOT\s+NULL)?"
+    r"(\s+CHECK\s*\([^)]+\))?"
+    r"$"
+)
+
+
+def _alter_table_add_column_sql(table: str, column: str, column_type: str) -> str:
+    """Build ALTER TABLE SQL only after validating all dynamic pieces."""
+    safe_table = _validate_sql_identifier(table, allowlist=_KNOWN_TABLES)
+    safe_col = _validate_sql_identifier(column)
+    if not isinstance(column_type, str) or not _COLUMN_TYPE_RE.match(column_type):
+        raise ValueError(f"Invalid column type for {column!r}: {column_type!r}")
+    return f"ALTER TABLE {safe_table} ADD COLUMN {safe_col} {column_type}"
+
+
+def _add_columns_safe(
+    cur: sqlite3.Cursor,
+    table: str,
+    new_cols: dict[str, str],
+    *,
+    existing: set[str] | None = None,
+) -> None:
+    """Add columns from *new_cols* to *table* with validated identifiers.
+
+    *new_cols* keys are column names, values are SQL type definitions.
+    Both are validated before being used in SQL.
+    """
+    existing_set = existing if existing is not None else set()
+    for col, col_type in new_cols.items():
+        safe_col = _validate_sql_identifier(col)
+        if safe_col not in existing_set:
+            cur.execute(_alter_table_add_column_sql(table, safe_col, col_type))
 
 
 def apply_pending_migrations_impl(
@@ -147,9 +195,7 @@ def _migrate_to_v7(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Curs
         "is_calendar_message": "INTEGER DEFAULT 0",
         "references_json": "TEXT",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_calendar ON emails(is_calendar_message, date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_inference ON emails(inference_classification)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_thread_topic ON emails(thread_topic)")
@@ -164,9 +210,7 @@ def _migrate_to_v8(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Curs
         "sentiment_label": "TEXT",
         "sentiment_score": "REAL",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_language ON emails(detected_language)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_sentiment ON emails(sentiment_label)")
     logger.info("Schema migration v8: added detected_language, sentiment_label, sentiment_score columns")
@@ -205,9 +249,7 @@ def _migrate_to_v11(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "forensic_body_text": "TEXT",
         "forensic_body_source": "TEXT DEFAULT ''",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     logger.info("Schema migration v11: added raw and forensic body preservation columns")
 
 
@@ -220,9 +262,7 @@ def _migrate_to_v12(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "recovery_strategy": "TEXT DEFAULT ''",
         "recovery_confidence": "REAL DEFAULT 0",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     logger.info("Schema migration v12: added empty-body classification and recovery provenance columns")
 
 
@@ -235,9 +275,7 @@ def _migrate_to_v13(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "bcc_identities_json": "TEXT DEFAULT '[]'",
         "recipient_identity_source": "TEXT DEFAULT ''",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     logger.info("Schema migration v13: added durable recipient identity persistence columns")
 
 
@@ -251,9 +289,7 @@ def _migrate_to_v14(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "reply_context_date": "TEXT DEFAULT ''",
         "reply_context_source": "TEXT DEFAULT ''",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     logger.info("Schema migration v14: added inferred quoted reply-context persistence columns")
 
 
@@ -284,9 +320,7 @@ def _migrate_to_v16(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "inferred_match_reason": "TEXT DEFAULT ''",
         "inferred_match_confidence": "REAL DEFAULT 0",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     cur.execute(
         """CREATE TABLE IF NOT EXISTS conversation_edges (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -313,9 +347,7 @@ def _migrate_to_v17(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "ocr_used": "INTEGER DEFAULT 0",
         "failure_reason": "TEXT DEFAULT ''",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE attachments ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "attachments", new_cols, existing=existing)
     logger.info("Schema migration v17: added attachment evidence metadata columns")
 
 
@@ -547,9 +579,7 @@ def _migrate_to_v22(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "text_source_path": "TEXT DEFAULT ''",
         "text_locator_json": "TEXT DEFAULT '{}'",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE attachments ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "attachments", new_cols, existing=existing)
     logger.info("Schema migration v22: added durable attachment text and locator persistence columns")
 
 
@@ -561,9 +591,7 @@ def _migrate_to_v23(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "extraction_version": "TEXT DEFAULT ''",
         "extracted_at": "TEXT DEFAULT ''",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE entity_mentions ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "entity_mentions", new_cols, existing=existing)
     cur.execute(
         """UPDATE entity_mentions
            SET extracted_at = datetime('now')
@@ -575,15 +603,14 @@ def _migrate_to_v23(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
 def _migrate_to_v24(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
     """Add language analytics provenance and confidence columns (schema v24)."""
     existing = table_columns(cur, "emails")
+    token_count_default = f"INTEGER DEFAULT {0}"
     new_cols = {
         "detected_language_confidence": "TEXT",
         "detected_language_reason": "TEXT",
-        "detected_language_token_count": "INTEGER DEFAULT 0",
+        "detected_language_token_count": token_count_default,
         "detected_language_source": "TEXT DEFAULT ''",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_language_confidence ON emails(detected_language_confidence)")
     logger.info("Schema migration v24: added language analytics provenance and confidence columns")
 
@@ -643,9 +670,7 @@ def _migrate_to_v26(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "exchange_extracted_contacts_json": "TEXT DEFAULT '[]'",
         "exchange_extracted_meetings_json": "TEXT DEFAULT '[]'",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE emails ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "emails", new_cols, existing=existing)
     logger.info("Schema migration v26: added durable meeting and Exchange metadata JSON columns")
 
 
@@ -658,9 +683,7 @@ def _migrate_to_v27(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "document_locator_json": "TEXT DEFAULT '{}'",
         "context_json": "TEXT DEFAULT '{}'",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE evidence_items ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "evidence_items", new_cols, existing=existing)
     logger.info("Schema migration v27: added durable evidence provenance columns")
 
 
@@ -677,9 +700,7 @@ def _migrate_to_v28(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "text_normalization_version": "INTEGER DEFAULT 0",
         "locator_version": "INTEGER DEFAULT 1",
     }
-    for col, col_type in new_cols.items():
-        if col not in existing:
-            cur.execute(f"ALTER TABLE attachments ADD COLUMN {col} {col_type}")
+    _add_columns_safe(cur, "attachments", new_cols, existing=existing)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_attachment_id ON attachments(attachment_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_content_sha256 ON attachments(content_sha256)")
     logger.info("Schema migration v28: added attachment identity and normalization columns")

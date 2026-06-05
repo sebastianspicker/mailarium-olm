@@ -1,4 +1,7 @@
 # ruff: noqa: F401,I001
+# pylint: disable=no-member,c-extension-no-member
+
+
 from pathlib import Path
 
 from lxml import etree
@@ -185,10 +188,6 @@ def test_calendar_to_text_empty():
 
 def test_extract_html_body_no_duplicate_tail():
     """_extract_html_body should not duplicate tail text of child elements."""
-    from lxml import etree
-
-    from src.olm_xml_helpers import _extract_html_body
-
     xml = "<body>Hello <b>bold</b> and <i>italic</i> world</body>"
     el = etree.fromstring(xml)
     result = _extract_html_body(el)

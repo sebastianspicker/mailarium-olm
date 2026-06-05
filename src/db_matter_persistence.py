@@ -1,4 +1,5 @@
 """Persistence helpers for matter snapshots and export records."""
+# pylint: disable=too-many-arguments,too-many-locals,redefined-outer-name
 
 from __future__ import annotations
 

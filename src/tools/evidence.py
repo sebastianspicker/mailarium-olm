@@ -1,4 +1,5 @@
 """Evidence management, chain of custody, and proof dossier MCP tools."""
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
@@ -139,7 +140,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
                 from ..network_analysis import CommunicationNetwork
 
                 network = CommunicationNetwork(db)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.debug("Network analysis unavailable for dossier generation", exc_info=True)
 
             from ..dossier_generator import DossierGenerator

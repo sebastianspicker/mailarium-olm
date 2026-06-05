@@ -22,7 +22,7 @@ def test_weak_message_semantics_describes_source_shell_message():
 
 def test_search_across_query_lanes_preserves_lane_provenance_after_scan_dedupe(monkeypatch):
     from src.retriever_models import SearchResult
-    from src.tools.search_answer_context_runtime import _search_across_query_lanes
+    from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
     result = SearchResult(
         chunk_id="chunk-1",
@@ -79,7 +79,7 @@ def test_search_across_query_lanes_preserves_lane_provenance_after_scan_dedupe(m
 
 def test_search_across_query_lanes_keeps_body_and_attachment_hits_from_same_uid():
     from src.retriever_models import SearchResult
-    from src.tools.search_answer_context_runtime import _search_across_query_lanes
+    from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
     body_result = SearchResult(
         chunk_id="chunk-body",
@@ -138,7 +138,7 @@ def test_search_across_query_lanes_keeps_body_and_attachment_hits_from_same_uid(
 
 def test_search_across_query_lanes_applies_lane_diversity_to_evidence_bank():
     from src.retriever_models import SearchResult
-    from src.tools.search_answer_context_runtime import _search_across_query_lanes
+    from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
     lane_1_results = [
         SearchResult(

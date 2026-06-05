@@ -19,6 +19,7 @@ from src.attachment_extractor import (
     _truncate,
     _xlsx_extractor,
     extract_text,
+    extract_text_with_reason,
 )
 
 
@@ -75,7 +76,7 @@ class TestExtractHtml:
         html = b"<html><body><p>Test paragraph</p></body></html>"
         result = _extract_html(html)
         assert result is not None
-        assert "Test paragraph" in result
+        assert "Test paragraph" in result  # pylint: disable=unsupported-membership-test
 
     def test_html_latin1_fallback(self) -> None:
         html = "<html><body><p>Ärger</p></body></html>".encode("latin-1")
@@ -93,6 +94,16 @@ class TestExtractTextRouting:
             result = extract_text("doc.pdf", b"fake")
             assert result == "PDF text"
             mock_extract.assert_called_once()
+
+    def test_pdf_extraction_failure_returns_reason_without_text(self) -> None:
+        def fail_optional(*_args, failure_recorder=None, **_kwargs):
+            failure_recorder("text_extraction_failed:PDF:RuntimeError")
+
+        with patch("src.attachment_extractor._optional_extract", fail_optional):
+            text, failure_reason = extract_text_with_reason("doc.pdf", b"fake")
+
+        assert text is None
+        assert failure_reason == "text_extraction_failed:PDF:RuntimeError"
 
     def test_docx_route(self) -> None:
         with patch("src.attachment_extractor._extract_docx", return_value="DOCX text") as mock_extract:

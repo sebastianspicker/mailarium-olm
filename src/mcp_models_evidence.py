@@ -8,6 +8,8 @@ from pydantic import AliasChoices, Field, field_validator
 
 from .mcp_models_base import PlainInput, StrictInput, _validate_output_path
 
+# ALL_CAPS intentional — type-level constant enumerating valid evidence categories.
+# pylint: disable-next=invalid-name
 EVIDENCE_CATEGORIES = Literal[
     "bossing",
     "harassment",

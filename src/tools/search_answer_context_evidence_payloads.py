@@ -1,4 +1,5 @@
 """Payload-shaping helpers for answer-context evidence output."""
+# pylint: disable=too-many-branches,too-many-locals,too-many-statements
 
 from __future__ import annotations
 

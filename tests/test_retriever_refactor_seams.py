@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.retriever import EmailRetriever
+from src.retriever import EmailRetriever, SearchResult
 
 
 def _bare_retriever() -> EmailRetriever:
@@ -22,28 +22,33 @@ def test_bare_retriever_exposes_stable_last_search_debug_seam():
     assert retriever.last_search_debug == {"used_query_expansion": True}
 
 
-def test_search_filtered_delegates_to_extracted_helpers(monkeypatch):
-    """search_filtered should keep delegating through the stable seam."""
+def test_search_filtered_applies_sender_filter_and_records_behavior_debug():
+    """search_filtered should expose behavior, not only helper delegation."""
     retriever = _bare_retriever()
-    prepare_calls: list[tuple[str, int, str | None]] = []
-    execute_calls: list[tuple[str, int]] = []
 
-    def fake_prepare(instance, **kwargs):
-        prepare_calls.append((kwargs["query"], kwargs["top_k"], kwargs["sender"]))
-        return ("plan", "filters")
+    def search(query: str, top_k: int = 10, where=None):
+        return [
+            SearchResult(
+                chunk_id="match",
+                text="budget body",
+                metadata={"uid": "u1", "sender_email": "alice@example.test", "date": "2024-01-01"},
+                distance=0.1,
+            ),
+            SearchResult(
+                chunk_id="other",
+                text="budget body",
+                metadata={"uid": "u2", "sender_email": "bob@example.test", "date": "2024-01-01"},
+                distance=0.1,
+            ),
+        ]
 
-    def fake_execute(instance, plan, filters):
-        execute_calls.append((plan, filters))
-        return ["ok"]
+    retriever.search = search
 
-    monkeypatch.setattr("src.retriever.prepare_filtered_search_impl", fake_prepare)
-    monkeypatch.setattr("src.retriever.execute_filtered_search_impl", fake_execute)
+    results = retriever.search_filtered(query="budget", top_k=1, sender="alice")
 
-    results = retriever.search_filtered(query="budget", top_k=3, sender="alice")
-
-    assert results == ["ok"]
-    assert prepare_calls == [("budget", 3, "alice")]
-    assert execute_calls == [("plan", "filters")]
+    assert [result.chunk_id for result in results] == ["match"]
+    assert retriever.last_search_debug["original_query"] == "budget"
+    assert retriever.last_search_debug["filter_summary"]["has_filters"] is True
 
 
 def test_search_delegates_to_extracted_helper(monkeypatch):

@@ -1,6 +1,7 @@
 # ruff: noqa: F401, F403
 from __future__ import annotations
 
+# pylint: disable=unused-wildcard-import,wildcard-import
 import pytest
 
 from src.case_analysis import (

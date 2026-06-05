@@ -1,4 +1,5 @@
 """Embedding/write pipeline helpers extracted from ``src.ingest``."""
+# pylint: disable=too-many-arguments,too-many-branches,too-many-instance-attributes,too-many-locals,too-many-nested-blocks,too-many-positional-arguments,too-many-statements
 
 from __future__ import annotations
 
@@ -212,14 +213,14 @@ class _EmbedPipeline:
                     break
                 chunks, emails = item
                 self._process_batch(chunks, emails)
-        except BaseException as exc:
+        except BaseException as exc:  # pylint: disable=broad-exception-caught
             self._error = exc
             while True:
                 try:
                     item = self._queue.get_nowait()
                     if item is _SENTINEL:
                         break
-                except Exception:
+                except queue.Empty:
                     break
 
     def _cleanup_vector_batch(self, chunk_ids: list[str]) -> None:
@@ -230,7 +231,7 @@ class _EmbedPipeline:
         if self._email_db and hasattr(self._email_db, "delete_sparse_by_chunk_ids"):
             try:
                 self._email_db.delete_sparse_by_chunk_ids(filtered_ids)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logger.warning("Failed to remove sparse vectors for failed ingest batch", exc_info=True)
 
         if self._embedder is None:
@@ -241,7 +242,7 @@ class _EmbedPipeline:
             delete = getattr(collection, "delete", None) if collection is not None else None
             if callable(delete):
                 delete(ids=filtered_ids)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.warning("Failed to remove dense vectors for failed ingest batch", exc_info=True)
 
         try:
@@ -253,7 +254,7 @@ class _EmbedPipeline:
             touch_revision = getattr(self._embedder, "_touch_collection_revision", None)
             if callable(touch_revision):
                 touch_revision()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Failed to refresh embedder cache after failed ingest cleanup", exc_info=True)
 
     def _mark_batch_failed(self, email_uids: list[str], *, error_message: str) -> None:
@@ -261,7 +262,7 @@ class _EmbedPipeline:
             return
         try:
             self._email_db.mark_ingest_batch_failed(email_uids, error_message=error_message)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.warning("Failed to persist ingest-batch failure state", exc_info=True)
 
     def _process_batch(self, chunks: list[EmailChunk], emails: list[Email]) -> None:
@@ -491,7 +492,7 @@ class _EmbedPipeline:
             if self._email_db is not None:
                 self._email_db.conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
             logger.debug("SQLite WAL checkpoint completed (batch %d)", self.batches_written)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("WAL checkpoint failed (non-critical)", exc_info=True)
 
     def _compute_analytics(self, emails: list[Email], *, commit: bool = True) -> None:

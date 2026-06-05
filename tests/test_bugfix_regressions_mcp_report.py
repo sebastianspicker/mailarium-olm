@@ -106,7 +106,7 @@ class TestP1LegacyDossierFormat:
         )
         cmd = _infer_subcommand(args)
         assert cmd == "evidence"
-        assert args.format == "html"
+        assert args.format == "html"  # pylint: disable=no-member
 
     def test_legacy_dossier_format_pdf(self):
         from src.cli import _infer_subcommand
@@ -129,7 +129,7 @@ class TestP1LegacyDossierFormat:
         )
         cmd = _infer_subcommand(args)
         assert cmd == "evidence"
-        assert args.format == "pdf"
+        assert args.format == "pdf"  # pylint: disable=no-member
 
 
 class TestP1LegacyVolumePeriod:
@@ -160,7 +160,7 @@ class TestP1LegacyVolumePeriod:
         )
         cmd = _infer_subcommand(args)
         assert cmd == "analytics"
-        assert args.period == "week"
+        assert args.period == "week"  # pylint: disable=no-member
 
     def test_legacy_volume_default_period(self):
         from src.cli import _infer_subcommand
@@ -187,7 +187,7 @@ class TestP1LegacyVolumePeriod:
         )
         cmd = _infer_subcommand(args)
         assert cmd == "analytics"
-        assert args.period == "month"
+        assert args.period == "month"  # pylint: disable=no-member
 
 
 class TestP2PathContainmentIsRelativeTo:
@@ -212,11 +212,11 @@ class TestP2PathContainmentIsRelativeTo:
 class TestP2TopicModelerPathValidation:
     """P2: TopicModeler.load must validate file extension."""
 
-    def test_non_pickle_extension_rejected(self):
+    def test_non_pickle_extension_rejected(self, tmp_path):
         from src.topic_modeler import TopicModeler
 
         with pytest.raises(ValueError, match=r"must be \.pkl or \.pickle"):
-            TopicModeler.load("/tmp/evil.bin")
+            TopicModeler.load(str(tmp_path / "evil.bin"))
 
     def test_nonexistent_file_raises(self, tmp_path):
         from src.topic_modeler import TopicModeler
