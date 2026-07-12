@@ -23,6 +23,7 @@ def build_active_filter_labels(
     priority: int | None = None,
     email_type: str | None = None,
 ) -> list[str]:
+    """Build a list of human-readable filter labels from active filter parameters."""
     labels: list[str] = []
 
     sender_value = _normalize_optional_text(sender)
@@ -32,18 +33,15 @@ def build_active_filter_labels(
     to_value = _normalize_optional_text(to)
     bcc_value = _normalize_optional_text(bcc)
 
-    if sender_value:
-        labels.append(f"Sender: {sender_value}")
-    if to_value:
-        labels.append(f"To: {to_value}")
-    if subject_value:
-        labels.append(f"Subject: {subject_value}")
-    if folder_value:
-        labels.append(f"Folder: {folder_value}")
-    if cc_value:
-        labels.append(f"CC: {cc_value}")
-    if bcc_value:
-        labels.append(f"BCC: {bcc_value}")
+    text_labels = (
+        ("Sender", sender_value),
+        ("To", to_value),
+        ("Subject", subject_value),
+        ("Folder", folder_value),
+        ("CC", cc_value),
+        ("BCC", bcc_value),
+    )
+    labels.extend(f"{name}: {value}" for name, value in text_labels if value)
     if has_attachments is True:
         labels.append("Has attachments")
     if priority is not None:
@@ -61,6 +59,7 @@ def build_active_filter_labels(
 
 
 def sort_search_results(results: Iterable[Any], sort_by: str) -> list[Any]:
+    """Sort search results by the specified criterion."""
     items = list(results)
     if sort_by == "date_desc":
         return sorted(items, key=_date_key, reverse=True)
@@ -83,6 +82,7 @@ def build_export_payload(
     sort_by: str,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
+    """Build an exportable payload containing query, results, filters, and metadata."""
     serialized_results = [_serialize_result(result) for result in results]
     timestamp = generated_at or datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -97,6 +97,7 @@ def build_export_payload(
 
 
 def _serialize_result(result: Any) -> dict[str, Any]:
+    """Serialize a search result to a dictionary for export."""
     if hasattr(result, "to_dict"):
         value = result.to_dict()
         if isinstance(value, dict):
@@ -111,11 +112,13 @@ def _serialize_result(result: Any) -> dict[str, Any]:
 
 
 def _date_key(result: Any) -> str:
+    """Extract the date string from result metadata for sorting."""
     metadata = getattr(result, "metadata", {}) or {}
     return str(metadata.get("date", "")).strip()
 
 
 def _sender_key(result: Any) -> str:
+    """Extract the sender name/email from result metadata for sorting."""
     metadata = getattr(result, "metadata", {}) or {}
     sender_name = str(metadata.get("sender_name", "")).strip()
     sender_email = str(metadata.get("sender_email", "")).strip()
@@ -123,6 +126,7 @@ def _sender_key(result: Any) -> str:
 
 
 def _normalize_optional_text(value: str | None) -> str | None:
+    """Normalize optional text by stripping whitespace, returning None if empty."""
     if value is None:
         return None
     normalized = value.strip()

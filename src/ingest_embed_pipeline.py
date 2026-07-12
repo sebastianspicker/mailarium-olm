@@ -9,6 +9,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .chunker import EmailChunk
@@ -25,6 +26,18 @@ EXCHANGE_ENTITY_EXTRACTOR_KEY = "exchange_metadata"
 EXCHANGE_ENTITY_EXTRACTION_VERSION = "1"
 
 
+@dataclass
+class _BatchState:
+    """Mutable state shared by the bounded ingest batch stages."""
+
+    ingest_rows: list[dict[str, object]]
+    inserted_ingest_rows: list[dict[str, object]] = field(default_factory=list)
+    new_chunks: list[EmailChunk] = field(default_factory=list)
+    batch_chunk_ids: list[str] = field(default_factory=list)
+    email_commit_pending: bool = False
+    relational_transaction_open: bool = False
+
+
 def _attachment_completion_status(email: Email) -> str:
     attachment_requested = bool(getattr(email, "_ingest_attachment_requested", False))
     if not attachment_requested:
@@ -33,22 +46,29 @@ def _attachment_completion_status(email: Email) -> str:
     if not attachments or not bool(getattr(email, "has_attachments", False)):
         return "completed"
     normalized_states = {str(att.get("extraction_state") or "").strip().lower() for att in attachments if isinstance(att, dict)}
-    if "unsupported" in normalized_states:
+    return _attachment_extraction_outcome(
+        normalized_states,
+        has_weak_reference=any(
+            str(att.get("evidence_strength") or "").strip().lower() == "weak_reference"
+            for att in attachments
+            if isinstance(att, dict)
+        ),
+    )
+
+
+def _attachment_extraction_outcome(states: set[str], *, has_weak_reference: bool) -> str:
+    """Map normalized attachment extraction states to the durable ingest status."""
+    if "unsupported" in states:
         return "unsupported"
-    if normalized_states & {
+    degraded_states = {
         "binary_only",
         "image_embedding_only",
         "ocr_failed",
         "extraction_failed",
         "archive_inventory_extracted",
         "sidecar_text_extracted",
-    }:
-        return "degraded"
-    if any(
-        str(att.get("evidence_strength") or "").strip().lower() == "weak_reference"
-        for att in attachments
-        if isinstance(att, dict)
-    ):
+    }
+    if states & degraded_states or has_weak_reference:
         return "degraded"
     return "pending"
 
@@ -228,29 +248,35 @@ class _EmbedPipeline:
         if not filtered_ids:
             return
 
+        self._cleanup_sparse_vectors(filtered_ids)
+        if self._embedder is None:
+            return
+        self._cleanup_dense_vectors(filtered_ids)
+        self._refresh_embedder_cache(filtered_ids)
+
+    def _cleanup_sparse_vectors(self, chunk_ids: list[str]) -> None:
         if self._email_db and hasattr(self._email_db, "delete_sparse_by_chunk_ids"):
             try:
-                self._email_db.delete_sparse_by_chunk_ids(filtered_ids)
+                self._email_db.delete_sparse_by_chunk_ids(chunk_ids)
             except Exception:  # pylint: disable=broad-exception-caught
                 logger.warning("Failed to remove sparse vectors for failed ingest batch", exc_info=True)
 
-        if self._embedder is None:
-            return
-
+    def _cleanup_dense_vectors(self, chunk_ids: list[str]) -> None:
         try:
             collection = getattr(self._embedder, "collection", None)
             delete = getattr(collection, "delete", None) if collection is not None else None
             if callable(delete):
-                delete(ids=filtered_ids)
+                delete(ids=chunk_ids)
         except Exception:  # pylint: disable=broad-exception-caught
             logger.warning("Failed to remove dense vectors for failed ingest batch", exc_info=True)
 
+    def _refresh_embedder_cache(self, chunk_ids: list[str]) -> None:
         try:
             get_existing_ids = getattr(self._embedder, "get_existing_ids", None)
             if callable(get_existing_ids):
                 cached_ids = get_existing_ids(refresh=False)
                 if isinstance(cached_ids, set):
-                    cached_ids.difference_update(filtered_ids)
+                    cached_ids.difference_update(chunk_ids)
             touch_revision = getattr(self._embedder, "_touch_collection_revision", None)
             if callable(touch_revision):
                 touch_revision()
@@ -266,223 +292,255 @@ class _EmbedPipeline:
             logger.warning("Failed to persist ingest-batch failure state", exc_info=True)
 
     def _process_batch(self, chunks: list[EmailChunk], emails: list[Email]) -> None:
-        ingest_rows = _ingest_state_rows(emails)
-        inserted_ingest_rows: list[dict[str, object]] = []
-        new_chunks: list[EmailChunk] = list(chunks)
-        batch_chunk_ids: list[str] = [_chunk_id(chunk) for chunk in new_chunks if _chunk_id(chunk)]
-        email_commit_pending = False
-        relational_transaction_open = False
+        state = _BatchState(
+            ingest_rows=_ingest_state_rows(emails),
+            new_chunks=list(chunks),
+            batch_chunk_ids=[_chunk_id(chunk) for chunk in chunks if _chunk_id(chunk)],
+        )
         conn = getattr(self._email_db, "conn", None) if self._email_db else None
         supports_manual_transaction = all(hasattr(conn, attr) for attr in ("execute", "commit", "rollback"))
         try:
-            if self._email_db and emails:
-                t0 = time.monotonic()
-                if supports_manual_transaction:
-                    assert conn is not None
-                    logger.debug(
-                        "Opening SQLite ingest transaction (run_id=%s, emails=%s, chunks=%s)",
-                        self._ingestion_run_id,
-                        len(emails),
-                        len(chunks),
-                    )
-                    conn.execute("BEGIN IMMEDIATE")
-                    relational_transaction_open = True
-                    inserted_uids = self._email_db.insert_emails_batch(
-                        emails,
-                        ingestion_run_id=self._ingestion_run_id,
-                        commit=False,
-                    )
-                else:
-                    inserted_uids = self._email_db.insert_emails_batch(
-                        emails,
-                        ingestion_run_id=self._ingestion_run_id,
-                    )
-                self.sqlite_inserted += len(inserted_uids)
-                dt_sqlite = time.monotonic() - t0
-                self.sqlite_seconds += dt_sqlite
-                inserted_ingest_rows = [row for row in ingest_rows if str(row.get("email_uid") or "") in inserted_uids]
-                if hasattr(self._email_db, "mark_ingest_batch_pending"):
-                    if inserted_ingest_rows:
-                        if supports_manual_transaction:
-                            self._email_db.mark_ingest_batch_pending(inserted_ingest_rows, commit=False)
-                        else:
-                            self._email_db.mark_ingest_batch_pending(inserted_ingest_rows)
-
-                new_emails = [email for email in emails if email.uid in inserted_uids]
-                new_chunks = [chunk for chunk in chunks if _chunk_uid(chunk) in inserted_uids]
-                batch_chunk_ids = [_chunk_id(chunk) for chunk in new_chunks if _chunk_id(chunk)]
-                if len(new_emails) < len(emails):
-                    logger.debug(
-                        "Skipped %d already-inserted emails for entity/analytics processing",
-                        len(emails) - len(new_emails),
-                    )
-                if len(new_chunks) < len(chunks):
-                    logger.debug(
-                        "Skipped %d already-indexed email chunks for vector persistence",
-                        len(chunks) - len(new_chunks),
-                    )
-
-                t1 = time.monotonic()
-                event_rows: list[tuple[object, ...]] = []
-                if self._email_db and hasattr(self._email_db, "upsert_event_records"):
-                    from .event_extractor import extract_event_rows_from_email
-
-                    for email in new_emails:
-                        event_rows.extend(extract_event_rows_from_email(email))
-                    if event_rows:
-                        self._email_db.upsert_event_records(event_rows, commit=False)
-
-                if self._entity_extractor_fn:
-                    from .entity_occurrence_extractor import extract_entity_occurrence_rows_from_email
-                    from .language_analytics import select_entity_text_from_email
-
-                    for email in new_emails:
-                        attachments = getattr(email, "attachments", None) or []
-                        has_entity_body_surface = any(
-                            str(getattr(email, field, "") or "").strip()
-                            for field in ("forensic_body_text", "clean_body", "raw_body_text")
-                        ) or any(
-                            str((attachment or {}).get(key) or "").strip()
-                            for attachment in attachments
-                            if isinstance(attachment, dict)
-                            for key in ("extracted_text", "text_preview")
-                        )
-                        if not has_entity_body_surface:
-                            continue
-                        entity_text, _entity_source = select_entity_text_from_email(email)
-                        if not entity_text:
-                            continue
-                        entities = self._entity_extractor_fn(entity_text, email.sender_email)
-                        if entities:
-                            normalized_entities = [
-                                (entity.text, entity.entity_type, entity.normalized_form) for entity in entities
-                            ]
-                            self._email_db.insert_entities_batch(
-                                email.uid,
-                                normalized_entities,
-                                extractor_key=self._entity_extractor_key,
-                                extraction_version=self._entity_extraction_version,
-                                commit=False,
-                            )
-                            if hasattr(self._email_db, "insert_entity_occurrences"):
-                                occurrence_rows = extract_entity_occurrence_rows_from_email(email, normalized_entities)
-                                if occurrence_rows:
-                                    self._email_db.insert_entity_occurrences(
-                                        email.uid,
-                                        occurrence_rows,
-                                        extractor_key=self._entity_extractor_key,
-                                        extraction_version=self._entity_extraction_version,
-                                        commit=False,
-                                    )
-                for email in new_emails:
-                    exchange_entities = _exchange_entities_from_email(email)
-                    if exchange_entities:
-                        self._email_db.insert_entities_batch(
-                            email.uid,
-                            exchange_entities,
-                            extractor_key=EXCHANGE_ENTITY_EXTRACTOR_KEY,
-                            extraction_version=EXCHANGE_ENTITY_EXTRACTION_VERSION,
-                            commit=False,
-                        )
-                dt_entity = time.monotonic() - t1
-                self.entity_seconds += dt_entity
-
-                t2 = time.monotonic()
-                self._compute_analytics(new_emails, commit=False)
-                dt_analytics = time.monotonic() - t2
-                self.analytics_seconds += dt_analytics
-
-                self.write_seconds += dt_sqlite + dt_entity + dt_analytics
-                email_commit_pending = bool(inserted_ingest_rows)
-
-                if inserted_ingest_rows and (not self._embedder or not new_chunks):
-                    if hasattr(self._email_db, "mark_ingest_batch_completed"):
-                        if supports_manual_transaction:
-                            self._email_db.mark_ingest_batch_completed(inserted_ingest_rows, commit=False)
-                        else:
-                            self._email_db.mark_ingest_batch_completed(inserted_ingest_rows)
-                    if supports_manual_transaction:
-                        assert conn is not None
-                        logger.debug(
-                            "Committing SQLite ingest transaction without vector write (run_id=%s, emails=%s)",
-                            self._ingestion_run_id,
-                            len(inserted_ingest_rows),
-                        )
-                        conn.commit()
-                    relational_transaction_open = False
-                    email_commit_pending = False
-                elif supports_manual_transaction and relational_transaction_open and not new_chunks:
-                    assert conn is not None
-                    logger.debug(
-                        "Committing empty SQLite ingest transaction after dedupe (run_id=%s)",
-                        self._ingestion_run_id,
-                    )
-                    conn.commit()
-                    relational_transaction_open = False
-                    email_commit_pending = False
-            if self._embedder and new_chunks:
-                t0 = time.monotonic()
-                added = 0
-                for chunk_group in _chunk_batches(new_chunks, max_chunks=self._batch_size):
-                    try:
-                        added += self._embedder.add_chunks(
-                            chunk_group,
-                            batch_size=self._batch_size,
-                            skip_existing_check=True,
-                        )
-                    except TypeError as exc:
-                        if "skip_existing_check" not in str(exc):
-                            raise
-                        added += self._embedder.add_chunks(
-                            chunk_group,
-                            batch_size=self._batch_size,
-                        )
-                dt_embed = time.monotonic() - t0
-                self.chunks_added += added
-                self.batches_written += 1
-                self.embed_seconds += dt_embed
-                if self._email_db and inserted_ingest_rows and email_commit_pending:
-                    completed_rows = _completed_ingest_rows(inserted_ingest_rows)
-                    self._email_db.mark_ingest_batch_completed(completed_rows, commit=True)
-                    relational_transaction_open = False
-                    email_commit_pending = False
-                elif self._email_db and inserted_ingest_rows and not supports_manual_transaction:
-                    completed_rows = _completed_ingest_rows(inserted_ingest_rows)
-                    if hasattr(self._email_db, "mark_ingest_batch_completed"):
-                        self._email_db.mark_ingest_batch_completed(completed_rows)
-                    email_commit_pending = False
-                rate = len(new_chunks) / dt_embed if dt_embed > 0 else 0
-                logger.info(
-                    "Batch %d: %d chunks embedded in %.1fs (%.0f chunks/s)",
-                    self.batches_written,
-                    len(new_chunks),
-                    dt_embed,
-                    rate,
-                )
+            new_emails, dt_sqlite = self._persist_relational_batch(chunks, emails, state, conn, supports_manual_transaction)
+            dt_entity, dt_analytics = self._persist_batch_metadata(new_emails)
+            self.write_seconds += dt_sqlite + dt_entity + dt_analytics
+            self._complete_relational_only_batch(state, conn, supports_manual_transaction)
+            self._embed_batch_chunks(state, supports_manual_transaction)
         except Exception as exc:
-            if relational_transaction_open:
-                assert conn is not None
-                logger.debug(
-                    "Rolling back SQLite ingest transaction after batch failure (run_id=%s)",
-                    self._ingestion_run_id,
-                    exc_info=True,
-                )
-                conn.rollback()
-                relational_transaction_open = False
-            self._cleanup_vector_batch(batch_chunk_ids)
-            email_uids = [str(row.get("email_uid") or "") for row in inserted_ingest_rows if str(row.get("email_uid") or "")]
-            self._mark_batch_failed(email_uids, error_message=str(exc))
+            self._rollback_failed_batch(state, conn, exc)
             raise
+        self._apply_batch_maintenance()
 
-        wal_due = (
-            self._wal_checkpoint_interval > 0
-            and self._email_db
-            and self.batches_written > 0
-            and self.batches_written % self._wal_checkpoint_interval == 0
+    def _persist_relational_batch(
+        self,
+        chunks: list[EmailChunk],
+        emails: list[Email],
+        state: _BatchState,
+        conn: Any,
+        supports_manual_transaction: bool,
+    ) -> tuple[list[Email], float]:
+        if not self._email_db or not emails:
+            return [], 0.0
+        started = time.monotonic()
+        inserted_uids = self._insert_emails_for_batch(emails, chunks, state, conn, supports_manual_transaction)
+        self.sqlite_inserted += len(inserted_uids)
+        state.inserted_ingest_rows = [row for row in state.ingest_rows if str(row.get("email_uid") or "") in inserted_uids]
+        self._mark_batch_pending(state, supports_manual_transaction)
+        new_emails = [email for email in emails if email.uid in inserted_uids]
+        state.new_chunks = [chunk for chunk in chunks if _chunk_uid(chunk) in inserted_uids]
+        state.batch_chunk_ids = [_chunk_id(chunk) for chunk in state.new_chunks if _chunk_id(chunk)]
+        self._log_deduplicated_batch(emails, chunks, new_emails, state.new_chunks)
+        elapsed = time.monotonic() - started
+        self.sqlite_seconds += elapsed
+        state.email_commit_pending = bool(state.inserted_ingest_rows)
+        return new_emails, elapsed
+
+    def _insert_emails_for_batch(
+        self,
+        emails: list[Email],
+        chunks: list[EmailChunk],
+        state: _BatchState,
+        conn: Any,
+        supports_manual_transaction: bool,
+    ) -> set[str]:
+        assert self._email_db is not None
+        if not supports_manual_transaction:
+            return self._email_db.insert_emails_batch(emails, ingestion_run_id=self._ingestion_run_id)
+        assert conn is not None
+        logger.debug(
+            "Opening SQLite ingest transaction (run_id=%s, emails=%s, chunks=%s)",
+            self._ingestion_run_id,
+            len(emails),
+            len(chunks),
         )
-        if wal_due:
-            self._checkpoint_wal()
+        conn.execute("BEGIN IMMEDIATE")
+        state.relational_transaction_open = True
+        return self._email_db.insert_emails_batch(emails, ingestion_run_id=self._ingestion_run_id, commit=False)
 
+    def _mark_batch_pending(self, state: _BatchState, supports_manual_transaction: bool) -> None:
+        if not self._email_db or not state.inserted_ingest_rows or not hasattr(self._email_db, "mark_ingest_batch_pending"):
+            return
+        if supports_manual_transaction:
+            self._email_db.mark_ingest_batch_pending(state.inserted_ingest_rows, commit=False)
+        else:
+            self._email_db.mark_ingest_batch_pending(state.inserted_ingest_rows)
+
+    @staticmethod
+    def _log_deduplicated_batch(
+        emails: list[Email], chunks: list[EmailChunk], new_emails: list[Email], new_chunks: list[EmailChunk]
+    ) -> None:
+        if len(new_emails) < len(emails):
+            logger.debug("Skipped %d already-inserted emails for entity/analytics processing", len(emails) - len(new_emails))
+        if len(new_chunks) < len(chunks):
+            logger.debug("Skipped %d already-indexed email chunks for vector persistence", len(chunks) - len(new_chunks))
+
+    def _persist_batch_metadata(self, emails: list[Email]) -> tuple[float, float]:
+        entity_started = time.monotonic()
+        self._persist_events(emails)
+        self._persist_extracted_entities(emails)
+        self._persist_exchange_entities(emails)
+        entity_elapsed = time.monotonic() - entity_started
+        self.entity_seconds += entity_elapsed
+        analytics_started = time.monotonic()
+        self._compute_analytics(emails, commit=False)
+        analytics_elapsed = time.monotonic() - analytics_started
+        self.analytics_seconds += analytics_elapsed
+        return entity_elapsed, analytics_elapsed
+
+    def _persist_events(self, emails: list[Email]) -> None:
+        if not self._email_db or not hasattr(self._email_db, "upsert_event_records"):
+            return
+        from .event_extractor import extract_event_rows_from_email
+
+        event_rows = [row for email in emails for row in extract_event_rows_from_email(email)]
+        if event_rows:
+            self._email_db.upsert_event_records(event_rows, commit=False)
+
+    def _persist_extracted_entities(self, emails: list[Email]) -> None:
+        if not self._email_db or not self._entity_extractor_fn:
+            return
+        from .entity_occurrence_extractor import extract_entity_occurrence_rows_from_email
+        from .language_analytics import select_entity_text_from_email
+
+        for email in emails:
+            entity_text, _source = select_entity_text_from_email(email)
+            if not self._has_entity_surface(email) or not entity_text:
+                continue
+            entities = self._entity_extractor_fn(entity_text, email.sender_email)
+            normalized_entities = [(entity.text, entity.entity_type, entity.normalized_form) for entity in entities]
+            if not normalized_entities:
+                continue
+            self._email_db.insert_entities_batch(
+                email.uid,
+                normalized_entities,
+                extractor_key=self._entity_extractor_key,
+                extraction_version=self._entity_extraction_version,
+                commit=False,
+            )
+            self._persist_entity_occurrences(email, normalized_entities, extract_entity_occurrence_rows_from_email)
+
+    @staticmethod
+    def _has_entity_surface(email: Email) -> bool:
+        body_fields = ("forensic_body_text", "clean_body", "raw_body_text")
+        attachment_fields = ("extracted_text", "text_preview")
+        if any(str(getattr(email, field, "") or "").strip() for field in body_fields):
+            return True
+        return any(
+            str((attachment or {}).get(key) or "").strip()
+            for attachment in (getattr(email, "attachments", None) or [])
+            if isinstance(attachment, dict)
+            for key in attachment_fields
+        )
+
+    def _persist_entity_occurrences(self, email: Email, entities: list[tuple[str, str, str]], extractor: Callable) -> None:
+        if not self._email_db or not hasattr(self._email_db, "insert_entity_occurrences"):
+            return
+        occurrence_rows = extractor(email, entities)
+        if occurrence_rows:
+            self._email_db.insert_entity_occurrences(
+                email.uid,
+                occurrence_rows,
+                extractor_key=self._entity_extractor_key,
+                extraction_version=self._entity_extraction_version,
+                commit=False,
+            )
+
+    def _persist_exchange_entities(self, emails: list[Email]) -> None:
+        if not self._email_db:
+            return
+        for email in emails:
+            entities = _exchange_entities_from_email(email)
+            if entities:
+                self._email_db.insert_entities_batch(
+                    email.uid,
+                    entities,
+                    extractor_key=EXCHANGE_ENTITY_EXTRACTOR_KEY,
+                    extraction_version=EXCHANGE_ENTITY_EXTRACTION_VERSION,
+                    commit=False,
+                )
+
+    def _complete_relational_only_batch(self, state: _BatchState, conn: Any, supports_manual_transaction: bool) -> None:
+        if not state.inserted_ingest_rows or (self._embedder and state.new_chunks):
+            self._commit_empty_transaction(state, conn, supports_manual_transaction)
+            return
+        assert self._email_db is not None
+        if hasattr(self._email_db, "mark_ingest_batch_completed"):
+            self._email_db.mark_ingest_batch_completed(state.inserted_ingest_rows, commit=not supports_manual_transaction)
+        if supports_manual_transaction:
+            assert conn is not None
+            logger.debug(
+                "Committing SQLite ingest transaction without vector write (run_id=%s, emails=%s)",
+                self._ingestion_run_id,
+                len(state.inserted_ingest_rows),
+            )
+            conn.commit()
+        state.relational_transaction_open = False
+        state.email_commit_pending = False
+
+    def _commit_empty_transaction(self, state: _BatchState, conn: Any, supports_manual_transaction: bool) -> None:
+        if not supports_manual_transaction or not state.relational_transaction_open or state.new_chunks:
+            return
+        assert conn is not None
+        logger.debug("Committing empty SQLite ingest transaction after dedupe (run_id=%s)", self._ingestion_run_id)
+        conn.commit()
+        state.relational_transaction_open = False
+        state.email_commit_pending = False
+
+    def _embed_batch_chunks(self, state: _BatchState, supports_manual_transaction: bool) -> None:
+        if not self._embedder or not state.new_chunks:
+            return
+        started = time.monotonic()
+        added = sum(self._add_chunk_group(group) for group in _chunk_batches(state.new_chunks, max_chunks=self._batch_size))
+        elapsed = time.monotonic() - started
+        self.chunks_added += added
+        self.batches_written += 1
+        self.embed_seconds += elapsed
+        self._complete_vector_batch(state, supports_manual_transaction)
+        rate = len(state.new_chunks) / elapsed if elapsed > 0 else 0
+        logger.info(
+            "Batch %d: %d chunks embedded in %.1fs (%.0f chunks/s)",
+            self.batches_written,
+            len(state.new_chunks),
+            elapsed,
+            rate,
+        )
+
+    def _add_chunk_group(self, chunk_group: list[EmailChunk]) -> int:
+        assert self._embedder is not None
+        try:
+            return self._embedder.add_chunks(chunk_group, batch_size=self._batch_size, skip_existing_check=True)
+        except TypeError as exc:
+            if "skip_existing_check" not in str(exc):
+                raise
+            return self._embedder.add_chunks(chunk_group, batch_size=self._batch_size)
+
+    def _complete_vector_batch(self, state: _BatchState, supports_manual_transaction: bool) -> None:
+        if not self._email_db or not state.inserted_ingest_rows:
+            return
+        completed_rows = _completed_ingest_rows(state.inserted_ingest_rows)
+        if state.email_commit_pending:
+            self._email_db.mark_ingest_batch_completed(completed_rows, commit=True)
+            state.relational_transaction_open = False
+        elif not supports_manual_transaction and hasattr(self._email_db, "mark_ingest_batch_completed"):
+            self._email_db.mark_ingest_batch_completed(completed_rows)
+        state.email_commit_pending = False
+
+    def _rollback_failed_batch(self, state: _BatchState, conn: Any, exc: Exception) -> None:
+        if state.relational_transaction_open:
+            assert conn is not None
+            logger.debug(
+                "Rolling back SQLite ingest transaction after batch failure (run_id=%s)",
+                self._ingestion_run_id,
+                exc_info=True,
+            )
+            conn.rollback()
+        self._cleanup_vector_batch(state.batch_chunk_ids)
+        email_uids = [str(row.get("email_uid") or "") for row in state.inserted_ingest_rows if str(row.get("email_uid") or "")]
+        self._mark_batch_failed(email_uids, error_message=str(exc))
+
+    def _apply_batch_maintenance(self) -> None:
+        wal_due = self._wal_checkpoint_interval > 0 and self._email_db and self.batches_written > 0
+        if wal_due and self.batches_written % self._wal_checkpoint_interval == 0:
+            self._checkpoint_wal()
         if self._cooldown > 0:
             time.sleep(self._cooldown)
 

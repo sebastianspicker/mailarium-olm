@@ -86,7 +86,14 @@ def apply_source_header_fallbacks(
     """Fill missing fields from the raw RFC 2822 source headers."""
     if not parts.raw_source:
         return
+    _fill_source_basics(parts)
+    _fill_source_to_addresses(parts, extract_identity_addresses_fn)
+    _fill_source_cc_addresses(parts, extract_identity_addresses_fn)
+    _fill_source_bcc_addresses(parts, extract_identity_addresses_fn)
+    _fill_source_thread_headers(parts)
 
+
+def _fill_source_basics(parts: ParsedEmailParts) -> None:
     if not parts.message_id:
         parts.message_id = _extract_header(parts.raw_source, "Message-ID").strip("<>")
     if not parts.subject:
@@ -97,6 +104,9 @@ def apply_source_header_fallbacks(
         parts.sender_name = _extract_name_from_header(parts.raw_source, "From")
     if not parts.date:
         parts.date = _normalize_date(_extract_header(parts.raw_source, "Date"))
+
+
+def _fill_source_to_addresses(parts: ParsedEmailParts, extract_identity_addresses_fn: Any) -> None:
     if not parts.to_addresses:
         to_raw = _extract_header(parts.raw_source, "To")
         if to_raw:
@@ -107,18 +117,27 @@ def apply_source_header_fallbacks(
             parts.to_identities = extract_identity_addresses_fn([to_raw])
             if parts.to_identities:
                 parts.recipient_identity_source = "source_header"
+
+
+def _fill_source_cc_addresses(parts: ParsedEmailParts, extract_identity_addresses_fn: Any) -> None:
     if not parts.cc_addresses:
         cc_raw = _extract_header(parts.raw_source, "CC")
         if cc_raw:
             parts.cc_addresses = _parse_address_list(cc_raw)
     if not parts.cc_identities and parts.cc_addresses:
         parts.cc_identities = extract_identity_addresses_fn(parts.cc_addresses)
+
+
+def _fill_source_bcc_addresses(parts: ParsedEmailParts, extract_identity_addresses_fn: Any) -> None:
     if not parts.bcc_addresses:
         bcc_raw = _extract_header(parts.raw_source, "BCC")
         if bcc_raw:
             parts.bcc_addresses = _parse_address_list(bcc_raw)
     if not parts.bcc_identities and parts.bcc_addresses:
         parts.bcc_identities = extract_identity_addresses_fn(parts.bcc_addresses)
+
+
+def _fill_source_thread_headers(parts: ParsedEmailParts) -> None:
     if not parts.in_reply_to:
         parts.in_reply_to = _extract_header(parts.raw_source, "In-Reply-To").strip("<>")
     if not parts.references:
@@ -133,6 +152,12 @@ def finalize_parsed_email_parts(
     extract_identity_addresses_fn: Any,
 ) -> None:
     """Apply deterministic recipient, body, and normalization fallbacks."""
+    _fill_recipient_identities(parts, extract_identity_addresses_fn)
+    _fill_body_fallback(parts)
+    _normalize_part_headers(parts)
+
+
+def _fill_recipient_identities(parts: ParsedEmailParts, extract_identity_addresses_fn: Any) -> None:
     if not parts.to_identities and parts.to_addresses:
         parts.to_identities = extract_identity_addresses_fn(parts.to_addresses)
     if not parts.cc_identities and parts.cc_addresses:
@@ -142,12 +167,16 @@ def finalize_parsed_email_parts(
     if not parts.recipient_identity_source and (parts.to_identities or parts.cc_identities or parts.bcc_identities):
         parts.recipient_identity_source = "parsed_addresses"
 
+
+def _fill_body_fallback(parts: ParsedEmailParts) -> None:
     if not parts.body_text and not parts.body_html and parts.raw_source:
         parts.body_text, parts.body_html = _extract_body_from_source(parts.raw_source)
 
     if not parts.body_text and not parts.body_html and parts.preview:
         parts.body_text = parts.preview
 
+
+def _normalize_part_headers(parts: ParsedEmailParts) -> None:
     parts.subject = _decode_mime_words(parts.subject) if parts.subject else ""
     parts.sender_name = _decode_mime_words(parts.sender_name) if parts.sender_name else ""
     parts.sender_email = parts.sender_email.strip().lower() if parts.sender_email else ""

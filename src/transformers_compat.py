@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any, cast
+
+
+def _flagembedding_is_injected() -> bool:
+    """Return whether FlagEmbedding is an explicit test-time module injection."""
+    if "FlagEmbedding" not in sys.modules:
+        return False
+    module = sys.modules["FlagEmbedding"]
+    return module is None or getattr(module, "__spec__", None) is None
 
 
 def ensure_flagembedding_transformers_compat() -> None:
@@ -16,6 +25,9 @@ def ensure_flagembedding_transformers_compat() -> None:
     The legacy helper only gates an optional FX wrapper in FlagEmbedding's
     vendored model code, so returning ``False`` preserves the safe path.
     """
+    if _flagembedding_is_injected():
+        return
+
     try:
         from transformers.utils import import_utils
     except ImportError:

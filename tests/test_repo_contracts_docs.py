@@ -174,7 +174,6 @@ def test_runtime_and_config_docs_use_portable_paths_and_current_archive_status()
     runtime_plan = _read("docs/agent/runtime_path_remediation_plan.md")
     mcp_client_config = _read("docs/agent/mcp_client_config_snippet.md")
     compatibility = _read("docs/API_COMPATIBILITY.md")
-    documentation = _read("docs/agent/Documentation.md")
 
     assert "private/runtime/current/" in plan
     assert "missing source file" not in runtime_plan
@@ -183,7 +182,6 @@ def test_runtime_and_config_docs_use_portable_paths_and_current_archive_status()
     assert "Intentional Surface Boundaries" in compatibility
     assert "Streamlit web app is exploratory" in compatibility
     assert "<home>/Git/01_high/01_high_outlook-email-rag" not in mcp_client_config
-    assert "<home>/.config/mcp-client/config.toml" not in documentation
 
 
 def test_readme_and_docs_index_reflect_public_documentation_surface():
@@ -215,7 +213,9 @@ def test_readme_and_docs_index_reflect_public_documentation_surface():
     assert "[`question_register_template.md`](question_register_template.md)" in agent_index
     assert "[`open_tasks_companion_template.md`](open_tasks_companion_template.md)" in agent_index
     assert "[`mcp_client_config_snippet.md`](mcp_client_config_snippet.md)" in agent_index
-    assert "`agent/Documentation.md` is a verification/change log" in docs_index
+    assert "Local verification logs, audit reports, remediation ledgers" in docs_index
+    assert "tracked eval assets remain synthetic." in agent_index
+    assert "private/tests/results/qa_eval/" in agent_index
     assert "Historical audit artifacts live under" in docs_index
     assert "[`archive/2026-05-16-remediation-closure/`](archive/2026-05-16-remediation-closure/)" in docs_index
 

@@ -10,6 +10,12 @@ if TYPE_CHECKING:
 
 
 def run_generate_training_data_impl(get_email_db: Callable[[], EmailDatabase], output_path: str) -> None:
+    """Generate contrastive training triplets from email data.
+
+    Args:
+        get_email_db: Factory function to get the email database instance.
+        output_path: Path to save the generated training data JSONL file.
+    """
     db = get_email_db()
     from .training_data_generator import TrainingDataGenerator
 
@@ -19,6 +25,13 @@ def run_generate_training_data_impl(get_email_db: Callable[[], EmailDatabase], o
 
 
 def run_fine_tune_impl(data_path: str, output_dir: str, epochs: int) -> None:
+    """Fine-tune the embedding model on training data.
+
+    Args:
+        data_path: Path to the training data JSONL file.
+        output_dir: Directory to save the fine-tuned model.
+        epochs: Number of training epochs.
+    """
     from .fine_tuner import FineTuner
 
     ft = FineTuner()

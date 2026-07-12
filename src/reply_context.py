@@ -3,27 +3,12 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from .html_converter import clean_text as _clean_text
 from .html_converter import html_to_text as _html_to_text
 from .html_converter import looks_like_html as _looks_like_html
 from .rfc2822 import _decode_mime_words, _normalize_date, _parse_address_list
-
-_RE_REPLY_CONTEXT_HEADER_LINE = re.compile(
-    r"(?i)^(from|sent|to|cc|bcc|subject|date|"
-    r"von|gesendet|an|betreff|"
-    r"de|envoy[ée]|[àa]|objet|"
-    r"asunto|para|enviado|assunto|"
-    r"van|verzonden|onderwerp|"
-    r"da|inviato|oggetto|"
-    r"från|fra|skickat|sendt|till|til|emne|"
-    r"od|do|wys[łl]ano|temat"
-    r"):\s*(.+)$"
-)
-_RE_REPLY_WRAPPER_LINE = re.compile(r"(?i)^(?:on .+ wrote:|am .+ schrieb.*:)$")
-_RE_REPLY_SEPARATOR_LINE = re.compile(r"(?i)^-+\s*original message\s*-+$")
 
 _RE_REPLY_CONTEXT_LABELS = {
     "from": "from",
@@ -68,6 +53,23 @@ _RE_REPLY_CONTEXT_LABELS = {
 }
 
 
+def _is_reply_wrapper_line(line: str) -> bool:
+    normalized = line.strip().casefold()
+    if not normalized.endswith(":"):
+        return False
+    content = normalized[:-1].rstrip()
+    return (content.startswith("on ") and content.endswith(" wrote")) or (content.startswith("am ") and " schrieb" in content[3:])
+
+
+def _is_reply_separator_line(line: str) -> bool:
+    stripped = line.strip()
+    leading = len(stripped) - len(stripped.lstrip("-"))
+    trailing = len(stripped) - len(stripped.rstrip("-"))
+    return (
+        leading >= 1 and trailing >= 1 and stripped[leading : len(stripped) - trailing].strip().casefold() == "original message"
+    )
+
+
 @dataclass(frozen=True)
 class ReplyContext:
     """Best-effort inferred context from embedded quoted headers."""
@@ -93,13 +95,13 @@ def _extract_identity_addresses(addresses: list[str]) -> list[str]:
 
 def _parse_reply_context_line(line: str) -> tuple[str, str] | None:
     """Parse one normalized mail-header line inside a quoted reply block."""
-    match = _RE_REPLY_CONTEXT_HEADER_LINE.match(line.strip())
-    if not match:
+    raw_label, separator, raw_value = line.strip().partition(":")
+    if not separator:
         return None
-    label = _RE_REPLY_CONTEXT_LABELS.get(match.group(1).casefold())
+    label = _RE_REPLY_CONTEXT_LABELS.get(raw_label.strip().casefold())
     if not label:
         return None
-    return label, match.group(2).strip()
+    return label, raw_value.strip()
 
 
 def _candidate_surfaces(body_text: str, body_html: str) -> list[tuple[str, str]]:
@@ -153,34 +155,40 @@ def extract_reply_context(body_text: str, body_html: str, email_type: str) -> Re
         return None
 
     for source, text in _candidate_surfaces(body_text, body_html):
-        lines = text.splitlines()
-        for idx, line in enumerate(lines):
-            parsed = _parse_reply_context_line(line)
-            start_index: int | None = None
-            confidence = 0.8
-            if parsed:
-                label, _value = parsed
-                if label in {"from", "sent"}:
-                    start_index = idx
-            elif _RE_REPLY_WRAPPER_LINE.match(line.strip()) or _RE_REPLY_SEPARATOR_LINE.match(line.strip()):
-                start_index = idx + 1
-                confidence = 0.65
-            if start_index is None:
-                continue
-            block, header_count = _collect_header_block(lines, start_index)
-            if header_count < 3:
-                continue
-            reply_from = _extract_identity_addresses([block.get("from", "")])
-            reply_to = _extract_identity_addresses([block.get("to", "")])
-            subject = _decode_mime_words(block.get("subject", "")).strip()
-            date = _normalize_date(block.get("date", ""))
-            if reply_from or reply_to or subject or date:
-                return ReplyContext(
-                    from_email=reply_from[0] if reply_from else "",
-                    to_emails=reply_to,
-                    subject=subject,
-                    date=date,
-                    source=source,
-                    confidence=confidence,
-                )
+        context = _reply_context_from_lines(text.splitlines(), source)
+        if context:
+            return context
     return None
+
+
+def _reply_context_from_lines(lines: list[str], source: str) -> ReplyContext | None:
+    for idx, line in enumerate(lines):
+        start_index, confidence = _reply_block_start(line, idx)
+        if start_index is None:
+            continue
+        block, header_count = _collect_header_block(lines, start_index)
+        if header_count < 3:
+            continue
+        reply_from = _extract_identity_addresses([block.get("from", "")])
+        reply_to = _extract_identity_addresses([block.get("to", "")])
+        subject = _decode_mime_words(block.get("subject", "")).strip()
+        date = _normalize_date(block.get("date", ""))
+        if reply_from or reply_to or subject or date:
+            return ReplyContext(
+                from_email=reply_from[0] if reply_from else "",
+                to_emails=reply_to,
+                subject=subject,
+                date=date,
+                source=source,
+                confidence=confidence,
+            )
+    return None
+
+
+def _reply_block_start(line: str, index: int) -> tuple[int | None, float]:
+    parsed = _parse_reply_context_line(line)
+    if parsed and parsed[0] in {"from", "sent"}:
+        return index, 0.8
+    if _is_reply_wrapper_line(line) or _is_reply_separator_line(line):
+        return index + 1, 0.65
+    return None, 0.8

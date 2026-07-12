@@ -1,7 +1,6 @@
-# ruff: noqa: F401
 from __future__ import annotations
 
-from src.multi_source_case_bundle import append_chat_log_sources, append_manifest_sources, build_multi_source_case_bundle
+from src.multi_source_case_bundle import append_manifest_sources, build_multi_source_case_bundle
 
 
 def test_build_multi_source_case_bundle_extracts_document_event_dates_and_time_record_ranges() -> None:

@@ -44,6 +44,14 @@ def _display_path(path: Path | None) -> str | None:
 
 
 def resolve_live_deps(*, preferred_backend: str = "auto") -> ToolDepsProto:
+    """Resolve live evaluation dependencies for answer context building.
+
+    Args:
+        preferred_backend: The preferred backend to use ('auto', or specific backend name).
+
+    Returns:
+        ToolDepsProto instance configured with the resolved retriever.
+    """
     return _live.resolve_live_deps(
         preferred_backend=preferred_backend,
         resolve_retriever=_resolve_live_retriever,
@@ -51,6 +59,21 @@ def resolve_live_deps(*, preferred_backend: str = "auto") -> ToolDepsProto:
 
 
 def _results_payload_map(path: Path) -> dict[str, dict[str, Any]]:
+    """Load and map results from a JSON file into a case ID to payload dictionary.
+
+    Supports two formats:
+    1. {"results": [{"id": "case1", "payload": {...}}, ...]}
+    2. {"case1": {...}, "case2": {...}, ...}
+
+    Args:
+        path: Path to the JSON results file.
+
+    Returns:
+        Dictionary mapping case IDs to their payload dictionaries.
+
+    Raises:
+        ValueError: If the file format is invalid or payloads are not objects.
+    """
     raw = _load_json(path)
     if isinstance(raw, dict) and "results" in raw and isinstance(raw["results"], list):
         mapped: dict[str, dict[str, Any]] = {}
@@ -72,6 +95,15 @@ def load_eval_report(path: Path) -> dict[str, Any]:
 
 
 async def _live_payload(case: QuestionCase, deps: ToolDepsProto) -> dict[str, Any]:
+    """Fetch live answer context payload for a question case.
+
+    Args:
+        case: The question case to evaluate.
+        deps: Tool dependencies including the retriever.
+
+    Returns:
+        Dictionary containing the answer context payload.
+    """
     params = EmailAnswerContextInput(
         question=case.question,
         evidence_mode=case.evidence_mode,  # type: ignore[arg-type]
@@ -83,6 +115,17 @@ async def _live_payload(case: QuestionCase, deps: ToolDepsProto) -> dict[str, An
 
 
 def _serialize_case(case: QuestionCase) -> dict[str, Any]:
+    """Serialize a QuestionCase to a dictionary for JSON serialization.
+
+    Converts the dataclass to a dict and handles special serialization
+    for the case_scope field.
+
+    Args:
+        case: The QuestionCase instance to serialize.
+
+    Returns:
+        Dictionary representation of the case.
+    """
     payload = asdict(case)
     if case.case_scope is not None:
         payload["case_scope"] = case.case_scope.model_dump(mode="json")
@@ -95,6 +138,22 @@ def _resolve_source_mode(
     live_deps: ToolDepsProto | None,
     source_mode: EvalSourceMode,
 ) -> Literal["captured_only", "live_only", "mixed"]:
+    """Determine the effective source mode for evaluation.
+
+    Validates that the provided sources match the requested mode and returns
+    the resolved source mode.
+
+    Args:
+        results_path: Path to captured results file, or None.
+        live_deps: Live dependencies, or None.
+        source_mode: Requested source mode ('auto', 'captured_only', 'live_only', 'mixed').
+
+    Returns:
+        The resolved source mode.
+
+    Raises:
+        ValueError: If sources don't match the requested mode.
+    """
     has_captured = results_path is not None
     has_live = live_deps is not None
     if source_mode == "auto":
@@ -127,6 +186,20 @@ async def _evaluate_case_with_source(
     captured: dict[str, dict[str, Any]],
     live_deps: ToolDepsProto | None,
 ) -> dict[str, Any]:
+    """Evaluate a single case using the specified source.
+
+    Args:
+        case: The question case to evaluate.
+        source: The source to use ('captured' or 'live').
+        captured: Dictionary mapping case IDs to captured payloads.
+        live_deps: Live dependencies for fetching live payloads.
+
+    Returns:
+        Evaluation result dictionary.
+
+    Raises:
+        ValueError: If the requested source is not available.
+    """
     if source == "captured":
         if case.id not in captured:
             raise ValueError(f"no captured payload available for case {case.id}")
@@ -168,63 +241,7 @@ async def run_evaluation(
     }
 
     if resolved_source_mode == "mixed":
-        captured_results: list[dict[str, Any]] = []
-        live_results: list[dict[str, Any]] = []
-        comparison_results: list[dict[str, Any]] = []
-        for case in cases:
-            captured_result = await _evaluate_case_with_source(
-                case=case,
-                source="captured",
-                captured=captured,
-                live_deps=live_deps,
-            )
-            live_result = await _evaluate_case_with_source(
-                case=case,
-                source="live",
-                captured=captured,
-                live_deps=live_deps,
-            )
-            captured_results.append(captured_result)
-            live_results.append(live_result)
-            comparison_results.append(
-                {
-                    "id": case.id,
-                    "bucket": case.bucket,
-                    "question": case.question,
-                    "captured": captured_result,
-                    "live": live_result,
-                }
-            )
-        report.update(
-            {
-                "results": comparison_results,
-                "source_counts": {"captured": len(captured_results), "live": len(live_results)},
-                "summary": {
-                    "total_cases": len(cases),
-                    "comparison_case_count": len(comparison_results),
-                    "source_summaries": {
-                        "captured": summarize_evaluation(captured_results),
-                        "live": summarize_evaluation(live_results),
-                    },
-                },
-                "failure_taxonomy": {
-                    "captured": build_failure_taxonomy(cases, captured_results),
-                    "live": build_failure_taxonomy(cases, live_results),
-                },
-                "investigation_corpus_readiness": {
-                    "captured": build_investigation_corpus_readiness(
-                        cases=cases,
-                        results=captured_results,
-                        live_deps=None,
-                    ),
-                    "live": build_investigation_corpus_readiness(
-                        cases=cases,
-                        results=live_results,
-                        live_deps=live_deps,
-                    ),
-                },
-            }
-        )
+        report.update(await _mixed_evaluation_report(cases, captured, live_deps))
         report["threshold_verdict"] = evaluate_report_thresholds(report)
         return report
 
@@ -254,6 +271,37 @@ async def run_evaluation(
     )
     report["threshold_verdict"] = evaluate_report_thresholds(report)
     return report
+
+
+async def _mixed_evaluation_report(cases, captured, live_deps) -> dict[str, Any]:
+    captured_results: list[dict[str, Any]] = []
+    live_results: list[dict[str, Any]] = []
+    comparisons: list[dict[str, Any]] = []
+    for case in cases:
+        captured_result = await _evaluate_case_with_source(case=case, source="captured", captured=captured, live_deps=live_deps)
+        live_result = await _evaluate_case_with_source(case=case, source="live", captured=captured, live_deps=live_deps)
+        captured_results.append(captured_result)
+        live_results.append(live_result)
+        comparisons.append(
+            {"id": case.id, "bucket": case.bucket, "question": case.question, "captured": captured_result, "live": live_result}
+        )
+    return {
+        "results": comparisons,
+        "source_counts": {"captured": len(captured_results), "live": len(live_results)},
+        "summary": {
+            "total_cases": len(cases),
+            "comparison_case_count": len(comparisons),
+            "source_summaries": {"captured": summarize_evaluation(captured_results), "live": summarize_evaluation(live_results)},
+        },
+        "failure_taxonomy": {
+            "captured": build_failure_taxonomy(cases, captured_results),
+            "live": build_failure_taxonomy(cases, live_results),
+        },
+        "investigation_corpus_readiness": {
+            "captured": build_investigation_corpus_readiness(cases=cases, results=captured_results, live_deps=None),
+            "live": build_investigation_corpus_readiness(cases=cases, results=live_results, live_deps=live_deps),
+        },
+    }
 
 
 def run_evaluation_sync(

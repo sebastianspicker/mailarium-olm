@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ._utils import _as_dict, _as_list, _compact
 from .case_prompt_intake_helpers import _adverse_action_candidates, _candidate_confidence, _trigger_event_candidates
 
 CASE_MATERIAL_PREFLIGHT_VERSION = "1"
@@ -42,18 +43,6 @@ _ALLOWED_ACTION_TYPES = {
     "job_downgrade",
     "other",
 }
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
 
 
 def _artifact_ref(artifact: dict[str, Any]) -> dict[str, Any]:
@@ -280,12 +269,26 @@ def _dedupe_actor_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _auto_fill_case_scope(candidate_structures: dict[str, Any]) -> dict[str, Any]:
     auto_fill: dict[str, Any] = {}
+    _auto_fill_target(candidate_structures, auto_fill)
+    _auto_fill_dates(candidate_structures, auto_fill)
+    for field, key_name in (
+        ("trigger_events", "trigger_event_candidates"),
+        ("alleged_adverse_actions", "adverse_action_candidates"),
+        ("comparator_actors", "comparator_candidates"),
+    ):
+        _auto_fill_candidate_rows(candidate_structures, auto_fill, field=field, key_name=key_name)
+    return auto_fill
+
+
+def _auto_fill_target(candidate_structures: dict[str, Any], auto_fill: dict[str, Any]) -> None:
     target_candidates = _dedupe_actor_rows(
         [item for item in _as_list(candidate_structures.get("target_person_candidates")) if isinstance(item, dict)]
     )
     if len(target_candidates) == 1 and str(target_candidates[0].get("confidence") or "") == "high":
         auto_fill["target_person"] = _as_dict(target_candidates[0].get("candidate_value"))
 
+
+def _auto_fill_dates(candidate_structures: dict[str, Any], auto_fill: dict[str, Any]) -> None:
     date_from_candidates = [item for item in _as_list(candidate_structures.get("date_from_candidates")) if isinstance(item, dict)]
     if date_from_candidates:
         auto_fill["date_from"] = str(date_from_candidates[0].get("candidate_value") or "")
@@ -293,45 +296,62 @@ def _auto_fill_case_scope(candidate_structures: dict[str, Any]) -> dict[str, Any
     if date_to_candidates:
         auto_fill["date_to"] = str(date_to_candidates[0].get("candidate_value") or "")
 
-    for field, key_name in (
-        ("trigger_events", "trigger_event_candidates"),
-        ("alleged_adverse_actions", "adverse_action_candidates"),
-        ("comparator_actors", "comparator_candidates"),
-    ):
-        rows = [
-            _as_dict(item.get("candidate_value")) if isinstance(item, dict) else {}
-            for item in _as_list(candidate_structures.get(key_name))
-            if isinstance(item, dict) and str(item.get("confidence") or "") in {"medium", "high"}
-        ]
-        normalized_rows: list[dict[str, Any]] = []
-        seen: set[tuple[tuple[str, Any], ...]] = set()
-        for row in rows:
-            compacted = {key: value for key, value in row.items() if value not in (None, "", [], {})}
-            if field == "trigger_events" and compacted.get("trigger_type") not in _ALLOWED_TRIGGER_TYPES:
-                continue
-            if field == "alleged_adverse_actions" and compacted.get("action_type") not in _ALLOWED_ACTION_TYPES:
-                continue
-            if field == "comparator_actors" and not compacted.get("name"):
-                continue
-            dedupe_key = tuple(sorted(compacted.items()))
-            if dedupe_key in seen:
-                continue
-            seen.add(dedupe_key)
-            normalized_rows.append(compacted)
-        if not normalized_rows:
+
+def _auto_fill_candidate_rows(
+    candidate_structures: dict[str, Any],
+    auto_fill: dict[str, Any],
+    *,
+    field: str,
+    key_name: str,
+) -> None:
+    rows = _confident_candidate_values(candidate_structures, key_name)
+    normalized_rows = _normalized_candidate_values(field, rows)
+    if not normalized_rows:
+        return
+    if field == "comparator_actors":
+        if len(normalized_rows) <= 3:
+            auto_fill[field] = normalized_rows
+        return
+    normalized_rows.sort(key=_candidate_value_sort_key)
+    auto_fill[field] = normalized_rows[:12]
+
+
+def _confident_candidate_values(candidate_structures: dict[str, Any], key_name: str) -> list[dict[str, Any]]:
+    return [
+        _as_dict(item.get("candidate_value"))
+        for item in _as_list(candidate_structures.get(key_name))
+        if isinstance(item, dict) and str(item.get("confidence") or "") in {"medium", "high"}
+    ]
+
+
+def _normalized_candidate_values(field: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    seen: set[tuple[tuple[str, Any], ...]] = set()
+    for row in rows:
+        compacted = {key: value for key, value in row.items() if value not in (None, "", [], {})}
+        dedupe_key = tuple(sorted(compacted.items()))
+        if not _valid_candidate_value(field, compacted) or dedupe_key in seen:
             continue
-        if field == "comparator_actors":
-            if len(normalized_rows) <= 3:
-                auto_fill[field] = normalized_rows
-            continue
-        normalized_rows.sort(
-            key=lambda item: (
-                str(item.get("date") or ""),
-                str(item.get("trigger_type") or item.get("action_type") or ""),
-            )
-        )
-        auto_fill[field] = normalized_rows[:12]
-    return auto_fill
+        seen.add(dedupe_key)
+        normalized.append(compacted)
+    return normalized
+
+
+def _valid_candidate_value(field: str, row: dict[str, Any]) -> bool:
+    if field == "trigger_events":
+        return row.get("trigger_type") in _ALLOWED_TRIGGER_TYPES
+    if field == "alleged_adverse_actions":
+        return row.get("action_type") in _ALLOWED_ACTION_TYPES
+    if field == "comparator_actors":
+        return bool(row.get("name"))
+    return False
+
+
+def _candidate_value_sort_key(item: dict[str, Any]) -> tuple[str, str]:
+    return (
+        str(item.get("date") or ""),
+        str(item.get("trigger_type") or item.get("action_type") or ""),
+    )
 
 
 def build_case_material_preflight(matter_manifest: dict[str, Any] | None) -> dict[str, Any]:

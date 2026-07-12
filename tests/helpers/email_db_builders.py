@@ -1,7 +1,5 @@
-# ruff: noqa: F401
 """Tests for the SQLite EmailDatabase."""
 
-from src.email_db import EmailDatabase, _parse_address
 from src.parse_olm import Email
 
 

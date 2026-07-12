@@ -33,39 +33,39 @@ def _fixture_retrieval_corpus(case_id: str) -> list[dict[str, Any]]:
     payload = build_fixture_answer_context(case_id)
     corpus: list[dict[str, Any]] = []
     for candidate in payload.get("candidates", []) or []:
-        if not isinstance(candidate, dict):
-            continue
-        uid = str(candidate.get("uid") or "")
-        if not uid:
-            continue
-        subject = str(candidate.get("subject") or "")
-        sender_name = str(candidate.get("sender_name") or "")
-        sender_email = str(candidate.get("sender_email") or "")
-        date = str(candidate.get("date") or "")
-        snippet = str(candidate.get("snippet") or "")
-        conversation_id = f"fixture:{case_id}:thread:1"
-        body_text = "\n".join(part for part in [subject, snippet] if part).strip()
-        corpus.append(
-            {
-                "uid": uid,
-                "subject": subject,
-                "sender_name": sender_name,
-                "sender_email": sender_email,
-                "date": date,
-                "conversation_id": conversation_id,
-                "body_text": body_text,
-                "forensic_body_text": body_text,
-                "normalized_body_text": body_text,
-                "to": ["employee@example.test"],
-                "cc": [],
-                "bcc": [],
-                "reply_context_from": "",
-                "reply_context_to": [],
-                "message_id": f"<{uid}@fixture.local>",
-                "references": [],
-            }
-        )
+        row = _fixture_candidate_row(candidate, case_id)
+        if row:
+            corpus.append(row)
     return corpus
+
+
+def _fixture_candidate_row(candidate: object, case_id: str) -> dict[str, Any] | None:
+    if not isinstance(candidate, dict):
+        return None
+    uid = str(candidate.get("uid") or "")
+    if not uid:
+        return None
+    subject = str(candidate.get("subject") or "")
+    snippet = str(candidate.get("snippet") or "")
+    body_text = "\n".join(part for part in [subject, snippet] if part).strip()
+    return {
+        "uid": uid,
+        "subject": subject,
+        "sender_name": str(candidate.get("sender_name") or ""),
+        "sender_email": str(candidate.get("sender_email") or ""),
+        "date": str(candidate.get("date") or ""),
+        "conversation_id": f"fixture:{case_id}:thread:1",
+        "body_text": body_text,
+        "forensic_body_text": body_text,
+        "normalized_body_text": body_text,
+        "to": ["employee@example.test"],
+        "cc": [],
+        "bcc": [],
+        "reply_context_from": "",
+        "reply_context_to": [],
+        "message_id": f"<{uid}@fixture.local>",
+        "references": [],
+    }
 
 
 class _FixtureRetrievalDB:
@@ -111,22 +111,7 @@ class _FixtureRetrievalRetriever:
 
     def search_filtered(self, query: str, top_k: int = 10, **kwargs: Any) -> list[SearchResult]:
         query_terms = _fixture_retrieval_terms(query)
-        scored: list[tuple[float, dict[str, Any]]] = []
-        for row in self._rows:
-            searchable_text = " ".join(
-                [
-                    str(row.get("subject") or ""),
-                    str(row.get("sender_name") or ""),
-                    str(row.get("sender_email") or ""),
-                    str(row.get("body_text") or ""),
-                ]
-            )
-            candidate_terms = _fixture_retrieval_terms(searchable_text)
-            overlap = len(query_terms & candidate_terms)
-            score = 0.2 + overlap * 0.12
-            if query_terms and overlap <= 0:
-                continue
-            scored.append((min(score, 0.95), row))
+        scored = _score_fixture_rows(self._rows, query_terms)
         scored.sort(key=lambda item: (-item[0], str(item[1].get("date") or ""), str(item[1].get("uid") or "")))
         selected = scored[: max(int(top_k or 0), 0)]
         self.last_search_debug = {
@@ -134,28 +119,34 @@ class _FixtureRetrievalRetriever:
             "used_query_expansion": bool(kwargs.get("expand_query")),
             "original_query": query,
         }
-        return [
-            SearchResult(
-                chunk_id=f"fixture:{row['uid']}:body",
-                text=str(row.get("body_text") or ""),
-                metadata={
-                    "uid": str(row.get("uid") or ""),
-                    "subject": str(row.get("subject") or ""),
-                    "sender_email": str(row.get("sender_email") or ""),
-                    "sender_name": str(row.get("sender_name") or ""),
-                    "date": str(row.get("date") or ""),
-                    "conversation_id": str(row.get("conversation_id") or ""),
-                    "normalized_body_source": "body_text",
-                    "score_kind": "semantic",
-                    "score_calibration": "calibrated",
-                },
-                distance=max(0.0, 1.0 - float(score)),
-            )
-            for score, row in selected
-        ]
+        return [_fixture_search_result(score, row) for score, row in selected]
 
     def stats(self) -> dict[str, Any]:
         return {"total_emails": len(self._rows)}
+
+
+def _score_fixture_rows(rows: list[dict[str, Any]], query_terms: set[str]) -> list[tuple[float, dict[str, Any]]]:
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for row in rows:
+        searchable = " ".join(str(row.get(key) or "") for key in ("subject", "sender_name", "sender_email", "body_text"))
+        overlap = len(query_terms & _fixture_retrieval_terms(searchable))
+        if query_terms and overlap <= 0:
+            continue
+        scored.append((min(0.2 + overlap * 0.12, 0.95), row))
+    return scored
+
+
+def _fixture_search_result(score: float, row: dict[str, Any]) -> SearchResult:
+    metadata = {
+        key: str(row.get(key) or "") for key in ("uid", "subject", "sender_email", "sender_name", "date", "conversation_id")
+    }
+    metadata.update({"normalized_body_source": "body_text", "score_kind": "semantic", "score_calibration": "calibrated"})
+    return SearchResult(
+        chunk_id=f"fixture:{row['uid']}:body",
+        text=str(row.get("body_text") or ""),
+        metadata=metadata,
+        distance=max(0.0, 1.0 - float(score)),
+    )
 
 
 class _FixtureRetrievalDeps:

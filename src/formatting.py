@@ -8,6 +8,7 @@ from datetime import datetime
 from html import unescape
 from typing import TYPE_CHECKING, Any
 
+from ._utils import _as_list
 from .repo_paths import validate_new_output_path
 
 if TYPE_CHECKING:
@@ -29,29 +30,12 @@ def build_email_header(email_dict: Mapping[str, Any]) -> str:
     """Build a concise metadata header for embedding context."""
     parts: list[str] = []
 
-    date_value = email_dict.get("date")
-    if date_value:
-        parts.append(f"Date: {date_value}")
-
-    sender = format_sender(email_dict.get("sender_name"), email_dict.get("sender_email"))
-    if sender:
-        parts.append(f"From: {sender}")
-
-    to_values = _as_list(email_dict.get("to"))
-    if to_values:
-        parts.append(f"To: {', '.join(to_values[:3])}")
-
-    cc_values = _as_list(email_dict.get("cc"))
-    if cc_values:
-        parts.append(f"CC: {', '.join(cc_values[:3])}")
-
-    subject = email_dict.get("subject")
-    if subject:
-        parts.append(f"Subject: {subject}")
-
-    folder = email_dict.get("folder")
-    if folder:
-        parts.append(f"Folder: {folder}")
+    _append_header_value(parts, "Date", email_dict.get("date"))
+    _append_header_value(parts, "From", format_sender(email_dict.get("sender_name"), email_dict.get("sender_email")))
+    _append_header_value(parts, "To", ", ".join(_as_list(email_dict.get("to"))[:3]))
+    _append_header_value(parts, "CC", ", ".join(_as_list(email_dict.get("cc"))[:3]))
+    _append_header_value(parts, "Subject", email_dict.get("subject"))
+    _append_header_value(parts, "Folder", email_dict.get("folder"))
 
     categories = email_dict.get("categories")
     if categories and isinstance(categories, list) and categories:
@@ -70,6 +54,11 @@ def build_email_header(email_dict: Mapping[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _append_header_value(parts: list[str], label: str, value: Any) -> None:
+    if value:
+        parts.append(f"{label}: {value}")
+
+
 def build_result_header(metadata: Mapping[str, Any]) -> str:
     """Build result header used in LLM context formatting.
 
@@ -79,39 +68,18 @@ def build_result_header(metadata: Mapping[str, Any]) -> str:
     parts: list[str] = []
 
     date_value = metadata.get("date")
-    if date_value:
-        # Truncate to date-only (drop time) for compactness
-        parts.append(f"Date: {str(date_value)[:10]}")
-
-    sender = format_sender(metadata.get("sender_name"), metadata.get("sender_email"))
-    if sender:
-        parts.append(f"From: {sender}")
+    _append_header_value(parts, "Date", str(date_value)[:10] if date_value else "")
+    _append_header_value(parts, "From", format_sender(metadata.get("sender_name"), metadata.get("sender_email")))
 
     to_value = metadata.get("to")
     if to_value:
-        if isinstance(to_value, list):
-            to_value = ", ".join(str(v) for v in to_value)
-        parts.append(f"To: {to_value}")
+        _append_header_value(parts, "To", _result_to_value(to_value))
+    _append_header_value(parts, "Subject", metadata.get("subject"))
 
-    subject = metadata.get("subject")
-    if subject:
-        parts.append(f"Subject: {subject}")
-
-    email_type = metadata.get("email_type")
-    if email_type and email_type != "original":
-        parts.append(f"Type: {email_type}")
-
-    folder = metadata.get("folder")
-    if folder and folder != "Inbox":
-        parts.append(f"Folder: {folder}")
-
-    priority = metadata.get("priority")
-    if priority and str(priority) not in ("0", ""):
-        parts.append(f"Priority: {priority}")
-
-    categories = metadata.get("categories")
-    if categories and str(categories).strip():
-        parts.append(f"Categories: {categories}")
+    _append_nondefault_header(parts, "Type", metadata.get("email_type"), "original")
+    _append_nondefault_header(parts, "Folder", metadata.get("folder"), "Inbox")
+    _append_nondefault_header(parts, "Priority", metadata.get("priority"), "0")
+    _append_nondefault_header(parts, "Categories", metadata.get("categories"))
 
     if str(metadata.get("is_calendar_message", "")).lower() in ("true", "1"):
         parts.append("[Calendar/Meeting]")
@@ -121,6 +89,15 @@ def build_result_header(metadata: Mapping[str, Any]) -> str:
         parts.append(f"Attachments: {attachment_names}")
 
     return "\n".join(parts)
+
+
+def _result_to_value(value: Any) -> Any:
+    return ", ".join(str(item) for item in value) if isinstance(value, list) else value
+
+
+def _append_nondefault_header(parts: list[str], label: str, value: Any, default: str = "") -> None:
+    if value and str(value).strip() and str(value) != default:
+        parts.append(f"{label}: {value}")
 
 
 def truncate_body(text: str | None, max_chars: int) -> str:
@@ -165,53 +142,42 @@ def weak_message_semantics(email_dict: Mapping[str, Any]) -> dict[str, Any] | No
     recovery_strategy = str(email_dict.get("recovery_strategy") or "")
     recovery_confidence = float(email_dict.get("recovery_confidence") or 0.0)
 
-    if body_empty_reason == "image_only":
-        return {
-            "is_weak": True,
-            "code": "image_only",
-            "label": "Image-only message",
-            "explanation": "The message matched, but no recoverable body text was found beyond image-backed content.",
-            "body_kind": body_kind or "content",
-            "body_empty_reason": body_empty_reason,
-            "recovery_strategy": recovery_strategy,
-            "recovery_confidence": recovery_confidence,
-        }
-    if body_empty_reason == "source_shell_only":
-        return {
-            "is_weak": True,
-            "code": "source_shell_only",
-            "label": "Source-shell message",
-            "explanation": (
-                "The message matched, but only source-shell structure or metadata was recoverable, not visible authored text."
-            ),
-            "body_kind": body_kind or "content",
-            "body_empty_reason": body_empty_reason,
-            "recovery_strategy": recovery_strategy,
-            "recovery_confidence": recovery_confidence,
-        }
-    if body_empty_reason == "metadata_only_reply":
-        return {
-            "is_weak": True,
-            "code": "metadata_only_reply",
-            "label": "Metadata-only reply",
-            "explanation": "The reply matched, but only reply metadata was recoverable; no authored reply body text was found.",
-            "body_kind": body_kind or "content",
-            "body_empty_reason": body_empty_reason,
-            "recovery_strategy": recovery_strategy,
-            "recovery_confidence": recovery_confidence,
-        }
-    if body_empty_reason == "true_blank":
-        return {
-            "is_weak": True,
-            "code": "true_blank",
-            "label": "Blank message",
-            "explanation": "The message matched, but no recoverable body text was present in the export surfaces.",
-            "body_kind": body_kind or "empty",
-            "body_empty_reason": body_empty_reason,
-            "recovery_strategy": recovery_strategy,
-            "recovery_confidence": recovery_confidence,
-        }
-    return None
+    definitions = {
+        "image_only": (
+            "Image-only message",
+            "The message matched, but no recoverable body text was found beyond image-backed content.",
+            "content",
+        ),
+        "source_shell_only": (
+            "Source-shell message",
+            "The message matched, but only source-shell structure or metadata was recoverable, not visible authored text.",
+            "content",
+        ),
+        "metadata_only_reply": (
+            "Metadata-only reply",
+            "The reply matched, but only reply metadata was recoverable; no authored reply body text was found.",
+            "content",
+        ),
+        "true_blank": (
+            "Blank message",
+            "The message matched, but no recoverable body text was present in the export surfaces.",
+            "empty",
+        ),
+    }
+    definition = definitions.get(body_empty_reason)
+    if definition is None:
+        return None
+    label, explanation, default_kind = definition
+    return {
+        "is_weak": True,
+        "code": body_empty_reason,
+        "label": label,
+        "explanation": explanation,
+        "body_kind": body_kind or default_kind,
+        "body_empty_reason": body_empty_reason,
+        "recovery_strategy": recovery_strategy,
+        "recovery_confidence": recovery_confidence,
+    }
 
 
 def format_context_block(
@@ -266,11 +232,19 @@ def format_triage_results(
 
 # Regex to detect metadata header lines at the start of chunk text
 # (e.g. "Date: ...\nFrom: ...\nSubject: ...\n\nActual body")
-_META_HEADER_RE = re.compile(
-    r"^(?:(?:Date|From|To|CC|Subject|Folder|Categories|Attachments|Type|Priority"
-    r"|Relevance|\[Calendar/Meeting\]|\[Part \d+/\d+\]|Has attachments)"
-    r"[:\s].*\n)*\n*",
-    re.MULTILINE,
+_META_HEADER_PREFIXES = (
+    "Date:",
+    "From:",
+    "To:",
+    "CC:",
+    "Subject:",
+    "Folder:",
+    "Categories:",
+    "Attachments:",
+    "Type:",
+    "Priority:",
+    "Relevance:",
+    "Has attachments",
 )
 
 
@@ -278,23 +252,28 @@ def _strip_metadata_header(text: str) -> str:
     """Strip the metadata header block from chunk text for cleaner previews."""
     if not text:
         return text
-    m = _META_HEADER_RE.match(text)
-    if m and m.end() > 0:
-        return text[m.end() :].strip()
+    lines = text.splitlines(keepends=True)
+    header_end = 0
+    saw_header = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if saw_header:
+                header_end += len(line)
+                continue
+            break
+        if (
+            stripped.startswith(_META_HEADER_PREFIXES)
+            or stripped.startswith("[Calendar/Meeting]")
+            or (stripped.startswith("[Part ") and "/" in stripped and stripped.endswith("]"))
+        ):
+            saw_header = True
+            header_end += len(line)
+            continue
+        break
+    if saw_header and header_end > 0:
+        return text[header_end:].strip()
     return text
-
-
-def _as_list(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, (list, tuple)):
-        return [str(v) for v in value if v]
-    if isinstance(value, str):
-        return [value] if value.strip() else []
-    return [str(value)]
-
-
-# ── Shared formatting utilities ───────────────────────────────
 
 
 def format_date(iso_date: str | None) -> str:

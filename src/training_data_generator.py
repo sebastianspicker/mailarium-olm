@@ -59,31 +59,18 @@ class TrainingDataGenerator:
                 for j, pos_email in enumerate(emails):
                     if i == j:
                         continue
-
-                    query_text = _truncate(query_email["body_text"] or query_email["subject"] or "", max_query_len)
-                    pos_text = _truncate(pos_email["body_text"] or pos_email["subject"] or "", max_passage_len)
-
-                    if not query_text.strip() or not pos_text.strip():
-                        continue
-
-                    # Find a negative
-                    neg_text = self._find_negative(
+                    triplet = self._build_triplet(
                         query_email,
+                        pos_email,
                         conv_id,
                         sender_index,
                         all_emails,
+                        max_query_len,
                         max_passage_len,
                     )
-                    if not neg_text:
+                    if triplet is None:
                         continue
-
-                    triplets.append(
-                        {
-                            "query": query_text,
-                            "pos": pos_text,
-                            "neg": neg_text,
-                        }
-                    )
+                    triplets.append(triplet)
 
                     if len(triplets) >= max_triplets:
                         logger.info("Generated %d triplets (max reached)", len(triplets))
@@ -93,6 +80,23 @@ class TrainingDataGenerator:
         self._rng.shuffle(triplets)
         logger.info("Generated %d contrastive triplets", len(triplets))
         return triplets
+
+    def _build_triplet(
+        self,
+        query_email: dict,
+        positive_email: dict,
+        conversation_id: str,
+        sender_index: dict[str, list[dict]],
+        all_emails: list[dict],
+        max_query_len: int,
+        max_passage_len: int,
+    ) -> dict[str, str] | None:
+        query = _truncate(query_email["body_text"] or query_email["subject"] or "", max_query_len)
+        positive = _truncate(positive_email["body_text"] or positive_email["subject"] or "", max_passage_len)
+        if not query.strip() or not positive.strip():
+            return None
+        negative = self._find_negative(query_email, conversation_id, sender_index, all_emails, max_passage_len)
+        return {"query": query, "pos": positive, "neg": negative} if negative else None
 
     def export_jsonl(
         self,
@@ -193,22 +197,16 @@ class TrainingDataGenerator:
         """
         sender = (query_email.get("sender_email") or "").lower()
 
-        # Try hard negative: same sender, different thread
-        if sender in sender_index:
-            candidates = [
-                e for e in sender_index[sender] if e["conversation_id"] != query_conv_id and (e["body_text"] or "").strip()
-            ]
-            if candidates:
-                neg = self._rng.choice(candidates)
-                return _truncate(neg["body_text"] or neg["subject"] or "", max_len)
+        hard_candidates = _negative_candidates(sender_index.get(sender, []), query_conv_id)
+        candidates = hard_candidates or _negative_candidates(all_emails, query_conv_id)
+        if not candidates:
+            return None
+        negative = self._rng.choice(candidates)
+        return _truncate(negative["body_text"] or negative["subject"] or "", max_len)
 
-        # Random negative: different thread
-        candidates = [e for e in all_emails if e["conversation_id"] != query_conv_id and (e["body_text"] or "").strip()]
-        if candidates:
-            neg = self._rng.choice(candidates)
-            return _truncate(neg["body_text"] or neg["subject"] or "", max_len)
 
-        return None
+def _negative_candidates(emails: list[dict], conversation_id: str) -> list[dict]:
+    return [email for email in emails if email["conversation_id"] != conversation_id and (email["body_text"] or "").strip()]
 
 
 def _truncate(text: str, max_len: int) -> str:

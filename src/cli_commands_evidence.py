@@ -18,6 +18,14 @@ def run_evidence_list_impl(
     category: str | None,
     min_relevance: int | None,
 ) -> None:
+    """List evidence items from the database with optional filtering.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        print_rich_or_plain: Function to handle rich or plain text output.
+        category: Optional filter for evidence category.
+        min_relevance: Optional minimum relevance score threshold.
+    """
     db = get_email_db()
     result = db.list_evidence(category=category, min_relevance=min_relevance)
     items = result["items"]
@@ -74,43 +82,42 @@ def run_evidence_list_impl(
         }
 
         for item in items:
-            verified = "[green bold]VERIFIED[/]" if item.get("verified") else "[dim]PENDING[/]"
-            rel = item.get("relevance", 0)
-            stars = "[yellow]" + "\u2605" * rel + "\u2606" * (5 - rel) + "[/]"
-            date_val = str(item.get("date", ""))[:10]
-            cat = item.get("category", "")
-            cat_style = category_styles.get(cat, "")
-            cat_display = f"[{cat_style}]{cat}[/{cat_style}]" if cat_style else cat
-            sender = sanitize_untrusted_text(str(item.get("sender_name") or item.get("sender_email", "?")))
-            subject = sanitize_untrusted_text(str(item.get("subject", ""))[:25])
-            quote_preview = item.get("key_quote", "")[:80]
-            if len(item.get("key_quote", "")) > 80:
-                quote_preview += "..."
-
-            table.add_row(
-                str(item["id"]),
-                date_val,
-                verified,
-                stars,
-                cat_display,
-                sender,
-                subject,
-                f'[dim italic]"{sanitize_untrusted_text(quote_preview)}"[/]',
-            )
+            table.add_row(*_rich_evidence_row(item, category_styles))
         console.print(table)
     except ImportError:
         print(f"\nEvidence items ({total} total):\n")
         for item in items:
-            verified = "VERIFIED" if item.get("verified") else "PENDING"
-            stars = "*" * item.get("relevance", 0)
-            date_val = str(item.get("date", ""))[:10]
-            cat = item.get("category", "")
-            sender = item.get("sender_name") or item.get("sender_email", "?")
-            quote_preview = item.get("key_quote", "")[:60]
-            if len(item.get("key_quote", "")) > 60:
-                quote_preview += "..."
-            print(f"  [{item['id']:>4}] {date_val}  [{verified:<8}] {stars:<5}  {cat:<20}  {sender}")
-            print(f'         "{quote_preview}"')
+            _print_plain_evidence_row(item)
+
+
+def _rich_evidence_row(item: dict, category_styles: dict[str, str]) -> tuple[str, ...]:
+    relevance = item.get("relevance", 0)
+    category = item.get("category", "")
+    style = category_styles.get(category, "")
+    quote = str(item.get("key_quote", ""))
+    preview = quote[:80] + ("..." if len(quote) > 80 else "")
+    return (
+        str(item["id"]),
+        str(item.get("date", ""))[:10],
+        "[green bold]VERIFIED[/]" if item.get("verified") else "[dim]PENDING[/]",
+        "[yellow]" + "\u2605" * relevance + "\u2606" * (5 - relevance) + "[/]",
+        f"[{style}]{category}[/{style}]" if style else category,
+        sanitize_untrusted_text(str(item.get("sender_name") or item.get("sender_email", "?"))),
+        sanitize_untrusted_text(str(item.get("subject", ""))[:25]),
+        f'[dim italic]"{sanitize_untrusted_text(preview)}"[/]',
+    )
+
+
+def _print_plain_evidence_row(item: dict) -> None:
+    verified = "VERIFIED" if item.get("verified") else "PENDING"
+    sender = item.get("sender_name") or item.get("sender_email", "?")
+    quote = str(item.get("key_quote", ""))
+    preview = quote[:60] + ("..." if len(quote) > 60 else "")
+    print(
+        f"  [{item['id']:>4}] {str(item.get('date', ''))[:10]}  [{verified:<8}] "
+        f"{'*' * item.get('relevance', 0):<5}  {item.get('category', ''):<20}  {sender}"
+    )
+    print(f'         "{preview}"')
 
 
 def run_evidence_export_impl(
@@ -120,6 +127,15 @@ def run_evidence_export_impl(
     category: str | None,
     min_relevance: int | None,
 ) -> None:
+    """Export evidence items to a file in the specified format.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        output_path: Path where the evidence export will be saved.
+        fmt: Output format (e.g., 'html', 'json', 'md').
+        category: Optional filter for evidence category.
+        min_relevance: Optional minimum relevance score threshold.
+    """
     db = get_email_db()
     from .evidence_exporter import EvidenceExporter
 
@@ -139,6 +155,12 @@ def run_evidence_stats_impl(
     get_email_db: Callable[[], EmailDatabase],
     print_rich_or_plain: Callable[..., None],
 ) -> None:
+    """Display statistics about evidence items in the database.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        print_rich_or_plain: Function to handle rich or plain text output.
+    """
     db = get_email_db()
     stats = db.evidence_stats()
 
@@ -172,14 +194,7 @@ def run_evidence_stats_impl(
                 2: "[yellow dim]\u2605\u2605\u2606\u2606\u2606[/] Background",
                 1: "[dim]\u2605\u2606\u2606\u2606\u2606[/] Tangential",
             }
-            if isinstance(relevance_counts, dict):
-                normalized_relevance_counts = {int(level): int(count) for level, count in relevance_counts.items()}
-            else:
-                normalized_relevance_counts = {
-                    int(item.get("relevance", 0)): int(item.get("count", 0))
-                    for item in relevance_counts
-                    if isinstance(item, dict) and int(item.get("count", 0)) > 0
-                }
+            normalized_relevance_counts = _normalize_relevance_counts(relevance_counts)
             for level in (5, 4, 3, 2, 1):
                 count = normalized_relevance_counts.get(level, 0)
                 if count:
@@ -192,10 +207,7 @@ def run_evidence_stats_impl(
             cat_table.add_column("Category", min_width=20)
             cat_table.add_column("Count", justify="right", style="cyan bold")
             cat_table.add_column("", width=25)
-            if isinstance(categories, dict):
-                cat_pairs = sorted(categories.items(), key=lambda x: x[1], reverse=True)
-            else:
-                cat_pairs = [(c.get("category", "?"), c.get("count", 0)) for c in categories]
+            cat_pairs = _category_pairs(categories)
             max_cat_count = max((c for _, c in cat_pairs), default=1)
             for cat_name, cat_count in cat_pairs:
                 bar_len = int((cat_count / max_cat_count) * 20) if max_cat_count else 0
@@ -209,7 +221,28 @@ def run_evidence_stats_impl(
         )
 
 
+def _normalize_relevance_counts(counts) -> dict[int, int]:
+    if isinstance(counts, dict):
+        return {int(level): int(count) for level, count in counts.items()}
+    return {
+        int(item.get("relevance", 0)): int(item.get("count", 0))
+        for item in counts
+        if isinstance(item, dict) and int(item.get("count", 0)) > 0
+    }
+
+
+def _category_pairs(categories) -> list[tuple[object, int]]:
+    if isinstance(categories, dict):
+        return sorted(categories.items(), key=lambda item: item[1], reverse=True)
+    return [(item.get("category", "?"), item.get("count", 0)) for item in categories]
+
+
 def run_evidence_verify_impl(get_email_db: Callable[[], EmailDatabase]) -> None:
+    """Verify evidence quotes against source emails in the database.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+    """
     db = get_email_db()
     result = db.verify_evidence_quotes()
 
@@ -269,6 +302,15 @@ def run_dossier_impl(
     category: str | None,
     min_relevance: int | None,
 ) -> None:
+    """Generate a dossier file from evidence items.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        output_path: Path where the dossier will be saved.
+        fmt: Output format (e.g., 'html', 'json', 'md').
+        category: Optional filter for evidence category.
+        min_relevance: Optional minimum relevance score threshold.
+    """
     db = get_email_db()
     from .dossier_generator import DossierGenerator
 
@@ -287,6 +329,12 @@ def run_custody_chain_impl(
     get_email_db: Callable[[], EmailDatabase],
     print_rich_or_plain: Callable[..., None],
 ) -> None:
+    """Display the chain-of-custody audit trail.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        print_rich_or_plain: Function to handle rich or plain text output.
+    """
     db = get_email_db()
     events = db.get_custody_chain(limit=100)
     if not events:
@@ -331,35 +379,44 @@ def run_custody_chain_impl(
         table.add_column("SHA-256 (prefix)", width=20, style="dim")
 
         for event in events:
-            action = event["action"]
-            action_style = action_styles.get(action, "")
-            action_display = f"[{action_style}]{action}[/{action_style}]" if action_style else action
-            target_type = event.get("target_type", "") or ""
-            target_id = str(event.get("target_id", "") or "")
-            target_id_short = target_id[:12] + "..." if len(target_id) > 12 else target_id
-            content_hash = event.get("content_hash") or ""
-            hash_display = content_hash[:16] + "..." if content_hash else "[dim]--[/]"
-
-            table.add_row(
-                event["timestamp"],
-                action_display,
-                event.get("actor", "system"),
-                target_type,
-                target_id_short,
-                hash_display,
-            )
+            table.add_row(*_rich_custody_row(event, action_styles))
         console.print(table)
     except ImportError:
         print(f"\nChain-of-custody audit trail ({len(events)} events):\n")
         for event in events:
-            target = f"{event.get('target_type', '')}:{event.get('target_id', '')}" if event.get("target_type") else ""
-            content_hash = event.get("content_hash") or ""
-            hash_display = content_hash[:16] + "..." if content_hash else "--"
-            print(f"  {event['timestamp']}  {event['action']:<22}  {event.get('actor', 'system'):<10}  {target}")
-            print(f"    SHA-256: {hash_display}")
+            _print_plain_custody_row(event)
+
+
+def _rich_custody_row(event: dict, styles: dict[str, str]) -> tuple[str, ...]:
+    action = event["action"]
+    style = styles.get(action, "")
+    target_id = str(event.get("target_id", "") or "")
+    content_hash = event.get("content_hash") or ""
+    return (
+        event["timestamp"],
+        f"[{style}]{action}[/{style}]" if style else action,
+        event.get("actor", "system"),
+        event.get("target_type", "") or "",
+        target_id[:12] + "..." if len(target_id) > 12 else target_id,
+        content_hash[:16] + "..." if content_hash else "[dim]--[/]",
+    )
+
+
+def _print_plain_custody_row(event: dict) -> None:
+    target = f"{event.get('target_type', '')}:{event.get('target_id', '')}" if event.get("target_type") else ""
+    content_hash = event.get("content_hash") or ""
+    hash_display = content_hash[:16] + "..." if content_hash else "--"
+    print(f"  {event['timestamp']}  {event['action']:<22}  {event.get('actor', 'system'):<10}  {target}")
+    print(f"    SHA-256: {hash_display}")
 
 
 def run_provenance_impl(get_email_db: Callable[[], EmailDatabase], email_uid: str) -> None:
+    """Display provenance information for a specific email.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        email_uid: The unique identifier of the email to trace.
+    """
     db = get_email_db()
     result = db.email_provenance(email_uid)
 

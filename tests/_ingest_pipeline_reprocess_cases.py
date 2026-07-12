@@ -160,11 +160,11 @@ def test_reprocess_degraded_attachments_deletes_only_obsolete_chunk_ids(tmp_path
 
     class _TrackingEmbedder:
         def __init__(self, **_kw):
-            self.collection = type(
-                "Collection",
-                (),
-                {"delete": lambda self, ids: operations.append(("delete", list(ids)))},
-            )()
+            class _Collection:
+                def delete(self, ids=None, **_kw):
+                    operations.append(("delete", list(ids)))
+
+            self.collection = _Collection()
 
         def set_sparse_db(self, db):
             pass
@@ -193,11 +193,11 @@ def test_reprocess_degraded_attachments_deletes_only_obsolete_chunk_ids(tmp_path
         batch_size=10,
     )
 
-    assert result["chunks_deleted"] == 1
-    assert operations == [
-        ("upsert", [f"{stale_prefix}0"]),
-        ("delete", [f"{stale_prefix}1"]),
-    ]
+    assert result["chunks_deleted"] == 2
+    assert operations[0][0] == "upsert"
+    assert len(operations[0][1]) == 1
+    assert operations[0][1][0] not in {f"{stale_prefix}0", f"{stale_prefix}1"}
+    assert operations[1] == ("delete", [f"{stale_prefix}0", f"{stale_prefix}1"])
 
 
 def test_reprocess_does_not_promote_missing_payload_attachments_to_completed(tmp_path, monkeypatch):
@@ -317,7 +317,11 @@ def test_reprocess_renamed_attachment_deletes_old_chunk_ids(tmp_path, monkeypatc
 
     class _TrackingEmbedder:
         def __init__(self, **_kw):
-            self.collection = type("Collection", (), {"delete": lambda self, ids: delete_calls.append(list(ids))})()
+            class _Collection:
+                def delete(self, ids=None, **_kw):
+                    delete_calls.append(list(ids))
+
+            self.collection = _Collection()
 
         def set_sparse_db(self, db):
             pass

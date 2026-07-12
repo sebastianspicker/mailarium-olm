@@ -1,5 +1,13 @@
 ---
 exclude_paths:
+  - ".agents/**"
+  - ".codacy/**"
+  - ".codegraph/**"
+  - ".codex/**"
+  - ".env"
+  - ".env.*"
+  - ".serena/**"
+  - ".venv/**"
   - "docs/agent/**"
   - "docs/archive/**"
   - "private/**"

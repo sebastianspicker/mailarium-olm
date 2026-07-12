@@ -1,11 +1,7 @@
-# ruff: noqa: F401, I001
-import queue
-import threading
-import time
+# ruff: noqa: I001
 
 import pytest
 
-from src.ingest import _SENTINEL, _EmbedPipeline, main, parse_args
 
 from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
 
@@ -149,7 +145,11 @@ def test_reembed_keeps_existing_body_chunks_when_upsert_fails(monkeypatch, tmp_p
 
     class _FailingEmbedder:
         def __init__(self, **_kw):
-            self.collection = type("Collection", (), {"delete": lambda self, ids: delete_calls.append(list(ids))})()
+            class _Collection:
+                def delete(self, ids=None, **_kw):
+                    delete_calls.append(list(ids))
+
+            self.collection = _Collection()
 
         def set_sparse_db(self, db):
             pass
@@ -195,7 +195,11 @@ def test_reembed_deletes_only_obsolete_body_chunks_after_success(monkeypatch, tm
 
     class _TrackingEmbedder:
         def __init__(self, **_kw):
-            self.collection = type("Collection", (), {"delete": lambda self, ids: delete_calls.append(list(ids))})()
+            class _Collection:
+                def delete(self, ids=None, **_kw):
+                    delete_calls.append(list(ids))
+
+            self.collection = _Collection()
 
         def set_sparse_db(self, db):
             pass

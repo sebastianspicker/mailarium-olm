@@ -1,21 +1,12 @@
-# ruff: noqa: F401,I001
+# ruff: noqa: I001
 from pathlib import Path
 
-from lxml import etree
 
 from src.parse_olm import (
-    Email,
-    _clean_text,
-    _extract_email_from_header,
-    _extract_header,
-    _extract_name_from_header,
     _html_to_text,
-    _parse_address_element,
-    _parse_address_list,
     _parse_email_xml,
 )
-from src.olm_xml_helpers import _extract_folder, _extract_html_body, _parse_references
-from src.rfc2822 import _normalize_date
+from src.olm_xml_helpers import _extract_folder
 
 
 def test_html_to_text_strips_tags_and_scripts():

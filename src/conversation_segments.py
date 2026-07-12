@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from lxml import html as lxml_html
@@ -11,29 +10,137 @@ from lxml import html as lxml_html
 from .chunker import strip_signature
 from .html_converter import clean_text, html_to_text, looks_like_html, strip_legal_disclaimer_tail
 
-_FORWARD_SEPARATOR_RE = re.compile(
-    r"(?im)^-{2,}\s*(original message|forwarded message|urspr[uü]ngliche nachricht|"
-    r"weitergeleitete nachricht|message d'origine|message transf[ée]r[ée]|"
-    r"mensaje original|mensaje reenviado|oorspronkelijk bericht|doorgestuurd bericht|"
-    r"messaggio originale|messaggio inoltrato|mensagem original|mensagem encaminhada|"
-    r"ursprungligt meddelande|vidarebefordrat meddelande|oprindelig meddelelse|"
-    r"videresendt meddelelse|oryginalna wiadomo[śs][ćc]|przekazana wiadomo[śs][ćc])\s*-{2,}\s*$"
+_FORWARD_SEPARATOR_LABELS = frozenset(
+    {
+        "original message",
+        "forwarded message",
+        "ursprungliche nachricht",
+        "ursprüngliche nachricht",
+        "weitergeleitete nachricht",
+        "message d'origine",
+        "message transferee",
+        "message transférée",
+        "mensaje original",
+        "mensaje reenviado",
+        "oorspronkelijk bericht",
+        "doorgestuurd bericht",
+        "messaggio originale",
+        "messaggio inoltrato",
+        "mensagem original",
+        "mensagem encaminhada",
+        "ursprungligt meddelande",
+        "vidarebefordrat meddelande",
+        "oprindelig meddelelse",
+        "videresendt meddelelse",
+        "oryginalna wiadomosc",
+        "oryginalna wiadomość",
+        "przekazana wiadomosc",
+        "przekazana wiadomość",
+    }
 )
-_WROTE_LINE_RE = re.compile(
-    r"^(On .+ wrote|Am .+ schrieb[^:]*|Le .+ a [ée]crit|El .+ escribi[óo]|"
-    r"Op .+ schreef[^:]*|Il .+ ha scritto|Em .+ escreveu|Den .+ skrev|"
-    r"W dniu .+ napisa[łl])\s*:\s*$",
-    re.IGNORECASE | re.MULTILINE,
+_HEADER_LABELS = frozenset(
+    {
+        "from",
+        "sent",
+        "to",
+        "subject",
+        "cc",
+        "bcc",
+        "date",
+        "von",
+        "gesendet",
+        "an",
+        "betreff",
+        "de",
+        "enviado",
+        "para",
+        "assunto",
+        "le",
+        "objet",
+        "el",
+        "asunto",
+        "da",
+        "inviato",
+        "oggetto",
+    }
 )
-_HEADER_LINE_RE = re.compile(
-    r"(?im)^(from|sent|to|subject|cc|bcc|date|von|gesendet|an|betreff|"
-    r"de|enviado|para|assunto|le|objet|el|asunto|da|inviato|oggetto)\s*:"
+_WROTE_MARKERS = (
+    ("on ", " wrote"),
+    ("am ", " schrieb"),
+    ("le ", " a écrit"),
+    ("le ", " a ecrit"),
+    ("el ", " escribió"),
+    ("el ", " escribio"),
+    ("op ", " schreef"),
+    ("il ", " ha scritto"),
+    ("em ", " escreveu"),
+    ("den ", " skrev"),
+    ("w dniu ", " napisał"),
+    ("w dniu ", " napisal"),
 )
-_QUOTE_LINE_RE = re.compile(r"^((?:>\s*)+)(.*)$")
+
+
+def _line_spans(text: str):
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        content = line.rstrip("\r\n")
+        yield offset, offset + len(content), content
+        offset += len(line)
+
+
+def _find_forward_separator(text: str) -> tuple[int, int, str] | None:
+    for start, end, line in _line_spans(text):
+        stripped = line.strip()
+        leading = len(stripped) - len(stripped.lstrip("-"))
+        trailing = len(stripped) - len(stripped.rstrip("-"))
+        if leading >= 2 and trailing >= 2:
+            label = stripped[leading : len(stripped) - trailing].strip().casefold()
+            if label in _FORWARD_SEPARATOR_LABELS:
+                return start, end, line
+    return None
+
+
+def _find_wrote_line(text: str) -> tuple[int, int, str] | None:
+    for start, end, line in _line_spans(text):
+        normalized = line.rstrip().removesuffix(":").rstrip().casefold()
+        if any(normalized.startswith(prefix) and marker in normalized[len(prefix) :] for prefix, marker in _WROTE_MARKERS):
+            return start, end, line
+    return None
+
+
+def _is_header_line(line: str) -> bool:
+    label, separator, _value = line.partition(":")
+    return bool(separator) and label.strip().casefold() in _HEADER_LABELS
+
+
+def _parse_quote_line(line: str) -> tuple[int, str] | None:
+    if not line.startswith(">"):
+        return None
+    index = 0
+    depth = 0
+    while index < len(line) and line[index] in "> \t":
+        if line[index] == ">":
+            depth += 1
+        index += 1
+    return depth, line[index:].strip()
 
 
 @dataclass(frozen=True)
 class ConversationSegment:
+    """Represents a segment of an email conversation.
+
+    Attributes:
+        ordinal: The sequential position of this segment in the conversation.
+        segment_type: The type of segment (e.g., 'authored_body', 'quoted_reply',
+            'signature', 'legal_footer', 'header_block', 'forwarded_message',
+            'system_separator').
+        depth: The nesting depth for quoted content (0 for top-level).
+        text: The text content of the segment.
+        source_surface: The source identifier (e.g., 'body_html', 'body_text').
+        provenance: Additional metadata about the segment's origin.
+
+    """
+
     ordinal: int
     segment_type: str
     depth: int
@@ -42,6 +149,12 @@ class ConversationSegment:
     provenance: dict[str, object]
 
     def to_dict(self) -> dict[str, object]:
+        """Convert the ConversationSegment to a dictionary.
+
+        Returns:
+            A dictionary representation of the segment with all attributes.
+
+        """
         return {
             "ordinal": self.ordinal,
             "segment_type": self.segment_type,
@@ -53,6 +166,18 @@ class ConversationSegment:
 
 
 def _select_visible_surface(body_text: str, body_html: str, raw_source: str) -> tuple[str, str]:
+    """Select the best visible text surface from available email body sources.
+
+    Args:
+        body_text: Plain text body content.
+        body_html: HTML body content.
+        raw_source: Raw source content as fallback.
+
+    Returns:
+        A tuple of (cleaned_text, source_identifier) where source_identifier
+        indicates which input was used (body_html, body_text_html, body_text, or raw_source).
+
+    """
     if body_html.strip():
         return clean_text(html_to_text(body_html)), "body_html"
     if body_text.strip():
@@ -65,6 +190,16 @@ def _select_visible_surface(body_text: str, body_html: str, raw_source: str) -> 
 
 
 def _split_legal_footer(text: str) -> tuple[str, str]:
+    """Split text into core content and legal footer/disclaimer.
+
+    Args:
+        text: The text to split.
+
+    Returns:
+        A tuple of (core_text, legal_footer) where legal_footer contains
+        any trailing legal disclaimer text.
+
+    """
     stripped = strip_legal_disclaimer_tail(text)
     if stripped == text:
         return text, ""
@@ -73,6 +208,16 @@ def _split_legal_footer(text: str) -> tuple[str, str]:
 
 
 def _split_signature(text: str) -> tuple[str, str]:
+    """Split text into core content and signature block.
+
+    Args:
+        text: The text to split.
+
+    Returns:
+        A tuple of (core_text, signature) where signature contains
+        the email signature block.
+
+    """
     stripped, had_signature = strip_signature(text)
     if not had_signature:
         return text, ""
@@ -85,6 +230,16 @@ def _split_signature(text: str) -> tuple[str, str]:
 
 
 def _split_signature_and_footer(text: str) -> tuple[str, str, str]:
+    """Split text into core content, signature, and legal footer.
+
+    Args:
+        text: The text to split.
+
+    Returns:
+        A tuple of (core_text, signature, legal_footer) separating the
+        main content from signature and legal disclaimer sections.
+
+    """
     core, signature = _split_signature(text)
     if signature:
         signature_only, legal_footer = _split_legal_footer(signature)
@@ -94,6 +249,17 @@ def _split_signature_and_footer(text: str) -> tuple[str, str, str]:
 
 
 def _consume_header_block(text: str) -> tuple[str, str]:
+    """Extract email header block from text.
+
+    Args:
+        text: The text potentially containing email headers.
+
+    Returns:
+        A tuple of (header_block, remainder) where header_block contains
+        the extracted header lines (From, To, Subject, etc.) and remainder
+        contains the text after the header block.
+
+    """
     lines = text.splitlines()
     header_lines: list[str] = []
     saw_header = False
@@ -106,7 +272,7 @@ def _consume_header_block(text: str) -> tuple[str, str]:
                 break
             idx += 1
             continue
-        if _HEADER_LINE_RE.match(line.strip()):
+        if _is_header_line(line.strip()):
             header_lines.append(line.strip())
             saw_header = True
             idx += 1
@@ -127,6 +293,17 @@ def _append_segment(
     source_surface: str,
     provenance: dict[str, object],
 ) -> None:
+    """Append a new segment to the segments list if text is non-empty.
+
+    Args:
+        segments: The list of ConversationSegment objects to append to.
+        segment_type: The type of segment (e.g., 'authored_body', 'quoted_reply').
+        depth: The nesting depth of the segment.
+        text: The text content of the segment.
+        source_surface: The source identifier for the segment.
+        provenance: Additional metadata about the segment's origin.
+
+    """
     cleaned = text.strip()
     if not cleaned:
         return
@@ -143,6 +320,17 @@ def _append_segment(
 
 
 def _append_quote_segments(segments: list[ConversationSegment], text: str, source_surface: str) -> None:
+    """Parse quoted text and append quote segments to the segments list.
+
+    Handles nested quote levels (>, >>, etc.) and creates separate segments
+    for each quote depth level.
+
+    Args:
+        segments: The list of ConversationSegment objects to append to.
+        text: The text containing quote markers to parse.
+        source_surface: The source identifier for the segments.
+
+    """
     current_depth: int | None = None
     current_lines: list[str] = []
 
@@ -159,13 +347,12 @@ def _append_quote_segments(segments: list[ConversationSegment], text: str, sourc
         if not line.strip():
             flush()
             continue
-        match = _QUOTE_LINE_RE.match(line.lstrip())
-        if not match:
+        parsed_quote = _parse_quote_line(line.lstrip())
+        if parsed_quote is None:
             flush()
             _append_segment(segments, "forwarded_message", 0, line, source_surface, {"kind": "body-line"})
             continue
-        depth = match.group(1).count(">")
-        content = match.group(2).strip()
+        depth, content = parsed_quote
         if current_depth == depth:
             current_lines.append(content)
             continue
@@ -176,11 +363,30 @@ def _append_quote_segments(segments: list[ConversationSegment], text: str, sourc
 
 
 def _tag_name(node: object) -> str:
+    """Get the lowercase tag name from an lxml node.
+
+    Args:
+        node: An lxml HTML node object.
+
+    Returns:
+        The lowercase tag name, or empty string if not available.
+
+    """
     tag = getattr(node, "tag", "")
     return tag.lower() if isinstance(tag, str) else ""
 
 
 def _node_text_without_nested_quotes(node) -> str:
+    """Extract text from an lxml node excluding nested blockquote content.
+
+    Args:
+        node: An lxml HTML node object.
+
+    Returns:
+        The text content of the node with blockquote content excluded,
+        cleaned and joined with newlines.
+
+    """
     parts: list[str] = []
     if node.text:
         parts.append(node.text)
@@ -197,6 +403,15 @@ def _node_text_without_nested_quotes(node) -> str:
 
 
 def _append_html_quote_segments(segments: list[ConversationSegment], node, depth: int, source_surface: str) -> None:
+    """Recursively append segments from HTML blockquote nodes.
+
+    Args:
+        segments: The list of ConversationSegment objects to append to.
+        node: An lxml HTML node (blockquote element).
+        depth: The current nesting depth of the blockquote.
+        source_surface: The source identifier for the segments.
+
+    """
     own_text = _node_text_without_nested_quotes(node)
     _append_segment(segments, "quoted_reply", depth, own_text, source_surface, {"kind": "html-blockquote"})
     for child in node:
@@ -205,6 +420,19 @@ def _append_html_quote_segments(segments: list[ConversationSegment], node, depth
 
 
 def _extract_html_blockquote_segments(body_html: str) -> list[ConversationSegment]:
+    """Extract conversation segments from HTML body with blockquote handling.
+
+    Parses HTML to identify blockquote elements and creates segments for
+    authored content and quoted replies at appropriate nesting depths.
+
+    Args:
+        body_html: The HTML body content to parse.
+
+    Returns:
+        A list of ConversationSegment objects representing the parsed content,
+        or empty list if parsing fails or no blockquotes are found.
+
+    """
     if "<blockquote" not in body_html.lower():
         return []
     try:
@@ -263,30 +491,32 @@ def extract_segments(body_text: str, body_html: str, raw_source: str, email_type
     segments: list[ConversationSegment] = []
 
     if core:
-        forward_match = _FORWARD_SEPARATOR_RE.search(core)
+        forward_match = _find_forward_separator(core)
         if forward_match:
-            _append_segment(segments, "authored_body", 0, core[: forward_match.start()], source_surface, {"kind": "lead"})
+            forward_start, forward_end, forward_line = forward_match
+            _append_segment(segments, "authored_body", 0, core[:forward_start], source_surface, {"kind": "lead"})
             _append_segment(
                 segments,
                 "system_separator",
                 0,
-                forward_match.group(0),
+                forward_line,
                 source_surface,
                 {"kind": "forward-separator"},
             )
-            after = core[forward_match.end() :].lstrip()
+            after = core[forward_end:].lstrip()
             header_block, remainder = _consume_header_block(after)
             _append_segment(segments, "header_block", 0, header_block, source_surface, {"kind": "forward-header"})
             _append_segment(segments, "forwarded_message", 0, remainder, source_surface, {"kind": "forward-body"})
         else:
-            wrote_match = _WROTE_LINE_RE.search(core)
+            wrote_match = _find_wrote_line(core)
             if wrote_match:
-                _append_segment(segments, "authored_body", 0, core[: wrote_match.start()], source_surface, {"kind": "lead"})
-                _append_segment(segments, "header_block", 0, wrote_match.group(0), source_surface, {"kind": "reply-header"})
-                _append_quote_segments(segments, core[wrote_match.end() :].lstrip(), source_surface)
+                wrote_start, wrote_end, wrote_line = wrote_match
+                _append_segment(segments, "authored_body", 0, core[:wrote_start], source_surface, {"kind": "lead"})
+                _append_segment(segments, "header_block", 0, wrote_line, source_surface, {"kind": "reply-header"})
+                _append_quote_segments(segments, core[wrote_end:].lstrip(), source_surface)
             else:
                 lines = core.splitlines()
-                first_quote_idx = next((i for i, line in enumerate(lines) if _QUOTE_LINE_RE.match(line.lstrip())), None)
+                first_quote_idx = next((i for i, line in enumerate(lines) if _parse_quote_line(line.lstrip()) is not None), None)
                 if first_quote_idx is None:
                     _append_segment(segments, "authored_body", 0, core, source_surface, {"kind": "body"})
                 else:

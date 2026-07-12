@@ -1,4 +1,5 @@
 # ruff: noqa: F401, F403
+# flake8: noqa
 from __future__ import annotations
 
 # pylint: disable=unused-wildcard-import,wildcard-import
@@ -90,164 +91,7 @@ def _assert_case_scope_and_appendix(transformed: dict) -> None:
 
 def test_transform_case_analysis_payload_adds_quality_and_message_appendix() -> None:
     params = EmailCaseAnalysisInput.model_validate(_case_payload())
-    answer_payload = {
-        "search": {
-            "top_k": 8,
-            "date_from": "2025-01-01",
-            "date_to": "2025-06-30",
-            "hybrid": False,
-            "rerank": False,
-        },
-        "case_bundle": {"bundle_id": "case-123"},
-        "power_context": {"missing_org_context": True},
-        "case_patterns": {"summary": {"behavior_cluster_count": 1}},
-        "retaliation_analysis": {
-            "trigger_event_count": 0,
-            "anchor_requirement_status": "explicit_trigger_confirmation_required",
-            "protected_activity_candidate_count": 2,
-            "adverse_action_candidate_count": 1,
-            "source_backed_candidate_counts": {"protected_activity": 1, "adverse_actions": 0},
-            "retaliation_timeline_assessment": {
-                "version": "1",
-                "protected_activity_timeline": [],
-                "adverse_action_timeline": [],
-                "temporal_correlation_analysis": [],
-                "strongest_retaliation_indicators": [],
-                "strongest_non_retaliatory_explanations": [],
-                "overall_evidentiary_rating": {"rating": "insufficient_timing_record"},
-            },
-        },
-        "comparative_treatment": {"summary": {"available_comparator_count": 0}},
-        "actor_identity_graph": {
-            "actors": [
-                {
-                    "actor_id": "actor-manager",
-                    "primary_email": "manager@example.test",
-                    "display_names": ["manager"],
-                    "role_hints": ["manager"],
-                }
-            ]
-        },
-        "communication_graph": {"graph_findings": []},
-        "multi_source_case_bundle": {
-            "summary": {"missing_source_types": ["chat_log"]},
-            "sources": [
-                {
-                    "source_id": "meeting:uid-1:meeting_data",
-                    "source_type": "meeting_note",
-                    "uid": "uid-1",
-                    "actor_id": "actor-manager",
-                    "title": "Gesprächsprotokoll",
-                    "date": "2025-03-14",
-                    "snippet": "Wir werden die SBV beteiligen und eine schriftliche Zusammenfassung senden.",
-                    "source_weighting": {"text_available": True},
-                    "chronology_anchor": {"date": "2025-03-14"},
-                },
-                {
-                    "source_id": "email:uid-1",
-                    "source_type": "email",
-                    "uid": "uid-1",
-                    "actor_id": "actor-manager",
-                    "title": "Status",
-                    "date": "2025-03-15",
-                    "snippet": "Wir werden die schriftliche Zusammenfassung vorerst nicht senden.",
-                    "source_weighting": {"text_available": True, "can_corroborate_or_contradict": True},
-                    "chronology_anchor": {"date": "2025-03-15"},
-                },
-            ],
-        },
-        "finding_evidence_index": {
-            "findings": [
-                {
-                    "finding_id": "finding-1",
-                    "finding_label": "Escalation Pressure",
-                    "evidence_strength": {"label": "strong_indicator"},
-                    "alternative_explanations": ["Possible policy deadline."],
-                    "counter_indicators": ["Operational urgency cannot be excluded."],
-                    "supporting_evidence": [
-                        {
-                            "message_or_document_id": "uid-1",
-                            "citation_id": "finding-1:citation-1",
-                        }
-                    ],
-                }
-            ]
-        },
-        "evidence_table": {"row_count": 1},
-        "behavioral_strength_rubric": {"version": "1"},
-        "investigation_report": {
-            "summary": {
-                "section_count": 11,
-                "supported_section_count": 7,
-                "insufficient_section_count": 1,
-            },
-            "sections": {
-                "missing_information": {
-                    "section_id": "missing_information",
-                    "title": "Missing Information / Further Evidence Needed",
-                    "status": "insufficient_evidence",
-                    "entries": [],
-                    "insufficiency_reason": "No missing information recorded.",
-                }
-            },
-        },
-        "candidates": [
-            {
-                "uid": "uid-1",
-                "date": "2025-03-15T10:00:00",
-                "sender_name": "manager",
-                "sender_email": "manager@example.test",
-                "subject": "Status",
-                "snippet": "Please just comply with the updated process.",
-                "language_rhetoric": {
-                    "authored_text": {
-                        "signal_count": 1,
-                        "signals": [
-                            {
-                                "signal_id": "dismissiveness",
-                                "label": "Dismissiveness",
-                                "confidence": "medium",
-                            }
-                        ],
-                    }
-                },
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidates": [
-                            {
-                                "behavior_id": "escalation",
-                                "label": "Escalation",
-                                "confidence": "medium",
-                            }
-                        ],
-                        "counter_indicators": ["Possible policy deadline."],
-                        "tone_summary": "Tense and directive.",
-                        "relevant_wording": [
-                            {
-                                "text": "Please comply today.",
-                                "source_scope": "authored_text",
-                                "basis_id": "dismissiveness",
-                            }
-                        ],
-                        "omissions_or_process_signals": [
-                            {
-                                "signal": "sbv_not_included",
-                                "summary": "SBV was not included in the message despite the process context.",
-                            }
-                        ],
-                        "included_actors": ["manager", "employee"],
-                        "excluded_actors": ["SBV"],
-                        "communication_classification": {
-                            "primary_class": "controlling",
-                            "applied_classes": ["tense", "controlling"],
-                            "confidence": "medium",
-                            "rationale": "Directive wording plus process pressure.",
-                        },
-                    }
-                },
-            }
-        ],
-    }
+    answer_payload = _fixture_test_transform_case_analysis_payload_adds_quality_and_message_appendix_answer_payload()
 
     transformed = transform_case_analysis_payload(answer_payload, params)
     _assert_core_transform_results(transformed, answer_payload)
@@ -274,7 +118,150 @@ def test_transform_case_analysis_payload_preserves_matter_ingestion_report_and_r
         ],
     }
     params = EmailCaseAnalysisInput.model_validate(payload)
-    answer_payload = {
+    answer_payload = (
+        _fixture_test_transform_case_analysis_payload_preserves_matter_ingestion_report_and_review_mode_answer_payload()
+    )
+
+    transformed = transform_case_analysis_payload(answer_payload, params)
+
+    assert transformed["review_mode"] == "exhaustive_matter_review"
+    assert transformed["review_classification"]["classification"] == "manifest_backed_but_materially_thin"
+    assert transformed["review_classification"]["may_be_presented_as_full_matter_review"] is False
+    assert transformed["matter_ingestion_report"]["completeness_status"] == "complete"
+    assert transformed["analysis_limits"]["review_mode"] == "exhaustive_matter_review"
+    assert transformed["analysis_limits"]["completeness_status"] == "complete"
+    assert transformed["analysis_limits"]["manifest_sufficiency"]["status"] == "thin"
+
+
+def test_transform_case_analysis_payload_surfaces_missing_chat_support_note() -> None:
+    payload = _case_payload()
+    payload["source_scope"] = "mixed_case_file"
+    payload["matter_manifest"] = {
+        "manifest_id": "matter-1",
+        "artifacts": [
+            {
+                "source_id": "manifest:calendar:1",
+                "source_class": "calendar_export",
+                "title": "Meeting invite",
+                "text": "SUMMARY: BEM review DTSTART:2025-03-10T10:00:00",
+            }
+        ],
+    }
+    params = EmailCaseAnalysisInput.model_validate(payload)
+
+    transformed = transform_case_analysis_payload(
+        {
+            "multi_source_case_bundle": {"summary": {"missing_source_types": ["chat_log"]}, "sources": []},
+        },
+        params,
+    )
+
+    assert "chat_log_source_type_missing_without_chat_support" in transformed["analysis_limits"]["notes"]
+
+
+def test_transform_case_analysis_payload_downgrades_compacted_exhaustive_runs_and_preserves_telemetry() -> None:
+    payload = _case_payload()
+    payload["review_mode"] = "exhaustive_matter_review"
+    payload["matter_manifest"] = {
+        "manifest_id": "matter-2",
+        "artifacts": [
+            {
+                "source_id": "manifest:email:1",
+                "source_class": "formal_document",
+                "title": "Case summary",
+                "date": "2025-03-10",
+                "text": "Document text.",
+            }
+        ],
+    }
+    params = EmailCaseAnalysisInput.model_validate(payload)
+    answer_payload = _fixture_test_transform_case_analysis_payload_downgrades_compacted_exhaustive_runs_and_preserves_telemetry_answer_payload()
+
+    transformed = transform_case_analysis_payload(answer_payload, params)
+
+    assert transformed["review_classification"]["classification"] == (
+        "compacted_exhaustive_review_with_omitted_critical_surfaces"
+    )
+    assert transformed["review_classification"]["may_be_presented_as_full_matter_review"] is False
+    assert transformed["_packed"]["applied"] is True
+    assert transformed["_case_surface_compaction"]["removed_count"] == 3
+    assert transformed["analysis_limits"]["packing"]["applied"] is True
+    assert transformed["analysis_limits"]["case_surface_compaction"]["removed"] == [
+        "case_patterns",
+        "finding_evidence_index",
+        "investigation_report",
+    ]
+    assert transformed["analysis_limits"]["omitted_case_analysis_surfaces"] == [
+        "case_patterns",
+        "finding_evidence_index",
+        "investigation_report",
+    ]
+    assert transformed["analysis_limits"]["prompt_complete_behavioral_review"] is False
+
+
+def test_transform_case_analysis_payload_allows_counsel_grade_only_with_sufficient_manifest() -> None:
+    payload = _case_payload()
+    payload["review_mode"] = "exhaustive_matter_review"
+    payload["matter_manifest"] = {
+        "manifest_id": "matter-1b",
+        "artifacts": [
+            {
+                "source_id": "manifest:doc:1",
+                "source_class": "formal_document",
+                "title": "Case summary",
+                "date": "2025-03-10",
+                "text": "Document text.",
+            },
+            {
+                "source_id": "manifest:calendar:1",
+                "source_class": "calendar_export",
+                "title": "BEM invite.ics",
+                "filename": "BEM-invite.ics",
+                "text": "BEGIN:VCALENDAR\nMETHOD:REQUEST\nSUMMARY:BEM invite\nEND:VCALENDAR",
+            },
+            {
+                "source_id": "manifest:time:1",
+                "source_class": "time_record",
+                "title": "time system export.csv",
+                "filename": "time system-export.csv",
+                "text": "date,hours\n2025-03-10,8",
+            },
+        ],
+    }
+    params = EmailCaseAnalysisInput.model_validate(payload)
+    answer_payload = (
+        _fixture_test_transform_case_analysis_payload_allows_counsel_grade_only_with_sufficient_manifest_answer_payload()
+    )
+
+    transformed = transform_case_analysis_payload(answer_payload, params)
+
+    assert transformed["analysis_limits"]["manifest_sufficiency"]["status"] == "sufficient"
+    assert transformed["review_classification"]["classification"] == "counsel_grade_exhaustive_review"
+    assert transformed["review_classification"]["may_be_presented_as_full_matter_review"] is True
+
+
+def test_transform_case_analysis_payload_applies_privacy_mode_redactions() -> None:
+    payload = _case_payload()
+    payload["privacy_mode"] = "witness_sharing"
+    params = EmailCaseAnalysisInput.model_validate(payload)
+    answer_payload = _fixture_test_transform_case_analysis_payload_applies_privacy_mode_redactions_answer_payload()
+
+    transformed = transform_case_analysis_payload(answer_payload, params)
+
+    assert transformed["privacy_guardrails"]["privacy_mode"] == "witness_sharing"
+    assert transformed["actor_identity_graph"]["actors"][0]["primary_email"] == "[REDACTED: participant_identity]"
+    assert transformed["actor_identity_graph"]["actors"][0]["display_names"][0] == "[REDACTED: participant_identity]"
+    assert transformed["investigation_report"]["sections"]["overall_assessment"]["entries"][0]["statement"] == (
+        "[REDACTED: sensitive_medical_content]"
+    )
+
+
+def _fixture_test_transform_case_analysis_payload_adds_quality_and_message_appendix_answer_payload():
+    return _fixture_test_transform_case_analysis_payload_adds_quality_and_message_appendix_answer_payload_part_0()
+
+
+def _fixture_test_transform_case_analysis_payload_preserves_matter_ingestion_report_and_review_mode_answer_payload():
+    return {
         "search": {},
         "case_bundle": {"bundle_id": "case-123"},
         "multi_source_case_bundle": {
@@ -343,60 +330,9 @@ def test_transform_case_analysis_payload_preserves_matter_ingestion_report_and_r
         "candidates": [],
     }
 
-    transformed = transform_case_analysis_payload(answer_payload, params)
 
-    assert transformed["review_mode"] == "exhaustive_matter_review"
-    assert transformed["review_classification"]["classification"] == "manifest_backed_but_materially_thin"
-    assert transformed["review_classification"]["may_be_presented_as_full_matter_review"] is False
-    assert transformed["matter_ingestion_report"]["completeness_status"] == "complete"
-    assert transformed["analysis_limits"]["review_mode"] == "exhaustive_matter_review"
-    assert transformed["analysis_limits"]["completeness_status"] == "complete"
-    assert transformed["analysis_limits"]["manifest_sufficiency"]["status"] == "thin"
-
-
-def test_transform_case_analysis_payload_surfaces_missing_chat_support_note() -> None:
-    payload = _case_payload()
-    payload["source_scope"] = "mixed_case_file"
-    payload["matter_manifest"] = {
-        "manifest_id": "matter-1",
-        "artifacts": [
-            {
-                "source_id": "manifest:calendar:1",
-                "source_class": "calendar_export",
-                "title": "Meeting invite",
-                "text": "SUMMARY: BEM review DTSTART:2025-03-10T10:00:00",
-            }
-        ],
-    }
-    params = EmailCaseAnalysisInput.model_validate(payload)
-
-    transformed = transform_case_analysis_payload(
-        {
-            "multi_source_case_bundle": {"summary": {"missing_source_types": ["chat_log"]}, "sources": []},
-        },
-        params,
-    )
-
-    assert "chat_log_source_type_missing_without_chat_support" in transformed["analysis_limits"]["notes"]
-
-
-def test_transform_case_analysis_payload_downgrades_compacted_exhaustive_runs_and_preserves_telemetry() -> None:
-    payload = _case_payload()
-    payload["review_mode"] = "exhaustive_matter_review"
-    payload["matter_manifest"] = {
-        "manifest_id": "matter-2",
-        "artifacts": [
-            {
-                "source_id": "manifest:email:1",
-                "source_class": "formal_document",
-                "title": "Case summary",
-                "date": "2025-03-10",
-                "text": "Document text.",
-            }
-        ],
-    }
-    params = EmailCaseAnalysisInput.model_validate(payload)
-    answer_payload = {
+def _fixture_test_transform_case_analysis_payload_downgrades_compacted_exhaustive_runs_and_preserves_telemetry_answer_payload():
+    return {
         "search": {},
         "case_bundle": {"bundle_id": "case-123"},
         "multi_source_case_bundle": {
@@ -453,59 +389,9 @@ def test_transform_case_analysis_payload_downgrades_compacted_exhaustive_runs_an
         },
     }
 
-    transformed = transform_case_analysis_payload(answer_payload, params)
 
-    assert transformed["review_classification"]["classification"] == (
-        "compacted_exhaustive_review_with_omitted_critical_surfaces"
-    )
-    assert transformed["review_classification"]["may_be_presented_as_full_matter_review"] is False
-    assert transformed["_packed"]["applied"] is True
-    assert transformed["_case_surface_compaction"]["removed_count"] == 3
-    assert transformed["analysis_limits"]["packing"]["applied"] is True
-    assert transformed["analysis_limits"]["case_surface_compaction"]["removed"] == [
-        "case_patterns",
-        "finding_evidence_index",
-        "investigation_report",
-    ]
-    assert transformed["analysis_limits"]["omitted_case_analysis_surfaces"] == [
-        "case_patterns",
-        "finding_evidence_index",
-        "investigation_report",
-    ]
-    assert transformed["analysis_limits"]["prompt_complete_behavioral_review"] is False
-
-
-def test_transform_case_analysis_payload_allows_counsel_grade_only_with_sufficient_manifest() -> None:
-    payload = _case_payload()
-    payload["review_mode"] = "exhaustive_matter_review"
-    payload["matter_manifest"] = {
-        "manifest_id": "matter-1b",
-        "artifacts": [
-            {
-                "source_id": "manifest:doc:1",
-                "source_class": "formal_document",
-                "title": "Case summary",
-                "date": "2025-03-10",
-                "text": "Document text.",
-            },
-            {
-                "source_id": "manifest:calendar:1",
-                "source_class": "calendar_export",
-                "title": "BEM invite.ics",
-                "filename": "BEM-invite.ics",
-                "text": "BEGIN:VCALENDAR\nMETHOD:REQUEST\nSUMMARY:BEM invite\nEND:VCALENDAR",
-            },
-            {
-                "source_id": "manifest:time:1",
-                "source_class": "time_record",
-                "title": "time system export.csv",
-                "filename": "time system-export.csv",
-                "text": "date,hours\n2025-03-10,8",
-            },
-        ],
-    }
-    params = EmailCaseAnalysisInput.model_validate(payload)
-    answer_payload = {
+def _fixture_test_transform_case_analysis_payload_allows_counsel_grade_only_with_sufficient_manifest_answer_payload():
+    return {
         "search": {},
         "case_bundle": {"bundle_id": "case-123"},
         "multi_source_case_bundle": {
@@ -564,18 +450,9 @@ def test_transform_case_analysis_payload_allows_counsel_grade_only_with_sufficie
         "candidates": [],
     }
 
-    transformed = transform_case_analysis_payload(answer_payload, params)
 
-    assert transformed["analysis_limits"]["manifest_sufficiency"]["status"] == "sufficient"
-    assert transformed["review_classification"]["classification"] == "counsel_grade_exhaustive_review"
-    assert transformed["review_classification"]["may_be_presented_as_full_matter_review"] is True
-
-
-def test_transform_case_analysis_payload_applies_privacy_mode_redactions() -> None:
-    payload = _case_payload()
-    payload["privacy_mode"] = "witness_sharing"
-    params = EmailCaseAnalysisInput.model_validate(payload)
-    answer_payload = {
+def _fixture_test_transform_case_analysis_payload_applies_privacy_mode_redactions_answer_payload():
+    return {
         "search": {},
         "case_bundle": {"bundle_id": "case-123"},
         "multi_source_case_bundle": None,
@@ -630,11 +507,171 @@ def test_transform_case_analysis_payload_applies_privacy_mode_redactions() -> No
         ],
     }
 
-    transformed = transform_case_analysis_payload(answer_payload, params)
 
-    assert transformed["privacy_guardrails"]["privacy_mode"] == "witness_sharing"
-    assert transformed["actor_identity_graph"]["actors"][0]["primary_email"] == "[REDACTED: participant_identity]"
-    assert transformed["actor_identity_graph"]["actors"][0]["display_names"][0] == "[REDACTED: participant_identity]"
-    assert transformed["investigation_report"]["sections"]["overall_assessment"]["entries"][0]["statement"] == (
-        "[REDACTED: sensitive_medical_content]"
-    )
+def _fixture_test_transform_case_analysis_payload_adds_quality_and_message_appendix_answer_payload_part_0():
+    return {
+        "search": {
+            "top_k": 8,
+            "date_from": "2025-01-01",
+            "date_to": "2025-06-30",
+            "hybrid": False,
+            "rerank": False,
+        },
+        "case_bundle": {"bundle_id": "case-123"},
+        "power_context": {"missing_org_context": True},
+        "case_patterns": {"summary": {"behavior_cluster_count": 1}},
+        "retaliation_analysis": {
+            "trigger_event_count": 0,
+            "anchor_requirement_status": "explicit_trigger_confirmation_required",
+            "protected_activity_candidate_count": 2,
+            "adverse_action_candidate_count": 1,
+            "source_backed_candidate_counts": {"protected_activity": 1, "adverse_actions": 0},
+            "retaliation_timeline_assessment": {
+                "version": "1",
+                "protected_activity_timeline": [],
+                "adverse_action_timeline": [],
+                "temporal_correlation_analysis": [],
+                "strongest_retaliation_indicators": [],
+                "strongest_non_retaliatory_explanations": [],
+                "overall_evidentiary_rating": {"rating": "insufficient_timing_record"},
+            },
+        },
+        "comparative_treatment": {"summary": {"available_comparator_count": 0}},
+        "actor_identity_graph": {
+            "actors": [
+                {
+                    "actor_id": "actor-manager",
+                    "primary_email": "manager@example.test",
+                    "display_names": ["manager"],
+                    "role_hints": ["manager"],
+                }
+            ]
+        },
+        "communication_graph": {"graph_findings": []},
+        "multi_source_case_bundle": _fixture_test_transform_case_analysis_payload_adds_quality_and_message_appendix_answer_payload_part_0_part_final(),
+        "finding_evidence_index": {
+            "findings": [
+                {
+                    "finding_id": "finding-1",
+                    "finding_label": "Escalation Pressure",
+                    "evidence_strength": {"label": "strong_indicator"},
+                    "alternative_explanations": ["Possible policy deadline."],
+                    "counter_indicators": ["Operational urgency cannot be excluded."],
+                    "supporting_evidence": [
+                        {
+                            "message_or_document_id": "uid-1",
+                            "citation_id": "finding-1:citation-1",
+                        }
+                    ],
+                }
+            ]
+        },
+        "evidence_table": {"row_count": 1},
+        "behavioral_strength_rubric": {"version": "1"},
+        "investigation_report": {
+            "summary": {
+                "section_count": 11,
+                "supported_section_count": 7,
+                "insufficient_section_count": 1,
+            },
+            "sections": {
+                "missing_information": {
+                    "section_id": "missing_information",
+                    "title": "Missing Information / Further Evidence Needed",
+                    "status": "insufficient_evidence",
+                    "entries": [],
+                    "insufficiency_reason": "No missing information recorded.",
+                }
+            },
+        },
+        "candidates": _fixture_test_transform_case_analysis_payload_adds_quality_and_message_appendix_answer_payload_part_0_part_next(),
+    }
+
+
+def _fixture_test_transform_case_analysis_payload_adds_quality_and_message_appendix_answer_payload_part_0_part_next():
+    return [
+        {
+            "uid": "uid-1",
+            "date": "2025-03-15T10:00:00",
+            "sender_name": "manager",
+            "sender_email": "manager@example.test",
+            "subject": "Status",
+            "snippet": "Please just comply with the updated process.",
+            "language_rhetoric": {
+                "authored_text": {
+                    "signal_count": 1,
+                    "signals": [
+                        {
+                            "signal_id": "dismissiveness",
+                            "label": "Dismissiveness",
+                            "confidence": "medium",
+                        }
+                    ],
+                }
+            },
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidates": [
+                        {
+                            "behavior_id": "escalation",
+                            "label": "Escalation",
+                            "confidence": "medium",
+                        }
+                    ],
+                    "counter_indicators": ["Possible policy deadline."],
+                    "tone_summary": "Tense and directive.",
+                    "relevant_wording": [
+                        {
+                            "text": "Please comply today.",
+                            "source_scope": "authored_text",
+                            "basis_id": "dismissiveness",
+                        }
+                    ],
+                    "omissions_or_process_signals": [
+                        {
+                            "signal": "sbv_not_included",
+                            "summary": "SBV was not included in the message despite the process context.",
+                        }
+                    ],
+                    "included_actors": ["manager", "employee"],
+                    "excluded_actors": ["SBV"],
+                    "communication_classification": {
+                        "primary_class": "controlling",
+                        "applied_classes": ["tense", "controlling"],
+                        "confidence": "medium",
+                        "rationale": "Directive wording plus process pressure.",
+                    },
+                }
+            },
+        }
+    ]
+
+
+def _fixture_test_transform_case_analysis_payload_adds_quality_and_message_appendix_answer_payload_part_0_part_final():
+    return {
+        "summary": {"missing_source_types": ["chat_log"]},
+        "sources": [
+            {
+                "source_id": "meeting:uid-1:meeting_data",
+                "source_type": "meeting_note",
+                "uid": "uid-1",
+                "actor_id": "actor-manager",
+                "title": "Gesprächsprotokoll",
+                "date": "2025-03-14",
+                "snippet": "Wir werden die SBV beteiligen und eine schriftliche Zusammenfassung senden.",
+                "source_weighting": {"text_available": True},
+                "chronology_anchor": {"date": "2025-03-14"},
+            },
+            {
+                "source_id": "email:uid-1",
+                "source_type": "email",
+                "uid": "uid-1",
+                "actor_id": "actor-manager",
+                "title": "Status",
+                "date": "2025-03-15",
+                "snippet": "Wir werden die schriftliche Zusammenfassung vorerst nicht senden.",
+                "source_weighting": {"text_available": True, "can_corroborate_or_contradict": True},
+                "chronology_anchor": {"date": "2025-03-15"},
+            },
+        ],
+    }

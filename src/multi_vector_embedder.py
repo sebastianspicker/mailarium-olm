@@ -133,13 +133,10 @@ class MultiVectorEmbedder:
             )
             return False
 
-        if self.device == "mps":
-            # MPS backend defaults to float32 because Apple Silicon's GPU
-            # produces silent numerical drift with fp16 on many transformer
-            # ops, causing degraded retrieval quality.  Opt-in via mps_float16.
-            use_fp16 = self._mps_float16
-        else:
-            use_fp16 = self.device not in ("cpu",)
+        # MPS backend defaults to float32 because Apple Silicon's GPU
+        # produces silent numerical drift with fp16 on many transformer
+        # ops, causing degraded retrieval quality.  Opt-in via mps_float16.
+        use_fp16 = self._mps_float16 if self.device == "mps" else self.device not in ("cpu",)
         logger.info(
             "Loading BGEM3FlagModel: %s (device=%s, fp16=%s, sparse=%s, colbert=%s, load_mode=%s)",
             self.model_name,

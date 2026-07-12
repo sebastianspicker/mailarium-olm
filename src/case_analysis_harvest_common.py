@@ -11,17 +11,15 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING, Any, cast
 
-from .case_analysis_scope import derive_case_analysis_query
+from ._utils import _as_dict, _compact
 from .case_operator_intake import ingest_chat_exports
 from .matter_file_ingestion import enrich_matter_manifest, infer_matter_manifest_authorized_roots
-from .mcp_models import EmailAnswerContextInput, EmailCaseAnalysisInput
-from .multi_source_case_bundle import build_standalone_mixed_source_bundle, promotable_mixed_source_evidence_rows
-from .question_execution_waves import derive_wave_query_lane_specs, get_wave_definition
+from .mcp_models import EmailCaseAnalysisInput
+from .multi_source_case_bundle import build_standalone_mixed_source_bundle
 
 if TYPE_CHECKING:
-    from .tools.utils import ToolDepsProto
+    pass
 
-# ruff: noqa: F401
 
 _EXPANSION_ERROR_SAMPLE_LIMIT = 8
 
@@ -42,10 +40,6 @@ class EnrichedRowIdentity:  # pylint: disable=too-many-instance-attributes
     thread_locator: dict[str, Any] = field(default_factory=dict)
     email_language_source: dict[str, Any] = field(default_factory=dict)
     extra_fields: dict[str, Any] = field(default_factory=dict)
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
 
 
 def _coerce_month_bucket(value: str) -> str:
@@ -126,9 +120,9 @@ def _mixed_source_harvest_inputs(params: EmailCaseAnalysisInput) -> tuple[dict[s
 
 def _row_identity(row: dict[str, Any]) -> str:
     raw_provenance = row.get("provenance")
-    provenance: dict[str, Any] = cast(dict[str, Any], raw_provenance) if isinstance(raw_provenance, dict) else {}
+    provenance: dict[str, Any] = _as_dict(raw_provenance)
     raw_locator = row.get("document_locator")
-    locator: dict[str, Any] = cast(dict[str, Any], raw_locator) if isinstance(raw_locator, dict) else {}
+    locator: dict[str, Any] = _as_dict(raw_locator)
     candidate_kind = _compact(row.get("candidate_kind"))
     attachment_filename = _compact(row.get("attachment_filename"))
     uid = _compact(row.get("uid"))
@@ -209,20 +203,8 @@ def _adaptive_harvest_plan(
     coverage_escalation: bool,
 ) -> dict[str, Any]:
     span_days = _date_span_days(params)
-    corpus_bonus = 0
-    if total_emails >= 15000:
-        corpus_bonus = 8
-    elif total_emails >= 5000:
-        corpus_bonus = 5
-    elif total_emails >= 1000:
-        corpus_bonus = 2
-    span_bonus = 0
-    if span_days >= 730:
-        span_bonus = 6
-    elif span_days >= 365:
-        span_bonus = 4
-    elif span_days >= 180:
-        span_bonus = 2
+    corpus_bonus = _corpus_size_bonus(total_emails)
+    span_bonus = _date_span_bonus(span_days)
     lane_bonus = max(query_lane_count - 3, 0) * 2
     review_bonus = 2 if params.review_mode == "exhaustive_matter_review" else 0
     wave_bonus = 2 if params.wave_id else 0
@@ -230,11 +212,7 @@ def _adaptive_harvest_plan(
     adaptive_bonus = corpus_bonus + span_bonus + lane_bonus + review_bonus + wave_bonus + escalation_bonus
     lane_top_k = min(60, max(selected_top_k * 2, 12, selected_top_k + adaptive_bonus))
     merge_budget = min(120, max(lane_top_k * 2, selected_top_k * 3, 24 + adaptive_bonus * 2))
-    reserve_per_lane = 2 if query_lane_count >= 4 else 1
-    if total_emails >= 15000 or span_days >= 365:
-        reserve_per_lane = max(reserve_per_lane, 3)
-    if coverage_escalation:
-        reserve_per_lane = max(reserve_per_lane, 3)
+    reserve_per_lane = _reserve_per_lane(query_lane_count, total_emails, span_days, coverage_escalation)
     return {
         "total_emails": total_emails,
         "date_span_days": span_days,
@@ -244,6 +222,27 @@ def _adaptive_harvest_plan(
         "merge_budget": merge_budget,
         "reserve_per_lane": reserve_per_lane,
     }
+
+
+def _corpus_size_bonus(total_emails: int) -> int:
+    if total_emails >= 15000:
+        return 8
+    if total_emails >= 5000:
+        return 5
+    return 2 if total_emails >= 1000 else 0
+
+
+def _date_span_bonus(span_days: int) -> int:
+    if span_days >= 730:
+        return 6
+    if span_days >= 365:
+        return 4
+    return 2 if span_days >= 180 else 0
+
+
+def _reserve_per_lane(query_lane_count: int, total_emails: int, span_days: int, coverage_escalation: bool) -> int:
+    reserve = 2 if query_lane_count >= 4 else 1
+    return max(reserve, 3) if total_emails >= 15000 or span_days >= 365 or coverage_escalation else reserve
 
 
 def _best_body_text(email_row: dict[str, Any]) -> str:

@@ -23,6 +23,40 @@ if TYPE_CHECKING:
     pass  # conn declared below for mypy
 
 
+def _ranked_segment_rows(rows: list[sqlite3.Row], tokens: list[str], normalized_phrase: str, limit: int) -> list[dict]:
+    ranked: list[dict] = []
+    for row in rows:
+        item = _ranked_segment_row(dict(row), tokens, normalized_phrase)
+        if item is not None:
+            ranked.append(item)
+    ranked.sort(
+        key=lambda item: (
+            -float(item.get("score") or 0.0),
+            str(item.get("date") or ""),
+            int(item.get("ordinal") or 0),
+        )
+    )
+    return ranked[:limit]
+
+
+def _ranked_segment_row(item: dict, tokens: list[str], normalized_phrase: str) -> dict | None:
+    haystack = " ".join(str(item.get("segment_text") or "").split()).casefold()
+    if not haystack:
+        return None
+    matched_tokens = [token for token in tokens if token in haystack]
+    phrase_match = normalized_phrase in haystack
+    if not phrase_match and not matched_tokens:
+        return None
+    score = 0.35 + (0.4 if phrase_match else 0.0)
+    if tokens:
+        score += min(0.2, (len(matched_tokens) / len(tokens)) * 0.2)
+    if str(item.get("segment_type") or "") == "quoted_reply":
+        score += 0.05
+    item["score"] = round(min(score, 0.99), 4)
+    item["matched_tokens"] = matched_tokens
+    return item
+
+
 class QueryMixin:
     """Read queries, full-body retrieval, browsing, and consistency checks."""
 
@@ -134,7 +168,7 @@ class QueryMixin:
         segment_placeholders = _sql_in_placeholders(segment_types)
         conditions = ["LOWER(ms.text) LIKE ? ESCAPE '\\'" for _ in like_patterns]
         params: list[object] = [*segment_types, *[f"%{_escape_like(pattern)}%" for pattern in like_patterns], limit * 8]
-        where_clause = f"WHERE ms.segment_type IN ({segment_placeholders}) AND ({' OR '.join(conditions)})"
+        where_clause = f"WHERE ms.segment_type IN ({segment_placeholders}) AND ({' OR '.join(conditions)})"  # nosec B608
         rows = self.conn.execute(
             "SELECT ms.email_uid AS uid, "
             "ms.ordinal, ms.segment_type, ms.depth, ms.text AS segment_text, "
@@ -148,35 +182,7 @@ class QueryMixin:
             "LIMIT ?",
             params,
         ).fetchall()
-
-        ranked: list[dict] = []
-        normalized_phrase = compact_query.casefold()
-        for row in rows:
-            item = dict(row)
-            haystack = " ".join(str(item.get("segment_text") or "").split()).casefold()
-            if not haystack:
-                continue
-            matched_tokens = [token for token in tokens if token in haystack]
-            phrase_match = normalized_phrase in haystack
-            if not phrase_match and not matched_tokens:
-                continue
-            score = 0.35 + (0.4 if phrase_match else 0.0)
-            if tokens:
-                score += min(0.2, (len(matched_tokens) / len(tokens)) * 0.2)
-            if str(item.get("segment_type") or "") == "quoted_reply":
-                score += 0.05
-            item["score"] = round(min(score, 0.99), 4)
-            item["matched_tokens"] = matched_tokens
-            ranked.append(item)
-
-        ranked.sort(
-            key=lambda item: (
-                -float(item.get("score") or 0.0),
-                str(item.get("date") or ""),
-                int(item.get("ordinal") or 0),
-            )
-        )
-        return ranked[:limit]
+        return _ranked_segment_rows(rows, tokens, compact_query.casefold(), limit)
 
     # ------------------------------------------------------------------
     # Category / Calendar / Attachment queries (schema v7)

@@ -53,3 +53,34 @@ def test_include_history_scans_historical_blob_content_without_printing_secret(
 
     assert privacy_scan.Finding("history-private-person-or-org-marker", "notes.md") in findings
     assert marker not in printed.out
+
+
+def test_tracked_local_tool_state_and_audit_logs_are_publication_risks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+
+    audit = repo / "AUDIT_REPORT_2026-07-12.md"
+    audit.write_text("local-only evidence\n", encoding="utf-8")
+    tool_state = repo / ".codegraph" / "state.json"
+    tool_state.parent.mkdir()
+    tool_state.write_text("{}\n", encoding="utf-8")
+    documentation = repo / "docs" / "agent" / "Documentation.md"
+    documentation.parent.mkdir(parents=True)
+    documentation.write_text("execution log\n", encoding="utf-8")
+    _git(repo, "add", "-f", audit.name, ".codegraph/state.json", "docs/agent/Documentation.md")
+
+    monkeypatch.setattr(privacy_scan, "REPO_ROOT", repo)
+    findings = privacy_scan.scan(include_untracked=False)
+
+    assert privacy_scan.Finding("tracked-forbidden-path", audit.name) in findings
+    assert privacy_scan.Finding("tracked-forbidden-path", ".codegraph/state.json") in findings
+    assert privacy_scan.Finding("tracked-forbidden-path", "docs/agent/Documentation.md") in findings
+
+    audit.unlink()
+    tool_state.unlink()
+    documentation.unlink()
+    assert privacy_scan.scan(include_untracked=False) == []

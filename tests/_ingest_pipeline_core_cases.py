@@ -1,12 +1,9 @@
-# ruff: noqa: F401, I001
-import queue
-import threading
-import time
+# ruff: noqa: I001
 from typing import Any
 
 import pytest
 
-from src.ingest import _SENTINEL, _EmbedPipeline, main, parse_args
+from src.ingest import _EmbedPipeline
 
 from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
 
@@ -353,7 +350,7 @@ def test_ingest_image_chunks_use_normalized_attachment_metadata(monkeypatch, tmp
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
     monkeypatch.setattr(ingest_mod, "chunk_email", lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}])
     monkeypatch.setattr(ingest_mod, "should_enable_image_embedding", lambda: True)
-    monkeypatch.setattr("src.attachment_extractor._get_image_embedder", type)
+    monkeypatch.setattr("src.attachment_extractor._get_image_embedder", lambda: type("Probe", (), {"is_available": True})())
     monkeypatch.setattr("src.attachment_extractor.extract_image_embedding", lambda *_args, **_kwargs: [0.1, 0.2, 0.3])
 
     class _TrackingEmbedder:
@@ -531,7 +528,11 @@ def test_reprocess_degraded_attachments_deletes_stale_attachment_chunks(tmp_path
 
     class _TrackingEmbedder:
         def __init__(self, **_kw):
-            self.collection = type("Collection", (), {"delete": lambda self, ids: delete_calls.append(list(ids))})()
+            class _Collection:
+                def delete(self, ids=None, **_kw):
+                    delete_calls.append(list(ids))
+
+            self.collection = _Collection()
 
         def set_sparse_db(self, db):
             pass

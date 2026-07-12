@@ -1,4 +1,4 @@
-# ruff: noqa: F401,I001
+# ruff: noqa: I001
 """Extended tests for web_app.py — targeting >=80% coverage.
 
 Every test mocks Streamlit calls and database dependencies to avoid
@@ -9,11 +9,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from src.retriever import SearchResult
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-from .helpers.web_app_fixtures import _columns_side_effect, _result, _setup_evidence_st, _setup_main_search_st
+from .helpers.web_app_fixtures import _setup_evidence_st
 
 
 class TestGetEmailDbSafeImpl:

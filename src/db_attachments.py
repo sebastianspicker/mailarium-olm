@@ -33,6 +33,59 @@ def _attachment_filter_conditions(
     return conditions, params
 
 
+def _json_object(raw: object) -> dict:
+    text = str(raw or "").strip()
+    if not text:
+        return {}
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _surface_payload(row: sqlite3.Row) -> dict[str, object]:
+    return {
+        "surface_id": str(row["surface_id"] or ""),
+        "surface_kind": str(row["surface_kind"] or ""),
+        "origin_kind": str(row["origin_kind"] or ""),
+        "text": str(row["text"] or ""),
+        "normalized_text": str(row["normalized_text"] or ""),
+        "alignment_map": _json_object(row["alignment_map_json"]),
+        "language": str(row["language"] or "unknown") or "unknown",
+        "language_confidence": str(row["language_confidence"] or ""),
+        "ocr_confidence": float(row["ocr_confidence"] or 0.0),
+        "surface_hash": str(row["surface_hash"] or ""),
+        "locator": _json_object(row["locator_json"]),
+        "quality": _json_object(row["quality_json"]),
+    }
+
+
+def _surfaces_by_attachment(rows: list[sqlite3.Row]) -> dict[str, list[dict[str, object]]]:
+    surfaces: dict[str, list[dict[str, object]]] = {}
+    for row in rows:
+        surfaces.setdefault(str(row["attachment_id"] or ""), []).append(_surface_payload(row))
+    return surfaces
+
+
+def _attachment_payload(row: sqlite3.Row, surfaces: dict[str, list[dict[str, object]]]) -> dict:
+    attachment = dict(row)
+    attachment["text_locator"] = _json_object(attachment.get("text_locator_json"))
+    attachment_id = str(attachment.get("attachment_id") or "")
+    attachment["surfaces"] = build_attachment_surfaces(
+        attachment_id=attachment_id,
+        extracted_text=str(attachment.get("extracted_text") or ""),
+        normalized_text=str(attachment.get("normalized_text") or ""),
+        text_locator=attachment.get("text_locator") or {},
+        extraction_state=str(attachment.get("extraction_state") or ""),
+        evidence_strength=str(attachment.get("evidence_strength") or ""),
+        ocr_used=bool(attachment.get("ocr_used")),
+        ocr_confidence=float(attachment.get("ocr_confidence") or 0.0),
+        surfaces=surfaces.get(attachment_id),
+    )
+    return enrich_attachment_record(attachment)
+
+
 class AttachmentMixin:
     """Attachment queries: per-email, stats, browse, and search."""
 
@@ -55,62 +108,8 @@ class AttachmentMixin:
             "FROM attachment_surfaces WHERE email_uid = ?",
             (uid,),
         ).fetchall()
-        surfaces_by_attachment_id: dict[str, list[dict[str, object]]] = {}
-        for row in surface_rows:
-            attachment_id = str(row["attachment_id"] or "")
-            alignment_map_json = str(row["alignment_map_json"] or "").strip()
-            locator_json = str(row["locator_json"] or "").strip()
-            quality_json = str(row["quality_json"] or "").strip()
-            try:
-                alignment_map = json.loads(alignment_map_json) if alignment_map_json else {}
-            except json.JSONDecodeError:
-                alignment_map = {}
-            try:
-                locator = json.loads(locator_json) if locator_json else {}
-            except json.JSONDecodeError:
-                locator = {}
-            try:
-                quality = json.loads(quality_json) if quality_json else {}
-            except json.JSONDecodeError:
-                quality = {}
-            surfaces_by_attachment_id.setdefault(attachment_id, []).append(
-                {
-                    "surface_id": str(row["surface_id"] or ""),
-                    "surface_kind": str(row["surface_kind"] or ""),
-                    "origin_kind": str(row["origin_kind"] or ""),
-                    "text": str(row["text"] or ""),
-                    "normalized_text": str(row["normalized_text"] or ""),
-                    "alignment_map": alignment_map,
-                    "language": str(row["language"] or "unknown") or "unknown",
-                    "language_confidence": str(row["language_confidence"] or ""),
-                    "ocr_confidence": float(row["ocr_confidence"] or 0.0),
-                    "surface_hash": str(row["surface_hash"] or ""),
-                    "locator": locator,
-                    "quality": quality,
-                }
-            )
-        attachments: list[dict] = []
-        for row in rows:
-            attachment = dict(row)
-            raw_locator = str(attachment.get("text_locator_json") or "").strip()
-            try:
-                attachment["text_locator"] = json.loads(raw_locator) if raw_locator else {}
-            except json.JSONDecodeError:
-                attachment["text_locator"] = {}
-            attachment_id = str(attachment.get("attachment_id") or "")
-            attachment["surfaces"] = build_attachment_surfaces(
-                attachment_id=attachment_id,
-                extracted_text=str(attachment.get("extracted_text") or ""),
-                normalized_text=str(attachment.get("normalized_text") or ""),
-                text_locator=attachment.get("text_locator") or {},
-                extraction_state=str(attachment.get("extraction_state") or ""),
-                evidence_strength=str(attachment.get("evidence_strength") or ""),
-                ocr_used=bool(attachment.get("ocr_used")),
-                ocr_confidence=float(attachment.get("ocr_confidence") or 0.0),
-                surfaces=surfaces_by_attachment_id.get(attachment_id),
-            )
-            attachments.append(enrich_attachment_record(attachment))
-        return attachments
+        surfaces = _surfaces_by_attachment(surface_rows)
+        return [_attachment_payload(row, surfaces) for row in rows]
 
     def attachment_stats(self) -> dict:
         """Aggregate attachment statistics: counts, sizes, type distribution."""

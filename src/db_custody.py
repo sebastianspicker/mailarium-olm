@@ -8,6 +8,7 @@ import json
 import logging
 import sqlite3
 import time
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -89,10 +90,8 @@ class CustodyMixin:
         for r in rows:
             d = dict(r)
             if d.get("details"):
-                try:
+                with suppress(json.JSONDecodeError, TypeError):
                     d["details"] = json.loads(d["details"])
-                except (json.JSONDecodeError, TypeError):
-                    pass  # keep raw details string if JSON parsing fails
             result.append(d)
         return result
 

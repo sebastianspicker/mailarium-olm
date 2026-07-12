@@ -9,10 +9,19 @@ from typing import Any
 
 
 def _text(value: Any) -> str:
+    """Convert a value to a string, returning empty string if None."""
     return str(value or "")
 
 
 def _dict(value: Any) -> dict[str, Any]:
+    """Convert a value to a dict, parsing JSON strings if necessary.
+
+    Args:
+        value: A value to convert to dict.
+
+    Returns:
+        The value if already a dict, or an empty dict if conversion fails.
+    """
     if isinstance(value, dict):
         return value
     if isinstance(value, str) and value.strip():
@@ -32,6 +41,17 @@ def _stable_surface_id(
     origin_kind: str,
     surface_hash: str,
 ) -> str:
+    """Generate a stable surface ID from attachment metadata.
+
+    Args:
+        attachment_id: The attachment identifier.
+        surface_kind: The kind of surface (e.g., 'verbatim', 'normalized_retrieval').
+        origin_kind: The origin kind (e.g., 'ocr', 'native').
+        surface_hash: The hash of the surface content.
+
+    Returns:
+        A stable surface ID string.
+    """
     seed = "|".join((attachment_id, surface_kind, origin_kind, surface_hash))
     digest = hashlib.sha256(seed.encode("utf-8", errors="ignore")).hexdigest()
     if attachment_id:
@@ -40,6 +60,17 @@ def _stable_surface_id(
 
 
 def _surface_hash(*, text: str, normalized_text: str, attachment_id: str, surface_kind: str) -> str:
+    """Generate a hash for a surface based on its content.
+
+    Args:
+        text: The raw text content.
+        normalized_text: The normalized text content.
+        attachment_id: The attachment identifier.
+        surface_kind: The kind of surface.
+
+    Returns:
+        A SHA256 hash of the surface content.
+    """
     payload = text if text else normalized_text
     if not payload:
         payload = f"{attachment_id}|{surface_kind}|empty"
@@ -47,6 +78,15 @@ def _surface_hash(*, text: str, normalized_text: str, attachment_id: str, surfac
 
 
 def _default_origin_kind(*, extraction_state: str, ocr_used: bool) -> str:
+    """Determine the default origin kind based on extraction state and OCR usage.
+
+    Args:
+        extraction_state: The state of text extraction.
+        ocr_used: Whether OCR was used.
+
+    Returns:
+        The origin kind string ('ocr', 'native', 'reference', or 'derived').
+    """
     if ocr_used or extraction_state == "ocr_text_extracted":
         return "ocr"
     if extraction_state in {"text_extracted", "archive_contents_extracted", "archive_inventory_extracted"}:
@@ -57,10 +97,59 @@ def _default_origin_kind(*, extraction_state: str, ocr_used: bool) -> str:
 
 
 def _quality_json(*, extraction_state: str, evidence_strength: str, ocr_used: bool) -> dict[str, Any]:
+    """Create a quality metadata dictionary for a surface.
+
+    Args:
+        extraction_state: The state of text extraction.
+        evidence_strength: The strength of the evidence.
+        ocr_used: Whether OCR was used.
+
+    Returns:
+        A dictionary with extraction quality metadata.
+    """
     return {
         "extraction_state": extraction_state,
         "evidence_strength": evidence_strength,
         "ocr_used": bool(ocr_used),
+    }
+
+
+def _surface_payload(
+    *,
+    attachment_id: str,
+    surface_kind: str,
+    origin_kind: str,
+    text: str,
+    normalized_text: str,
+    locator: dict[str, Any],
+    quality: dict[str, Any],
+    ocr_confidence: float,
+    alignment_map: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    surface_hash = _surface_hash(
+        text=text,
+        normalized_text=normalized_text,
+        attachment_id=attachment_id,
+        surface_kind=surface_kind,
+    )
+    return {
+        "surface_id": _stable_surface_id(
+            attachment_id=attachment_id,
+            surface_kind=surface_kind,
+            origin_kind=origin_kind,
+            surface_hash=surface_hash,
+        ),
+        "surface_kind": surface_kind,
+        "origin_kind": origin_kind,
+        "text": text,
+        "normalized_text": normalized_text,
+        "alignment_map": alignment_map or {},
+        "language": "unknown",
+        "language_confidence": "",
+        "ocr_confidence": float(ocr_confidence),
+        "surface_hash": surface_hash,
+        "locator": locator,
+        "quality": quality,
     }
 
 
@@ -75,6 +164,21 @@ def _default_surfaces(
     ocr_used: bool,
     ocr_confidence: float,
 ) -> list[dict[str, Any]]:
+    """Create default surface payloads for an attachment.
+
+    Args:
+        attachment_id: The attachment identifier.
+        extracted_text: The extracted raw text.
+        normalized_text: The normalized text.
+        text_locator: Locator metadata for the text.
+        extraction_state: The state of text extraction.
+        evidence_strength: The strength of the evidence.
+        ocr_used: Whether OCR was used.
+        ocr_confidence: The OCR confidence score.
+
+    Returns:
+        A list of surface payload dictionaries.
+    """
     origin_kind = _default_origin_kind(extraction_state=extraction_state, ocr_used=ocr_used)
     quality = _quality_json(
         extraction_state=extraction_state,
@@ -83,120 +187,60 @@ def _default_surfaces(
     )
 
     if not extracted_text and not normalized_text:
-        empty_hash = _surface_hash(
-            text="",
-            normalized_text="",
-            attachment_id=attachment_id,
-            surface_kind="reference_only",
-        )
         return [
-            {
-                "surface_id": _stable_surface_id(
-                    attachment_id=attachment_id,
-                    surface_kind="reference_only",
-                    origin_kind=origin_kind,
-                    surface_hash=empty_hash,
-                ),
-                "surface_kind": "reference_only",
-                "origin_kind": origin_kind,
-                "text": "",
-                "normalized_text": "",
-                "alignment_map": {},
-                "language": "unknown",
-                "language_confidence": "",
-                "ocr_confidence": float(ocr_confidence),
-                "surface_hash": empty_hash,
-                "locator": text_locator,
-                "quality": quality,
-            }
+            _surface_payload(
+                attachment_id=attachment_id,
+                surface_kind="reference_only",
+                origin_kind=origin_kind,
+                text="",
+                normalized_text="",
+                locator=text_locator,
+                quality=quality,
+                ocr_confidence=ocr_confidence,
+            )
         ]
 
-    verbatim_hash = _surface_hash(
-        text=extracted_text,
-        normalized_text="",
+    verbatim_surface = _surface_payload(
         attachment_id=attachment_id,
         surface_kind="verbatim",
+        origin_kind=origin_kind,
+        text=extracted_text,
+        normalized_text="",
+        locator=text_locator,
+        quality=quality,
+        ocr_confidence=ocr_confidence,
     )
-    verbatim_surface = {
-        "surface_id": _stable_surface_id(
-            attachment_id=attachment_id,
-            surface_kind="verbatim",
-            origin_kind=origin_kind,
-            surface_hash=verbatim_hash,
-        ),
-        "surface_kind": "verbatim",
-        "origin_kind": origin_kind,
-        "text": extracted_text,
-        "normalized_text": "",
-        "alignment_map": {},
-        "language": "unknown",
-        "language_confidence": "",
-        "ocr_confidence": float(ocr_confidence),
-        "surface_hash": verbatim_hash,
-        "locator": text_locator,
-        "quality": quality,
-    }
 
     if not normalized_text:
         return [verbatim_surface]
 
-    normalized_hash = _surface_hash(
-        text=normalized_text,
-        normalized_text=normalized_text,
+    normalized_surface = _surface_payload(
         attachment_id=attachment_id,
         surface_kind="normalized_retrieval",
-    )
-    normalized_surface = {
-        "surface_id": _stable_surface_id(
-            attachment_id=attachment_id,
-            surface_kind="normalized_retrieval",
-            origin_kind="normalized",
-            surface_hash=normalized_hash,
-        ),
-        "surface_kind": "normalized_retrieval",
-        "origin_kind": "normalized",
-        "text": normalized_text,
-        "normalized_text": normalized_text,
-        "alignment_map": {},
-        "language": "unknown",
-        "language_confidence": "",
-        "ocr_confidence": float(ocr_confidence),
-        "surface_hash": normalized_hash,
-        "locator": text_locator,
-        "quality": quality,
-    }
-
-    alignment_hash = _surface_hash(
-        text="",
+        origin_kind="normalized",
+        text=normalized_text,
         normalized_text=normalized_text,
+        locator=text_locator,
+        quality=quality,
+        ocr_confidence=ocr_confidence,
+    )
+    alignment_surface = _surface_payload(
         attachment_id=attachment_id,
         surface_kind="normalized_alignment",
-    )
-    alignment_surface = {
-        "surface_id": _stable_surface_id(
-            attachment_id=attachment_id,
-            surface_kind="normalized_alignment",
-            origin_kind="alignment",
-            surface_hash=alignment_hash,
-        ),
-        "surface_kind": "normalized_alignment",
-        "origin_kind": "alignment",
-        "text": "",
-        "normalized_text": normalized_text,
-        "alignment_map": {
+        origin_kind="alignment",
+        text="",
+        normalized_text=normalized_text,
+        locator=text_locator,
+        quality=quality,
+        ocr_confidence=ocr_confidence,
+        alignment_map={
             "mode": "identity" if extracted_text == normalized_text else "whole_text_proxy",
             "verbatim_surface_id": verbatim_surface["surface_id"],
             "normalized_surface_id": normalized_surface["surface_id"],
             "verbatim_char_count": len(extracted_text),
             "normalized_char_count": len(normalized_text),
         },
-        "language": "unknown",
-        "language_confidence": "",
-        "ocr_confidence": float(ocr_confidence),
-        "surface_hash": alignment_hash,
-        "locator": text_locator,
-        "quality": quality,
-    }
+    )
     return [verbatim_surface, normalized_surface, alignment_surface]
 
 
@@ -217,45 +261,18 @@ def build_attachment_surfaces(
     normalized_surfaces: list[dict[str, Any]] = []
     if isinstance(surfaces, list):
         for surface in surfaces:
-            if not isinstance(surface, dict):
-                continue
-            surface_kind = _text(surface.get("surface_kind") or "reference_only").strip() or "reference_only"
-            origin_kind = _text(surface.get("origin_kind") or "derived").strip() or "derived"
-            text_value = _text(surface.get("text"))
-            normalized_value = _text(surface.get("normalized_text"))
-            surface_hash = _text(surface.get("surface_hash")).strip() or _surface_hash(
-                text=text_value,
-                normalized_text=normalized_value,
-                attachment_id=attachment_id,
-                surface_kind=surface_kind,
-            )
-            surface_id = _text(surface.get("surface_id")).strip() or _stable_surface_id(
-                attachment_id=attachment_id,
-                surface_kind=surface_kind,
-                origin_kind=origin_kind,
-                surface_hash=surface_hash,
-            )
-            normalized_surfaces.append(
-                {
-                    "surface_id": surface_id,
-                    "surface_kind": surface_kind,
-                    "origin_kind": origin_kind,
-                    "text": text_value,
-                    "normalized_text": normalized_value,
-                    "alignment_map": _dict(surface.get("alignment_map")),
-                    "language": _text(surface.get("language") or "unknown") or "unknown",
-                    "language_confidence": _text(surface.get("language_confidence")),
-                    "ocr_confidence": float(surface.get("ocr_confidence") or ocr_confidence or 0.0),
-                    "surface_hash": surface_hash,
-                    "locator": _dict(surface.get("locator")) or locator,
-                    "quality": _dict(surface.get("quality"))
-                    or _quality_json(
+            if isinstance(surface, dict):
+                normalized_surfaces.append(
+                    _normalized_surface(
+                        surface,
+                        attachment_id=attachment_id,
+                        locator=locator,
                         extraction_state=extraction_state,
                         evidence_strength=evidence_strength,
                         ocr_used=ocr_used,
-                    ),
-                }
-            )
+                        ocr_confidence=ocr_confidence,
+                    )
+                )
 
     if normalized_surfaces:
         return normalized_surfaces
@@ -270,6 +287,83 @@ def build_attachment_surfaces(
         ocr_used=bool(ocr_used),
         ocr_confidence=float(ocr_confidence or 0.0),
     )
+
+
+def _normalized_surface(
+    surface: dict[str, Any],
+    *,
+    attachment_id: str,
+    locator: dict[str, Any],
+    extraction_state: str,
+    evidence_strength: str,
+    ocr_used: bool,
+    ocr_confidence: float,
+) -> dict[str, Any]:
+    surface_kind, origin_kind, text_value, normalized_value = _surface_content(surface)
+    payload = _surface_payload(
+        attachment_id=attachment_id,
+        surface_kind=surface_kind,
+        origin_kind=origin_kind,
+        text=text_value,
+        normalized_text=normalized_value,
+        locator=_surface_locator(surface, locator),
+        quality=_surface_quality(surface, extraction_state, evidence_strength, ocr_used),
+        ocr_confidence=_surface_ocr_confidence(surface, ocr_confidence),
+        alignment_map=_dict(surface.get("alignment_map")),
+    )
+    _apply_explicit_surface_identifiers(payload, surface, attachment_id, surface_kind, origin_kind)
+    _apply_surface_language(payload, surface)
+    return payload
+
+
+def _surface_content(surface: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        _default_surface_text(surface.get("surface_kind"), "reference_only"),
+        _default_surface_text(surface.get("origin_kind"), "derived"),
+        _text(surface.get("text")),
+        _text(surface.get("normalized_text")),
+    )
+
+
+def _default_surface_text(value: Any, default: str) -> str:
+    return _text(value or default).strip() or default
+
+
+def _surface_locator(surface: dict[str, Any], default_locator: dict[str, Any]) -> dict[str, Any]:
+    return _dict(surface.get("locator")) or default_locator
+
+
+def _surface_quality(surface: dict[str, Any], state: str, strength: str, ocr_used: bool) -> dict[str, Any]:
+    return _dict(surface.get("quality")) or _quality_json(
+        extraction_state=state,
+        evidence_strength=strength,
+        ocr_used=ocr_used,
+    )
+
+
+def _surface_ocr_confidence(surface: dict[str, Any], default: float) -> float:
+    return float(surface.get("ocr_confidence") or default or 0.0)
+
+
+def _apply_explicit_surface_identifiers(
+    payload: dict[str, Any],
+    surface: dict[str, Any],
+    attachment_id: str,
+    surface_kind: str,
+    origin_kind: str,
+) -> None:
+    payload["surface_hash"] = _text(surface.get("surface_hash")).strip() or payload["surface_hash"]
+    payload["surface_id"] = _text(surface.get("surface_id")).strip() or _stable_surface_id(
+        attachment_id=attachment_id,
+        surface_kind=surface_kind,
+        origin_kind=origin_kind,
+        surface_hash=payload["surface_hash"],
+    )
+
+
+def _apply_surface_language(payload: dict[str, Any], surface: dict[str, Any]) -> None:
+    payload["language"] = _default_surface_text(surface.get("language"), "unknown")
+    payload["language_confidence"] = _text(surface.get("language_confidence"))
 
 
 def attachment_surface_rows_for_attachment(

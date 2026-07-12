@@ -83,13 +83,11 @@ def build_wave_case_params(
 ) -> tuple[EmailCaseAnalysisInput, dict[str, Any]]:
     """Return a wave-specialized case-analysis input plus stable wave metadata."""
     definition = get_wave_definition(wave_id)
-    explicit_query_lanes = [" ".join(str(item or "").split()).strip() for item in params.query_lanes if str(item or "").strip()]
+    explicit_query_lanes = _normalized_query_lanes(params.query_lanes)
     query_lane_specs = [] if explicit_query_lanes else derive_wave_query_lane_specs(params, definition.wave_id)
     payload = params.model_dump(mode="json")
     payload["wave_id"] = definition.wave_id
-    payload["query_lanes"] = (
-        explicit_query_lanes or [spec.query for spec in query_lane_specs] or derive_wave_query_lanes(params, definition.wave_id)
-    )
+    payload["query_lanes"] = _resolved_query_lanes(params, definition.wave_id, explicit_query_lanes, query_lane_specs)
     payload["scan_id"] = derive_wave_scan_id(
         scan_id_prefix=(scan_id_prefix or payload.get("scan_id")),
         wave_id=definition.wave_id,
@@ -106,62 +104,91 @@ def build_wave_case_params(
     }
 
 
+def _normalized_query_lanes(query_lanes: list[str]) -> list[str]:
+    return [" ".join(str(item or "").split()).strip() for item in query_lanes if str(item or "").strip()]
+
+
+def _resolved_query_lanes(params: EmailCaseAnalysisInput, wave_id: str, explicit: list[str], specs: list[Any]) -> list[str]:
+    return explicit or [spec.query for spec in specs] or derive_wave_query_lanes(params, wave_id)
+
+
 def _wave_summary_row(
     payload: dict[str, Any],
     *,
     wave_meta: dict[str, Any],
 ) -> dict[str, Any]:
-    retrieval_plan_raw = payload.get("retrieval_plan")
-    retrieval_plan = retrieval_plan_raw if isinstance(retrieval_plan_raw, dict) else {}
-    wave_local_raw = payload.get("wave_local_views")
-    wave_local = wave_local_raw if isinstance(wave_local_raw, dict) else {}
-    archive_harvest_raw = payload.get("archive_harvest")
-    archive_harvest = archive_harvest_raw if isinstance(archive_harvest_raw, dict) else {}
-    evidence_harvest_raw = payload.get("evidence_harvest")
-    evidence_harvest = evidence_harvest_raw if isinstance(evidence_harvest_raw, dict) else {}
-    coverage_gate = archive_harvest.get("coverage_gate")
-    source_basis = archive_harvest.get("source_basis")
-    coverage_metrics = archive_harvest.get("coverage_metrics")
-    quality_gate = archive_harvest.get("quality_gate")
+    retrieval_plan = _dict_value(payload, "retrieval_plan")
+    wave_local = _dict_value(payload, "wave_local_views")
+    archive_harvest = _dict_value(payload, "archive_harvest")
+    evidence_harvest = _dict_value(payload, "evidence_harvest")
     return {
         "wave_id": wave_meta["wave_id"],
         "label": wave_meta["label"],
         "questions": list(wave_meta["questions"]),
         "query_lanes": list(wave_meta["query_lanes"]),
-        "query_lane_classes": list(wave_meta.get("query_lane_classes") or []),
+        "query_lane_classes": list(wave_meta.get("query_lane_classes", [])),
         "scan_id": wave_meta["scan_id"],
         "retrieval_plan": {
             "effective_max_results": retrieval_plan.get("effective_max_results"),
             "query_lane_count": retrieval_plan.get("effective_query_lane_count"),
         },
-        "archive_harvest": {
-            "status": str((coverage_gate or {}).get("status") or ""),
-            "quality_status": str((quality_gate or {}).get("status") or ""),
-            "quality_score": float((quality_gate or {}).get("score") or 0.0),
-            "primary_source": str((source_basis or {}).get("primary_source") or ""),
-            "unique_hits": int((coverage_metrics or {}).get("unique_hits") or 0),
-            "unique_threads": int((coverage_metrics or {}).get("unique_threads") or 0),
-            "unique_months": int((coverage_metrics or {}).get("unique_months") or 0),
-            "verified_exact_hits": int((coverage_metrics or {}).get("verified_exact_hits") or 0),
-            "attachment_candidates": int((coverage_metrics or {}).get("attachment_candidate_count") or 0),
-            "non_email_sources": int((archive_harvest.get("mixed_source_metrics") or {}).get("non_email_source_count") or 0),
-            "linked_non_email_sources": int(
-                (archive_harvest.get("mixed_source_metrics") or {}).get("linked_non_email_source_count") or 0
-            ),
-            "document_only_actors": int((archive_harvest.get("actor_discovery") or {}).get("document_only_actor_count") or 0),
-        },
-        "wave_local_views": {
-            key: int(value)
-            for key, value in dict(wave_local.get("surface_counts") or {}).items()
-            if isinstance(value, (int, float))
-        },
-        "evidence_harvest": {
-            "status": str(evidence_harvest.get("status") or ""),
-            "candidate_count": int(evidence_harvest.get("candidate_count") or 0),
-            "promoted_count": int(evidence_harvest.get("promoted_count") or 0),
-            "exact_body_candidate_count": int(evidence_harvest.get("exact_body_candidate_count") or 0),
-        },
+        "archive_harvest": _archive_harvest_summary(archive_harvest),
+        "wave_local_views": _surface_counts(wave_local),
+        "evidence_harvest": _evidence_harvest_summary(evidence_harvest),
     }
+
+
+def _dict_value(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    value = payload.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _surface_counts(payload: dict[str, Any]) -> dict[str, int]:
+    return {key: int(value) for key, value in _dict_value(payload, "surface_counts").items() if isinstance(value, int | float)}
+
+
+def _evidence_harvest_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": _str_value(payload, "status"),
+        "candidate_count": _int_value(payload, "candidate_count"),
+        "promoted_count": _int_value(payload, "promoted_count"),
+        "exact_body_candidate_count": _int_value(payload, "exact_body_candidate_count"),
+    }
+
+
+def _archive_harvest_summary(harvest: dict[str, Any]) -> dict[str, Any]:
+    coverage = _dict_value(harvest, "coverage_gate")
+    quality = _dict_value(harvest, "quality_gate")
+    basis = _dict_value(harvest, "source_basis")
+    metrics = _dict_value(harvest, "coverage_metrics")
+    mixed = _dict_value(harvest, "mixed_source_metrics")
+    actors = _dict_value(harvest, "actor_discovery")
+    return {
+        "status": _str_value(coverage, "status"),
+        "quality_status": _str_value(quality, "status"),
+        "quality_score": _float_value(quality, "score"),
+        "primary_source": _str_value(basis, "primary_source"),
+        "unique_hits": _int_value(metrics, "unique_hits"),
+        "unique_threads": _int_value(metrics, "unique_threads"),
+        "unique_months": _int_value(metrics, "unique_months"),
+        "verified_exact_hits": _int_value(metrics, "verified_exact_hits"),
+        "attachment_candidates": _int_value(metrics, "attachment_candidate_count"),
+        "non_email_sources": _int_value(mixed, "non_email_source_count"),
+        "linked_non_email_sources": _int_value(mixed, "linked_non_email_source_count"),
+        "document_only_actors": _int_value(actors, "document_only_actor_count"),
+    }
+
+
+def _str_value(payload: dict[str, Any], key: str) -> str:
+    return str(payload.get(key) or "")
+
+
+def _int_value(payload: dict[str, Any], key: str) -> int:
+    return int(payload.get(key) or 0)
+
+
+def _float_value(payload: dict[str, Any], key: str) -> float:
+    return float(payload.get(key) or 0.0)
 
 
 async def execute_wave_payload(
@@ -252,74 +279,19 @@ async def gather_evidence_payload(
     db = get_email_db() if callable(get_email_db) else None
 
     if db is None:
-        return {
-            "workflow": "case_gather_evidence",
-            "status": "db_unavailable",
-            "run_id": run_id,
-            "phase_id": phase_id,
-            "scan_id_prefix": resolved_scan_id_prefix,
-            "wave_count": 0,
-            "waves": [],
-            "evidence_harvest": {
-                "candidate_count": 0,
-                "body_candidate_count": 0,
-                "attachment_candidate_count": 0,
-                "exact_body_candidate_count": 0,
-                "duplicate_candidate_count": 0,
-                "promoted_count": 0,
-                "linked_existing_evidence_count": 0,
-                "wave_harvests": [],
-                "candidate_stats": {},
-            },
-            "evidence_stats": {},
-        }
+        return _db_unavailable_payload(run_id, phase_id, resolved_scan_id_prefix)
 
-    summaries: list[dict[str, Any]] = []
-    payloads: list[dict[str, Any]] = []
-    wave_harvests: list[dict[str, Any]] = []
-    aggregate = {
-        "candidate_count": 0,
-        "body_candidate_count": 0,
-        "attachment_candidate_count": 0,
-        "exact_body_candidate_count": 0,
-        "duplicate_candidate_count": 0,
-        "promoted_count": 0,
-        "linked_existing_evidence_count": 0,
-    }
-    for definition in list_wave_definitions():
-        payload = await execute_wave_payload(
-            deps,
-            params,
-            wave_id=definition.wave_id,
-            scan_id_prefix=resolved_scan_id_prefix,
-        )
-        harvest = harvest_wave_payload(
-            db,
-            payload=payload,
-            run_id=run_id,
-            phase_id=phase_id,
-            harvest_limit_per_wave=harvest_limit_per_wave,
-            promote_limit_per_wave=promote_limit_per_wave,
-        )
-        payload["evidence_harvest"] = harvest
-        wave_execution_raw = payload.get("wave_execution")
-        wave_meta = (
-            dict(wave_execution_raw)
-            if isinstance(wave_execution_raw, dict)
-            else {
-                "wave_id": definition.wave_id,
-                "label": definition.label,
-                "questions": list(definition.question_ids),
-                "query_lanes": [],
-                "scan_id": derive_wave_scan_id(scan_id_prefix=resolved_scan_id_prefix, wave_id=definition.wave_id),
-            }
-        )
-        summaries.append(_wave_summary_row(payload, wave_meta=wave_meta))
-        wave_harvests.append(harvest)
-        if include_payloads:
-            payloads.append(payload)
-        for key in aggregate:
-            aggregate[key] += int(harvest.get(key) or 0)
+    summaries, payloads, wave_harvests, aggregate = await _gather_wave_harvests(
+        deps,
+        params,
+        db,
+        run_id=run_id,
+        phase_id=phase_id,
+        scan_id_prefix=resolved_scan_id_prefix,
+        harvest_limit=harvest_limit_per_wave,
+        promote_limit=promote_limit_per_wave,
+        include_payloads=include_payloads,
+    )
 
     db_any: Any = db
     evidence_candidate_stats = getattr(db_any, "evidence_candidate_stats", None)
@@ -345,3 +317,81 @@ async def gather_evidence_payload(
     if include_payloads:
         result["wave_payloads"] = payloads
     return result
+
+
+def _empty_harvest_totals() -> dict[str, int]:
+    return dict.fromkeys(
+        (
+            "candidate_count",
+            "body_candidate_count",
+            "attachment_candidate_count",
+            "exact_body_candidate_count",
+            "duplicate_candidate_count",
+            "promoted_count",
+            "linked_existing_evidence_count",
+        ),
+        0,
+    )
+
+
+def _db_unavailable_payload(run_id: str, phase_id: str, scan_id_prefix: str) -> dict[str, Any]:
+    return {
+        "workflow": "case_gather_evidence",
+        "status": "db_unavailable",
+        "run_id": run_id,
+        "phase_id": phase_id,
+        "scan_id_prefix": scan_id_prefix,
+        "wave_count": 0,
+        "waves": [],
+        "evidence_harvest": {**_empty_harvest_totals(), "wave_harvests": [], "candidate_stats": {}},
+        "evidence_stats": {},
+    }
+
+
+async def _gather_wave_harvests(
+    deps: ToolDepsProto,
+    params: EmailCaseAnalysisInput,
+    db: Any,
+    *,
+    run_id: str,
+    phase_id: str,
+    scan_id_prefix: str,
+    harvest_limit: int,
+    promote_limit: int,
+    include_payloads: bool,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    summaries: list[dict[str, Any]] = []
+    payloads: list[dict[str, Any]] = []
+    harvests: list[dict[str, Any]] = []
+    aggregate = _empty_harvest_totals()
+    for definition in list_wave_definitions():
+        payload = await execute_wave_payload(deps, params, wave_id=definition.wave_id, scan_id_prefix=scan_id_prefix)
+        harvest = harvest_wave_payload(
+            db,
+            payload=payload,
+            run_id=run_id,
+            phase_id=phase_id,
+            harvest_limit_per_wave=harvest_limit,
+            promote_limit_per_wave=promote_limit,
+        )
+        payload["evidence_harvest"] = harvest
+        summaries.append(_wave_summary_row(payload, wave_meta=_wave_meta(payload, definition, scan_id_prefix)))
+        harvests.append(harvest)
+        if include_payloads:
+            payloads.append(payload)
+        for key in aggregate:
+            aggregate[key] += int(harvest.get(key) or 0)
+    return summaries, payloads, harvests, aggregate
+
+
+def _wave_meta(payload: dict[str, Any], definition: Any, scan_id_prefix: str) -> dict[str, Any]:
+    execution = payload.get("wave_execution")
+    if isinstance(execution, dict):
+        return dict(execution)
+    return {
+        "wave_id": definition.wave_id,
+        "label": definition.label,
+        "questions": list(definition.question_ids),
+        "query_lanes": [],
+        "scan_id": derive_wave_scan_id(scan_id_prefix=scan_id_prefix, wave_id=definition.wave_id),
+    }

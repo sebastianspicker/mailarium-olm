@@ -81,24 +81,12 @@ class SearchFilters:
 
     @property
     def has_filters(self) -> bool:
-        return bool(
-            self.sender
-            or self.date_from
-            or self.date_to
-            or self.subject
-            or self.folder
-            or self.cc
-            or self.to
-            or self.bcc
-            or self.has_attachments is not None
-            or self.priority is not None
-            or self.min_score is not None
-            or self.email_type
-            or self.allowed_uids is not None
-            or self.category
-            or self.is_calendar is not None
-            or self.attachment_name
-            or self.attachment_type
+        text_filters = (self.sender, self.date_from, self.date_to, self.subject, self.folder, self.cc, self.to, self.bcc)
+        optional_filters = (self.has_attachments, self.priority, self.min_score, self.allowed_uids, self.is_calendar)
+        return (
+            any(text_filters)
+            or any(value is not None for value in optional_filters)
+            or any((self.email_type, self.category, self.attachment_name, self.attachment_type))
         )
 
     def apply(self, results: list[SearchResult], *, use_rerank: bool) -> list[SearchResult]:
@@ -126,6 +114,35 @@ class SearchFilters:
             attachment_name=self.attachment_name,
             attachment_type=self.attachment_type,
         )
+
+
+@dataclass(frozen=True)
+class FilteredSearchRequest:
+    """Typed public-input snapshot for one filtered retrieval request."""
+
+    query: str
+    top_k: int = 10
+    sender: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+    subject: str | None = None
+    folder: str | None = None
+    cc: str | None = None
+    to: str | None = None
+    bcc: str | None = None
+    has_attachments: bool | None = None
+    priority: int | None = None
+    min_score: float | None = None
+    email_type: str | None = None
+    rerank: bool = False
+    hybrid: bool = False
+    topic_id: int | None = None
+    cluster_id: int | None = None
+    expand_query: bool = False
+    category: str | None = None
+    is_calendar: bool | None = None
+    attachment_name: str | None = None
+    attachment_type: str | None = None
 
 
 @dataclass(frozen=True)

@@ -12,14 +12,16 @@ Canonical execution documents:
 
 - `docs/agent/email_matter_analysis_single_source_of_truth.md`
 - `docs/agent/question_execution_companion.md`
-- `docs/agent/Documentation.md` (verification/change log, not a general docs index)
 
 Archive and history surfaces:
 
 - `docs/agent/matter_analysis/` for supporting phase maps, heuristics, and operations detail
-- `docs/agent/deprecated/` for archived audit-era docs and deprecated path shims
+- `docs/archive/2026-05-16-remediation-closure/agent-deprecated/deprecated/` for archived audit-era docs and deprecated path shims
 - `docs/agent/implementation_log/` for chronological change logs
 - `docs/agent/plan_history/` for preserved planning-program history
+
+Keep verification logs, audit reports, and remediation ledgers in these ignored
+local history surfaces; they are not canonical public execution documents.
 
 ## Execution enablement pack
 

@@ -1,13 +1,3 @@
-# ruff: noqa: F401
-import queue
-import threading
-import time
-
-import pytest
-
-from src.ingest import _SENTINEL, _EmbedPipeline, main, parse_args
-
-
 def _make_mock_email(idx):
     from src.parse_olm import Email
 

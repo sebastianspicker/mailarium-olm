@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._utils import _as_dict, _as_list
+
 DOCUMENT_REQUEST_CHECKLIST_VERSION = "1"
 
 _GROUP_RULES: tuple[dict[str, Any], ...] = (
@@ -128,15 +130,17 @@ _GROUP_RULES: tuple[dict[str, Any], ...] = (
 )
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
 def _match_group(request_text: str) -> dict[str, Any]:
+    """Match a request text to the appropriate document group rule.
+
+    Args:
+        request_text: The text of the document request to match.
+
+    Returns:
+        A dictionary containing the matched group rule with group_id, title,
+        custodian, urgency, risk_of_loss, and preservation_action. If no match
+        is found, returns a default general document requests rule.
+    """
     normalized = " ".join(str(request_text or "").lower().split())
     for rule in _GROUP_RULES:
         if any(keyword in normalized for keyword in rule["keywords"]):
@@ -203,6 +207,26 @@ def build_document_request_checklist(
 
     grouped: dict[str, dict[str, Any]] = {}
 
+    _append_missing_exhibit_requests(grouped, missing_exhibits)
+
+    _append_missing_information_requests(grouped, missing_information_entries)
+
+    _append_scope_requests(grouped, scope_quality, limits)
+
+    _append_issue_requests(grouped, lawyer_issue_rows)
+
+    _append_weakness_requests(grouped, weakness_items)
+
+    groups = _finalize_groups(grouped)
+
+    return {
+        "version": DOCUMENT_REQUEST_CHECKLIST_VERSION,
+        "group_count": len(groups),
+        "groups": groups,
+    }
+
+
+def _append_missing_exhibit_requests(grouped, missing_exhibits) -> None:
     for index, missing in enumerate(missing_exhibits, start=1):
         request_text = str(missing.get("requested_exhibit") or "").strip()
         if not request_text:
@@ -235,6 +259,8 @@ def build_document_request_checklist(
             )
         )
 
+
+def _append_missing_information_requests(grouped, missing_information_entries) -> None:
     # Convert broader missing-information flags into concrete preservation requests when possible.
     for entry in missing_information_entries:
         statement = str(entry.get("statement") or "").strip()
@@ -281,6 +307,8 @@ def build_document_request_checklist(
                 )
             )
 
+
+def _append_scope_requests(grouped, scope_quality, limits) -> None:
     missing_fields = {str(item) for item in _as_list(scope_quality.get("missing_recommended_fields")) if str(item).strip()}
     if "comparator_actors" in missing_fields:
         rule = _match_group("comparator evidence")
@@ -351,6 +379,8 @@ def build_document_request_checklist(
             )
         )
 
+
+def _append_issue_requests(grouped, lawyer_issue_rows) -> None:
     for index, row in enumerate(lawyer_issue_rows, start=1):
         missing_proof = [str(item) for item in _as_list(row.get("missing_proof")) if str(item).strip()]
         if not missing_proof:
@@ -375,61 +405,66 @@ def build_document_request_checklist(
             )
         )
 
+
+def _append_weakness_requests(grouped, weakness_items) -> None:
     # Add preservation-sensitive stress-test items from skeptical review.
     for index, weakness in enumerate(weakness_items, start=1):
-        category = str(weakness.get("category") or "")
-        if category not in {"chronology_problem", "missing_documentation", "ordinary_management_explanation"}:
+        request = _weakness_request(index, weakness)
+        if request is None:
             continue
-        rule = _match_group("calendar meeting records" if category == "chronology_problem" else "task change communications")
+        rule, item = request
         group = grouped.setdefault(
             str(rule["group_id"]),
             {"group_id": str(rule["group_id"]), "title": str(rule["title"]), "items": []},
         )
-        request_text = (
-            "Native calendar invites, attendee changes, and meeting notes around the disputed sequence"
-            if category == "chronology_problem"
-            else "Task-change communications, approvals, and workflow instructions that test the ordinary-management explanation"
-        )
-        group["items"].append(
-            _request_item(
-                item_id=f"request:{rule['group_id']}:repair:{index}",
-                request_text=request_text,
-                why_it_matters=str(weakness.get("why_it_matters") or ""),
-                likely_custodian=str(rule["custodian"]),
-                would_prove_or_disprove=str(
-                    _as_dict(weakness.get("repair_guidance")).get("evidence_that_would_repair")
-                    or "Would help prove or disprove the stressed weakness."
-                ),
-                urgency="high" if category == "chronology_problem" else str(rule["urgency"]),
-                risk_of_loss="high" if category == "chronology_problem" else str(rule["risk_of_loss"]),
-                preservation_action=str(rule["preservation_action"]),
-                linked_date_gap_ids=[str(item) for item in _as_list(weakness.get("linked_date_gap_ids")) if item],
-                supporting_finding_ids=[str(item) for item in _as_list(weakness.get("supporting_finding_ids")) if item],
-                supporting_source_ids=[str(item) for item in _as_list(weakness.get("supporting_source_ids")) if item],
-                supporting_uids=[str(item) for item in _as_list(weakness.get("supporting_uids")) if item],
-            )
-        )
+        group["items"].append(item)
 
+
+def _weakness_request(index, weakness):
+    category = str(weakness.get("category") or "")
+    if category not in {"chronology_problem", "missing_documentation", "ordinary_management_explanation"}:
+        return None
+    chronology_problem = category == "chronology_problem"
+    rule = _match_group("calendar meeting records" if chronology_problem else "task change communications")
+    request_text = (
+        "Native calendar invites, attendee changes, and meeting notes around the disputed sequence"
+        if chronology_problem
+        else "Task-change communications, approvals, and workflow instructions that test the ordinary-management explanation"
+    )
+    item = _request_item(
+        item_id=f"request:{rule['group_id']}:repair:{index}",
+        request_text=request_text,
+        why_it_matters=str(weakness.get("why_it_matters") or ""),
+        likely_custodian=str(rule["custodian"]),
+        would_prove_or_disprove=str(
+            _as_dict(weakness.get("repair_guidance")).get("evidence_that_would_repair")
+            or "Would help prove or disprove the stressed weakness."
+        ),
+        urgency="high" if chronology_problem else str(rule["urgency"]),
+        risk_of_loss="high" if chronology_problem else str(rule["risk_of_loss"]),
+        preservation_action=str(rule["preservation_action"]),
+        linked_date_gap_ids=_strings(weakness.get("linked_date_gap_ids")),
+        supporting_finding_ids=_strings(weakness.get("supporting_finding_ids")),
+        supporting_source_ids=_strings(weakness.get("supporting_source_ids")),
+        supporting_uids=_strings(weakness.get("supporting_uids")),
+    )
+    return rule, item
+
+
+def _strings(value):
+    return [str(item) for item in _as_list(value) if item]
+
+
+def _finalize_groups(grouped) -> list[dict[str, Any]]:
     groups = sorted(grouped.values(), key=lambda item: (str(item.get("title") or ""), str(item.get("group_id") or "")))
     for group in groups:
         items = [item for item in _as_list(group.get("items")) if isinstance(item, dict)]
         group["item_count"] = len(items)
-        group["linked_date_gap_ids"] = list(
-            dict.fromkeys(str(item) for row in items for item in _as_list(row.get("linked_date_gap_ids")) if str(item).strip())
-        )
-        group["supporting_finding_ids"] = list(
-            dict.fromkeys(str(item) for row in items for item in _as_list(row.get("supporting_finding_ids")) if str(item).strip())
-        )
-        group["supporting_source_ids"] = list(
-            dict.fromkeys(str(item) for row in items for item in _as_list(row.get("supporting_source_ids")) if str(item).strip())
-        )
-        group["supporting_uids"] = list(
-            dict.fromkeys(str(item) for row in items for item in _as_list(row.get("supporting_uids")) if str(item).strip())
-        )
+        for key in ("linked_date_gap_ids", "supporting_finding_ids", "supporting_source_ids", "supporting_uids"):
+            group[key] = _group_links(items, key)
         group["items"] = items
+    return groups
 
-    return {
-        "version": DOCUMENT_REQUEST_CHECKLIST_VERSION,
-        "group_count": len(groups),
-        "groups": groups,
-    }
+
+def _group_links(items, key):
+    return list(dict.fromkeys(str(item) for row in items for item in _as_list(row.get(key)) if str(item).strip()))

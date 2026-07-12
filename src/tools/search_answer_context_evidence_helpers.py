@@ -12,12 +12,8 @@ from ..mcp_models import EmailAnswerContextInput
 _ATTACHMENT_HEADER_RE = re.compile(r'^\[Attachment:\s*(.+?)\s+from email\s+"', re.IGNORECASE)
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
+def _text(value: Any) -> str:
+    return str(value) if value else ""
 
 
 def _snippet(text: str, *, max_chars: int = 280) -> str:
@@ -168,6 +164,20 @@ def _recipients_summary(full_email: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def _references_for_email(full_email: dict[str, Any] | None) -> list[str]:
+    if not full_email:
+        return []
+    raw = full_email.get("references") or []
+    if not raw and full_email.get("references_json"):
+        import json
+
+        try:
+            raw = json.loads(str(full_email.get("references_json") or "[]"))
+        except json.JSONDecodeError:
+            raw = []
+    return [str(item) for item in raw if item] if isinstance(raw, list) else []
+
+
 def _thread_graph_for_email(
     full_email: dict[str, Any] | None,
     *,
@@ -176,20 +186,10 @@ def _thread_graph_for_email(
     """Return canonical vs inferred thread graph fields for one email."""
     if not full_email and not fallback_conversation_id:
         return None
-    references = []
-    if full_email:
-        raw_references = full_email.get("references") or []
-        if not raw_references and full_email.get("references_json"):
-            import json
-
-            try:
-                raw_references = json.loads(str(full_email.get("references_json") or "[]"))
-            except json.JSONDecodeError:
-                raw_references = []
-        if isinstance(raw_references, list):
-            references = [str(reference) for reference in raw_references if reference]
-    conversation_id = str((full_email or {}).get("conversation_id") or fallback_conversation_id or "")
-    in_reply_to = str((full_email or {}).get("in_reply_to") or "")
+    email = full_email or {}
+    references = _references_for_email(full_email)
+    conversation_id = _text(email.get("conversation_id") or fallback_conversation_id)
+    in_reply_to = _text(email.get("in_reply_to"))
     canonical = {
         "conversation_id": conversation_id,
         "in_reply_to": in_reply_to,
@@ -197,10 +197,10 @@ def _thread_graph_for_email(
         "has_thread_links": bool(conversation_id or in_reply_to or references),
     }
     inferred = {
-        "parent_uid": str((full_email or {}).get("inferred_parent_uid") or ""),
-        "thread_id": str((full_email or {}).get("inferred_thread_id") or ""),
-        "reason": str((full_email or {}).get("inferred_match_reason") or ""),
-        "confidence": float((full_email or {}).get("inferred_match_confidence") or 0.0),
+        "parent_uid": _text(email.get("inferred_parent_uid")),
+        "thread_id": _text(email.get("inferred_thread_id")),
+        "reason": _text(email.get("inferred_match_reason")),
+        "confidence": float(email.get("inferred_match_confidence") or 0.0),
     }
     inferred["has_parent_link"] = bool(inferred["parent_uid"] or inferred["thread_id"])
     return {
@@ -238,6 +238,29 @@ def _thread_locator_for_candidate(
     }
 
 
+def _render_candidate_body(
+    full_email: dict[str, Any], requested_mode: str, retrieval_snippet: str
+) -> tuple[str, str, str, str, int | None, int | None]:
+    has_forensic = bool((full_email.get("forensic_body_text") or "").strip())
+    if requested_mode == "forensic":
+        mode = "forensic" if has_forensic else "retrieval"
+        body, source = resolve_body_for_render(full_email, mode)
+        snippet, status, start, end = _verified_snippet_for_mode(body, retrieval_snippet)
+        verification = "forensic_exact" if status == "exact" and mode == "forensic" else "forensic_fallback_retrieval"
+        return snippet, mode, source, verification, start, end
+    if requested_mode == "hybrid" and has_forensic:
+        body, source = resolve_body_for_render(full_email, "forensic")
+        snippet, status, start, end = _verified_snippet_for_mode(body, retrieval_snippet)
+        verification = "hybrid_verified_forensic" if status == "exact" else "hybrid_forensic_fallback"
+        return snippet, "forensic", source, verification, start, end
+    body, source = resolve_body_for_render(full_email, "retrieval")
+    snippet, status, start, end = _verified_snippet_for_mode(body, retrieval_snippet)
+    if requested_mode == "hybrid":
+        return snippet, "retrieval", source, "hybrid_fallback_retrieval", start, end
+    verification = "retrieval_exact" if status == "exact" else "retrieval_fallback"
+    return snippet, "retrieval", source, verification, start, end
+
+
 def _provenance_for_candidate(
     db: Any,
     uid: str,
@@ -258,29 +281,9 @@ def _provenance_for_candidate(
     full_map = db.get_emails_full_batch([uid]) if db and uid and hasattr(db, "get_emails_full_batch") else {}
     full_email = full_map.get(uid) if isinstance(full_map, dict) else None
     if full_email:
-        has_forensic_text = bool((full_email.get("forensic_body_text") or "").strip())
-        if requested_mode == "forensic":
-            body_text, body_render_source = resolve_body_for_render(full_email, "forensic" if has_forensic_text else "retrieval")
-            body_render_mode = "forensic" if has_forensic_text else "retrieval"
-            snippet, status_suffix, snippet_start, snippet_end = _verified_snippet_for_mode(body_text, retrieval_snippet)
-            verification_status = (
-                "forensic_exact" if status_suffix == "exact" and body_render_mode == "forensic" else "forensic_fallback_retrieval"
-            )
-        elif requested_mode == "hybrid":
-            if has_forensic_text:
-                forensic_text, forensic_source = resolve_body_for_render(full_email, "forensic")
-                body_render_mode = "forensic"
-                body_render_source = forensic_source
-                snippet, status_suffix, snippet_start, snippet_end = _verified_snippet_for_mode(forensic_text, retrieval_snippet)
-                verification_status = "hybrid_verified_forensic" if status_suffix == "exact" else "hybrid_forensic_fallback"
-            else:
-                body_text, body_render_source = resolve_body_for_render(full_email, "retrieval")
-                snippet, _, snippet_start, snippet_end = _verified_snippet_for_mode(body_text, retrieval_snippet)
-                verification_status = "hybrid_fallback_retrieval"
-        else:
-            body_text, body_render_source = resolve_body_for_render(full_email, "retrieval")
-            snippet, status_suffix, snippet_start, snippet_end = _verified_snippet_for_mode(body_text, retrieval_snippet)
-            verification_status = "retrieval_exact" if status_suffix == "exact" else "retrieval_fallback"
+        snippet, body_render_mode, body_render_source, verification_status, snippet_start, snippet_end = _render_candidate_body(
+            full_email, requested_mode, retrieval_snippet
+        )
         segment_ordinal = _segment_ordinal_for_snippet(db, uid, snippet)
 
     if snippet_start is None:

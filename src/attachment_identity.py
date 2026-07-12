@@ -8,6 +8,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from src._utils import compact
+
 ATTACHMENT_TEXT_NORMALIZATION_VERSION = 1
 DEFAULT_ATTACHMENT_OCR_LANG = "deu+eng"
 _UMLAUT_ASCII_MAP = str.maketrans(
@@ -23,12 +25,8 @@ _UMLAUT_ASCII_MAP = str.maketrans(
 )
 
 
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
-
-
 def _normalized_filename(filename: str) -> str:
-    return _compact(filename).casefold()
+    return compact(filename).casefold()
 
 
 def compute_attachment_content_sha256(content: bytes | bytearray | memoryview | None) -> str:
@@ -54,13 +52,13 @@ def stable_attachment_id(
     Prefers payload hash continuity when bytes exist. Falls back to a stable
     metadata fingerprint for rows without payload bytes.
     """
-    sha = _compact(content_sha256).casefold()
+    sha = compact(content_sha256).casefold()
     if sha:
         return f"sha256:{sha}"
 
     fingerprint_payload = {
-        "content_id": _compact(content_id).casefold(),
-        "mime_type": _compact(mime_type).casefold(),
+        "content_id": compact(content_id).casefold(),
+        "mime_type": compact(mime_type).casefold(),
         "size": int(size or 0),
         "filename": _normalized_filename(filename),
     }
@@ -75,8 +73,8 @@ def ensure_attachment_identity(
     content_bytes: bytes | bytearray | memoryview | None = None,
 ) -> tuple[str, str]:
     """Return ``(attachment_id, content_sha256)`` for an attachment payload."""
-    existing_attachment_id = _compact(attachment.get("attachment_id"))
-    existing_sha = _compact(attachment.get("content_sha256"))
+    existing_attachment_id = compact(attachment.get("attachment_id"))
+    existing_sha = compact(attachment.get("content_sha256"))
     payload_sha = compute_attachment_content_sha256(content_bytes)
     content_sha256 = payload_sha or existing_sha
     attachment_id = existing_attachment_id or stable_attachment_id(
@@ -91,8 +89,8 @@ def ensure_attachment_identity(
 
 def attachment_chunk_token(*, attachment_id: str, filename: str, att_index: int) -> str:
     """Return a stable compact token suitable for chunk ids."""
-    seed = _compact(attachment_id) or f"{_normalized_filename(filename)}#{att_index}"
-    return hashlib.md5(seed.encode("utf-8", errors="ignore"), usedforsecurity=False).hexdigest()[:16]
+    seed = compact(attachment_id) or f"{_normalized_filename(filename)}#{att_index}"
+    return hashlib.sha256(seed.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
 
 def normalize_attachment_search_text(text: str) -> str:

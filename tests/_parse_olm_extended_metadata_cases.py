@@ -1,4 +1,3 @@
-# ruff: noqa: F401
 # pylint: disable=no-member,c-extension-no-member
 
 
@@ -6,7 +5,6 @@
 
 from __future__ import annotations
 
-import base64
 import zipfile
 from pathlib import Path
 
@@ -15,19 +13,15 @@ from lxml import etree
 
 from src.olm_xml_helpers import (
     _detect_namespace,
-    _extract_attachment_contents,
-    _extract_attachment_field,
     _extract_html_body,
     _find,
     _find_text,
 )
 from src.parse_olm import (
     _NS_OUTLOOK,
-    Email,
     _parse_email_xml,
     parse_olm,
 )
-from src.parse_olm_normalization import BODY_NORMALIZATION_VERSION
 
 # ── Email.uid fallback (lines 98-99) ─────────────────────────
 

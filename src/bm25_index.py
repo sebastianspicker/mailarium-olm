@@ -231,23 +231,30 @@ class BM25Index:
         morph_tokens = _tokenize_with_morphology(query)
         if not morph_tokens:
             return [], {"status": "empty_query"}
+        raw_ranked, morph_ranked = self._diagnostic_rankings(raw_tokens, morph_tokens, top_k)
+        return self._diagnostic_result(raw_tokens, morph_tokens, raw_ranked, morph_ranked)
 
+    def _diagnostic_rankings(
+        self, raw_tokens: list[str], morph_tokens: list[str], top_k: int
+    ) -> tuple[list[tuple[int, float]], list[tuple[int, float]]]:
+        """Rank raw and morphology token paths with the same requested limit."""
+        assert self._raw_index is not None and self._index is not None
         raw_scores = self._raw_index.get_scores(raw_tokens) if raw_tokens else []
         morph_scores = self._index.get_scores(morph_tokens)
-
-        raw_ranked = self._rank_indices(
-            scores=raw_scores,
-            token_sets=self._raw_token_sets,
-            query_tokens=raw_tokens,
-            top_k=top_k,
-        )
+        raw_ranked = self._rank_indices(scores=raw_scores, token_sets=self._raw_token_sets, query_tokens=raw_tokens, top_k=top_k)
         morph_ranked = self._rank_indices(
-            scores=morph_scores,
-            token_sets=self._morph_token_sets,
-            query_tokens=morph_tokens,
-            top_k=top_k,
+            scores=morph_scores, token_sets=self._morph_token_sets, query_tokens=morph_tokens, top_k=top_k
         )
+        return raw_ranked, morph_ranked
 
+    def _diagnostic_result(
+        self,
+        raw_tokens: list[str],
+        morph_tokens: list[str],
+        raw_ranked: list[tuple[int, float]],
+        morph_ranked: list[tuple[int, float]],
+    ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
+        """Build stable diagnostic payloads from two already-ranked paths."""
         raw_ids = [self._chunk_ids[index] for index, _score in raw_ranked]
         morph_ids = [self._chunk_ids[index] for index, _score in morph_ranked]
         rows = [(self._chunk_ids[index], score) for index, score in morph_ranked]
@@ -257,7 +264,7 @@ class BM25Index:
             "morph_query_tokens": morph_tokens,
             "raw_hit_count": len(raw_ids),
             "morph_hit_count": len(morph_ids),
-            "morph_only_hit_count": len([chunk_id for chunk_id in morph_ids if chunk_id not in set(raw_ids)]),
+            "morph_only_hit_count": len(set(morph_ids).difference(raw_ids)),
             "token_path_stats": dict(self._token_path_stats),
         }
         return rows, diagnostics

@@ -1,24 +1,13 @@
 from __future__ import annotations
 
+from typing import Any
+
 from src.email_db import EmailDatabase
 
 
-def _payload() -> dict[str, object]:
+def _payload() -> dict[str, Any]:
     return {
-        "matter_workspace": {
-            "workspace_id": "workspace:abc123",
-            "matter": {
-                "matter_id": "matter:abc123",
-                "bundle_id": "case-123",
-                "case_label": "Case 123",
-                "analysis_goal": "lawyer_briefing",
-                "date_range": {
-                    "date_from": "2025-01-01",
-                    "date_to": "2025-06-30",
-                },
-                "target_person_entity_id": "person:target",
-            },
-        },
+        "matter_workspace": _payload_part_next(),
         "multi_source_case_bundle": {
             "sources": [
                 {
@@ -74,23 +63,7 @@ def _payload() -> dict[str, object]:
             "potentially_independent_witnesses": [],
             "high_value_record_holders": [],
         },
-        "comparative_treatment": {
-            "comparator_summaries": [
-                {
-                    "comparator_actor_id": "actor-peer",
-                    "comparator_matrix": {
-                        "rows": [
-                            {
-                                "issue_label": "Mobile work approvals",
-                                "comparison_strength": "moderate",
-                                "claimant_treatment": "Restricted",
-                                "comparator_treatment": "Approved",
-                            }
-                        ]
-                    },
-                }
-            ]
-        },
+        "comparative_treatment": _fixture__payload_part(),
         "lawyer_issue_matrix": {
             "rows": [
                 {
@@ -205,7 +178,7 @@ def test_snapshot_review_state_and_diff_workflow() -> None:
     assert approved["review_state"] == "export_approved"
 
     updated_payload = _payload()
-    updated_payload["multi_source_case_bundle"]["sources"].append(  # type: ignore[index]
+    updated_payload["multi_source_case_bundle"]["sources"].append(
         {
             "source_id": "formal_document:policy-1",
             "source_type": "formal_document",
@@ -308,7 +281,7 @@ def test_latest_snapshot_prefers_latest_snapshot_id_on_same_second() -> None:
     assert first_result is not None
 
     second_payload = _payload()
-    second_payload["case_dashboard"]["cards"]["main_claims_or_issues"][0]["evidence_hint"] = "Updated hint"  # type: ignore[index]
+    second_payload["case_dashboard"]["cards"]["main_claims_or_issues"][0]["evidence_hint"] = "Updated hint"
     second_result = db.persist_matter_snapshot(
         payload=second_payload,
         review_mode="exhaustive_matter_review",
@@ -329,7 +302,7 @@ def test_persist_matter_snapshot_deduplicates_duplicate_witness_ids() -> None:
     db = EmailDatabase(":memory:")
 
     payload = _payload()
-    payload["witness_map"]["high_value_record_holders"] = [  # type: ignore[index]
+    payload["witness_map"]["high_value_record_holders"] = [
         {"actor_id": "actor-manager", "name": "manager"},
         {"actor_id": "actor-manager", "name": "manager"},
     ]
@@ -346,3 +319,40 @@ def test_persist_matter_snapshot_deduplicates_duplicate_witness_ids() -> None:
     witness_count = db.conn.execute("SELECT COUNT(*) FROM matter_witnesses").fetchone()[0]
     assert witness_count == 2
     db.close()
+
+
+def _fixture__payload_part():
+    return {
+        "comparator_summaries": [
+            {
+                "comparator_actor_id": "actor-peer",
+                "comparator_matrix": {
+                    "rows": [
+                        {
+                            "issue_label": "Mobile work approvals",
+                            "comparison_strength": "moderate",
+                            "claimant_treatment": "Restricted",
+                            "comparator_treatment": "Approved",
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+
+
+def _payload_part_next():
+    return {
+        "workspace_id": "workspace:abc123",
+        "matter": {
+            "matter_id": "matter:abc123",
+            "bundle_id": "case-123",
+            "case_label": "Case 123",
+            "analysis_goal": "lawyer_briefing",
+            "date_range": {
+                "date_from": "2025-01-01",
+                "date_to": "2025-06-30",
+            },
+            "target_person_entity_id": "person:target",
+        },
+    }

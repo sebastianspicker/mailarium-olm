@@ -1,15 +1,3 @@
-# ruff: noqa: F401, I001
-import queue
-import threading
-import time
-
-import pytest
-
-from src.ingest import _SENTINEL, _EmbedPipeline, main, parse_args
-
-from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
-
-
 def test_format_ingestion_summary_includes_qol_fields():
     from src.ingest import format_ingestion_summary
 

@@ -21,6 +21,7 @@ class InferredThreadMatch:
 
 
 def _parse_dt(value: str) -> datetime | None:
+    """Parse a date string into a timezone-naive UTC datetime."""
     if not value:
         return None
     try:
@@ -36,6 +37,7 @@ def _parse_dt(value: str) -> datetime | None:
 
 
 def _participant_set(email: Email) -> set[str]:
+    """Extract the set of normalized participant email addresses from an email."""
     sender_email = getattr(email, "sender_email", "") or ""
     participants = {sender_email.lower()} if sender_email else set()
     for identities in (
@@ -51,6 +53,7 @@ def _participant_set(email: Email) -> set[str]:
 
 
 def _reply_context_participants(email: Email) -> set[str]:
+    """Extract the set of normalized participants from reply context (from/to)."""
     participants: set[str] = set()
     if getattr(email, "reply_context_from", ""):
         participants.add(email.reply_context_from.strip().lower())
@@ -62,71 +65,71 @@ def _reply_context_participants(email: Email) -> set[str]:
 
 
 def _snippet(text: str, limit: int = 120) -> str:
+    """Create a normalized snippet of text limited to the specified character count."""
     return " ".join(text.lower().split())[:limit]
 
 
 def _score_candidate(email: Email, candidate: Email) -> tuple[float, list[str]]:
-    reasons: list[str] = []
-    score = 0.0
+    """Score a candidate parent email against a child email, returning score and reasons."""
+    date_signal = _date_signal(email, candidate)
+    if date_signal is None:
+        return 0.0, []
+    signals = [
+        date_signal,
+        _subject_signal(email, candidate),
+        _participant_signal(email, candidate),
+        _snippet_signal(email, candidate),
+    ]
+    return sum(score for score, _ in signals), [reason for _, reasons in signals for reason in reasons]
 
-    child_dt = _parse_dt(getattr(email, "date", "") or "")
-    parent_dt = _parse_dt(getattr(candidate, "date", "") or "")
-    if child_dt and parent_dt:
-        if parent_dt >= child_dt:
-            return 0.0, []
-        delta_hours = (child_dt - parent_dt).total_seconds() / 3600
-        if delta_hours <= 72:
-            score += 0.10
-            reasons.append("recent_date")
-        elif delta_hours <= 24 * 30:
-            score += 0.05
-            reasons.append("date_window")
-        else:
-            return 0.0, []
 
-    email_base_subject = getattr(email, "base_subject", "") or ""
-    candidate_base_subject = getattr(candidate, "base_subject", "") or ""
-    if email_base_subject and candidate_base_subject and email_base_subject == candidate_base_subject:
-        score += 0.30
-        reasons.append("base_subject")
+def _date_signal(email: Email, candidate: Email) -> tuple[float, list[str]] | None:
+    child = _parse_dt(getattr(email, "date", "") or "")
+    parent = _parse_dt(getattr(candidate, "date", "") or "")
+    if not child or not parent:
+        return 0.0, []
+    if parent >= child:
+        return None
+    hours = (child - parent).total_seconds() / 3600
+    if hours <= 72:
+        return 0.10, ["recent_date"]
+    return (0.05, ["date_window"]) if hours <= 24 * 30 else None
 
-    reply_context_subject = getattr(email, "reply_context_subject", "").strip()
-    candidate_subject = getattr(candidate, "subject", "") or ""
-    if reply_context_subject and reply_context_subject == candidate_subject:
-        score += 0.20
-        reasons.append("reply_context_subject")
-    elif reply_context_subject and reply_context_subject == candidate_base_subject:
-        score += 0.15
-        reasons.append("reply_context_base_subject")
 
-    reply_context_from = getattr(email, "reply_context_from", "").strip().lower()
-    candidate_sender_email = getattr(candidate, "sender_email", "") or ""
-    if reply_context_from and candidate_sender_email and reply_context_from == candidate_sender_email.lower():
-        score += 0.25
-        reasons.append("reply_context_from")
-
-    reply_context_to = _reply_context_participants(email)
-    candidate_participants = _participant_set(candidate)
-    if reply_context_to and reply_context_to & candidate_participants:
-        score += 0.10
-        reasons.append("reply_context_to")
-
-    child_participants = _participant_set(email)
-    email_sender_email = getattr(email, "sender_email", "") or ""
-    if email_sender_email and email_sender_email.lower() in candidate_participants:
-        score += 0.12
-        reasons.append("sender_in_parent_participants")
-    if candidate_sender_email and candidate_sender_email.lower() in child_participants:
-        score += 0.12
-        reasons.append("parent_sender_in_child_participants")
-
-    child_snippet = _snippet(getattr(email, "clean_body", "") or "")
-    parent_snippet = _snippet(getattr(candidate, "clean_body", "") or "")
-    if child_snippet and parent_snippet and child_snippet[:40] and child_snippet[:40] in parent_snippet:
-        score += 0.08
-        reasons.append("snippet_overlap")
-
+def _subject_signal(email: Email, candidate: Email) -> tuple[float, list[str]]:
+    child_base = getattr(email, "base_subject", "") or ""
+    parent_base = getattr(candidate, "base_subject", "") or ""
+    context = getattr(email, "reply_context_subject", "").strip()
+    parent_subject = getattr(candidate, "subject", "") or ""
+    score, reasons = (0.30, ["base_subject"]) if child_base and parent_base and child_base == parent_base else (0.0, [])
+    if context and context == parent_subject:
+        return score + 0.20, [*reasons, "reply_context_subject"]
+    if context and context == parent_base:
+        return score + 0.15, [*reasons, "reply_context_base_subject"]
     return score, reasons
+
+
+def _participant_signal(email: Email, candidate: Email) -> tuple[float, list[str]]:
+    context_from = getattr(email, "reply_context_from", "").strip().lower()
+    parent_sender = getattr(candidate, "sender_email", "") or ""
+    context_to = _reply_context_participants(email)
+    parent_participants = _participant_set(candidate)
+    child_participants = _participant_set(email)
+    child_sender = getattr(email, "sender_email", "") or ""
+    checks = (
+        (context_from and parent_sender and context_from == parent_sender.lower(), 0.25, "reply_context_from"),
+        (context_to and bool(context_to & parent_participants), 0.10, "reply_context_to"),
+        (child_sender and child_sender.lower() in parent_participants, 0.12, "sender_in_parent_participants"),
+        (parent_sender and parent_sender.lower() in child_participants, 0.12, "parent_sender_in_child_participants"),
+    )
+    return sum(weight for matched, weight, _ in checks if matched), [reason for matched, _, reason in checks if matched]
+
+
+def _snippet_signal(email: Email, candidate: Email) -> tuple[float, list[str]]:
+    child = _snippet(getattr(email, "clean_body", "") or "")
+    parent = _snippet(getattr(candidate, "clean_body", "") or "")
+    matched = bool(child and parent and child[:40] and child[:40] in parent)
+    return (0.08, ["snippet_overlap"]) if matched else (0.0, [])
 
 
 def infer_parent_candidate(email: Email, candidate_messages: list[Email]) -> InferredThreadMatch | None:
@@ -136,13 +139,7 @@ def infer_parent_candidate(email: Email, candidate_messages: list[Email]) -> Inf
     if getattr(email, "email_type", "original") == "original":
         return None
 
-    scored: list[tuple[float, list[str], Email]] = []
-    for candidate in candidate_messages:
-        if getattr(candidate, "uid", "") == getattr(email, "uid", ""):
-            continue
-        score, reasons = _score_candidate(email, candidate)
-        if score > 0:
-            scored.append((score, reasons, candidate))
+    scored = _scored_parent_candidates(email, candidate_messages)
 
     if not scored:
         return None
@@ -163,3 +160,13 @@ def infer_parent_candidate(email: Email, candidate_messages: list[Email]) -> Inf
         reason=",".join(best_reasons),
         confidence=round(min(best_score, 1.0), 3),
     )
+
+
+def _scored_parent_candidates(email: Email, candidates: list[Email]) -> list[tuple[float, list[str], Email]]:
+    scored = []
+    for candidate in candidates:
+        if getattr(candidate, "uid", "") != getattr(email, "uid", ""):
+            score, reasons = _score_candidate(email, candidate)
+            if score > 0:
+                scored.append((score, reasons, candidate))
+    return scored

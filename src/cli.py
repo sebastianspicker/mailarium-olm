@@ -137,33 +137,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if argv and all(token in _ROOT_FLAGS_NO_VALUES for token in argv):
         return _build_subcommand_parser().parse_args(argv)
     if _has_subcommand(argv):
-        # Modern subcommand path
-        new_parser = _build_subcommand_parser()
-        args = new_parser.parse_args(argv)
-        for dest, value in _extract_root_flag_values(argv).items():
-            if getattr(args, dest, None) is None:
-                setattr(args, dest, value)
-
-        # Normalize search query: positional or --query
-        if args.subcommand == "search":
-            query_pos = getattr(args, "query_positional", None)
-            query_flag = getattr(args, "query", None)
-            if query_pos and query_flag:
-                new_parser.error("Provide query as positional argument or --query, not both.")
-            args.query = query_pos or query_flag
-            if args.query is None:
-                new_parser.error("search requires a query (positional or --query).")
-            # Validate date window
-            date_from = getattr(args, "date_from", None)
-            date_to = getattr(args, "date_to", None)
-            try:
-                validate_date_window(date_from, date_to)
-            except ValueError:
-                new_parser.error("--date-from cannot be later than --date-to")
-            # Validate --json + --format combo
-            if getattr(args, "json", False) and getattr(args, "format", None) is not None:
-                new_parser.error("--json cannot be combined with --format; use only --format {text,json}")
-        return args
+        return _parse_modern_args(argv)
 
     # Legacy flat-flag parser
     legacy_parser = _build_legacy_parser()
@@ -182,10 +156,43 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
+def _parse_modern_args(argv: list[str]) -> argparse.Namespace:
+    parser = _build_subcommand_parser()
+    args = parser.parse_args(argv)
+    for dest, value in _extract_root_flag_values(argv).items():
+        if getattr(args, dest, None) is None:
+            setattr(args, dest, value)
+    if args.subcommand == "search":
+        _normalize_search_args(args, parser)
+    return args
+
+
+def _normalize_search_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    query_pos = getattr(args, "query_positional", None)
+    query_flag = getattr(args, "query", None)
+    if query_pos and query_flag:
+        parser.error("Provide query as positional argument or --query, not both.")
+    args.query = query_pos or query_flag
+    if args.query is None:
+        parser.error("search requires a query (positional or --query).")
+    try:
+        validate_date_window(getattr(args, "date_from", None), getattr(args, "date_to", None))
+    except ValueError:
+        parser.error("--date-from cannot be later than --date-to")
+    if getattr(args, "json", False) and getattr(args, "format", None) is not None:
+        parser.error("--json cannot be combined with --format; use only --format {text,json}")
+
+
 # ── Validation (legacy parser) ───────────────────────────────────
 
 
 def _validate_arg_combinations(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Validate argument combinations for legacy parser.
+
+    Args:
+        args: Parsed command-line arguments.
+        parser: The argument parser used for parsing.
+    """
     _validate_arg_combinations_impl(args, parser)
 
 
@@ -193,6 +200,11 @@ def _validate_arg_combinations(args: argparse.Namespace, parser: argparse.Argume
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Main entry point for the CLI.
+
+    Args:
+        argv: Command-line arguments. If None, uses sys.argv[1:].
+    """
     load_dotenv()
     args = parse_args(argv)
     configure_logging(getattr(args, "log_level", None))

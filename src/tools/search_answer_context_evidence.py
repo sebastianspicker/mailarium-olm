@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from src._utils import _as_dict, _as_list
+
 from .search_answer_context_evidence_candidates import (
     _attach_conversation_context,
     _attachment_candidate,
@@ -10,8 +12,6 @@ from .search_answer_context_evidence_candidates import (
     _conversation_group_summaries,
 )
 from .search_answer_context_evidence_helpers import (
-    _as_dict,
-    _as_list,
     _attachment_extraction_state,
     _find_snippet_bounds,
     _is_attachment_result,

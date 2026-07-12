@@ -6,6 +6,7 @@ from __future__ import annotations
 import collections
 import logging
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -178,10 +179,7 @@ class CommunicationNetwork:
 
         # Build undirected graph with inverted weights (1/count) for
         # shortest-path computation: stronger connections = shorter paths.
-        undirected = self._to_undirected_summed(nx)
-        for _u, _v, data in undirected.edges(data=True):
-            w = data.get("weight", 1)
-            data["cost"] = 1.0 / max(w, 1)
+        undirected = self._weighted_undirected_graph(nx)
 
         if source not in undirected or target not in undirected:
             return []
@@ -189,20 +187,21 @@ class CommunicationNetwork:
         if source == target:
             return [{"error": "source and target are the same address"}]
 
+        return self._shortest_paths(nx, undirected, source, target, max_hops, top_k)
+
+    def _weighted_undirected_graph(self, nx):
+        undirected = self._to_undirected_summed(nx)
+        for _u, _v, data in undirected.edges(data=True):
+            data["cost"] = 1.0 / max(data.get("weight", 1), 1)
+        return undirected
+
+    def _shortest_paths(self, nx, graph, source, target, max_hops, top_k):
         paths = []
         try:
-            for path_nodes in nx.shortest_simple_paths(undirected, source, target, weight="cost"):
+            for path_nodes in nx.shortest_simple_paths(graph, source, target, weight="cost"):
                 if len(path_nodes) - 1 > max_hops:
                     break
-                edges = []
-                for i in range(len(path_nodes) - 1):
-                    a, b = path_nodes[i], path_nodes[i + 1]
-                    weight = 0
-                    if self._graph.has_edge(a, b):
-                        weight += self._graph[a][b].get("weight", 0)
-                    if self._graph.has_edge(b, a):
-                        weight += self._graph[b][a].get("weight", 0)
-                    edges.append({"from": a, "to": b, "weight": weight})
+                edges = self._path_edges(path_nodes)
 
                 paths.append(
                     {
@@ -217,6 +216,14 @@ class CommunicationNetwork:
             pass  # no path exists between the two nodes — return empty list
 
         return paths
+
+    def _path_edges(self, nodes):
+        edges = []
+        for a, b in pairwise(nodes):
+            weight = self._graph[a][b].get("weight", 0) if self._graph.has_edge(a, b) else 0
+            weight += self._graph[b][a].get("weight", 0) if self._graph.has_edge(b, a) else 0
+            edges.append({"from": a, "to": b, "weight": weight})
+        return edges
 
     def shared_recipients(self, email_addresses: list[str], min_shared: int = 2) -> list[dict[str, Any]]:
         """Find recipients who received emails from ALL specified senders.
@@ -250,16 +257,7 @@ class CommunicationNetwork:
             return []
 
         # Parse dates
-        dated_events = []
-        for entry in timeline:
-            try:
-                dt = datetime.fromisoformat(entry["date"].replace("Z", "+00:00"))
-                # Normalize to naive UTC to avoid mixed-timezone comparison errors
-                if dt.tzinfo is not None:
-                    dt = dt.astimezone(UTC).replace(tzinfo=None)
-                dated_events.append((dt, entry["sender_email"]))
-            except (ValueError, TypeError):
-                continue
+        dated_events = _dated_sender_events(timeline)
 
         if not dated_events:
             return []
@@ -375,3 +373,16 @@ class CommunicationNetwork:
             "total_nodes": self._graph.number_of_nodes(),
             "total_edges": self._graph.number_of_edges(),
         }
+
+
+def _dated_sender_events(timeline):
+    events = []
+    for entry in timeline:
+        try:
+            parsed = datetime.fromisoformat(entry["date"].replace("Z", "+00:00"))
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+            events.append((parsed, entry["sender_email"]))
+        except (ValueError, TypeError):
+            continue
+    return events

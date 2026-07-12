@@ -168,6 +168,7 @@ def issue_track_titles(issue_tracks: list[str]) -> list[str]:
 
 
 def _context_text(case_scope: Any) -> str:
+    """Return normalized context notes as a single-line lowercase string."""
     return " ".join(str(case_scope.context_notes or "").lower().split())
 
 
@@ -183,72 +184,88 @@ def _has_protected_context(case_scope: Any) -> bool:
 
 def _track_needs(case_scope: Any, issue_track: IssueTrack) -> list[dict[str, str]]:
     """Return structured missing-input guidance for one selected issue track."""
-    needs: list[dict[str, str]] = []
     context_text = _context_text(case_scope)
-
     if issue_track == "disability_disadvantage":
-        if not _has_protected_context(case_scope):
-            needs.append(
-                {
-                    "field": "org_context.vulnerability_contexts",
-                    "reason": "Protected or vulnerability context is not yet visible in structured intake.",
-                    "recommendation": "Add illness or disability context only when it is already documented and relevant.",
-                }
-            )
-        if not getattr(case_scope, "comparator_actors", []):
-            needs.append(
-                {
-                    "field": "comparator_actors",
-                    "reason": "Comparator support is missing for a disadvantage or unequal-treatment issue track.",
-                    "recommendation": "Add one or more comparable actors from the same workflow or decision context.",
-                }
-            )
-    elif issue_track == "retaliation_after_protected_event":
-        if not getattr(case_scope, "trigger_events", []):
-            needs.append(
-                {
-                    "field": "trigger_events",
-                    "reason": "The protected or participation trigger event is not yet anchored to a date.",
-                    "recommendation": "Add dated complaint, objection, disclosure, or participation events.",
-                }
-            )
-    elif issue_track == "eingruppierung_dispute":
-        if not context_text or not any(keyword in context_text for keyword in _KEYWORDS_BY_TRACK[issue_track]):
-            needs.append(
-                {
-                    "field": "context_notes",
-                    "reason": "The intake does not yet describe the classification or task-allocation dispute concretely.",
-                    "recommendation": "Add neutral context about grade, task profile, or disputed role allocation.",
-                }
-            )
-    elif issue_track == "prevention_duty_gap":
-        if not _has_protected_context(case_scope):
-            needs.append(
-                {
-                    "field": "org_context.vulnerability_contexts",
-                    "reason": "The health or disability context that would trigger prevention review is not yet visible.",
-                    "recommendation": "Add documented health, disability, or workability context when already known.",
-                }
-            )
-        if not context_text or not any(keyword in context_text for keyword in _KEYWORDS_BY_TRACK[issue_track]):
-            needs.append(
-                {
-                    "field": "context_notes",
-                    "reason": "The intake does not yet identify a prevention, BEM, or follow-up process question.",
-                    "recommendation": "Add neutral notes about the prevention or BEM process concern.",
-                }
-            )
-    elif issue_track == "participation_duty_gap":
-        if not context_text or not any(keyword in context_text for keyword in _KEYWORDS_BY_TRACK[issue_track]):
-            needs.append(
-                {
-                    "field": "context_notes",
-                    "reason": "The intake does not yet identify which participation body should have been involved.",
-                    "recommendation": "Add neutral notes naming SBV, Personalrat, or the relevant participation path.",
-                }
-            )
+        return _disability_needs(case_scope)
+    if issue_track == "retaliation_after_protected_event":
+        return _retaliation_needs(case_scope)
+    if issue_track == "prevention_duty_gap":
+        return _prevention_needs(case_scope, context_text)
+    if issue_track in {"eingruppierung_dispute", "participation_duty_gap"}:
+        return _context_needs(issue_track, context_text)
+    return []
 
+
+def _need(field: str, reason: str, recommendation: str) -> dict[str, str]:
+    return {"field": field, "reason": reason, "recommendation": recommendation}
+
+
+def _disability_needs(case_scope: Any) -> list[dict[str, str]]:
+    needs = []
+    if not _has_protected_context(case_scope):
+        needs.append(
+            _need(
+                "org_context.vulnerability_contexts",
+                "Protected or vulnerability context is not yet visible in structured intake.",
+                "Add illness or disability context only when it is already documented and relevant.",
+            )
+        )
+    if not getattr(case_scope, "comparator_actors", []):
+        needs.append(
+            _need(
+                "comparator_actors",
+                "Comparator support is missing for a disadvantage or unequal-treatment issue track.",
+                "Add one or more comparable actors from the same workflow or decision context.",
+            )
+        )
     return needs
+
+
+def _retaliation_needs(case_scope: Any) -> list[dict[str, str]]:
+    if getattr(case_scope, "trigger_events", []):
+        return []
+    return [
+        _need(
+            "trigger_events",
+            "The protected or participation trigger event is not yet anchored to a date.",
+            "Add dated complaint, objection, disclosure, or participation events.",
+        )
+    ]
+
+
+def _prevention_needs(case_scope: Any, context_text: str) -> list[dict[str, str]]:
+    needs = []
+    if not _has_protected_context(case_scope):
+        needs.append(
+            _need(
+                "org_context.vulnerability_contexts",
+                "The health or disability context that would trigger prevention review is not yet visible.",
+                "Add documented health, disability, or workability context when already known.",
+            )
+        )
+    needs.extend(_context_needs("prevention_duty_gap", context_text))
+    return needs
+
+
+def _context_needs(issue_track: IssueTrack, context_text: str) -> list[dict[str, str]]:
+    if context_text and any(keyword in context_text for keyword in _KEYWORDS_BY_TRACK[issue_track]):
+        return []
+    messages = {
+        "eingruppierung_dispute": (
+            "The intake does not yet describe the classification or task-allocation dispute concretely.",
+            "Add neutral context about grade, task profile, or disputed role allocation.",
+        ),
+        "prevention_duty_gap": (
+            "The intake does not yet identify a prevention, BEM, or follow-up process question.",
+            "Add neutral notes about the prevention or BEM process concern.",
+        ),
+        "participation_duty_gap": (
+            "The intake does not yet identify which participation body should have been involved.",
+            "Add neutral notes naming SBV, Personalrat, or the relevant participation path.",
+        ),
+    }
+    reason, recommendation = messages[issue_track]
+    return [_need("context_notes", reason, recommendation)]
 
 
 def build_issue_track_intake_payload(case_scope: Any) -> list[dict[str, Any]]:

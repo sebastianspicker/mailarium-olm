@@ -233,7 +233,7 @@ def _reset_runtime_clients() -> None:
         try:
             close()  # pylint: disable=not-callable
         except OSError:
-            pass
+            logger.debug("Failed to release file lock", exc_info=True)
 
 
 def set_runtime_archive_paths(*, chromadb_path: str | None = None, sqlite_path: str | None = None) -> None:

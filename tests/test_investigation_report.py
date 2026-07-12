@@ -1,6 +1,9 @@
-# ruff: noqa: F403,F405
+# ruff: noqa: F403
+# flake8: noqa
 # pylint: disable=unused-wildcard-import,wildcard-import
 
+
+from src.investigation_report import build_investigation_report
 
 from ._investigation_report_assessment_cases import *
 from ._investigation_report_issue_compact_cases import *

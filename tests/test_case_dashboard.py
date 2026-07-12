@@ -4,7 +4,71 @@ from src.case_dashboard import build_case_dashboard
 
 
 def test_build_case_dashboard_renders_refreshable_cards_from_shared_entities() -> None:
-    payload = build_case_dashboard(
+    payload = _fixture_test_build_case_dashboard_renders_refreshable_cards_from_shared_entities_payload()
+
+    assert payload is not None
+    assert payload["version"] == "1"
+    assert payload["dashboard_format"] == "refreshable_case_dashboard"
+    assert payload["summary"]["refreshable_from_shared_entities"] is True
+    assert payload["cards"]["main_claims_or_issues"][0]["title"] == "Participation duty gap"
+    assert payload["cards"]["key_dates"][0]["chronology_id"] == "CHR-001"
+    assert payload["cards"]["strongest_exhibits"][0]["exhibit_id"] == "EXH-001"
+    assert payload["cards"]["open_evidence_gaps"][0]["gap_id"] == "gap-1"
+    assert payload["cards"]["main_actors"][0]["actor_id"] == "actor-manager"
+    assert payload["cards"]["comparator_points"][0]["comparator_point_id"] == "cmp:1"
+    assert payload["cards"]["comparator_points"][0]["strength"] == "moderate"
+    assert "comparator emails received faster follow-up" in payload["cards"]["comparator_points"][0]["summary"].lower()
+    assert payload["cards"]["process_irregularities"][0]["summary"]
+    assert payload["cards"]["drafting_priorities"][0]["confidence"] == "medium"
+    assert payload["cards"]["timing_warnings"][0]["warning_id"] == "timing:deadline_relevance"
+    assert payload["cards"]["risks_or_weak_spots"][0]["weakness_id"] == "weak-1"
+    assert payload["cards"]["recommended_next_actions"][0]["group_id"] == "group-1"
+
+
+def test_build_case_dashboard_suppresses_blank_placeholder_cards() -> None:
+    payload = _fixture_test_build_case_dashboard_suppresses_blank_placeholder_cards_payload()
+
+    assert payload is not None
+    assert payload["cards"]["strongest_exhibits"] == [
+        {
+            "exhibit_id": "EXH-001",
+            "source_id": "",
+            "summary": "Anchored email.",
+            "strength": "strong",
+            "source_language": "",
+            "source_conflict_status": "",
+            "supporting_source_ids": [],
+            "supporting_uids": [],
+            "quoted_evidence": {},
+            "document_locator": {},
+        }
+    ]
+    assert payload["cards"]["open_evidence_gaps"] == [
+        {
+            "gap_id": "gap-1",
+            "summary": "8-day unexplained gap",
+            "gap_days": 8,
+            "priority": "",
+            "missing_bridge_record_suggestions": [],
+        }
+    ]
+    assert payload["cards"]["process_irregularities"] == [{"summary": "Participation step missing from later summary."}]
+    assert payload["cards"]["comparator_points"] == [
+        {
+            "status": "insufficient_evidence",
+            "summary": "Comparator analysis is not yet supported on the current record.",
+        }
+    ]
+    assert payload["cards"]["drafting_priorities"] == [
+        {
+            "status": "insufficient_evidence",
+            "summary": "No contradiction-driven drafting priority is currently available on the shared record.",
+        }
+    ]
+
+
+def _fixture_test_build_case_dashboard_renders_refreshable_cards_from_shared_entities_payload():
+    return build_case_dashboard(
         case_bundle={"scope": {"case_label": "Case A", "target_person": {"name": "Morgan Manager"}}},
         matter_workspace={
             "workspace_id": "workspace:123",
@@ -104,27 +168,9 @@ def test_build_case_dashboard_renders_refreshable_cards_from_shared_entities() -
         },
     )
 
-    assert payload is not None
-    assert payload["version"] == "1"
-    assert payload["dashboard_format"] == "refreshable_case_dashboard"
-    assert payload["summary"]["refreshable_from_shared_entities"] is True
-    assert payload["cards"]["main_claims_or_issues"][0]["title"] == "Participation duty gap"
-    assert payload["cards"]["key_dates"][0]["chronology_id"] == "CHR-001"
-    assert payload["cards"]["strongest_exhibits"][0]["exhibit_id"] == "EXH-001"
-    assert payload["cards"]["open_evidence_gaps"][0]["gap_id"] == "gap-1"
-    assert payload["cards"]["main_actors"][0]["actor_id"] == "actor-manager"
-    assert payload["cards"]["comparator_points"][0]["comparator_point_id"] == "cmp:1"
-    assert payload["cards"]["comparator_points"][0]["strength"] == "moderate"
-    assert "comparator emails received faster follow-up" in payload["cards"]["comparator_points"][0]["summary"].lower()
-    assert payload["cards"]["process_irregularities"][0]["summary"]
-    assert payload["cards"]["drafting_priorities"][0]["confidence"] == "medium"
-    assert payload["cards"]["timing_warnings"][0]["warning_id"] == "timing:deadline_relevance"
-    assert payload["cards"]["risks_or_weak_spots"][0]["weakness_id"] == "weak-1"
-    assert payload["cards"]["recommended_next_actions"][0]["group_id"] == "group-1"
 
-
-def test_build_case_dashboard_suppresses_blank_placeholder_cards() -> None:
-    payload = build_case_dashboard(
+def _fixture_test_build_case_dashboard_suppresses_blank_placeholder_cards_payload():
+    return build_case_dashboard(
         case_bundle={"scope": {"case_label": "Case A"}},
         matter_workspace={"workspace_id": "workspace:123", "matter": {"matter_id": "matter:123"}},
         matter_evidence_index={
@@ -164,41 +210,3 @@ def test_build_case_dashboard_suppresses_blank_placeholder_cards() -> None:
         document_request_checklist={},
         promise_contradiction_analysis={},
     )
-
-    assert payload is not None
-    assert payload["cards"]["strongest_exhibits"] == [
-        {
-            "exhibit_id": "EXH-001",
-            "source_id": "",
-            "summary": "Anchored email.",
-            "strength": "strong",
-            "source_language": "",
-            "source_conflict_status": "",
-            "supporting_source_ids": [],
-            "supporting_uids": [],
-            "quoted_evidence": {},
-            "document_locator": {},
-        }
-    ]
-    assert payload["cards"]["open_evidence_gaps"] == [
-        {
-            "gap_id": "gap-1",
-            "summary": "8-day unexplained gap",
-            "gap_days": 8,
-            "priority": "",
-            "missing_bridge_record_suggestions": [],
-        }
-    ]
-    assert payload["cards"]["process_irregularities"] == [{"summary": "Participation step missing from later summary."}]
-    assert payload["cards"]["comparator_points"] == [
-        {
-            "status": "insufficient_evidence",
-            "summary": "Comparator analysis is not yet supported on the current record.",
-        }
-    ]
-    assert payload["cards"]["drafting_priorities"] == [
-        {
-            "status": "insufficient_evidence",
-            "summary": "No contradiction-driven drafting priority is currently available on the shared record.",
-        }
-    ]

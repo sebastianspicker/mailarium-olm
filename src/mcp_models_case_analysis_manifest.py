@@ -4,13 +4,46 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
 from .mcp_models_analysis import BehavioralCaseScopeInput
 from .mcp_models_base import StrictInput, _validate_local_read_path, _validate_output_path
 from .mcp_models_case_analysis_core import CaseChatExportInput, CaseChatLogEntryInput
+
+
+def _validate_case_date_bounds(case_scope: BehavioralCaseScopeInput) -> None:
+    if case_scope.date_from is None:  # pylint: disable=no-member
+        raise ValueError(
+            "case_scope.date_from is required for dedicated case analysis. "
+            "Provide a bounded review window so chronology and before/after comparisons stay interpretable."
+        )
+    if case_scope.date_to is None:  # pylint: disable=no-member
+        raise ValueError(
+            "case_scope.date_to is required for dedicated case analysis. "
+            "Provide a bounded review window so chronology and before/after comparisons stay interpretable."
+        )
+
+
+def _validate_case_source_support(params: Any) -> None:
+    manifest = params.matter_manifest
+    has_manifest_artifacts = bool(manifest is not None and manifest.artifacts)
+    has_mixed_support = any((params.chat_log_entries, params.chat_exports, has_manifest_artifacts))
+    if params.source_scope == "mixed_case_file" and not has_mixed_support:
+        raise ValueError(
+            "mixed_case_file requires at least one of chat_log_entries, chat_exports, or matter_manifest artifacts. "
+            "If you only want email evidence, use emails_only or emails_and_attachments instead."
+        )
+
+
+def _validate_exhaustive_manifest(params: Any) -> None:
+    if params.review_mode != "exhaustive_matter_review":
+        return
+    if params.matter_manifest is None:
+        raise ValueError("exhaustive_matter_review requires matter_manifest so the run can account for every supplied artifact.")
+    if not params.matter_manifest.artifacts:
+        raise ValueError("exhaustive_matter_review requires at least one matter_manifest artifact.")
 
 
 class MatterArtifactInput(StrictInput):
@@ -369,37 +402,9 @@ class EmailCaseAnalysisInput(StrictInput):
     @model_validator(mode="after")
     def validate_case_scope_requirements(self):
         case_scope = self.case_scope
-        if case_scope.date_from is None:  # pylint: disable=no-member
-            raise ValueError(
-                "case_scope.date_from is required for dedicated case analysis. "
-                "Provide a bounded review window so chronology and before/after comparisons stay interpretable."
-            )
-        if case_scope.date_to is None:  # pylint: disable=no-member
-            raise ValueError(
-                "case_scope.date_to is required for dedicated case analysis. "
-                "Provide a bounded review window so chronology and before/after comparisons stay interpretable."
-            )
-        has_manifest_artifacts = bool(self.matter_manifest is not None and self.matter_manifest.artifacts)  # pylint: disable=no-member
-        if (
-            self.source_scope == "mixed_case_file"
-            and not self.chat_log_entries
-            and not self.chat_exports
-            and not has_manifest_artifacts
-        ):
-            raise ValueError(
-                "mixed_case_file requires at least one of chat_log_entries, chat_exports, or matter_manifest artifacts. "
-                "If you only want email evidence, use emails_only or emails_and_attachments instead."
-            )
-        if self.review_mode == "exhaustive_matter_review" and self.matter_manifest is None:
-            raise ValueError(
-                "exhaustive_matter_review requires matter_manifest so the run can account for every supplied artifact."
-            )
-        if (
-            self.review_mode == "exhaustive_matter_review"
-            and self.matter_manifest is not None
-            and not self.matter_manifest.artifacts  # pylint: disable=no-member
-        ):
-            raise ValueError("exhaustive_matter_review requires at least one matter_manifest artifact.")
+        _validate_case_date_bounds(case_scope)
+        _validate_case_source_support(self)
+        _validate_exhaustive_manifest(self)
         return self
 
     @field_validator("query_lanes")

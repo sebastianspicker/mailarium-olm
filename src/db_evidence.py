@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from ._sql_validation import validate_column_update_pairs as _validate_column_update_pairs
@@ -29,6 +30,353 @@ _REVIEW_STATES = {
     "draft_only",
     "export_approved",
 }
+
+
+@dataclass(frozen=True)
+class _EvidenceCandidateRequest:
+    run_id: str
+    phase_id: str
+    wave_id: str
+    wave_label: str
+    question_ids: list[str]
+    email_uid: str | None
+    candidate_kind: str
+    quote_candidate: str
+    summary: str
+    category_hint: str
+    rank: int
+    score: float
+    verification_status: str
+    verified_exact: bool
+    subject: str
+    sender_name: str
+    sender_email: str
+    date: str
+    conversation_id: str
+    matched_query_lanes: list[str]
+    matched_query_queries: list[str]
+    provenance: dict | None = None
+    context: dict | None = None
+
+
+@dataclass(frozen=True)
+class _EvidenceAddContext:
+    email_uid: str
+    category: str
+    key_quote: str
+    summary: str
+    relevance: int
+    recipients: str
+    notes: str
+    verified: int
+    content_hash: str
+    candidate_kind: str
+    provenance: dict | None
+    document_locator: dict | None
+    context: dict | None
+
+
+@dataclass(frozen=True)
+class _ReviewOverrideRequest:
+    workspace_id: str
+    target_type: str
+    target_id: str
+    review_state: str
+    override_payload: dict[str, Any]
+    machine_payload: dict[str, Any]
+    source_evidence: list[dict[str, Any]]
+    reviewer: str
+    review_notes: str
+    apply_on_refresh: bool
+
+
+def _evidence_candidate_request(values: dict[str, Any]) -> _EvidenceCandidateRequest:
+    return _EvidenceCandidateRequest(**values)
+
+
+def _candidate_content_hash(db: Any, request: _EvidenceCandidateRequest) -> str:
+    return db.compute_content_hash(
+        json.dumps(
+            {
+                "phase_id": request.phase_id,
+                "email_uid": request.email_uid or "",
+                "candidate_kind": request.candidate_kind,
+                "quote_candidate": request.quote_candidate,
+                "provenance": request.provenance or {},
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+    )
+
+
+def _candidate_insert_values(request: _EvidenceCandidateRequest, content_hash: str) -> tuple[Any, ...]:
+    return (
+        request.run_id,
+        request.phase_id,
+        request.wave_id,
+        request.wave_label,
+        json.dumps(request.question_ids, ensure_ascii=False),
+        request.email_uid,
+        request.candidate_kind,
+        request.quote_candidate,
+        request.summary,
+        request.category_hint,
+        request.rank,
+        request.score,
+        request.verification_status,
+        int(request.verified_exact),
+        request.subject,
+        request.sender_name,
+        request.sender_email,
+        request.date,
+        request.conversation_id,
+        json.dumps(request.matched_query_lanes, ensure_ascii=False),
+        json.dumps(request.matched_query_queries, ensure_ascii=False),
+        json.dumps(request.provenance or {}, ensure_ascii=False),
+        json.dumps(request.context or {}, ensure_ascii=False),
+        "harvested",
+        None,
+        content_hash,
+    )
+
+
+def _insert_evidence_candidate(db: Any, request: _EvidenceCandidateRequest, content_hash: str) -> int:
+    try:
+        cur = db.conn.execute(
+            """INSERT INTO evidence_candidates(
+                   run_id, phase_id, wave_id, wave_label, question_ids_json, email_uid,
+                   candidate_kind, quote_candidate, summary, category_hint, rank, score,
+                   verification_status, verified_exact, subject, sender_name, sender_email,
+                   date, conversation_id, matched_query_lanes_json, matched_query_queries_json,
+                   provenance_json, context_json, status, promoted_evidence_id, content_hash
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            _candidate_insert_values(request, content_hash),
+        )
+        candidate_id = int(cur.lastrowid)
+        db.log_custody_event(
+            "evidence_candidate_add",
+            target_type="evidence_candidate",
+            target_id=str(candidate_id),
+            details={
+                "run_id": request.run_id,
+                "phase_id": request.phase_id,
+                "wave_id": request.wave_id,
+                "candidate_kind": request.candidate_kind,
+                "email_uid": request.email_uid or "",
+                "verified_exact": bool(request.verified_exact),
+            },
+            content_hash=content_hash,
+            commit=False,
+        )
+        db.conn.commit()
+    except Exception:
+        db.conn.rollback()
+        raise
+    return candidate_id
+
+
+def _insert_evidence_item(
+    db: Any,
+    values: tuple[Any, ...],
+    *,
+    email_uid: str,
+    category: str,
+    relevance: int,
+    summary: str,
+    content_hash: str,
+) -> int:
+    try:
+        cur = db.conn.execute(
+            """INSERT INTO evidence_items
+               (email_uid, category, key_quote, summary, relevance,
+                sender_name, sender_email, date, recipients, subject, notes, verified,
+                content_hash, candidate_kind, provenance_json, document_locator_json, context_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            values,
+        )
+        evidence_id = int(cur.lastrowid)
+        db.log_custody_event(
+            "evidence_add",
+            target_type="evidence",
+            target_id=str(evidence_id),
+            details={"email_uid": email_uid, "category": category, "relevance": relevance, "summary": summary[:200]},
+            content_hash=content_hash,
+            commit=False,
+        )
+        db.conn.commit()
+    except Exception:
+        db.conn.rollback()
+        raise
+    return evidence_id
+
+
+def _new_evidence_payload(
+    evidence_id: int,
+    email_row: sqlite3.Row,
+    request: _EvidenceAddContext,
+) -> dict[str, Any]:
+    return {
+        "id": evidence_id,
+        "email_uid": request.email_uid,
+        "category": request.category,
+        "key_quote": request.key_quote,
+        "summary": request.summary,
+        "relevance": request.relevance,
+        "sender_name": email_row["sender_name"],
+        "sender_email": email_row["sender_email"],
+        "date": email_row["date"],
+        "recipients": request.recipients,
+        "subject": email_row["subject"],
+        "notes": request.notes,
+        "verified": request.verified,
+        "content_hash": request.content_hash,
+        "candidate_kind": request.candidate_kind,
+        "provenance": request.provenance or {},
+        "document_locator": request.document_locator or {},
+        "context": request.context or {},
+    }
+
+
+def _prepare_evidence_updates(db: Any, existing: sqlite3.Row, updates: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    if "relevance" in updates and updates["relevance"] is not None:
+        updates["relevance"] = max(1, min(5, int(updates["relevance"])))
+    if "key_quote" in updates:
+        verification = quote_verification_state_for_evidence(
+            db,
+            email_uid=str(existing["email_uid"] or ""),
+            quote=updates["key_quote"].strip(),
+            candidate_kind=str(existing["candidate_kind"] or ""),
+            document_locator=_decode_locator_json(existing["document_locator_json"]),
+        )
+        updates["verified"] = int(verification.get("state") == "exact_verified")
+    category = updates.get("category", existing["category"])
+    key_quote = updates.get("key_quote", existing["key_quote"])
+    content_hash = db.compute_content_hash(f"{existing['email_uid']}|{category}|{key_quote}")
+    updates["content_hash"] = content_hash
+    return updates, content_hash
+
+
+def _execute_evidence_update(
+    db: Any,
+    evidence_id: int,
+    updates: dict[str, Any],
+    old_values: dict[str, Any],
+    content_hash: str,
+    allowed: set[str],
+) -> bool:
+    set_clause = _validate_column_update_pairs(updates, allowed_columns=allowed | {"content_hash", "verified"})
+    set_clause += ", updated_at = datetime('now')"
+    try:
+        cur = db.conn.execute(
+            f"UPDATE evidence_items SET {set_clause} WHERE id = ?",  # nosec B608
+            [*updates.values(), evidence_id],
+        )
+        if cur.rowcount > 0:
+            db.log_custody_event(
+                "evidence_update",
+                target_type="evidence",
+                target_id=str(evidence_id),
+                details={
+                    "old_values": old_values,
+                    "new_values": {key: value for key, value in updates.items() if key != "content_hash"},
+                },
+                content_hash=content_hash,
+                commit=False,
+            )
+        db.conn.commit()
+    except Exception:
+        db.conn.rollback()
+        raise
+    return cur.rowcount > 0
+
+
+def _review_override_request(
+    workspace_id: str,
+    target_type: str,
+    target_id: str,
+    review_state: str,
+    override_payload: dict | None,
+    machine_payload: dict | None,
+    source_evidence: list[dict] | None,
+    reviewer: str,
+    review_notes: str,
+    apply_on_refresh: bool,
+) -> _ReviewOverrideRequest:
+    identifiers = tuple(str(value or "").strip() for value in (workspace_id, target_type, target_id))
+    if not all(identifiers):
+        raise ValueError("workspace_id, target_type, and target_id are required for review overrides.")
+    normalized_state = str(review_state or "").strip()
+    if normalized_state not in _REVIEW_STATES:
+        raise ValueError(f"Unsupported review_state: {normalized_state}")
+    return _ReviewOverrideRequest(
+        identifiers[0],
+        identifiers[1],
+        identifiers[2],
+        normalized_state,
+        override_payload if isinstance(override_payload, dict) else {},
+        machine_payload if isinstance(machine_payload, dict) else {},
+        [item for item in (source_evidence or []) if isinstance(item, dict)],
+        reviewer,
+        review_notes,
+        apply_on_refresh,
+    )
+
+
+def _persist_review_override(db: Any, request: _ReviewOverrideRequest, content_hash: str) -> sqlite3.Row | None:
+    try:
+        db.conn.execute(
+            """INSERT INTO matter_review_overrides(
+                   workspace_id, target_type, target_id, review_state,
+                   override_payload_json, machine_payload_json, source_evidence_json,
+                   reviewer, review_notes, apply_on_refresh, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(workspace_id, target_type, target_id) DO UPDATE SET
+                   review_state=excluded.review_state,
+                   override_payload_json=excluded.override_payload_json,
+                   machine_payload_json=excluded.machine_payload_json,
+                   source_evidence_json=excluded.source_evidence_json,
+                   reviewer=excluded.reviewer,
+                   review_notes=excluded.review_notes,
+                   apply_on_refresh=excluded.apply_on_refresh,
+                   updated_at=datetime('now')""",
+            (
+                request.workspace_id,
+                request.target_type,
+                request.target_id,
+                request.review_state,
+                json.dumps(request.override_payload, sort_keys=True),
+                json.dumps(request.machine_payload, sort_keys=True),
+                json.dumps(request.source_evidence, sort_keys=True),
+                request.reviewer,
+                request.review_notes,
+                int(request.apply_on_refresh),
+            ),
+        )
+        row = db.conn.execute(
+            """SELECT * FROM matter_review_overrides
+               WHERE workspace_id=? AND target_type=? AND target_id=?""",
+            (request.workspace_id, request.target_type, request.target_id),
+        ).fetchone()
+        db.log_custody_event(
+            "review_override_upsert",
+            target_type="matter_review_override",
+            target_id=f"{request.workspace_id}:{request.target_type}:{request.target_id}",
+            details={
+                "workspace_id": request.workspace_id,
+                "target_type": request.target_type,
+                "target_id": request.target_id,
+                "review_state": request.review_state,
+                "apply_on_refresh": request.apply_on_refresh,
+            },
+            content_hash=content_hash,
+            commit=False,
+        )
+        db.conn.commit()
+    except Exception:
+        db.conn.rollback()
+        raise
+    return row
 
 
 def _clean_identity_text(value: Any) -> str:
@@ -86,27 +434,13 @@ def _artifact_identity_matches(
 ) -> bool:
     normalized_candidate_kind = _clean_identity_text(candidate_kind).casefold()
     normalized_existing_kind = _clean_identity_text(existing_kind).casefold()
-
-    if normalized_candidate_kind:
-        if normalized_existing_kind and normalized_existing_kind != normalized_candidate_kind:
-            return False
-        if normalized_candidate_kind != "attachment" and normalized_existing_kind == "attachment":
-            return False
+    if not _artifact_kinds_compatible(normalized_candidate_kind, normalized_existing_kind):
+        return False
     if normalized_candidate_kind == "attachment":
-        candidate_attachment_id = _clean_identity_text(candidate_locator.get("attachment_id")).casefold()
-        existing_attachment_id = _clean_identity_text(existing_locator.get("attachment_id")).casefold()
-        if candidate_attachment_id and existing_attachment_id and candidate_attachment_id == existing_attachment_id:
-            return True
-        candidate_content_sha = _clean_identity_text(candidate_locator.get("content_sha256")).casefold()
-        existing_content_sha = _clean_identity_text(existing_locator.get("content_sha256")).casefold()
-        if candidate_content_sha and existing_content_sha and candidate_content_sha == existing_content_sha:
-            return True
-        candidate_filename = _clean_identity_text(candidate_locator.get("attachment_filename")).casefold()
-        existing_filename = _clean_identity_text(existing_locator.get("attachment_filename")).casefold()
-        if not candidate_filename or not existing_filename or candidate_filename != existing_filename:
-            return False
-
-    for key in (
+        attachment_match = _attachment_identity_match(candidate_locator, existing_locator)
+        if attachment_match is not None:
+            return attachment_match
+    identity_keys = (
         "evidence_handle",
         "chunk_id",
         "segment_type",
@@ -119,60 +453,64 @@ def _artifact_identity_matches(
         "surface_hash",
         "attachment_id",
         "content_sha256",
-    ):
-        candidate_value = candidate_locator.get(key)
-        existing_value = existing_locator.get(key)
-        if candidate_value not in (None, "") and existing_value not in (None, "") and candidate_value != existing_value:
-            return False
-
+    )
+    if _artifact_locator_conflict(candidate_locator, existing_locator, identity_keys):
+        return False
     if normalized_candidate_kind == "attachment":
         return True
-    if (
-        candidate_locator.get("evidence_handle")
-        and existing_locator.get("evidence_handle")
-        and candidate_locator.get("evidence_handle") == existing_locator.get("evidence_handle")
-    ):
+    if _positive_artifact_locator_match(candidate_locator, existing_locator):
         return True
-    if (
-        candidate_locator.get("chunk_id")
-        and existing_locator.get("chunk_id")
-        and candidate_locator.get("chunk_id") == existing_locator.get("chunk_id")
-    ):
-        return True
-    candidate_segment = (candidate_locator.get("segment_type"), candidate_locator.get("segment_ordinal"))
-    existing_segment = (existing_locator.get("segment_type"), existing_locator.get("segment_ordinal"))
-    if all(candidate_segment) and all(existing_segment) and candidate_segment == existing_segment:
-        return True
-    if (
-        candidate_locator.get("snippet_start") is not None
-        and candidate_locator.get("snippet_end") is not None
-        and existing_locator.get("snippet_start") is not None
-        and existing_locator.get("snippet_end") is not None
-        and candidate_locator.get("snippet_start") == existing_locator.get("snippet_start")
-        and candidate_locator.get("snippet_end") == existing_locator.get("snippet_end")
-    ):
-        return True
-
-    has_candidate_artifact_identity = any(
-        candidate_locator.get(key) not in (None, "")
-        for key in (
-            "evidence_handle",
-            "chunk_id",
-            "segment_type",
-            "segment_ordinal",
-            "snippet_start",
-            "snippet_end",
-            "source_scope",
-            "char_start",
-            "char_end",
-            "surface_hash",
-            "attachment_id",
-            "content_sha256",
-        )
-    )
+    has_candidate_artifact_identity = any(candidate_locator.get(key) not in (None, "") for key in identity_keys)
     if not has_candidate_artifact_identity and normalized_candidate_kind in {"", "body"}:
         return normalized_existing_kind in {"", "body"}
     return False
+
+
+def _artifact_kinds_compatible(candidate_kind: str, existing_kind: str) -> bool:
+    if not candidate_kind:
+        return True
+    if existing_kind and existing_kind != candidate_kind:
+        return False
+    return not all((candidate_kind != "attachment", existing_kind == "attachment"))
+
+
+def _shared_locator_value(candidate: dict[str, Any], existing: dict[str, Any], key: str) -> bool:
+    candidate_value = _clean_identity_text(candidate.get(key)).casefold()
+    existing_value = _clean_identity_text(existing.get(key)).casefold()
+    return all((candidate_value, existing_value, candidate_value == existing_value))
+
+
+def _attachment_identity_match(candidate: dict[str, Any], existing: dict[str, Any]) -> bool | None:
+    if _shared_locator_value(candidate, existing, "attachment_id"):
+        return True
+    if _shared_locator_value(candidate, existing, "content_sha256"):
+        return True
+    candidate_filename = _clean_identity_text(candidate.get("attachment_filename")).casefold()
+    existing_filename = _clean_identity_text(existing.get("attachment_filename")).casefold()
+    if not all((candidate_filename, existing_filename, candidate_filename == existing_filename)):
+        return False
+    return None
+
+
+def _artifact_locator_conflict(candidate: dict[str, Any], existing: dict[str, Any], keys: tuple[str, ...]) -> bool:
+    for key in keys:
+        candidate_value = candidate.get(key)
+        existing_value = existing.get(key)
+        if all((candidate_value not in (None, ""), existing_value not in (None, ""), candidate_value != existing_value)):
+            return True
+    return False
+
+
+def _positive_artifact_locator_match(candidate: dict[str, Any], existing: dict[str, Any]) -> bool:
+    direct_match = any(_shared_locator_value(candidate, existing, key) for key in ("evidence_handle", "chunk_id"))
+    candidate_segment = (candidate.get("segment_type"), candidate.get("segment_ordinal"))
+    existing_segment = (existing.get("segment_type"), existing.get("segment_ordinal"))
+    segment_match = all(candidate_segment) and all(existing_segment) and candidate_segment == existing_segment
+    snippet_keys = ("snippet_start", "snippet_end")
+    snippet_match = all(candidate.get(key) is not None for key in snippet_keys) and all(
+        candidate.get(key) == existing.get(key) for key in snippet_keys
+    )
+    return any((direct_match, segment_match, snippet_match))
 
 
 class EvidenceMixin:
@@ -291,73 +629,52 @@ class EvidenceMixin:
 
         content_hash = self.compute_content_hash(f"{email_uid}|{category}|{key_quote}")
 
-        try:
-            cur = self.conn.execute(
-                """INSERT INTO evidence_items
-                   (email_uid, category, key_quote, summary, relevance,
-                    sender_name, sender_email, date, recipients, subject, notes, verified,
-                    content_hash, candidate_kind, provenance_json, document_locator_json, context_json)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    email_uid,
-                    category,
-                    key_quote,
-                    summary,
-                    relevance,
-                    email_row["sender_name"],
-                    email_row["sender_email"],
-                    email_row["date"],
-                    recipients,
-                    email_row["subject"],
-                    notes,
-                    verified,
-                    content_hash,
-                    candidate_kind,
-                    json.dumps(provenance or {}, ensure_ascii=False),
-                    json.dumps(document_locator or {}, ensure_ascii=False),
-                    json.dumps(context or {}, ensure_ascii=False),
-                ),
-            )
-            new_id = cur.lastrowid
-
-            self.log_custody_event(
-                "evidence_add",
-                target_type="evidence",
-                target_id=str(new_id),
-                details={
-                    "email_uid": email_uid,
-                    "category": category,
-                    "relevance": relevance,
-                    "summary": summary[:200],
-                },
-                content_hash=content_hash,
-                commit=False,
-            )
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
-
-        return {
-            "id": new_id,
-            "email_uid": email_uid,
-            "category": category,
-            "key_quote": key_quote,
-            "summary": summary,
-            "relevance": relevance,
-            "sender_name": email_row["sender_name"],
-            "sender_email": email_row["sender_email"],
-            "date": email_row["date"],
-            "recipients": recipients,
-            "subject": email_row["subject"],
-            "notes": notes,
-            "verified": verified,
-            "content_hash": content_hash,
-            "candidate_kind": candidate_kind,
-            "provenance": provenance or {},
-            "document_locator": document_locator or {},
-            "context": context or {},
-        }
+        new_id = _insert_evidence_item(
+            self,
+            (
+                email_uid,
+                category,
+                key_quote,
+                summary,
+                relevance,
+                email_row["sender_name"],
+                email_row["sender_email"],
+                email_row["date"],
+                recipients,
+                email_row["subject"],
+                notes,
+                verified,
+                content_hash,
+                candidate_kind,
+                json.dumps(provenance or {}, ensure_ascii=False),
+                json.dumps(document_locator or {}, ensure_ascii=False),
+                json.dumps(context or {}, ensure_ascii=False),
+            ),
+            email_uid=email_uid,
+            category=category,
+            relevance=relevance,
+            summary=summary,
+            content_hash=content_hash,
+        )
+        return _new_evidence_payload(
+            new_id,
+            email_row,
+            _EvidenceAddContext(
+                email_uid,
+                category,
+                key_quote,
+                summary,
+                relevance,
+                recipients,
+                notes,
+                verified,
+                content_hash,
+                candidate_kind,
+                provenance,
+                document_locator,
+                context,
+            ),
+        )
 
     def list_evidence(
         self,
@@ -400,9 +717,6 @@ class EvidenceMixin:
         if not updates:
             return False
 
-        if "relevance" in updates and updates["relevance"] is not None:
-            updates["relevance"] = max(1, min(5, int(updates["relevance"])))
-
         # Check item exists and snapshot old values
         existing = self.conn.execute(
             "SELECT * FROM evidence_items WHERE id = ?",
@@ -411,49 +725,8 @@ class EvidenceMixin:
         if not existing:
             return False
         old_values = {k: existing[k] for k in updates}
-
-        # Re-verify if key_quote changed
-        if "key_quote" in updates:
-            new_quote = updates["key_quote"].strip()
-            verification = quote_verification_state_for_evidence(
-                self,
-                email_uid=str(existing["email_uid"] or ""),
-                quote=new_quote,
-                candidate_kind=str(existing["candidate_kind"] or ""),
-                document_locator=_decode_locator_json(existing["document_locator_json"]),
-            )
-            updates["verified"] = 1 if verification.get("state") == "exact_verified" else 0
-
-        # Recompute content hash
-        category = updates.get("category", existing["category"])
-        key_quote = updates.get("key_quote", existing["key_quote"])
-        new_hash = self.compute_content_hash(f"{existing['email_uid']}|{category}|{key_quote}")
-        updates["content_hash"] = new_hash
-
-        set_managere = _validate_column_update_pairs(updates, allowed_columns=allowed | {"content_hash", "verified"})
-        set_managere += ", updated_at = datetime('now')"
-        params = [*updates.values(), evidence_id]
-
-        try:
-            cur = self.conn.execute(
-                f"UPDATE evidence_items SET {set_managere} WHERE id = ?",  # nosec B608
-                params,
-            )
-
-            if cur.rowcount > 0:
-                self.log_custody_event(
-                    "evidence_update",
-                    target_type="evidence",
-                    target_id=str(evidence_id),
-                    details={"old_values": old_values, "new_values": {k: v for k, v in updates.items() if k != "content_hash"}},
-                    content_hash=new_hash,
-                    commit=False,
-                )
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
-        return cur.rowcount > 0
+        updates, new_hash = _prepare_evidence_updates(self, existing, updates)
+        return _execute_evidence_update(self, evidence_id, updates, old_values, new_hash, allowed)
 
     def remove_evidence(self, evidence_id: int) -> bool:
         """Delete an evidence item by ID. Logs custody event with snapshot. Returns True if deleted."""
@@ -520,121 +793,26 @@ class EvidenceMixin:
         """
         return evidence_stats_impl(self, category=category, min_relevance=min_relevance)
 
-    def add_evidence_candidate(
-        self,
-        *,
-        run_id: str,
-        phase_id: str,
-        wave_id: str,
-        wave_label: str,
-        question_ids: list[str],
-        email_uid: str | None,
-        candidate_kind: str,
-        quote_candidate: str,
-        summary: str,
-        category_hint: str,
-        rank: int,
-        score: float,
-        verification_status: str,
-        verified_exact: bool,
-        subject: str,
-        sender_name: str,
-        sender_email: str,
-        date: str,
-        conversation_id: str,
-        matched_query_lanes: list[str],
-        matched_query_queries: list[str],
-        provenance: dict | None = None,
-        context: dict | None = None,
-    ) -> dict:
+    def add_evidence_candidate(self, **values: Any) -> dict:
         """Persist one harvested evidence candidate for a wave run.
 
         Returns the stored row plus an ``inserted`` flag. Duplicate candidates for the
         same ``run_id`` and ``wave_id`` are ignored and returned as existing rows.
         """
-        content_hash = self.compute_content_hash(
-            json.dumps(
-                {
-                    "phase_id": phase_id,
-                    "email_uid": email_uid or "",
-                    "candidate_kind": candidate_kind,
-                    "quote_candidate": quote_candidate,
-                    "provenance": provenance or {},
-                },
-                sort_keys=True,
-                ensure_ascii=False,
-            )
-        )
+        request = _evidence_candidate_request(values)
+        content_hash = _candidate_content_hash(self, request)
         existing = self.conn.execute(
             """SELECT *
                FROM evidence_candidates
                WHERE run_id = ? AND wave_id = ? AND content_hash = ?""",
-            (run_id, wave_id, content_hash),
+            (request.run_id, request.wave_id, content_hash),
         ).fetchone()
         if existing:
             payload = dict(existing)
             payload["inserted"] = False
             return payload
 
-        values = (
-            run_id,
-            phase_id,
-            wave_id,
-            wave_label,
-            json.dumps(question_ids, ensure_ascii=False),
-            email_uid,
-            candidate_kind,
-            quote_candidate,
-            summary,
-            category_hint,
-            rank,
-            score,
-            verification_status,
-            1 if verified_exact else 0,
-            subject,
-            sender_name,
-            sender_email,
-            date,
-            conversation_id,
-            json.dumps(matched_query_lanes, ensure_ascii=False),
-            json.dumps(matched_query_queries, ensure_ascii=False),
-            json.dumps(provenance or {}, ensure_ascii=False),
-            json.dumps(context or {}, ensure_ascii=False),
-            "harvested",
-            None,
-            content_hash,
-        )
-        try:
-            cur = self.conn.execute(
-                """INSERT INTO evidence_candidates(
-                       run_id, phase_id, wave_id, wave_label, question_ids_json, email_uid,
-                       candidate_kind, quote_candidate, summary, category_hint, rank, score,
-                       verification_status, verified_exact, subject, sender_name, sender_email,
-                       date, conversation_id, matched_query_lanes_json, matched_query_queries_json,
-                       provenance_json, context_json, status, promoted_evidence_id, content_hash
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                values,
-            )
-            candidate_id = cur.lastrowid
-            self.log_custody_event(
-                "evidence_candidate_add",
-                target_type="evidence_candidate",
-                target_id=str(candidate_id),
-                details={
-                    "run_id": run_id,
-                    "phase_id": phase_id,
-                    "wave_id": wave_id,
-                    "candidate_kind": candidate_kind,
-                    "email_uid": email_uid or "",
-                    "verified_exact": bool(verified_exact),
-                },
-                content_hash=content_hash,
-                commit=False,
-            )
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
+        candidate_id = _insert_evidence_candidate(self, request, content_hash)
 
         created = self.conn.execute("SELECT * FROM evidence_candidates WHERE id = ?", (candidate_id,)).fetchone()
         payload = dict(created) if created else {"id": candidate_id, "content_hash": content_hash}
@@ -731,84 +909,31 @@ class EvidenceMixin:
         apply_on_refresh: bool = True,
     ) -> dict:
         """Persist or replace one human review override for a matter product item."""
-        workspace_id = str(workspace_id or "").strip()
-        target_type = str(target_type or "").strip()
-        target_id = str(target_id or "").strip()
-        review_state = str(review_state or "").strip()
-        if not workspace_id or not target_type or not target_id:
-            raise ValueError("workspace_id, target_type, and target_id are required for review overrides.")
-        if review_state not in _REVIEW_STATES:
-            raise ValueError(f"Unsupported review_state: {review_state}")
-
-        override_payload = override_payload if isinstance(override_payload, dict) else {}
-        machine_payload = machine_payload if isinstance(machine_payload, dict) else {}
-        source_evidence = [item for item in (source_evidence or []) if isinstance(item, dict)]
+        request = _review_override_request(
+            workspace_id,
+            target_type,
+            target_id,
+            review_state,
+            override_payload,
+            machine_payload,
+            source_evidence,
+            reviewer,
+            review_notes,
+            apply_on_refresh,
+        )
         content_hash = self.compute_content_hash(
             json.dumps(
                 {
-                    "workspace_id": workspace_id,
-                    "target_type": target_type,
-                    "target_id": target_id,
-                    "review_state": review_state,
-                    "override_payload": override_payload,
+                    "workspace_id": request.workspace_id,
+                    "target_type": request.target_type,
+                    "target_id": request.target_id,
+                    "review_state": request.review_state,
+                    "override_payload": request.override_payload,
                 },
                 sort_keys=True,
             )
         )
-
-        try:
-            self.conn.execute(
-                """INSERT INTO matter_review_overrides(
-                       workspace_id, target_type, target_id, review_state,
-                       override_payload_json, machine_payload_json, source_evidence_json,
-                       reviewer, review_notes, apply_on_refresh, updated_at
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                   ON CONFLICT(workspace_id, target_type, target_id) DO UPDATE SET
-                       review_state=excluded.review_state,
-                       override_payload_json=excluded.override_payload_json,
-                       machine_payload_json=excluded.machine_payload_json,
-                       source_evidence_json=excluded.source_evidence_json,
-                       reviewer=excluded.reviewer,
-                       review_notes=excluded.review_notes,
-                       apply_on_refresh=excluded.apply_on_refresh,
-                       updated_at=datetime('now')""",
-                (
-                    workspace_id,
-                    target_type,
-                    target_id,
-                    review_state,
-                    json.dumps(override_payload, sort_keys=True),
-                    json.dumps(machine_payload, sort_keys=True),
-                    json.dumps(source_evidence, sort_keys=True),
-                    reviewer,
-                    review_notes,
-                    int(bool(apply_on_refresh)),
-                ),
-            )
-            row = self.conn.execute(
-                """SELECT * FROM matter_review_overrides
-                   WHERE workspace_id=? AND target_type=? AND target_id=?""",
-                (workspace_id, target_type, target_id),
-            ).fetchone()
-            self.log_custody_event(
-                "review_override_upsert",
-                target_type="matter_review_override",
-                target_id=f"{workspace_id}:{target_type}:{target_id}",
-                details={
-                    "workspace_id": workspace_id,
-                    "target_type": target_type,
-                    "target_id": target_id,
-                    "review_state": review_state,
-                    "apply_on_refresh": bool(apply_on_refresh),
-                },
-                content_hash=content_hash,
-                commit=False,
-            )
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
-
+        row = _persist_review_override(self, request, content_hash)
         return dict(row) if row else {}
 
     def list_matter_review_overrides(

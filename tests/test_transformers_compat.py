@@ -40,3 +40,37 @@ def test_ensure_flagembedding_transformers_compat_keeps_existing_helper(monkeypa
     ensure_flagembedding_transformers_compat()
 
     assert import_utils.is_torch_fx_available() is sentinel  # pylint: disable=no-member
+
+
+def test_ensure_flagembedding_transformers_compat_skips_injected_test_module(monkeypatch):
+    import_utils = types.ModuleType("transformers.utils.import_utils")
+    utils = types.ModuleType("transformers.utils")
+    transformers = types.ModuleType("transformers")
+    utils.import_utils = import_utils
+    transformers.utils = utils
+
+    monkeypatch.setitem(sys.modules, "FlagEmbedding", types.ModuleType("FlagEmbedding"))
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
+    monkeypatch.setitem(sys.modules, "transformers.utils", utils)
+    monkeypatch.setitem(sys.modules, "transformers.utils.import_utils", import_utils)
+
+    ensure_flagembedding_transformers_compat()
+
+    assert not hasattr(import_utils, "is_torch_fx_available")
+
+
+def test_ensure_flagembedding_transformers_compat_skips_explicit_missing_module(monkeypatch):
+    import_utils = types.ModuleType("transformers.utils.import_utils")
+    utils = types.ModuleType("transformers.utils")
+    transformers = types.ModuleType("transformers")
+    utils.import_utils = import_utils
+    transformers.utils = utils
+
+    monkeypatch.setitem(sys.modules, "FlagEmbedding", None)
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
+    monkeypatch.setitem(sys.modules, "transformers.utils", utils)
+    monkeypatch.setitem(sys.modules, "transformers.utils.import_utils", import_utils)
+
+    ensure_flagembedding_transformers_compat()
+
+    assert not hasattr(import_utils, "is_torch_fx_available")

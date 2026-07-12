@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .._utils import _as_dict, _as_list
 from .search_answer_context_runtime_lanes import _segment_search_results
 from .search_answer_context_runtime_ranking import (
     _evidence_bank_keys_with_lane_diversity,
@@ -65,6 +66,19 @@ class LaneProcessingInput:
 
 
 def _lane_search_kwargs(search_kwargs: dict[str, Any], *, lane_query: str, lane_search_top_k: int) -> dict[str, Any]:
+    """Create search kwargs for a specific lane.
+
+    Combines base search kwargs with lane-specific query and top_k,
+    filtering out keys that start with underscore.
+
+    Args:
+        search_kwargs: Base search keyword arguments.
+        lane_query: The query string for this lane.
+        lane_search_top_k: The top_k value for this lane.
+
+    Returns:
+        A dictionary of search kwargs for the lane.
+    """
     return {
         key: value
         for key, value in {**search_kwargs, "query": lane_query, "top_k": lane_search_top_k}.items()
@@ -79,6 +93,17 @@ def _remember_best_result(
     result: Any,
     exact_wording: bool,
 ) -> None:
+    """Store the best result for a given key in the combined results dict.
+
+    Compares the new result against any existing result for the same key
+    using the competition key, and keeps the better one.
+
+    Args:
+        combined: The dictionary storing combined results.
+        key: The key for this result.
+        result: The result to potentially store.
+        exact_wording: Whether exact wording is requested.
+    """
     existing = combined.get(key)
     if existing is None or _result_competition_key(result, exact_wording=exact_wording) > _result_competition_key(
         existing,
@@ -98,6 +123,25 @@ def _lane_runtime_results(
     bank_limit: int,
     base_lane_query: str,
 ) -> tuple[list[Any], list[Any], list[Any], dict[str, Any], list[str], dict[str, Any] | None]:
+    """Execute search for a single lane and return results with diagnostics.
+
+    Performs the main search, applies seen filters, extracts segment results,
+    and builds lane diagnostics.
+
+    Args:
+        retriever: The retriever instance to use for search.
+        search_kwargs: Base search keyword arguments.
+        lane_query: The query string for this lane.
+        lane_id: Identifier for this lane.
+        scan_id: Optional scan identifier.
+        lane_search_top_k: Top k for lane search.
+        bank_limit: Maximum items in the evidence bank.
+        base_lane_query: The base query for this lane.
+
+    Returns:
+        A tuple of (raw_lane_results, lane_results, segment_results,
+        diagnostics, expansion_terms, lane_scan_meta).
+    """
     lane_results = retriever.search_filtered(
         **_lane_search_kwargs(
             search_kwargs,
@@ -147,6 +191,18 @@ def _record_raw_lane_matches(
     lane_hits: dict[str, list[str]],
     lane_queries_by_key: dict[str, list[str]],
 ) -> None:
+    """Record which lane matched each result.
+
+    Iterates through lane results and records the lane_id and lane_query
+    for each result's identity key in the tracking dictionaries.
+
+    Args:
+        lane_results: List of results from the lane search.
+        lane_id: Identifier for this lane.
+        lane_query: The query string for this lane.
+        lane_hits: Dictionary mapping keys to list of lane IDs that hit them.
+        lane_queries_by_key: Dictionary mapping keys to list of queries that hit them.
+    """
     for result in lane_results:
         key = _result_identity_key(result, fallback=lane_id)
         _record_lane_match(
@@ -169,6 +225,24 @@ def _merge_lane_results_for_diagnostics(
     lane_queries_by_key: dict[str, list[str]],
     exact_wording: bool,
 ) -> list[str]:
+    """Merge lane results into combined dict and return reserved keys.
+
+    Merges both regular and segment results into the combined dictionary,
+    recording matches and returning the list of keys reserved by this lane.
+
+    Args:
+        combined: The shared dictionary for combined results.
+        lane_results: Regular results from the lane search.
+        segment_results: Segment-level results from the lane search.
+        lane_id: Identifier for this lane.
+        lane_query: The query string for this lane.
+        lane_hits: Dictionary mapping keys to list of lane IDs that hit them.
+        lane_queries_by_key: Dictionary mapping keys to list of queries that hit them.
+        exact_wording: Whether exact wording is requested.
+
+    Returns:
+        List of keys reserved by this lane (including both regular and segment results).
+    """
     lane_reserved_keys = _merge_lane_result_set(
         combined=combined,
         lane_results=lane_results,
@@ -201,6 +275,17 @@ def _update_lane_recovery_diagnostics(
     lane_initial_keys: set[str],
     expansion_terms: list[str],
 ) -> None:
+    """Update diagnostics with information about recovered keys from expansion.
+
+    Identifies new keys added to combined that weren't in the initial set,
+    and records which expansion terms led to those recoveries.
+
+    Args:
+        diagnostics: The diagnostics dictionary to update.
+        combined: The combined results dictionary.
+        lane_initial_keys: Set of keys that were present before lane processing.
+        expansion_terms: List of query expansion terms used for this lane.
+    """
     lane_new_keys = [key for key in combined if key not in lane_initial_keys]
     diagnostics["new_key_count"] = len(lane_new_keys)
     recovered_terms, recovered_key_count = _lane_recovered_expansion_terms(
@@ -218,12 +303,30 @@ def _remember_reserved_keys(
     lane_reserved_keys: list[str],
     reserve_per_lane: int,
 ) -> None:
+    """Add lane's reserved keys to the global reserved keys list.
+
+    Takes up to reserve_per_lane keys from the lane's reserved keys and
+    adds them to the global reserved_keys list if not already present.
+
+    Args:
+        reserved_keys: The global list of reserved keys.
+        lane_reserved_keys: The list of keys reserved by this lane.
+        reserve_per_lane: Maximum number of keys to reserve per lane.
+    """
     for key in lane_reserved_keys[: max(reserve_per_lane, 0)]:
         if key not in reserved_keys:
             reserved_keys.append(key)
 
 
 def _process_lane_results(context: LaneProcessingInput, state: LaneCollectionState) -> None:
+    """Process results for a single lane and update collection state.
+
+    Executes lane search, records matches, merges results, and updates diagnostics.
+
+    Args:
+        context: Input parameters for lane processing.
+        state: Mutable state for collecting results across lanes.
+    """
     lane_initial_keys = set(state.combined.keys())
     raw_lane_results, lane_results, segment_results, diagnostics, expansion_terms, _lane_scan_meta = _lane_runtime_results(
         retriever=context.retriever,
@@ -277,6 +380,24 @@ def _collect_lane_results(
     reserve_per_lane: int,
     exact_wording: bool,
 ) -> tuple[dict[str, Any], dict[str, list[str]], dict[str, list[str]], list[str], list[dict[str, Any]]]:
+    """Collect results from all query lanes.
+
+    Processes each lane sequentially, accumulating results and diagnostics.
+
+    Args:
+        retriever: The retriever instance to use for search.
+        search_kwargs: Base search keyword arguments.
+        query_lanes: List of query strings, one per lane.
+        scan_id: Optional scan identifier.
+        lane_search_top_k: Top k for each lane search.
+        bank_limit: Maximum items in the evidence bank.
+        reserve_per_lane: Maximum number of keys to reserve per lane.
+        exact_wording: Whether exact wording is requested.
+
+    Returns:
+        A tuple of (combined, lane_hits, lane_queries_by_key, reserved_keys,
+        lane_diagnostics).
+    """
     base_lane_query = str(query_lanes[0] or "")
     state = LaneCollectionState(
         combined={},
@@ -315,6 +436,24 @@ def _merge_lane_result_set(
     exact_wording: bool,
     record_matches_for_all: bool,
 ) -> list[str]:
+    """Merge a set of lane results into the combined dictionary.
+
+    For each result, stores the best version in combined and optionally
+    records which lane matched it.
+
+    Args:
+        combined: The shared dictionary for combined results.
+        lane_results: List of results to merge.
+        lane_id: Identifier for this lane.
+        lane_query: The query string for this lane.
+        lane_hits: Dictionary mapping keys to list of lane IDs that hit them.
+        lane_queries_by_key: Dictionary mapping keys to list of queries that hit them.
+        exact_wording: Whether exact wording is requested.
+        record_matches_for_all: If True, record matches for all results.
+
+    Returns:
+        List of keys that were added or updated in combined.
+    """
     lane_reserved_keys: list[str] = []
     for result in lane_results:
         key = _result_identity_key(result, fallback=lane_id)
@@ -339,6 +478,20 @@ def _select_merged_keys(
     reserved_keys: list[str],
     top_k: int,
 ) -> list[str]:
+    """Select the top k keys from reserved and ranked results.
+
+    First takes keys from reserved_keys (in order), then fills remaining
+    slots from ranked results.
+
+    Args:
+        combined: The combined results dictionary.
+        ranked: List of (key, result) tuples sorted by competition key.
+        reserved_keys: List of keys that should be prioritized.
+        top_k: Maximum number of keys to select.
+
+    Returns:
+        List of up to top_k selected keys.
+    """
     merged_keys: list[str] = []
     for key in reserved_keys:
         if key in combined and key not in merged_keys:
@@ -359,18 +512,51 @@ def _annotate_merged_results(
     lane_hits: dict[str, list[str]],
     lane_queries_by_key: dict[str, list[str]],
 ) -> None:
+    """Annotate merged results with lane matching information.
+
+    Adds metadata to each result's metadata indicating which lanes and
+    queries matched it.
+
+    Args:
+        merged: List of merged result objects.
+        lane_hits: Dictionary mapping keys to list of lane IDs that hit them.
+        lane_queries_by_key: Dictionary mapping keys to list of queries that hit them.
+    """
     for result in merged:
-        metadata = result.metadata if isinstance(result.metadata, dict) else {}
+        metadata = _as_dict(result.metadata)
         key = _result_identity_key(result, fallback="")
         metadata["matched_query_lanes"] = lane_hits.get(key, [])
         metadata["matched_query_queries"] = lane_queries_by_key.get(key, [])
 
 
 def _string_list(value: Any) -> list[str]:
-    return [str(term) for term in value if str(term).strip()] if isinstance(value, list) else []
+    """Convert a value to a list of non-empty strings.
+
+    If the value is a list, converts each element to string and filters
+    out empty strings. Otherwise returns an empty list.
+
+    Args:
+        value: The value to convert.
+
+    Returns:
+        A list of non-empty strings.
+    """
+    return [str(term) for term in _as_list(value) if str(term).strip()]
 
 
 def _expansion_attribution_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Extract expansion attribution fields from a lane diagnostics item.
+
+    Creates a compact dictionary with the most relevant expansion
+    attribution information.
+
+    Args:
+        item: A lane diagnostics dictionary.
+
+    Returns:
+        A dictionary with lane_id, query, new_key_count, expansion_terms,
+        recovered_expansion_terms, and recovered_expansion_key_count.
+    """
     return {
         "lane_id": str(item.get("lane_id") or ""),
         "query": str(item.get("query") or ""),
@@ -382,10 +568,33 @@ def _expansion_attribution_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _expansion_attribution(lane_diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract expansion attribution from all lane diagnostics.
+
+    Converts each lane diagnostics item to an expansion attribution item.
+
+    Args:
+        lane_diagnostics: List of lane diagnostics dictionaries.
+
+    Returns:
+        List of expansion attribution dictionaries.
+    """
     return [_expansion_attribution_item(item) for item in lane_diagnostics if isinstance(item, dict)]
 
 
 def _multi_lane_payload(context: MultiLanePayloadInput) -> dict[str, Any]:
+    """Build the multi-lane payload from collected results.
+
+    Constructs the evidence bank, computes support diversity metrics,
+    and assembles the final payload with all diagnostic information.
+
+    Args:
+        context: Input containing all collected lane results and parameters.
+
+    Returns:
+        A dictionary with candidate pool stats, selected results, lane
+        parameters, support diversity info, expansion attribution, evidence
+        bank, and evidence results.
+    """
     bank_keys = _evidence_bank_keys_with_lane_diversity(
         ranked=context.ranked,
         lane_hits=context.lane_hits,
@@ -436,6 +645,25 @@ def _search_multi_lane(
     bank_limit: int,
     reserve_per_lane: int,
 ) -> tuple[list[Any], list[dict[str, Any]], dict[str, Any]]:
+    """Execute multi-lane search and return merged results with diagnostics.
+
+    Orchestrates the complete multi-lane search process: collects results
+    from all lanes, ranks them, selects the top k, annotates with lane info,
+    and builds the payload.
+
+    Args:
+        retriever: The retriever instance to use for search.
+        search_kwargs: Base search keyword arguments.
+        query_lanes: List of query strings, one per lane.
+        top_k: Maximum number of results to return.
+        scan_id: Optional scan identifier.
+        lane_search_top_k: Top k for each individual lane search.
+        bank_limit: Maximum items in the evidence bank.
+        reserve_per_lane: Maximum number of keys to reserve per lane.
+
+    Returns:
+        A tuple of (merged_results, lane_diagnostics, multi_lane_payload).
+    """
     exact_wording = bool(search_kwargs.get("_exact_wording_requested"))
     combined, lane_hits, lane_queries_by_key, reserved_keys, lane_diagnostics = _collect_lane_results(
         retriever=retriever,

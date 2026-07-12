@@ -1,4 +1,4 @@
-# ruff: noqa: F401,I001
+# ruff: noqa: I001
 """Extended tests for src/ingest.py to increase coverage from ~73% to >=85%.
 
 Covers: reingest paths, _reset_index, _resolve_entity_extractor,
@@ -8,18 +8,10 @@ main() dispatch branches, attachment processing, and more.
 """
 
 import argparse
-import types
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.ingest import (
-    _auto_download_spacy_models,
-    _EmbedPipeline,
-    _hash_file_sha256,
-    _make_progress_bar,
-    _NoOpProgressBar,
-    _resolve_entity_extractor,
     format_ingestion_summary,
     main,
     parse_args,
@@ -28,11 +20,10 @@ from src.ingest import (
     reingest_bodies,
     reingest_metadata,
 )
-from src.parse_olm import Email
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-from .helpers.ingest_extended_fixtures import _MockEmailDB, _MockEmbedder, _block_import, _make_email
+from .helpers.ingest_extended_fixtures import _MockEmbedder, _make_email
 
 
 class TestMainDispatch:

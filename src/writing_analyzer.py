@@ -42,7 +42,7 @@ class WritingMetrics:
 
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<!\.)\.(?!\.)\s+|[!?]+\s+|(?<!\.)\.(?!\.)$|[!?]+$")
-_WORD_RE = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*", re.UNICODE)
+_WORD_PART_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -55,7 +55,21 @@ def _split_sentences(text: str) -> list[str]:
 
 def _get_words(text: str) -> list[str]:
     """Extract words from text."""
-    return _WORD_RE.findall(text.lower())
+    normalized = text.lower()
+    matches = list(_WORD_PART_RE.finditer(normalized))
+    if not matches:
+        return []
+
+    words = [matches[0].group(0)]
+    previous_end = matches[0].end()
+    for match in matches[1:]:
+        separator = normalized[previous_end : match.start()]
+        if separator in {"'", "’", "-"}:
+            words[-1] += separator + match.group(0)
+        else:
+            words.append(match.group(0))
+        previous_end = match.end()
+    return words
 
 
 class WritingAnalyzer:
@@ -121,15 +135,7 @@ class WritingAnalyzer:
         formality_score = long_words / word_count if word_count else 0.0
 
         # Readability via textstat (if available)
-        readability_score = None
-        grade_level = None
-        ts = self._get_textstat()
-        if ts and word_count >= 10:
-            try:
-                readability_score = round(ts.flesch_reading_ease(text), 1)  # pylint: disable=no-member
-                grade_level = round(ts.flesch_kincaid_grade(text), 1)  # pylint: disable=no-member
-            except Exception:  # pylint: disable=broad-exception-caught
-                logger.debug("textstat scoring failed", exc_info=True)
+        readability_score, grade_level = self._readability(text, word_count)
 
         return WritingMetrics(
             readability_score=readability_score,
@@ -143,6 +149,16 @@ class WritingAnalyzer:
             word_count=word_count,
             sentence_count=sentence_count,
         )
+
+    def _readability(self, text: str, word_count: int) -> tuple[float | None, float | None]:
+        textstat = self._get_textstat()
+        if not textstat or word_count < 10:
+            return None, None
+        try:
+            return round(textstat.flesch_reading_ease(text), 1), round(textstat.flesch_kincaid_grade(text), 1)
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.debug("textstat scoring failed", exc_info=True)
+            return None, None
 
     def analyze_texts(self, texts: list[str]) -> list[WritingMetrics]:
         """Analyze multiple texts and return their metrics.

@@ -274,10 +274,7 @@ class KeywordExtractor:
             return results
 
         try:
-            if hasattr(vectorizer, "vocabulary_") and vectorizer.vocabulary_:
-                tfidf_matrix = vectorizer.transform(valid_texts)
-            else:
-                tfidf_matrix = vectorizer.fit_transform(valid_texts)
+            tfidf_matrix = _transform_documents(vectorizer, valid_texts)
         except ValueError:
             return results
 
@@ -288,5 +285,10 @@ class KeywordExtractor:
             indices = row.argsort()[::-1][:top_n]
             keywords = [(feature_names[k], round(float(row[k]), 4)) for k in indices if row[k] > 0]
             results[valid_indices[j]] = keywords
-
         return results
+
+
+def _transform_documents(vectorizer, texts):
+    if hasattr(vectorizer, "vocabulary_") and vectorizer.vocabulary_:
+        return vectorizer.transform(texts)
+    return vectorizer.fit_transform(texts)

@@ -280,7 +280,7 @@ def list_emails_paginated_impl(
 
     # Safe: validated sort column/direction, static filters, bound params.
     rows = db.conn.execute(  # nosemgrep
-        f"{BROWSE_SELECT_BASE_SQL} ORDER BY {sort_by} {sort_order} LIMIT ? OFFSET ?",
+        f"{BROWSE_SELECT_BASE_SQL} ORDER BY {sort_by} {sort_order} LIMIT ? OFFSET ?",  # nosec B608
         [*params, limit, offset],
     ).fetchall()
 
@@ -300,31 +300,41 @@ def get_email_for_reembed_impl(db: Any, uid: str) -> dict | None:
     body = full.get("body_text") or ""
     if not body.strip():
         return None
+    return _reembed_email_payload(full, body)
+
+
+def _full_value(full: dict, key: str, default: Any) -> Any:
+    return full.get(key) or default
+
+
+def _reembed_email_payload(full: dict, body: str) -> dict:
+    attachments = _full_value(full, "attachments", [])
+    categories = full.get("categories")
     return {
         "uid": full["uid"],
-        "message_id": full.get("message_id") or "",
-        "subject": full.get("subject") or "",
-        "sender_name": full.get("sender_name") or "",
-        "sender_email": full.get("sender_email") or "",
-        "to": full.get("to") or [],
-        "cc": full.get("cc") or [],
-        "bcc": full.get("bcc") or [],
-        "date": full.get("date") or "",
+        "message_id": _full_value(full, "message_id", ""),
+        "subject": _full_value(full, "subject", ""),
+        "sender_name": _full_value(full, "sender_name", ""),
+        "sender_email": _full_value(full, "sender_email", ""),
+        "to": _full_value(full, "to", []),
+        "cc": _full_value(full, "cc", []),
+        "bcc": _full_value(full, "bcc", []),
+        "date": _full_value(full, "date", ""),
         "body": body,
-        "folder": full.get("folder") or "",
-        "has_attachments": bool(full.get("has_attachments") or full.get("attachment_count")),
-        "attachment_names": [a["name"] for a in (full.get("attachments") or []) if a.get("name")],
-        "attachments": full.get("attachments") or [],
-        "attachment_count": full.get("attachment_count") or 0,
-        "conversation_id": full.get("conversation_id") or "",
-        "in_reply_to": full.get("in_reply_to") or "",
-        "references": full.get("references") or [],
-        "priority": full.get("priority") or 0,
+        "folder": _full_value(full, "folder", ""),
+        "has_attachments": any((full.get("has_attachments"), full.get("attachment_count"))),
+        "attachment_names": [a["name"] for a in attachments if a.get("name")],
+        "attachments": attachments,
+        "attachment_count": _full_value(full, "attachment_count", 0),
+        "conversation_id": _full_value(full, "conversation_id", ""),
+        "in_reply_to": _full_value(full, "in_reply_to", ""),
+        "references": _full_value(full, "references", []),
+        "priority": _full_value(full, "priority", 0),
         "is_read": bool(full.get("is_read", True)),
-        "email_type": full.get("email_type") or "original",
-        "base_subject": full.get("base_subject") or "",
-        "categories": full.get("categories") if isinstance(full.get("categories"), list) else [],
-        "thread_topic": full.get("thread_topic") or "",
-        "inference_classification": full.get("inference_classification") or "",
+        "email_type": _full_value(full, "email_type", "original"),
+        "base_subject": _full_value(full, "base_subject", ""),
+        "categories": categories if isinstance(categories, list) else [],
+        "thread_topic": _full_value(full, "thread_topic", ""),
+        "inference_classification": _full_value(full, "inference_classification", ""),
         "is_calendar_message": bool(full.get("is_calendar_message")),
     }

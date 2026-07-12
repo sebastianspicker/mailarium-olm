@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -12,6 +13,47 @@ if TYPE_CHECKING:
     from .retriever import EmailRetriever
 
 OutputFormat = Literal["text", "json"]
+
+
+@dataclass(frozen=True, slots=True)
+class SingleQueryOptions:
+    as_json: bool = False
+    top_k: int = 10
+    sender: str | None = None
+    subject: str | None = None
+    folder: str | None = None
+    cc: str | None = None
+    to: str | None = None
+    bcc: str | None = None
+    has_attachments: bool | None = None
+    priority: int | None = None
+    email_type: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+    min_score: float | None = None
+    rerank: bool = False
+    hybrid: bool = False
+    topic_id: int | None = None
+    cluster_id: int | None = None
+    expand_query: bool = False
+
+
+_SINGLE_QUERY_OPTION_NAMES = tuple(SingleQueryOptions.__dataclass_fields__)
+
+
+def bind_single_query_options(positional: tuple[Any, ...], keyword: dict[str, Any]) -> SingleQueryOptions:
+    """Bind the legacy call shape while rejecting ambiguous options."""
+    if len(positional) > len(_SINGLE_QUERY_OPTION_NAMES):
+        raise TypeError(f"run_single_query() takes at most {len(_SINGLE_QUERY_OPTION_NAMES) + 2} positional arguments")
+    unknown = sorted(set(keyword) - set(_SINGLE_QUERY_OPTION_NAMES))
+    if unknown:
+        raise TypeError(f"run_single_query() got unexpected option(s): {', '.join(unknown)}")
+    positional_names = _SINGLE_QUERY_OPTION_NAMES[: len(positional)]
+    duplicates = sorted(set(positional_names) & set(keyword))
+    if duplicates:
+        raise TypeError(f"run_single_query() got duplicate option(s): {', '.join(duplicates)}")
+    values = dict(zip(positional_names, positional, strict=True)) | keyword
+    return SingleQueryOptions(**values)
 
 
 def run_interactive_impl(
@@ -65,53 +107,48 @@ def run_interactive_impl(
 def run_single_query_impl(
     retriever: EmailRetriever,
     query: str,
-    *,
-    as_json: bool,
-    top_k: int,
-    sender: str | None,
-    subject: str | None,
-    folder: str | None,
-    cc: str | None,
-    to: str | None,
-    bcc: str | None,
-    has_attachments: bool | None,
-    priority: int | None,
-    email_type: str | None,
-    date_from: str | None,
-    date_to: str | None,
-    min_score: float | None,
-    rerank: bool,
-    hybrid: bool,
-    topic_id: int | None,
-    cluster_id: int | None,
-    expand_query: bool,
+    options: SingleQueryOptions,
     print_rich_or_plain: Callable[..., None],
     render_single_query_rich: Callable[[Any, str, list[Any]], None],
     render_single_query_plain: Callable[[str, list[Any]], None],
 ) -> int:
+    """Execute a single search query and render results.
+
+    Args:
+        retriever: Email retriever instance for searching.
+        query: Search query string.
+        as_json: Whether to output results as JSON.
+        top_k: Maximum number of results to retrieve.
+        sender: Optional sender filter.
+        subject: Optional subject filter.
+        folder: Optional folder filter.
+        cc: Optional CC recipient filter.
+        to: Optional To recipient filter.
+        bcc: Optional BCC recipient filter.
+        has_attachments: Optional filter for emails with attachments.
+        priority: Optional minimum priority level.
+        email_type: Optional email type filter (reply, forward, original).
+        date_from: Optional start date filter (YYYY-MM-DD).
+        date_to: Optional end date filter (YYYY-MM-DD).
+        min_score: Optional minimum relevance score threshold.
+        rerank: Whether to re-rank results with cross-encoder.
+        hybrid: Whether to use hybrid semantic + BM25 search.
+        topic_id: Optional topic ID filter.
+        cluster_id: Optional cluster ID filter.
+        expand_query: Whether to expand query with related terms.
+        print_rich_or_plain: Function to print output in rich or plain format.
+        render_single_query_rich: Function to render rich output.
+        render_single_query_plain: Function to render plain output.
+
+    Returns:
+        Exit code (0 for success).
+    """
     results = retriever.search_filtered(
         query=query,
-        top_k=top_k,
-        sender=sender,
-        subject=subject,
-        folder=folder,
-        cc=cc,
-        to=to,
-        bcc=bcc,
-        has_attachments=has_attachments,
-        priority=priority,
-        email_type=email_type,
-        date_from=date_from,
-        date_to=date_to,
-        min_score=min_score,
-        rerank=rerank,
-        hybrid=hybrid,
-        topic_id=topic_id,
-        cluster_id=cluster_id,
-        expand_query=expand_query,
+        **{name: getattr(options, name) for name in _SINGLE_QUERY_OPTION_NAMES if name != "as_json"},
     )
 
-    if as_json:
+    if options.as_json:
         print(json.dumps(retriever.serialize_results(query, results), indent=2))
         return 0
 
@@ -136,6 +173,14 @@ def run_single_query_impl(
 
 
 def render_single_query_rich_impl(console, query: str, results, sanitize_text: Callable[[str], str]) -> None:
+    """Render search results in a rich formatted output.
+
+    Args:
+        console: Rich console instance for output.
+        query: The search query string.
+        results: List of search results to render.
+        sanitize_text: Function to sanitize text for display.
+    """
     from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
@@ -160,25 +205,27 @@ def render_single_query_rich_impl(console, query: str, results, sanitize_text: C
     table.add_column("Folder", width=12, style="dim")
 
     for i, result in enumerate(results, 1):
-        metadata = result.metadata
-        score_val = float(result.score)
-        score_style = "green bold" if score_val >= 0.75 else ("yellow" if score_val >= 0.45 else "red")
-        sender_val = sanitize_text(str(metadata.get("sender_name") or metadata.get("sender_email", "?")))
-        subject_val = sanitize_text(str(metadata.get("subject", "(no subject)")))
-        date_val = sanitize_text(str(metadata.get("date", "?"))[:10])
-        folder_val = sanitize_text(str(metadata.get("folder", "")))
-
-        table.add_row(
-            str(i),
-            Text(f"{score_val:.0%}", style=score_style),
-            date_val,
-            sender_val,
-            subject_val,
-            folder_val,
-        )
+        table.add_row(*_rich_result_row(i, result, sanitize_text, Text))
 
     console.print(table)
+    _render_rich_detail_panels(console, results, sanitize_text, Panel)
 
+
+def _rich_result_row(index: int, result: Any, sanitize_text: Callable[[str], str], text_cls: Any) -> tuple[Any, ...]:
+    metadata = result.metadata
+    score = float(result.score)
+    score_style = "green bold" if score >= 0.75 else ("yellow" if score >= 0.45 else "red")
+    return (
+        str(index),
+        text_cls(f"{score:.0%}", style=score_style),
+        sanitize_text(str(metadata.get("date", "?"))[:10]),
+        sanitize_text(str(metadata.get("sender_name") or metadata.get("sender_email", "?"))),
+        sanitize_text(str(metadata.get("subject", "(no subject)"))),
+        sanitize_text(str(metadata.get("folder", ""))),
+    )
+
+
+def _render_rich_detail_panels(console: Any, results: list[Any], sanitize_text: Callable[[str], str], panel_cls: Any) -> None:
     for i, result in enumerate(results, 1):
         metadata = result.metadata
         score_val = float(result.score)
@@ -193,7 +240,7 @@ def render_single_query_rich_impl(console, query: str, results, sanitize_text: C
         body = sanitize_text(str(result.text or ""))
         preview = body[:800] + "..." if len(body) > 800 else body
         console.print(
-            Panel(
+            panel_cls(
                 preview,
                 title=f"[bold {score_style}]Result {i}[/]  [{score_style}]{score_val:.0%}[/{score_style}]{type_label}",
                 subtitle=f"{subject}  |  {sender}  |  {date_val}  |  [dim]{uid_short}[/]",
@@ -203,6 +250,13 @@ def render_single_query_rich_impl(console, query: str, results, sanitize_text: C
 
 
 def render_single_query_plain_impl(query: str, results, sanitize_text: Callable[[str], str]) -> None:
+    """Render search results in plain text format.
+
+    Args:
+        query: The search query string.
+        results: List of search results to render.
+        sanitize_text: Function to sanitize text for display.
+    """
     scores = [float(r.score) for r in results]
     avg = sum(scores) / len(scores) if scores else 0.0
     print(f'\n  {len(results)} results for "{query}"')
@@ -231,6 +285,16 @@ def run_browse_impl(
     folder: str | None,
     sender: str | None,
 ) -> None:
+    """Browse emails in paginated view.
+
+    Args:
+        get_email_db: Factory function to get the email database instance.
+        sanitize_text: Function to sanitize text for display.
+        offset: Starting offset for pagination.
+        limit: Maximum number of emails per page.
+        folder: Optional folder filter.
+        sender: Optional sender filter.
+    """
     db = get_email_db()
     page = db.list_emails_paginated(offset=offset, limit=limit, folder=folder, sender=sender)
     total = page["total"]

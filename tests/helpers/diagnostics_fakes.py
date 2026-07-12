@@ -1,4 +1,3 @@
-# ruff: noqa: F401
 """Tests for src/tools/diagnostics.py — admin and diagnostic tools.
 
 Covers: email_admin with action='diagnostics', 'reingest_bodies',
@@ -9,10 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import threading
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from src.mcp_server import _offload
 from src.sanitization import sanitize_untrusted_text

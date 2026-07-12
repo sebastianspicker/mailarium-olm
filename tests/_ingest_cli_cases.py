@@ -1,13 +1,6 @@
-# ruff: noqa: F401, I001
-import queue
-import threading
-import time
-
 import pytest
 
-from src.ingest import _SENTINEL, _EmbedPipeline, main, parse_args
-
-from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
+from src.ingest import main, parse_args
 
 
 def test_parse_args_rejects_non_positive_batch_size():

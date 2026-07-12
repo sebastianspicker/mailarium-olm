@@ -1,4 +1,4 @@
-# ruff: noqa: F401,I001
+# ruff: noqa: I001
 # pylint: disable=unused-wildcard-import,wildcard-import
 
 
@@ -14,12 +14,11 @@ from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from src.retriever import SearchResult
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-from .helpers.web_app_fixtures import _columns_side_effect, _result, _setup_evidence_st, _setup_main_search_st
-from ._web_app_aux_cases import *  # noqa: F403
+from .helpers.web_app_fixtures import _columns_side_effect, _result, _setup_main_search_st
+from ._web_app_aux_cases import *  # noqa
 
 
 class TestMain:

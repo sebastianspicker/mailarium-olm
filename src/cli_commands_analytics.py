@@ -11,6 +11,12 @@ if TYPE_CHECKING:
 
 
 def run_top_contacts_impl(db, email_address: str) -> None:
+    """Display top contacts for a given email address.
+
+    Args:
+        db: The EmailDatabase instance.
+        email_address: The email address to find contacts for.
+    """
     contacts = db.top_contacts(email_address, limit=20)
     if not contacts:
         print(f"No contacts found for {email_address}")
@@ -39,6 +45,12 @@ def run_top_contacts_impl(db, email_address: str) -> None:
 
 
 def run_volume_impl(db, period: str) -> None:
+    """Display email volume over time for the specified period.
+
+    Args:
+        db: The EmailDatabase instance.
+        period: Time period for aggregation (e.g., 'day', 'week', 'month').
+    """
     from .temporal_analysis import TemporalAnalyzer
 
     analyzer = TemporalAnalyzer(db)
@@ -79,6 +91,12 @@ def run_volume_impl(db, period: str) -> None:
 
 
 def run_entities_impl(db, entity_type: str | None) -> None:
+    """Display top entities extracted from emails.
+
+    Args:
+        db: The EmailDatabase instance.
+        entity_type: Optional filter for entity type (e.g., 'person', 'organization').
+    """
     entities = db.top_entities(entity_type=entity_type, limit=30)
     if not entities:
         label = entity_type or "all types"
@@ -122,6 +140,11 @@ def run_entities_impl(db, entity_type: str | None) -> None:
 
 
 def run_heatmap_impl(db) -> None:
+    """Display an activity heatmap showing email activity by hour and day of week.
+
+    Args:
+        db: The EmailDatabase instance.
+    """
     from .temporal_analysis import TemporalAnalyzer
 
     analyzer = TemporalAnalyzer(db)
@@ -184,6 +207,11 @@ def run_heatmap_impl(db) -> None:
 
 
 def run_response_times_impl(db) -> None:
+    """Display average response times for email repliers.
+
+    Args:
+        db: The EmailDatabase instance.
+    """
     from .temporal_analysis import TemporalAnalyzer
 
     analyzer = TemporalAnalyzer(db)
@@ -230,6 +258,11 @@ def run_response_times_impl(db) -> None:
 
 
 def run_suggest_impl(get_email_db: Callable[[], EmailDatabase]) -> None:
+    """Generate and display query suggestions based on email content.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+    """
     db = get_email_db()
     from .query_suggestions import QuerySuggester
 

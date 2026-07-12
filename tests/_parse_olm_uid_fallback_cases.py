@@ -1,30 +1,10 @@
-# ruff: noqa: F401
 """Extended tests for src/parse_olm.py — targeting uncovered lines."""
 
 from __future__ import annotations
 
-import base64
-import zipfile
-from pathlib import Path
-
-import pytest
-from lxml import etree
-
-from src.olm_xml_helpers import (
-    _detect_namespace,
-    _extract_attachment_contents,
-    _extract_attachment_field,
-    _extract_html_body,
-    _find,
-    _find_text,
-)
 from src.parse_olm import (
-    _NS_OUTLOOK,
     Email,
-    _parse_email_xml,
-    parse_olm,
 )
-from src.parse_olm_normalization import BODY_NORMALIZATION_VERSION
 
 # ── Email.uid fallback (lines 98-99) ─────────────────────────
 
@@ -48,7 +28,7 @@ class TestEmailUidFallback:
         )
         uid = email.uid
         assert uid  # non-empty
-        assert len(uid) == 32  # md5 hex
+        assert len(uid) == 64  # sha256 hex
 
     def test_uid_with_message_id(self):
         email = Email(
@@ -67,7 +47,7 @@ class TestEmailUidFallback:
         )
         uid = email.uid
         assert uid
-        assert len(uid) == 32
+        assert len(uid) == 64
 
     def test_uid_fallback_deterministic(self):
         """Same subject/date/sender always produces same uid."""

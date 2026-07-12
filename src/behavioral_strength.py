@@ -6,17 +6,9 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+from src._utils import as_dict, as_list
+
 BEHAVIORAL_STRENGTH_VERSION = "1"
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    """Return one dict or an empty dict."""
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    """Return one list or an empty list."""
-    return value if isinstance(value, list) else []
 
 
 def _label_from_score(score: int) -> str:
@@ -43,7 +35,7 @@ def _generated_alternatives(finding: dict[str, Any], supporting: list[dict[str, 
     """Return conservative alternative explanations for one finding."""
     finding_scope = str(finding.get("finding_scope") or "")
     alternatives: list[str] = []
-    text_origins = {str((_as_dict(citation.get("text_attribution"))).get("text_origin") or "") for citation in supporting}
+    text_origins = {str((as_dict(citation.get("text_attribution"))).get("text_origin") or "") for citation in supporting}
     if finding_scope == "communication_graph":
         alternatives.append("Recipient visibility patterns may reflect operational routing or process stage differences.")
     if finding_scope == "comparative_treatment":
@@ -54,7 +46,7 @@ def _generated_alternatives(finding: dict[str, Any], supporting: list[dict[str, 
         alternatives.append("The pattern may reflect repeated process friction rather than targeted hostility.")
     if "metadata" in text_origins and "authored" not in text_origins and "quoted" not in text_origins:
         alternatives.append("The current support relies on message metadata more than direct authored text.")
-    quote_ambiguity = _as_dict(finding.get("quote_ambiguity"))
+    quote_ambiguity = as_dict(finding.get("quote_ambiguity"))
     if bool(quote_ambiguity.get("downgraded_due_to_quote_ambiguity")):
         alternatives.append("Quoted content may belong to a different speaker than the current inference suggests.")
     return list(dict.fromkeys(alternatives))
@@ -62,55 +54,12 @@ def _generated_alternatives(finding: dict[str, Any], supporting: list[dict[str, 
 
 def _score_finding(finding: dict[str, Any]) -> dict[str, Any]:
     """Return BA13 strength scoring for one finding."""
-    supporting = [citation for citation in _as_list(finding.get("supporting_evidence")) if isinstance(citation, dict)]
-    contradictory = [citation for citation in _as_list(finding.get("contradictory_evidence")) if isinstance(citation, dict)]
-    counter_indicators = [str(item) for item in _as_list(finding.get("counter_indicators")) if str(item).strip()]
-    quote_ambiguity = _as_dict(finding.get("quote_ambiguity"))
+    supporting = [citation for citation in as_list(finding.get("supporting_evidence")) if isinstance(citation, dict)]
+    contradictory = [citation for citation in as_list(finding.get("contradictory_evidence")) if isinstance(citation, dict)]
+    counter_indicators = [str(item) for item in as_list(finding.get("counter_indicators")) if str(item).strip()]
+    quote_ambiguity = as_dict(finding.get("quote_ambiguity"))
 
-    reasons: list[str] = []
-    evidence_score = 0
-
-    if supporting:
-        evidence_score += 1
-        reasons.append("At least one supporting citation is present.")
-    if len(supporting) >= 2:
-        evidence_score += 1
-        reasons.append("Multiple supporting citations are present.")
-
-    evidence_handles = {
-        str((_as_dict(citation.get("provenance"))).get("evidence_handle") or "")
-        for citation in supporting
-        if str((_as_dict(citation.get("provenance"))).get("evidence_handle") or "")
-    }
-    message_ids = {
-        str(citation.get("message_or_document_id") or "") for citation in supporting if citation.get("message_or_document_id")
-    }
-    text_statuses = Counter(
-        str((_as_dict(citation.get("text_attribution"))).get("authored_quoted_inferred_status") or "") for citation in supporting
-    )
-
-    if len(evidence_handles) >= 2 or len(message_ids) >= 2:
-        evidence_score += 1
-        reasons.append("Support spans more than one evidence handle or message/document.")
-    if text_statuses.get("authored", 0) >= 1:
-        evidence_score += 1
-        reasons.append("Direct authored-text support is present.")
-    if text_statuses.get("quoted", 0) >= 1:
-        evidence_score += 1
-        reasons.append("Quoted support is present with non-inferred ownership.")
-    if text_statuses.get("metadata", 0) >= 1 and text_statuses.get("authored", 0) == 0 and text_statuses.get("quoted", 0) == 0:
-        evidence_score -= 1
-        reasons.append("Support is metadata-heavy without direct authored or quoted text.")
-
-    if contradictory:
-        evidence_score -= 1
-        reasons.append("Contradictory evidence is present.")
-    if len(counter_indicators) >= 2:
-        evidence_score -= 1
-        reasons.append("Multiple counter-indicators weaken the current evidence read.")
-    if bool(quote_ambiguity.get("downgraded_due_to_quote_ambiguity")):
-        evidence_score -= 1
-        reasons.append("Quoted-speaker ambiguity reduces evidentiary strength.")
+    evidence_score, reasons = _evidence_score(supporting, contradictory, counter_indicators, quote_ambiguity)
 
     evidence_strength = _label_from_score(evidence_score)
 
@@ -146,43 +95,93 @@ def _score_finding(finding: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _evidence_score(
+    supporting: list[dict[str, Any]],
+    contradictory: list[dict[str, Any]],
+    counter_indicators: list[str],
+    quote_ambiguity: dict[str, Any],
+) -> tuple[int, list[str]]:
+    score, reasons = _support_score(supporting)
+    deductions = (
+        (bool(contradictory), "Contradictory evidence is present."),
+        (len(counter_indicators) >= 2, "Multiple counter-indicators weaken the current evidence read."),
+        (
+            bool(quote_ambiguity.get("downgraded_due_to_quote_ambiguity")),
+            "Quoted-speaker ambiguity reduces evidentiary strength.",
+        ),
+    )
+    for applies, reason in deductions:
+        if applies:
+            score -= 1
+            reasons.append(reason)
+    return score, reasons
+
+
+def _support_score(supporting: list[dict[str, Any]]) -> tuple[int, list[str]]:
+    handles = _support_handles(supporting)
+    message_ids = _support_message_ids(supporting)
+    statuses = _support_statuses(supporting)
+    checks = _presence_checks(supporting, handles, message_ids) + _attribution_checks(statuses)
+    score = sum(delta for applies, delta, _reason in checks if applies)
+    reasons = [reason for applies, _delta, reason in checks if applies]
+    return score, reasons
+
+
+def _support_handles(supporting: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(as_dict(item.get("provenance")).get("evidence_handle") or "")
+        for item in supporting
+        if str(as_dict(item.get("provenance")).get("evidence_handle") or "")
+    }
+
+
+def _support_message_ids(supporting: list[dict[str, Any]]) -> set[str]:
+    return {str(item.get("message_or_document_id") or "") for item in supporting if item.get("message_or_document_id")}
+
+
+def _support_statuses(supporting: list[dict[str, Any]]) -> Counter[str]:
+    return Counter(str(as_dict(item.get("text_attribution")).get("authored_quoted_inferred_status") or "") for item in supporting)
+
+
+def _presence_checks(
+    supporting: list[dict[str, Any]], handles: set[str], message_ids: set[str]
+) -> tuple[tuple[bool, int, str], ...]:
+    return (
+        (bool(supporting), 1, "At least one supporting citation is present."),
+        (len(supporting) >= 2, 1, "Multiple supporting citations are present."),
+        (len(handles) >= 2 or len(message_ids) >= 2, 1, "Support spans more than one evidence handle or message/document."),
+    )
+
+
+def _attribution_checks(statuses: Counter[str]) -> tuple[tuple[bool, int, str], ...]:
+    return (
+        (statuses.get("authored", 0) >= 1, 1, "Direct authored-text support is present."),
+        (statuses.get("quoted", 0) >= 1, 1, "Quoted support is present with non-inferred ownership."),
+        (
+            statuses.get("metadata", 0) >= 1 and statuses.get("authored", 0) == 0 and statuses.get("quoted", 0) == 0,
+            -1,
+            "Support is metadata-heavy without direct authored or quoted text.",
+        ),
+    )
+
+
 def apply_behavioral_strength(
     finding_evidence_index: dict[str, Any],
     evidence_table: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Apply BA13 strength scoring to the BA12 finding and table outputs."""
-    findings = [finding for finding in _as_list(finding_evidence_index.get("findings")) if isinstance(finding, dict)]
-    enriched_findings: list[dict[str, Any]] = []
-    strength_counts: Counter[str] = Counter()
-    evidence_confidence_counts: Counter[str] = Counter()
-    interpretation_confidence_counts: Counter[str] = Counter()
-    assessment_by_id: dict[str, dict[str, Any]] = {}
-
-    for finding in findings:
-        assessment = _score_finding(finding)
-        enriched = {**finding, **assessment}
-        enriched_findings.append(enriched)
-        finding_id = str(finding.get("finding_id") or "")
-        assessment_by_id[finding_id] = assessment
-        strength_counts[str(assessment["evidence_strength"]["label"])] += 1
-        evidence_confidence_counts[str(assessment["confidence_split"]["evidence_confidence"]["label"])] += 1
-        interpretation_confidence_counts[str(assessment["confidence_split"]["interpretation_confidence"]["label"])] += 1
-
-    rows = [row for row in _as_list(evidence_table.get("rows")) if isinstance(row, dict)]
-    enriched_rows: list[dict[str, Any]] = []
-    for row in rows:
-        finding_id = str(row.get("finding_id") or "")
-        assessment = assessment_by_id.get(finding_id, {})
-        evidence_strength = _as_dict(assessment.get("evidence_strength"))
-        confidence_split = _as_dict(assessment.get("confidence_split"))
-        enriched_rows.append(
-            {
-                **row,
-                "evidence_strength": str(evidence_strength.get("label") or ""),
-                "evidence_confidence": str(_as_dict(confidence_split.get("evidence_confidence")).get("label") or ""),
-                "interpretation_confidence": str(_as_dict(confidence_split.get("interpretation_confidence")).get("label") or ""),
-            }
-        )
+    findings = [finding for finding in as_list(finding_evidence_index.get("findings")) if isinstance(finding, dict)]
+    enriched_findings, assessment_by_id = _assess_findings(findings)
+    enriched_rows = _assess_table_rows(evidence_table, assessment_by_id)
+    strength_counts = Counter(str(as_dict(item.get("evidence_strength")).get("label") or "") for item in enriched_findings)
+    evidence_confidence_counts = Counter(
+        str(as_dict(as_dict(item.get("confidence_split")).get("evidence_confidence")).get("label") or "")
+        for item in enriched_findings
+    )
+    interpretation_confidence_counts = Counter(
+        str(as_dict(as_dict(item.get("confidence_split")).get("interpretation_confidence")).get("label") or "")
+        for item in enriched_findings
+    )
 
     rubric = {
         "version": BEHAVIORAL_STRENGTH_VERSION,
@@ -222,3 +221,29 @@ def apply_behavioral_strength(
         },
         rubric,
     )
+
+
+def _assess_findings(findings: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    enriched: list[dict[str, Any]] = []
+    assessments: dict[str, dict[str, Any]] = {}
+    for finding in findings:
+        assessment = _score_finding(finding)
+        enriched.append({**finding, **assessment})
+        assessments[str(finding.get("finding_id") or "")] = assessment
+    return enriched, assessments
+
+
+def _assess_table_rows(evidence_table: dict[str, Any], assessments: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_assess_table_row(row, assessments) for row in as_list(evidence_table.get("rows")) if isinstance(row, dict)]
+
+
+def _assess_table_row(row: dict[str, Any], assessments: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    assessment = assessments.get(str(row.get("finding_id") or ""), {})
+    strength = as_dict(assessment.get("evidence_strength"))
+    confidence = as_dict(assessment.get("confidence_split"))
+    return {
+        **row,
+        "evidence_strength": str(strength.get("label") or ""),
+        "evidence_confidence": str(as_dict(confidence.get("evidence_confidence")).get("label") or ""),
+        "interpretation_confidence": str(as_dict(confidence.get("interpretation_confidence")).get("label") or ""),
+    }

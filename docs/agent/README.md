@@ -34,9 +34,19 @@ All checked-in examples in this subtree must remain synthetic. Do not add person
 - `legal_support_full_pack_golden.*.json`
 - `qa_eval_*.json`
 
+The historical `.live.json` suffix identifies frozen regression scenarios; it
+does not mean the files contain a live mailbox or private matter data. All
+tracked eval assets remain synthetic. Actual live QA output belongs under the
+ignored `private/tests/results/qa_eval/` workspace.
+
 ## Archive Material
 
-- [`deprecated/`](deprecated/) preserves audit-era docs and path shims as historical context.
-- `implementation_log/`, `plan_history/`, and `matter_analysis/` are ignored local work areas unless explicitly promoted.
+- [`../archive/2026-05-16-remediation-closure/agent-deprecated/deprecated/`](../archive/2026-05-16-remediation-closure/agent-deprecated/deprecated/)
+  preserves audit-era docs and path shims as historical context.
+- `archive/`, `implementation_log/`, `plan_history/`, and `matter_analysis/`
+  are ignored local work areas unless explicitly promoted. Keep local status,
+  ledger, Codacy, and remediation snapshots there when they include local paths
+  or dirty-checkout evidence.
 
-`Documentation.md` is a verification/change log, not the public docs map.
+Local verification logs and audit/remediation ledgers belong in the ignored
+work areas above, not in this tracked public subtree.

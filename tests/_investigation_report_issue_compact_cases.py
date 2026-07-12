@@ -4,7 +4,107 @@ from src.investigation_report import build_investigation_report
 
 
 def test_build_investigation_report_renders_employment_issue_frameworks_conservatively() -> None:
-    report = build_investigation_report(
+    report = _fixture_test_build_investigation_report_renders_employment_issue_frameworks_conservatively_report()
+
+    issue_frameworks = report["sections"]["employment_issue_frameworks"]
+    assert issue_frameworks["status"] == "supported"
+    payloads = {item["issue_track"]: item for item in issue_frameworks["issue_tracks"]}
+    assert payloads["disability_disadvantage"]["status"] == "supported_by_current_record"
+    assert payloads["retaliation_after_protected_event"]["status"] == "supported_by_current_record"
+    assert payloads["participation_duty_gap"]["status"] == "supported_by_current_record"
+    assert payloads["prevention_duty_gap"]["status"] == "supported_by_current_record"
+    assert payloads["prevention_duty_gap"]["minimum_source_quality_expectations"]
+    assert payloads["disability_disadvantage"]["required_proof_elements"]
+    assert issue_frameworks["issue_tag_summary"]["operator_supplied"][0]["tag_id"] == "sbv_participation"
+    direct_tags = [item["tag_id"] for item in issue_frameworks["issue_tag_summary"]["direct_document_content"]]
+    inferred_tags = [item["tag_id"] for item in issue_frameworks["issue_tag_summary"]["bounded_inference"]]
+    assert "prevention_bem_sgb_ix_167" in direct_tags
+    assert "retaliation_massregelung" in inferred_tags
+    power = report["sections"]["power_context_analysis"]
+    assert power["comparator_matrix"]["row_count"] == 1
+    assert power["comparator_matrix"]["rows"][0]["issue_id"] == "control_intensity"
+    lawyer_matrix = report["sections"]["lawyer_issue_matrix"]["lawyer_issue_matrix"]
+    row_ids = [row["issue_id"] for row in lawyer_matrix["rows"]]
+    assert "agg_disadvantage" in row_ids
+    assert "sgb_ix_167_bem" in row_ids
+    agg_row = next(row for row in lawyer_matrix["rows"] if row["issue_id"] == "agg_disadvantage")
+    assert agg_row["legal_relevance_status"] in {"supported_relevance", "potentially_relevant"}
+    assert agg_row["strongest_documents"]
+    assert agg_row["likely_opposing_argument"]
+
+
+def test_build_investigation_report_embeds_retaliation_timeline_assessment() -> None:
+    report = _fixture_test_build_investigation_report_embeds_retaliation_timeline_assessment_report()
+
+    chronology = report["sections"]["chronological_pattern_analysis"]
+    protected_candidates = chronology["retaliation_timeline_assessment"]["protected_activity_candidates"]
+    adverse_candidates = chronology["retaliation_timeline_assessment"]["adverse_action_candidates"]
+    assert protected_candidates[0]["candidate_id"] == "protected_activity:1"
+    assert adverse_candidates[0]["candidate_id"] == "adverse_action:1"
+    assert chronology["retaliation_timeline_assessment"]["protected_activity_timeline"][0]["trigger_type"] == "complaint"
+    assert chronology["retaliation_timeline_assessment"]["adverse_action_timeline"][0]["uid"] == "uid-5"
+    assert chronology["retaliation_timeline_assessment"]["confounder_summary"]["confounder_weight"] == "low"
+    assert chronology["retaliation_timeline_assessment"]["overall_evidentiary_rating"]["rating"] == (
+        "limited_or_mixed_timing_support"
+    )
+    assert any(entry["entry_id"] == "timeline:retaliation_assessment" for entry in chronology["entries"])
+
+
+def test_compact_investigation_report_preserves_overall_assessment_contract_fields():
+    report = _fixture_test_compact_investigation_report_preserves_overall_assessment_contract_fields_report()
+
+    from src.investigation_report import compact_investigation_report
+
+    compact = compact_investigation_report(report)
+    triage = compact["sections"]["evidence_triage"]
+    matter_index = compact["sections"]["matter_evidence_index"]
+    lawyer_matrix = compact["sections"]["lawyer_issue_matrix"]
+    actor_witness = compact["sections"]["actor_and_witness_map"]
+    witness_packs = compact["sections"]["witness_question_packs"]
+    promise_analysis = compact["sections"]["promise_and_contradiction_analysis"]
+    memo = compact["sections"]["lawyer_briefing_memo"]
+    drafting = compact["sections"]["controlled_factual_drafting"]
+    dashboard = compact["sections"]["case_dashboard"]
+    skeptical_review = compact["sections"]["skeptical_employer_review"]
+    checklist = compact["sections"]["document_request_checklist"]
+    overall = compact["sections"]["overall_assessment"]
+    assert compact["report_highlights"] == report["report_highlights"]
+    assert compact["bilingual_workflow"]["output_language"] == "en"
+    assert triage["summary"]["reasonable_inference_count"] == 1
+    assert len(triage["reasonable_inference"]) == 1
+    assert len(triage["missing_proof"]) == 1
+    assert matter_index["matter_evidence_index"]["row_count"] == 1
+    assert matter_index["matter_evidence_index"]["rows"][0]["exhibit_reliability"]["strength"] == "strong"
+    assert lawyer_matrix["lawyer_issue_matrix"]["row_count"] == 0
+    assert lawyer_matrix["lawyer_issue_matrix"]["bilingual_rendering"]["output_language"] == "en"
+    assert lawyer_matrix["lawyer_issue_matrix"]["rows"] == []
+    assert actor_witness["actor_map"]["actor_count"] == 1
+    assert actor_witness["witness_map"]["primary_decision_makers"] == []
+    assert witness_packs["witness_question_packs"]["pack_count"] >= 0
+    assert promise_analysis["promise_contradiction_analysis"]["summary"]["promise_action_row_count"] == 0
+    assert promise_analysis["promise_contradiction_analysis"]["summary"]["contradiction_row_count"] == 0
+    assert memo["lawyer_briefing_memo"]["memo_format"] == "lawyer_onboarding_brief"
+    assert memo["lawyer_briefing_memo"]["bilingual_rendering"]["preserve_original_quotations"] is True
+    assert memo["lawyer_briefing_memo"]["sections"]["executive_summary"]
+    assert drafting["controlled_factual_drafting"]["drafting_format"] == "controlled_factual_drafting"
+    assert drafting["controlled_factual_drafting"]["bilingual_rendering"]["translation_mode"] == "translation_aware"
+    assert drafting["controlled_factual_drafting"]["framing_preflight"]["allegation_ceiling"]["ceiling_level"]
+    assert dashboard["case_dashboard"]["dashboard_format"] == "refreshable_case_dashboard"
+    assert dashboard["case_dashboard"]["bilingual_rendering"]["output_language"] == "en"
+    assert dashboard["case_dashboard"]["summary"]["refreshable_from_shared_entities"] is True
+    assert dashboard["case_dashboard"]["cards"]["main_actors"]
+    assert skeptical_review["skeptical_employer_review"]["summary"]["weakness_count"] >= 1
+    assert checklist["document_request_checklist"]["group_count"] >= 1
+    assert compact["sections"]["chronological_pattern_analysis"]["master_chronology"]["entry_count"] == 1
+    assert compact["sections"]["chronological_pattern_analysis"]["retaliation_timeline_assessment"]["version"] == ""
+    assert overall["primary_assessment"] == "unequal_treatment_concern"
+    assert overall["assessment_strength"] == "moderate_indicator"
+    assert overall["secondary_plausible_interpretations"] == ["targeted_hostility_concern"]
+    assert "Quoted-speaker ambiguity downgrades part of the current record." in overall["downgrade_reasons"]
+
+
+def _fixture_test_build_investigation_report_renders_employment_issue_frameworks_conservatively_report():
+    return build_investigation_report(
         case_bundle={
             "scope": {
                 "allegation_focus": ["retaliation", "discrimination"],
@@ -60,52 +160,7 @@ def test_build_investigation_report_renders_employment_issue_frameworks_conserva
             ],
         },
         communication_graph={},
-        finding_evidence_index={
-            "findings": [
-                {
-                    "finding_id": "cmp-2",
-                    "finding_scope": "comparative_treatment",
-                    "finding_label": "Unequal treatment",
-                    "supporting_evidence": [
-                        {
-                            "citation_id": "c-2",
-                            "message_or_document_id": "uid-2",
-                            "text_attribution": {
-                                "authored_quoted_inferred_status": "metadata",
-                            },
-                        }
-                    ],
-                    "evidence_strength": {"label": "strong_indicator"},
-                    "confidence_split": {
-                        "interpretation_confidence": {
-                            "label": "medium",
-                        }
-                    },
-                    "alternative_explanations": [],
-                },
-                {
-                    "finding_id": "ret-1",
-                    "finding_scope": "retaliation_analysis",
-                    "finding_label": "Retaliatory sequence",
-                    "supporting_evidence": [
-                        {
-                            "citation_id": "c-3",
-                            "message_or_document_id": "uid-3",
-                            "text_attribution": {
-                                "authored_quoted_inferred_status": "metadata",
-                            },
-                        }
-                    ],
-                    "evidence_strength": {"label": "moderate_indicator"},
-                    "confidence_split": {
-                        "interpretation_confidence": {
-                            "label": "medium",
-                        }
-                    },
-                    "alternative_explanations": [],
-                },
-            ]
-        },
+        finding_evidence_index=_fixture_test_build_investigation_report_renders_employment_issue_frameworks_conservatively_report_part_0(),
         evidence_table={"rows": []},
         multi_source_case_bundle={
             "summary": {"source_type_counts": {"formal_document": 1}},
@@ -128,35 +183,9 @@ def test_build_investigation_report_renders_employment_issue_frameworks_conserva
         },
     )
 
-    issue_frameworks = report["sections"]["employment_issue_frameworks"]
-    assert issue_frameworks["status"] == "supported"
-    payloads = {item["issue_track"]: item for item in issue_frameworks["issue_tracks"]}
-    assert payloads["disability_disadvantage"]["status"] == "supported_by_current_record"
-    assert payloads["retaliation_after_protected_event"]["status"] == "supported_by_current_record"
-    assert payloads["participation_duty_gap"]["status"] == "supported_by_current_record"
-    assert payloads["prevention_duty_gap"]["status"] == "supported_by_current_record"
-    assert payloads["prevention_duty_gap"]["minimum_source_quality_expectations"]
-    assert payloads["disability_disadvantage"]["required_proof_elements"]
-    assert issue_frameworks["issue_tag_summary"]["operator_supplied"][0]["tag_id"] == "sbv_participation"
-    direct_tags = [item["tag_id"] for item in issue_frameworks["issue_tag_summary"]["direct_document_content"]]
-    inferred_tags = [item["tag_id"] for item in issue_frameworks["issue_tag_summary"]["bounded_inference"]]
-    assert "prevention_bem_sgb_ix_167" in direct_tags
-    assert "retaliation_massregelung" in inferred_tags
-    power = report["sections"]["power_context_analysis"]
-    assert power["comparator_matrix"]["row_count"] == 1
-    assert power["comparator_matrix"]["rows"][0]["issue_id"] == "control_intensity"
-    lawyer_matrix = report["sections"]["lawyer_issue_matrix"]["lawyer_issue_matrix"]
-    row_ids = [row["issue_id"] for row in lawyer_matrix["rows"]]
-    assert "agg_disadvantage" in row_ids
-    assert "sgb_ix_167_bem" in row_ids
-    agg_row = next(row for row in lawyer_matrix["rows"] if row["issue_id"] == "agg_disadvantage")
-    assert agg_row["legal_relevance_status"] in {"supported_relevance", "potentially_relevant"}
-    assert agg_row["strongest_documents"]
-    assert agg_row["likely_opposing_argument"]
 
-
-def test_build_investigation_report_embeds_retaliation_timeline_assessment() -> None:
-    report = build_investigation_report(
+def _fixture_test_build_investigation_report_embeds_retaliation_timeline_assessment_report():
+    return build_investigation_report(
         case_bundle={
             "scope": {
                 "trigger_events": [
@@ -243,22 +272,9 @@ def test_build_investigation_report_embeds_retaliation_timeline_assessment() -> 
         multi_source_case_bundle={"summary": {"source_type_counts": {}}},
     )
 
-    chronology = report["sections"]["chronological_pattern_analysis"]
-    protected_candidates = chronology["retaliation_timeline_assessment"]["protected_activity_candidates"]
-    adverse_candidates = chronology["retaliation_timeline_assessment"]["adverse_action_candidates"]
-    assert protected_candidates[0]["candidate_id"] == "protected_activity:1"
-    assert adverse_candidates[0]["candidate_id"] == "adverse_action:1"
-    assert chronology["retaliation_timeline_assessment"]["protected_activity_timeline"][0]["trigger_type"] == "complaint"
-    assert chronology["retaliation_timeline_assessment"]["adverse_action_timeline"][0]["uid"] == "uid-5"
-    assert chronology["retaliation_timeline_assessment"]["confounder_summary"]["confounder_weight"] == "low"
-    assert chronology["retaliation_timeline_assessment"]["overall_evidentiary_rating"]["rating"] == (
-        "limited_or_mixed_timing_support"
-    )
-    assert any(entry["entry_id"] == "timeline:retaliation_assessment" for entry in chronology["entries"])
 
-
-def test_compact_investigation_report_preserves_overall_assessment_contract_fields():
-    report = build_investigation_report(
+def _fixture_test_compact_investigation_report_preserves_overall_assessment_contract_fields_report():
+    return build_investigation_report(
         case_bundle={"scope": {"trigger_events": []}},
         candidates=[],
         timeline={},
@@ -336,51 +352,51 @@ def test_compact_investigation_report_preserves_overall_assessment_contract_fiel
         },
     )
 
-    from src.investigation_report import compact_investigation_report
 
-    compact = compact_investigation_report(report)
-    triage = compact["sections"]["evidence_triage"]
-    matter_index = compact["sections"]["matter_evidence_index"]
-    lawyer_matrix = compact["sections"]["lawyer_issue_matrix"]
-    actor_witness = compact["sections"]["actor_and_witness_map"]
-    witness_packs = compact["sections"]["witness_question_packs"]
-    promise_analysis = compact["sections"]["promise_and_contradiction_analysis"]
-    memo = compact["sections"]["lawyer_briefing_memo"]
-    drafting = compact["sections"]["controlled_factual_drafting"]
-    dashboard = compact["sections"]["case_dashboard"]
-    skeptical_review = compact["sections"]["skeptical_employer_review"]
-    checklist = compact["sections"]["document_request_checklist"]
-    overall = compact["sections"]["overall_assessment"]
-    assert compact["report_highlights"] == report["report_highlights"]
-    assert compact["bilingual_workflow"]["output_language"] == "en"
-    assert triage["summary"]["reasonable_inference_count"] == 1
-    assert len(triage["reasonable_inference"]) == 1
-    assert len(triage["missing_proof"]) == 1
-    assert matter_index["matter_evidence_index"]["row_count"] == 1
-    assert matter_index["matter_evidence_index"]["rows"][0]["exhibit_reliability"]["strength"] == "strong"
-    assert lawyer_matrix["lawyer_issue_matrix"]["row_count"] == 0
-    assert lawyer_matrix["lawyer_issue_matrix"]["bilingual_rendering"]["output_language"] == "en"
-    assert lawyer_matrix["lawyer_issue_matrix"]["rows"] == []
-    assert actor_witness["actor_map"]["actor_count"] == 1
-    assert actor_witness["witness_map"]["primary_decision_makers"] == []
-    assert witness_packs["witness_question_packs"]["pack_count"] >= 0
-    assert promise_analysis["promise_contradiction_analysis"]["summary"]["promise_action_row_count"] == 0
-    assert promise_analysis["promise_contradiction_analysis"]["summary"]["contradiction_row_count"] == 0
-    assert memo["lawyer_briefing_memo"]["memo_format"] == "lawyer_onboarding_brief"
-    assert memo["lawyer_briefing_memo"]["bilingual_rendering"]["preserve_original_quotations"] is True
-    assert memo["lawyer_briefing_memo"]["sections"]["executive_summary"]
-    assert drafting["controlled_factual_drafting"]["drafting_format"] == "controlled_factual_drafting"
-    assert drafting["controlled_factual_drafting"]["bilingual_rendering"]["translation_mode"] == "translation_aware"
-    assert drafting["controlled_factual_drafting"]["framing_preflight"]["allegation_ceiling"]["ceiling_level"]
-    assert dashboard["case_dashboard"]["dashboard_format"] == "refreshable_case_dashboard"
-    assert dashboard["case_dashboard"]["bilingual_rendering"]["output_language"] == "en"
-    assert dashboard["case_dashboard"]["summary"]["refreshable_from_shared_entities"] is True
-    assert dashboard["case_dashboard"]["cards"]["main_actors"]
-    assert skeptical_review["skeptical_employer_review"]["summary"]["weakness_count"] >= 1
-    assert checklist["document_request_checklist"]["group_count"] >= 1
-    assert compact["sections"]["chronological_pattern_analysis"]["master_chronology"]["entry_count"] == 1
-    assert compact["sections"]["chronological_pattern_analysis"]["retaliation_timeline_assessment"]["version"] == ""
-    assert overall["primary_assessment"] == "unequal_treatment_concern"
-    assert overall["assessment_strength"] == "moderate_indicator"
-    assert overall["secondary_plausible_interpretations"] == ["targeted_hostility_concern"]
-    assert "Quoted-speaker ambiguity downgrades part of the current record." in overall["downgrade_reasons"]
+def _fixture_test_build_investigation_report_renders_employment_issue_frameworks_conservatively_report_part_0():
+    return {
+        "findings": [
+            {
+                "finding_id": "cmp-2",
+                "finding_scope": "comparative_treatment",
+                "finding_label": "Unequal treatment",
+                "supporting_evidence": [
+                    {
+                        "citation_id": "c-2",
+                        "message_or_document_id": "uid-2",
+                        "text_attribution": {
+                            "authored_quoted_inferred_status": "metadata",
+                        },
+                    }
+                ],
+                "evidence_strength": {"label": "strong_indicator"},
+                "confidence_split": {
+                    "interpretation_confidence": {
+                        "label": "medium",
+                    }
+                },
+                "alternative_explanations": [],
+            },
+            {
+                "finding_id": "ret-1",
+                "finding_scope": "retaliation_analysis",
+                "finding_label": "Retaliatory sequence",
+                "supporting_evidence": [
+                    {
+                        "citation_id": "c-3",
+                        "message_or_document_id": "uid-3",
+                        "text_attribution": {
+                            "authored_quoted_inferred_status": "metadata",
+                        },
+                    }
+                ],
+                "evidence_strength": {"label": "moderate_indicator"},
+                "confidence_split": {
+                    "interpretation_confidence": {
+                        "label": "medium",
+                    }
+                },
+                "alternative_explanations": [],
+            },
+        ]
+    }

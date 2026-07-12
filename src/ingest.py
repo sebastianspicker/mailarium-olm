@@ -23,12 +23,18 @@ from .config import (
     should_enable_image_embedding,
 )
 from .ingest_embed_pipeline import (
-    _SENTINEL,  # noqa: F401 - re-exported for backward compat
+    _SENTINEL,
     _EmbedPipeline,
     _exchange_entities_from_email,
 )
 from .parse_olm import parse_olm
 from .validation import positive_int as _shared_positive_int
+
+_COMPATIBILITY_EXPORTS = (
+    _EmbedPipeline,
+    _SENTINEL,
+    _exchange_entities_from_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +170,28 @@ def ingest(
     resume: bool = False,
     timing: bool = False,
 ) -> dict[str, Any]:
+    """Run the end-to-end ingestion pipeline for Outlook .olm exports.
+
+    Parses emails from the OLM archive, chunks them, generates embeddings,
+    and stores results in ChromaDB and SQLite databases.
+
+    Args:
+        olm_path: Path to the Outlook .olm export file.
+        chromadb_path: Custom path for ChromaDB storage. Defaults to None (uses default location).
+        sqlite_path: Custom path for SQLite metadata database. Defaults to None (uses default location).
+        batch_size: Number of chunks per write batch (default: 500).
+        max_emails: Optional cap on the number of emails to parse.
+        dry_run: If True, parse and chunk without writing to databases.
+        extract_attachments: If True, extract and index text from attachments.
+        extract_entities: If True, extract entities (orgs, URLs, phones) and store in SQLite.
+        incremental: If True, skip emails already present in SQLite.
+        embed_images: If True, embed image attachments using Visualized-BGE-M3.
+        resume: If True, resume from the most recent checkpoint.
+        timing: If True, show per-phase timing breakdown.
+
+    Returns:
+        Dictionary containing ingestion statistics (emails parsed, chunks created, etc.).
+    """
     return pipeline_family.ingest_impl(
         olm_path=olm_path,
         chromadb_path=chromadb_path,
@@ -193,7 +221,30 @@ def ingest(
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments for the ingestion pipeline.
+
+    Args:
+        argv: List of command-line arguments. Defaults to None (uses sys.argv).
+
+    Returns:
+        Parsed argparse.Namespace containing all configuration options.
+
+    Raises:
+        SystemExit: If required arguments are missing or invalid.
+    """
     parser = argparse.ArgumentParser(description="Ingest Outlook .olm export into the email RAG database.")
+    _add_ingest_arguments(parser)
+    _add_reprocessing_arguments(parser)
+    _add_common_arguments(parser)
+    args = parser.parse_args(argv)
+    if _olm_path_required(args) and not getattr(args, "olm_path", None):
+        parser.error(
+            "olm_path is required for ingest, --reingest-bodies, --reingest-metadata, and --reprocess-degraded-attachments."
+        )
+    return args
+
+
+def _add_ingest_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("olm_path", nargs="?", help="Path to the .olm file to ingest or re-parse when required.")
     parser.add_argument("--chromadb-path", default=None, help="Custom path for ChromaDB storage.")
     parser.add_argument(
@@ -233,6 +284,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Custom path for SQLite metadata database.",
     )
+
+
+def _add_reprocessing_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--incremental",
         action="store_true",
@@ -288,21 +342,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Resume ingest from the most recent checkpoint for the same OLM path.",
     )
+
+
+def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--yes", action="store_true", help="Confirm destructive operations.")
     parser.add_argument(
         "--log-level",
         default=None,
         help="Logging level override (DEBUG, INFO, WARNING, ERROR).",
     )
-    args = parser.parse_args(argv)
-    if _olm_path_required(args) and not getattr(args, "olm_path", None):
-        parser.error(
-            "olm_path is required for ingest, --reingest-bodies, --reingest-metadata, and --reprocess-degraded-attachments."
-        )
-    return args
 
 
 def _olm_path_required(args: argparse.Namespace) -> bool:
+    """Check if olm_path argument is required based on other arguments.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        True if olm_path is required, False if another operation mode is selected
+        that doesn't need an OLM file (e.g., --reset-index, --reingest-analytics).
+    """
     return not any(
         [
             getattr(args, "reset_index", False),
@@ -314,63 +374,78 @@ def _olm_path_required(args: argparse.Namespace) -> bool:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Main entry point for the ingestion pipeline.
+
+    Orchestrates the ingestion process based on command-line arguments.
+    Handles various operation modes: standard ingestion, re-ingestion variants,
+    re-embedding, and index reset.
+
+    Args:
+        argv: List of command-line arguments. Defaults to None (uses sys.argv).
+
+    Raises:
+        SystemExit: On errors or when operations complete (with appropriate exit codes).
+    """
     load_dotenv()
     args = parse_args(argv)
     configure_logging(args.log_level)
+    if _run_maintenance_command(args):
+        return
+    stats = _run_ingest_command(args)
+    print("\n" + "\n".join(format_ingestion_summary(stats)))
 
+
+def _run_maintenance_command(args: argparse.Namespace) -> bool:
     if args.reset_index:
-        if not args.yes:
-            print("Refusing to reset index without --yes.")
-            raise SystemExit(2)
-        _reset_index(args)
-        print("Index has been reset.")
-        raise SystemExit(0)
+        _run_reset_index(args)
 
     if args.reingest_bodies:
-        result = reingest_bodies(args.olm_path, sqlite_path=args.sqlite_path, force=args.force)
-        print(result["message"])
-        raise SystemExit(0)
+        _print_command_completion(reingest_bodies(args.olm_path, sqlite_path=args.sqlite_path, force=args.force))
 
     if args.reingest_metadata:
-        result = reingest_metadata(args.olm_path, sqlite_path=args.sqlite_path)
-        print(result["message"])
-        raise SystemExit(0)
+        _print_command_completion(reingest_metadata(args.olm_path, sqlite_path=args.sqlite_path))
 
     if args.reingest_analytics:
-        result = reingest_analytics(sqlite_path=args.sqlite_path)
-        print(result["message"])
-        raise SystemExit(0)
+        _print_command_completion(reingest_analytics(sqlite_path=args.sqlite_path))
 
     if args.reextract_entities:
-        result = reextract_entities(
-            sqlite_path=args.sqlite_path,
-            force=args.force,
-        )
-        print(result["message"])
-        raise SystemExit(0)
+        _print_command_completion(reextract_entities(sqlite_path=args.sqlite_path, force=args.force))
 
     if args.reprocess_degraded_attachments:
-        result = reprocess_degraded_attachments(
-            args.olm_path,
-            chromadb_path=args.chromadb_path,
-            sqlite_path=args.sqlite_path,
-            batch_size=args.batch_size,
-            force=args.force,
+        _print_command_completion(
+            reprocess_degraded_attachments(
+                args.olm_path,
+                chromadb_path=args.chromadb_path,
+                sqlite_path=args.sqlite_path,
+                batch_size=args.batch_size,
+                force=args.force,
+            )
         )
-        print(result["message"])
-        raise SystemExit(0)
 
     if args.reembed:
-        result = reembed(
-            chromadb_path=args.chromadb_path,
-            sqlite_path=args.sqlite_path,
-            batch_size=args.batch_size,
+        _print_command_completion(
+            reembed(chromadb_path=args.chromadb_path, sqlite_path=args.sqlite_path, batch_size=args.batch_size)
         )
-        print(result["message"])
-        raise SystemExit(0)
+    return False
 
+
+def _run_reset_index(args: argparse.Namespace) -> None:
+    if not args.yes:
+        print("Refusing to reset index without --yes.")
+        raise SystemExit(2)
+    _reset_index(args)
+    print("Index has been reset.")
+    raise SystemExit(0)
+
+
+def _print_command_completion(result: dict[str, Any]) -> None:
+    print(result["message"])
+    raise SystemExit(0)
+
+
+def _run_ingest_command(args: argparse.Namespace) -> dict[str, Any]:
     try:
-        stats = ingest(
+        return ingest(
             args.olm_path,
             chromadb_path=args.chromadb_path,
             sqlite_path=args.sqlite_path,
@@ -400,15 +475,22 @@ def main(argv: list[str] | None = None) -> None:
         print("Ingestion interrupted.")
         raise SystemExit(130) from exc
 
-    summary_lines = format_ingestion_summary(stats)
-    print("\n" + "\n".join(summary_lines))
-
 
 def reingest_bodies(
     olm_path: str,
     sqlite_path: str | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
+    """Re-parse OLM file to backfill body_text and body_html fields.
+
+    Args:
+        olm_path: Path to the Outlook .olm export file.
+        sqlite_path: Custom path for SQLite metadata database. Defaults to None.
+        force: If True, also updates subjects and sender names.
+
+    Returns:
+        Dictionary containing operation results and statistics.
+    """
     return reingest_family.reingest_bodies_impl(
         olm_path,
         sqlite_path=sqlite_path,
@@ -421,6 +503,18 @@ def reingest_metadata(
     olm_path: str,
     sqlite_path: str | None = None,
 ) -> dict[str, Any]:
+    """Re-parse OLM file to backfill v7 metadata fields.
+
+    Backfills metadata including categories, thread_topic, calendar events,
+    references, and attachment information.
+
+    Args:
+        olm_path: Path to the Outlook .olm export file.
+        sqlite_path: Custom path for SQLite metadata database. Defaults to None.
+
+    Returns:
+        Dictionary containing operation results and statistics.
+    """
     return reingest_family.reingest_metadata_impl(
         olm_path,
         sqlite_path=sqlite_path,
@@ -432,6 +526,16 @@ def reingest_metadata(
 def reingest_analytics(
     sqlite_path: str | None = None,
 ) -> dict[str, Any]:
+    """Backfill language detection and sentiment analysis for emails.
+
+    Processes emails missing analytics data in the SQLite database.
+
+    Args:
+        sqlite_path: Custom path for SQLite metadata database. Defaults to None.
+
+    Returns:
+        Dictionary containing operation results and statistics.
+    """
     return reingest_family.reingest_analytics_impl(sqlite_path=sqlite_path)
 
 
@@ -439,6 +543,18 @@ def reextract_entities(
     sqlite_path: str | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
+    """Re-extract entities from stored email bodies.
+
+    Re-processes email bodies to extract entities (organizations, URLs, phones, etc.)
+    and persists extractor provenance metadata.
+
+    Args:
+        sqlite_path: Custom path for SQLite metadata database. Defaults to None.
+        force: If True, re-extract entities even if already present.
+
+    Returns:
+        Dictionary containing operation results and statistics.
+    """
     entity_extractor_fn = _resolve_entity_extractor(extract_entities=True, dry_run=False)
     extractor_key, extraction_version = _entity_extractor_provenance(entity_extractor_fn)
     return reingest_family.reextract_entities_impl(
@@ -457,6 +573,21 @@ def reprocess_degraded_attachments(
     batch_size: int = 100,
     force: bool = False,
 ) -> dict[str, Any]:
+    """Re-process mailbox attachments for degraded/unsupported rows.
+
+    Attempts OCR recovery for image attachments and re-extracts text from
+    attachments that were previously marked as degraded or unsupported.
+
+    Args:
+        olm_path: Path to the Outlook .olm export file.
+        chromadb_path: Custom path for ChromaDB storage. Defaults to None.
+        sqlite_path: Custom path for SQLite metadata database. Defaults to None.
+        batch_size: Number of items per batch (default: 100).
+        force: If True, re-process all attachments regardless of current state.
+
+    Returns:
+        Dictionary containing operation results and statistics.
+    """
     from .attachment_extractor import extract_attachment_text_ocr, extract_text
 
     return reingest_family.reprocess_degraded_attachments_impl(
@@ -477,6 +608,19 @@ def reembed(
     sqlite_path: str | None = None,
     batch_size: int = 100,
 ) -> dict[str, Any]:
+    """Re-chunk and re-embed all emails from SQLite body text into ChromaDB.
+
+    Uses corrected body text from SQLite database to regenerate chunks and
+    embeddings in ChromaDB.
+
+    Args:
+        chromadb_path: Custom path for ChromaDB storage. Defaults to None.
+        sqlite_path: Custom path for SQLite metadata database. Defaults to None.
+        batch_size: Number of chunks per batch (default: 100).
+
+    Returns:
+        Dictionary containing operation results and statistics.
+    """
     return reingest_family.reembed_impl(
         chromadb_path=chromadb_path,
         sqlite_path=sqlite_path,
@@ -490,6 +634,17 @@ def _reset_index(args: argparse.Namespace) -> None:
 
 
 def _positive_int(raw: str) -> int:
+    """Validate and convert a string to a positive integer.
+
+    Args:
+        raw: String to convert.
+
+    Returns:
+        The parsed positive integer.
+
+    Raises:
+        argparse.ArgumentTypeError: If the string cannot be parsed as a positive integer.
+    """
     try:
         return _shared_positive_int(raw)
     except ValueError as exc:
@@ -497,6 +652,15 @@ def _positive_int(raw: str) -> int:
 
 
 def format_ingestion_summary(stats: dict[str, Any]) -> list[str]:
+    """Format ingestion statistics into a human-readable summary.
+
+    Args:
+        stats: Dictionary containing ingestion statistics (emails_parsed, chunks_created,
+            chunks_added, chunks_skipped, batches_written, total_in_db, dry_run, etc.).
+
+    Returns:
+        List of formatted summary lines ready for display.
+    """
     lines = [
         "=== Ingestion Summary ===",
         f"Emails parsed: {stats['emails_parsed']}",

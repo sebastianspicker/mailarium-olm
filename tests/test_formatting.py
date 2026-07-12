@@ -1,6 +1,9 @@
 """Tests for formatting module (Phase 4)."""
 
-from src.formatting import build_result_header, estimate_tokens
+import time
+
+from src.formatting import build_result_header, estimate_tokens, format_triage_results
+from src.sanitization import csv_safe_cell
 
 
 def test_result_header_truncates_date_to_date_only():
@@ -12,6 +15,18 @@ def test_result_header_truncates_date_to_date_only():
 def test_result_header_omits_inbox_folder():
     header = build_result_header({"folder": "Inbox", "subject": "Test"})
     assert "Folder" not in header
+
+
+def test_compact_results_strip_metadata_header_preview():
+    class Result:
+        def __init__(self) -> None:
+            self.metadata = {"uid": "uid-1", "sender_email": "sender@example.test", "date": "2025-01-15", "subject": "Subject"}
+            self.score = 0.9
+            self.text = "Date: 2025-01-15\nFrom: sender@example.test\nSubject: Subject\n\nActual body"
+
+    [entry] = format_triage_results([Result()])
+
+    assert entry["preview"] == "Actual body"
 
 
 def test_result_header_shows_non_inbox_folder():
@@ -48,6 +63,37 @@ def test_estimate_tokens():
     assert estimate_tokens("") == 1  # minimum 1
     assert estimate_tokens("a" * 100) == 25
     assert estimate_tokens("hello world") >= 1
+
+
+def test_csv_safe_cell_neutralizes_formula_prefixes_without_changing_plain_values():
+    for value in ("=1+1", "+cmd", "-2", "@SUM(A1:A2)", "\tformula", "\rformula"):
+        assert csv_safe_cell(value) == f"'{value}"
+    assert csv_safe_cell("plain") == "plain"
+    assert csv_safe_cell(42) == "42"
+    assert csv_safe_cell(None) == ""
+
+
+def test_rewritten_regex_helpers_preserve_token_and_sentence_parity():
+    from src.thread_summarizer import _split_sentences
+    from src.writing_analyzer import _get_words
+
+    assert _get_words("Jean-Luc's well–formed words") == ["jean-luc's", "well", "formed", "words"]
+    assert _split_sentences("First sentence. Second sentence! Third sentence?") == [
+        "First sentence.",
+        "Second sentence!",
+        "Third sentence?",
+    ]
+
+
+def test_rewritten_regex_helpers_are_linear_on_adversarial_input():
+    from src.thread_summarizer import _split_sentences
+    from src.writing_analyzer import _get_words
+
+    adversarial = ("a'" * 50_000) + "! " + ("A" * 50_000)
+    started = time.perf_counter()
+    _get_words(adversarial)
+    _split_sentences(adversarial)
+    assert time.perf_counter() - started < 1.0
 
 
 # ── Categories and calendar in headers ──────────────────────

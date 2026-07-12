@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .db_schema import _escape_like, _sql_in_placeholders
@@ -17,6 +18,106 @@ def _safe_optional_int(value: Any) -> int | None:
         return int(str(value))
     except (TypeError, ValueError):
         return None
+
+
+@dataclass(frozen=True)
+class _EntityOccurrence:
+    text: str
+    entity_type: str
+    normalized_form: str
+    source_scope: str
+    surface_scope: str
+    segment_ordinal: int | None
+    char_start: int | None
+    char_end: int | None
+    occurrence_text: str
+
+
+def _entity_occurrence(row: tuple[object, ...]) -> _EntityOccurrence:
+    if len(row) != 9:
+        raise ValueError(f"Unsupported occurrence row shape: {len(row)}")
+    entity_text, entity_type, normalized_form, source_scope, surface_scope, ordinal, start, end, occurrence_text = row
+    return _EntityOccurrence(
+        text=str(entity_text or ""),
+        entity_type=str(entity_type or ""),
+        normalized_form=str(normalized_form or ""),
+        source_scope=str(source_scope or "email_text"),
+        surface_scope=str(surface_scope or ""),
+        segment_ordinal=_safe_optional_int(ordinal),
+        char_start=_safe_optional_int(start),
+        char_end=_safe_optional_int(end),
+        occurrence_text=str(occurrence_text or ""),
+    )
+
+
+def _upsert_occurrence_entity(cur: sqlite3.Cursor, occurrence: _EntityOccurrence) -> int | None:
+    row = cur.execute(
+        """INSERT INTO entities(entity_text, entity_type, normalized_form)
+           VALUES(?, ?, ?)
+           ON CONFLICT(normalized_form, entity_type) DO UPDATE SET
+             entity_text = excluded.entity_text
+           RETURNING id""",
+        (occurrence.text, occurrence.entity_type, occurrence.normalized_form),
+    ).fetchone()
+    return int(row[0]) if row is not None else None
+
+
+def _occurrence_hash(entity_id: int, email_uid: str, occurrence: _EntityOccurrence) -> str:
+    values = (
+        entity_id,
+        email_uid,
+        occurrence.source_scope,
+        occurrence.surface_scope,
+        occurrence.segment_ordinal,
+        occurrence.char_start,
+        occurrence.char_end,
+        occurrence.occurrence_text.casefold(),
+    )
+    return hashlib.sha256(
+        "|".join("" if value is None else str(value) for value in values).encode("utf-8", errors="ignore")
+    ).hexdigest()
+
+
+def _persist_entity_occurrence(
+    cur: sqlite3.Cursor,
+    email_uid: str,
+    entity_id: int,
+    occurrence: _EntityOccurrence,
+    extractor_key: str,
+    extraction_version: str,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO entity_occurrences(
+            entity_id, email_uid, source_scope, surface_scope, segment_ordinal,
+            char_start, char_end, occurrence_text, occurrence_hash,
+            extractor_key, extraction_version, extracted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(entity_id, email_uid, occurrence_hash) DO UPDATE SET
+            source_scope=excluded.source_scope,
+            surface_scope=excluded.surface_scope,
+            segment_ordinal=excluded.segment_ordinal,
+            char_start=excluded.char_start,
+            char_end=excluded.char_end,
+            occurrence_text=excluded.occurrence_text,
+            extractor_key=excluded.extractor_key,
+            extraction_version=excluded.extraction_version,
+            extracted_at=datetime('now')
+        """,
+        (
+            entity_id,
+            email_uid,
+            occurrence.source_scope,
+            occurrence.surface_scope,
+            occurrence.segment_ordinal,
+            occurrence.char_start,
+            occurrence.char_end,
+            occurrence.occurrence_text,
+            _occurrence_hash(entity_id, email_uid, occurrence),
+            str(extractor_key or ""),
+            str(extraction_version or ""),
+        ),
+    )
 
 
 class EntityMixin:
@@ -132,97 +233,14 @@ class EntityMixin:
             return 0
         inserted = 0
         cur = self.conn.cursor()
-        for occurrence in occurrences:
-            if len(occurrence) != 9:
-                raise ValueError(f"Unsupported occurrence row shape: {len(occurrence)}")
-            (
-                entity_text,
-                entity_type,
-                normalized_form,
-                source_scope,
-                surface_scope,
-                segment_ordinal,
-                char_start,
-                char_end,
-                occurrence_text,
-            ) = occurrence
-            text = str(entity_text or "")
-            etype = str(entity_type or "")
-            norm = str(normalized_form or "")
-            if not norm or not etype:
+        for raw_occurrence in occurrences:
+            occurrence = _entity_occurrence(raw_occurrence)
+            if not occurrence.normalized_form or not occurrence.entity_type:
                 continue
-            row = cur.execute(
-                """INSERT INTO entities(entity_text, entity_type, normalized_form)
-                   VALUES(?, ?, ?)
-                   ON CONFLICT(normalized_form, entity_type) DO UPDATE SET
-                     entity_text = excluded.entity_text
-                   RETURNING id""",
-                (text, etype, norm),
-            ).fetchone()
-            if row is None:
+            entity_id = _upsert_occurrence_entity(cur, occurrence)
+            if entity_id is None:
                 continue
-            entity_id = int(row[0])
-            source_scope_value = str(source_scope or "email_text")
-            surface_scope_value = str(surface_scope or "")
-            ordinal_value = _safe_optional_int(segment_ordinal)
-            char_start_value = _safe_optional_int(char_start)
-            char_end_value = _safe_optional_int(char_end)
-            occurrence_text_value = str(occurrence_text or "")
-            occurrence_hash = hashlib.sha256(
-                "|".join(
-                    [
-                        str(entity_id),
-                        email_uid,
-                        source_scope_value,
-                        surface_scope_value,
-                        str(ordinal_value if ordinal_value is not None else ""),
-                        str(char_start_value if char_start_value is not None else ""),
-                        str(char_end_value if char_end_value is not None else ""),
-                        occurrence_text_value.casefold(),
-                    ]
-                ).encode("utf-8", errors="ignore")
-            ).hexdigest()
-            cur.execute(
-                """
-                INSERT INTO entity_occurrences(
-                    entity_id,
-                    email_uid,
-                    source_scope,
-                    surface_scope,
-                    segment_ordinal,
-                    char_start,
-                    char_end,
-                    occurrence_text,
-                    occurrence_hash,
-                    extractor_key,
-                    extraction_version,
-                    extracted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                ON CONFLICT(entity_id, email_uid, occurrence_hash) DO UPDATE SET
-                    source_scope=excluded.source_scope,
-                    surface_scope=excluded.surface_scope,
-                    segment_ordinal=excluded.segment_ordinal,
-                    char_start=excluded.char_start,
-                    char_end=excluded.char_end,
-                    occurrence_text=excluded.occurrence_text,
-                    extractor_key=excluded.extractor_key,
-                    extraction_version=excluded.extraction_version,
-                    extracted_at=datetime('now')
-                """,
-                (
-                    entity_id,
-                    email_uid,
-                    source_scope_value,
-                    surface_scope_value,
-                    ordinal_value,
-                    char_start_value,
-                    char_end_value,
-                    occurrence_text_value,
-                    occurrence_hash,
-                    str(extractor_key or ""),
-                    str(extraction_version or ""),
-                ),
-            )
+            _persist_entity_occurrence(cur, email_uid, entity_id, occurrence, extractor_key, extraction_version)
             inserted += 1
         if commit:
             self.conn.commit()
@@ -401,13 +419,13 @@ class EntityMixin:
             date_expr = "substr(e.date, 1, 7)"
 
         query = (
-            f"SELECT {date_expr} AS period, COUNT(*) AS count"
-            f" FROM entity_mentions em"
-            f" JOIN entities ent ON em.entity_id = ent.id"
-            f" JOIN emails e ON em.email_uid = e.uid"
-            r" WHERE ent.normalized_form LIKE ? ESCAPE '\'"
-            f" GROUP BY period"
-            f" ORDER BY period"
+            f"SELECT {date_expr} AS period, COUNT(*) AS count"  # nosec B608
+            f" FROM entity_mentions em"  # nosec B608
+            f" JOIN entities ent ON em.entity_id = ent.id"  # nosec B608
+            f" JOIN emails e ON em.email_uid = e.uid"  # nosec B608
+            r" WHERE ent.normalized_form LIKE ? ESCAPE '\'"  # nosec B608
+            f" GROUP BY period"  # nosec B608
+            f" ORDER BY period"  # nosec B608
         )
         rows = self.conn.execute(
             query,

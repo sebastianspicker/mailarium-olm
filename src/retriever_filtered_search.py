@@ -10,6 +10,7 @@ from .result_filters import _deduplicate_by_email, _normalize_filter
 
 if TYPE_CHECKING:
     from .retriever import EmailRetriever, SearchResult, _SearchFilters, _SearchPlan
+    from .retriever_models import FilteredSearchRequest
 
 _MAX_FETCH_SIZE = 10_000
 _MAX_FETCH_ATTEMPTS = 6
@@ -46,137 +47,170 @@ def _empty_semantic_filter_filters(
 
 
 def prepare_filtered_search_impl(
-    retriever: EmailRetriever,
-    *,
-    query: str,
-    top_k: int,
-    sender: str | None,
-    date_from: str | None,
-    date_to: str | None,
-    subject: str | None,
-    folder: str | None,
-    cc: str | None,
-    to: str | None,
-    bcc: str | None,
-    has_attachments: bool | None,
-    priority: int | None,
-    min_score: float | None,
-    email_type: str | None,
-    rerank: bool,
-    hybrid: bool,
-    topic_id: int | None,
-    cluster_id: int | None,
-    expand_query: bool,
-    category: str | None,
-    is_calendar: bool | None,
-    attachment_name: str | None,
-    attachment_type: str | None,
+    retriever: EmailRetriever, request: FilteredSearchRequest
 ) -> tuple[_SearchPlan | None, _SearchFilters]:
     """Normalize filtered-search inputs and derive an execution plan."""
-    from .retriever import _SearchFilters
-
-    semantic_filter_requested = topic_id is not None or cluster_id is not None
-    legal_support_profile = legal_support_query_profile(query)
-    allowed_uids = retriever._resolve_allowed_uids(topic_id=topic_id, cluster_id=cluster_id)
+    semantic_filter_requested = request.topic_id is not None or request.cluster_id is not None
+    legal_support_profile = legal_support_query_profile(request.query)
+    allowed_uids = retriever._resolve_allowed_uids(topic_id=request.topic_id, cluster_id=request.cluster_id)
     semantic_filter_errors = list(getattr(retriever, "_last_semantic_filter_errors", []) or [])
-    if semantic_filter_requested and allowed_uids is None and not semantic_filter_errors:
-        semantic_filter_errors = [
+    failure = _semantic_filter_failure(retriever, request, legal_support_profile, allowed_uids, semantic_filter_errors)
+    if failure is not None:
+        return failure
+    normalized_query, expansion_debug, expansion_suffix, expansion_status = _expanded_query_state(retriever, request)
+    filters = _normalized_filters(request, allowed_uids)
+    retriever._validate_filtered_search(top_k=request.top_k, min_score=request.min_score, filters=filters)
+    plan = retriever._build_search_plan(normalized_query, request.top_k, filters, rerank=request.rerank, hybrid=request.hybrid)
+    _record_prepared_search_debug(
+        retriever,
+        request,
+        plan,
+        filters,
+        legal_support_profile,
+        semantic_filter_requested,
+        semantic_filter_errors,
+        allowed_uids,
+        normalized_query,
+        expansion_debug,
+        expansion_suffix,
+        expansion_status,
+    )
+    return plan, filters
+
+
+def _semantic_filter_failure(
+    retriever: EmailRetriever,
+    request: FilteredSearchRequest,
+    legal_support_profile: dict,
+    allowed_uids: set[str] | None,
+    errors: list[dict],
+) -> tuple[_SearchPlan | None, _SearchFilters] | None:
+    """Record and return the no-search result for unavailable semantic scope."""
+    requested = request.topic_id is not None or request.cluster_id is not None
+    if requested and allowed_uids is None and not errors:
+        errors.append(
             {
                 "filter": "topic_or_cluster",
-                "value": {"topic_id": topic_id, "cluster_id": cluster_id},
+                "value": {"topic_id": request.topic_id, "cluster_id": request.cluster_id},
                 "error_type": "SemanticFilterUnavailable",
                 "message": "SQLite email database is not available for semantic filter resolution.",
             }
-        ]
-    if semantic_filter_requested and (semantic_filter_errors or not allowed_uids):
-        retriever._set_last_search_debug(
-            {
-                "original_query": query,
-                "executed_query": query,
-                "used_query_expansion": False,
-                "query_expansion_suffix": "",
-                "expand_query_requested": bool(expand_query),
-                "use_hybrid": False,
-                "use_rerank": False,
-                "top_k": int(top_k),
-                "fetch_size": 0,
-                "legal_support_profile": legal_support_profile,
-                "semantic_filter_status": "error" if semantic_filter_errors else "empty",
-                "semantic_filter_errors": semantic_filter_errors,
-                "semantic_filter_uid_count": 0,
-                "filter_summary": {
-                    "has_filters": True,
-                    "topic_or_cluster_constrained": True,
-                    "semantic_filter_error": bool(semantic_filter_errors),
-                    "attachment_filter": bool(attachment_name or attachment_type),
-                },
-            }
         )
-        return None, _empty_semantic_filter_filters(
-            has_attachments=has_attachments,
-            priority=priority,
-            min_score=min_score,
-            is_calendar=is_calendar,
-        )
-
-    normalized_query = retriever._expand_query(query) if expand_query and query else query
-    expansion_debug = dict(getattr(retriever, "_last_query_expansion", {}) or {}) if expand_query else {}
-    expansion_suffix = ""
-    if normalized_query != query and normalized_query.startswith(query):
-        expansion_suffix = normalized_query[len(query) :].strip()
-    query_expansion_status = "not_requested"
-    if expand_query:
-        query_expansion_status = str(expansion_debug.get("query_expansion_status") or "").strip() or (
-            "expanded" if normalized_query != query else "unchanged"
-        )
-    filters = _SearchFilters(
-        sender=_normalize_filter(sender),
-        date_from=_normalize_filter(date_from),
-        date_to=_normalize_filter(date_to),
-        subject=_normalize_filter(subject),
-        folder=_normalize_filter(folder),
-        cc=_normalize_filter(cc),
-        to=_normalize_filter(to),
-        bcc=_normalize_filter(bcc),
-        has_attachments=has_attachments,
-        priority=priority,
-        min_score=min_score,
-        email_type=(_normalize_filter(email_type) or "").lower() or None,
-        allowed_uids=allowed_uids,
-        category=_normalize_filter(category),
-        is_calendar=is_calendar,
-        attachment_name=_normalize_filter(attachment_name),
-        attachment_type=_normalize_filter(attachment_type),
+    if not requested or (not errors and allowed_uids):
+        return None
+    retriever._set_last_search_debug(_semantic_failure_debug(request, legal_support_profile, errors))
+    return None, _empty_semantic_filter_filters(
+        has_attachments=request.has_attachments,
+        priority=request.priority,
+        min_score=request.min_score,
+        is_calendar=request.is_calendar,
     )
-    retriever._validate_filtered_search(top_k=top_k, min_score=min_score, filters=filters)
-    plan = retriever._build_search_plan(normalized_query, top_k, filters, rerank=rerank, hybrid=hybrid)
+
+
+def _semantic_failure_debug(request: FilteredSearchRequest, profile: dict, errors: list[dict]) -> dict:
+    """Create stable debug data for a failed or empty semantic filter resolution."""
+    return {
+        "original_query": request.query,
+        "executed_query": request.query,
+        "used_query_expansion": False,
+        "query_expansion_suffix": "",
+        "expand_query_requested": bool(request.expand_query),
+        "use_hybrid": False,
+        "use_rerank": False,
+        "top_k": int(request.top_k),
+        "fetch_size": 0,
+        "legal_support_profile": profile,
+        "semantic_filter_status": "error" if errors else "empty",
+        "semantic_filter_errors": errors,
+        "semantic_filter_uid_count": 0,
+        "filter_summary": {
+            "has_filters": True,
+            "topic_or_cluster_constrained": True,
+            "semantic_filter_error": bool(errors),
+            "attachment_filter": bool(request.attachment_name or request.attachment_type),
+        },
+    }
+
+
+def _expanded_query_state(retriever: EmailRetriever, request: FilteredSearchRequest) -> tuple[str, dict, str, str]:
+    """Expand the query and retain the exact diagnostic state used by callers."""
+    normalized = retriever._expand_query(request.query) if request.expand_query and request.query else request.query
+    debug = dict(getattr(retriever, "_last_query_expansion", {}) or {}) if request.expand_query else {}
+    suffix = (
+        normalized[len(request.query) :].strip() if normalized != request.query and normalized.startswith(request.query) else ""
+    )
+    status = str(debug.get("query_expansion_status") or "").strip() or (
+        "expanded" if normalized != request.query else "unchanged"
+    )
+    return normalized, debug, suffix, status if request.expand_query else "not_requested"
+
+
+def _normalized_filters(request: FilteredSearchRequest, allowed_uids: set[str] | None) -> _SearchFilters:
+    """Normalize all text fields into the immutable runtime filter state."""
+    from .retriever import _SearchFilters
+
+    return _SearchFilters(
+        sender=_normalize_filter(request.sender),
+        date_from=_normalize_filter(request.date_from),
+        date_to=_normalize_filter(request.date_to),
+        subject=_normalize_filter(request.subject),
+        folder=_normalize_filter(request.folder),
+        cc=_normalize_filter(request.cc),
+        to=_normalize_filter(request.to),
+        bcc=_normalize_filter(request.bcc),
+        has_attachments=request.has_attachments,
+        priority=request.priority,
+        min_score=request.min_score,
+        email_type=(_normalize_filter(request.email_type) or "").lower() or None,
+        allowed_uids=allowed_uids,
+        category=_normalize_filter(request.category),
+        is_calendar=request.is_calendar,
+        attachment_name=_normalize_filter(request.attachment_name),
+        attachment_type=_normalize_filter(request.attachment_type),
+    )
+
+
+def _record_prepared_search_debug(
+    retriever: EmailRetriever,
+    request: FilteredSearchRequest,
+    plan: _SearchPlan,
+    filters: _SearchFilters,
+    profile: dict,
+    semantic_requested: bool,
+    semantic_errors: list[dict],
+    allowed_uids: set[str] | None,
+    normalized_query: str,
+    expansion_debug: dict,
+    expansion_suffix: str,
+    expansion_status: str,
+) -> None:
+    """Persist debug fields without mixing them into request normalization."""
     retriever._set_last_search_debug(
         {
-            "original_query": query,
+            "original_query": request.query,
             "executed_query": normalized_query,
-            "used_query_expansion": normalized_query != query,
-            "query_expansion_status": query_expansion_status,
+            "used_query_expansion": normalized_query != request.query,
+            "query_expansion_status": expansion_status,
             "query_expansion_error_type": str(expansion_debug.get("query_expansion_error_type") or ""),
             "query_expansion_error": str(expansion_debug.get("query_expansion_error") or ""),
             "query_expansion_suffix": expansion_suffix,
-            "expand_query_requested": bool(expand_query),
+            "expand_query_requested": bool(request.expand_query),
             "use_hybrid": bool(plan.use_hybrid),
             "use_rerank": bool(plan.use_rerank),
-            "top_k": int(top_k),
+            "top_k": int(request.top_k),
             "fetch_size": int(plan.fetch_size),
-            "legal_support_profile": legal_support_profile,
-            "semantic_filter_status": "matched" if semantic_filter_requested else "not_requested",
-            "semantic_filter_errors": semantic_filter_errors,
+            "legal_support_profile": profile,
+            "semantic_filter_status": "matched" if semantic_requested else "not_requested",
+            "semantic_filter_errors": semantic_errors,
             "semantic_filter_uid_count": len(allowed_uids or set()),
             "filter_summary": {
                 "has_filters": bool(filters.has_filters),
                 "topic_or_cluster_constrained": allowed_uids is not None,
-                "semantic_filter_error": bool(semantic_filter_errors),
+                "semantic_filter_error": bool(semantic_errors),
                 "attachment_filter": bool(filters.attachment_name or filters.attachment_type),
             },
         }
     )
-    return plan, filters
 
 
 def execute_filtered_search_impl(

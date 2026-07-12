@@ -17,63 +17,65 @@ from src.mcp_models import (
 )
 
 
+class _CaseScopeRetriever:
+    def __init__(self):
+        self.queries = []
+
+    def search_filtered(self, query, top_k=10, **kwargs):
+        self.queries.append(query)
+        assert top_k == 1
+        assert kwargs["date_from"] == "2026-02-01"
+        assert kwargs["date_to"] == "2026-02-28"
+        return [
+            SimpleNamespace(
+                metadata={
+                    "uid": "uid-case-1",
+                    "subject": "Re: Complaint follow-up",
+                    "sender_email": "manager@example.com",
+                    "sender_name": "Morgan Manager",
+                    "date": "2026-02-12T10:00:00",
+                    "conversation_id": "conv-case-1",
+                },
+                chunk_id="chunk-case-1",
+                text="We should discuss this privately tomorrow morning.",
+                score=0.92,
+            )
+        ]
+
+
+class _CaseScopeDB:
+    conn = None
+
+    def get_emails_full_batch(self, uids):
+        assert uids == ["uid-case-1"]
+        return {
+            "uid-case-1": {
+                "uid": "uid-case-1",
+                "body_text": "Intro. We should discuss this privately tomorrow morning. Thanks.",
+                "normalized_body_source": "body_text_html",
+                "to": ["Alex Example <alex@example.com>"],
+                "cc": [],
+                "bcc": [],
+                "reply_context_from": "alex@example.com",
+                "reply_context_to_json": "[]",
+                "conversation_id": "conv-case-1",
+            }
+        }
+
+
 async def test_email_answer_context_emits_case_bundle_and_applies_case_scope_dates(monkeypatch):
     import src.tools.search as search_mod
-
-    class DummyRetriever:
-        def __init__(self):
-            self.queries = []
-
-        def search_filtered(self, query, top_k=10, **kwargs):
-            self.queries.append(query)
-            assert top_k == 1
-            assert kwargs["date_from"] == "2026-02-01"
-            assert kwargs["date_to"] == "2026-02-28"
-            return [
-                SimpleNamespace(
-                    metadata={
-                        "uid": "uid-case-1",
-                        "subject": "Re: Complaint follow-up",
-                        "sender_email": "manager@example.com",
-                        "sender_name": "Morgan Manager",
-                        "date": "2026-02-12T10:00:00",
-                        "conversation_id": "conv-case-1",
-                    },
-                    chunk_id="chunk-case-1",
-                    text="We should discuss this privately tomorrow morning.",
-                    score=0.92,
-                )
-            ]
-
-    class DummyDB:
-        conn = None
-
-        def get_emails_full_batch(self, uids):
-            assert uids == ["uid-case-1"]
-            return {
-                "uid-case-1": {
-                    "uid": "uid-case-1",
-                    "body_text": "Intro. We should discuss this privately tomorrow morning. Thanks.",
-                    "normalized_body_source": "body_text_html",
-                    "to": ["Alex Example <alex@example.com>"],
-                    "cc": [],
-                    "bcc": [],
-                    "reply_context_from": "alex@example.com",
-                    "reply_context_to_json": "[]",
-                    "conversation_id": "conv-case-1",
-                }
-            }
 
     class DummyDeps:
         DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
 
         @staticmethod
         def get_retriever():
-            return DummyRetriever()
+            return _CaseScopeRetriever()
 
         @staticmethod
         def get_email_db():
-            return DummyDB()
+            return _CaseScopeDB()
 
         @staticmethod
         async def offload(fn, *args, **kwargs):
@@ -95,7 +97,7 @@ async def test_email_answer_context_emits_case_bundle_and_applies_case_scope_dat
         def idempotent_write_annotations(title: str):
             return {"title": title}
 
-    retriever = DummyRetriever()
+    retriever = _CaseScopeRetriever()
 
     monkeypatch.setattr(search_mod, "_deps", DummyDeps)
     monkeypatch.setattr(DummyDeps, "get_retriever", staticmethod(lambda: retriever))

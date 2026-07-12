@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from html import escape as html_escape
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -206,7 +207,7 @@ class TestP2PathContainmentIsRelativeTo:
 
         monkeypatch.setenv("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", "/home/user/output")
         result = _validate_output_path("/home/user/output/report.html")
-        assert result == "/home/user/output/report.html"
+        assert result == str(Path("/home/user/output/report.html").resolve())
 
 
 class TestP2TopicModelerPathValidation:

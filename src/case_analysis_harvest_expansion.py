@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ._utils import _as_dict
 from .case_analysis_harvest_common import (
     EnrichedRowIdentity,
     _build_enriched_row_identity,
@@ -22,12 +23,19 @@ from .case_analysis_harvest_expansion_rows import (
 from .mcp_models import EmailAnswerContextInput
 
 if TYPE_CHECKING:
-    from .tools.utils import ToolDepsProto
-
-# ruff: noqa: F401
+    pass
 
 
 def _full_email_for_uid(db: Any, uid: str) -> dict[str, Any]:
+    """Retrieve the full email record for a given UID from the database.
+
+    Args:
+        db: The email database with get_emails_full_batch method.
+        uid: The unique identifier of the email to retrieve.
+
+    Returns:
+        A dict containing the full email record, or empty dict if not found or db is invalid.
+    """
     if db is None or not uid or not hasattr(db, "get_emails_full_batch"):
         return {}
     return dict((db.get_emails_full_batch([uid]) or {}).get(uid) or {})
@@ -41,6 +49,19 @@ def _candidate_context(
     impl: Any,
     full_email: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """Build context information for a candidate email/segment.
+
+    Args:
+        db: The email database.
+        metadata: Metadata dict for the candidate.
+        uid: The unique identifier of the email.
+        impl: The implementation object with context methods.
+        full_email: The full email record, or None.
+
+    Returns:
+        A dict with thread_locator, recipients_summary, speaker_attribution,
+        reply_context_from, and reply_context_emails.
+    """
     thread_locator = impl._thread_locator_for_candidate(
         {"uid": uid, "conversation_id": metadata.get("conversation_id", "")},
         full_email,
@@ -75,6 +96,19 @@ def _segment_identity(
     context: dict[str, Any],
     full_email: dict[str, Any],
 ) -> EnrichedRowIdentity:
+    """Create an EnrichedRowIdentity for a segment candidate.
+
+    Args:
+        metadata: Metadata dict for the segment.
+        result: The search/segment result object.
+        uid: The unique identifier of the email.
+        impl: The implementation object with snippet and provenance methods.
+        context: Pre-computed context dict from _candidate_context.
+        full_email: The full email record.
+
+    Returns:
+        An EnrichedRowIdentity configured for a segment with appropriate provenance.
+    """
     segment_type = _compact(metadata.get("segment_type"))
     segment_ordinal = int(metadata.get("segment_ordinal") or 0)
     body_render_source = _compact(metadata.get("body_render_source")) or "message_segments"
@@ -113,6 +147,20 @@ def _enrich_segment_candidate(
     index: int,
     uid: str,
 ) -> dict[str, Any]:
+    """Enrich a segment candidate into a full evidence row.
+
+    Args:
+        db: The email database.
+        entry: The original bank entry dict.
+        metadata: Metadata dict for the segment.
+        result: The search/segment result object.
+        impl: The implementation object.
+        index: The rank/index of this candidate.
+        uid: The unique identifier of the email.
+
+    Returns:
+        A dict representing the enriched evidence row for the segment.
+    """
     segment_full_email = _full_email_for_uid(db, uid)
     context = _candidate_context(db=db, metadata=metadata, uid=uid, impl=impl, full_email=segment_full_email or None)
     return _build_enriched_row_identity(
@@ -139,6 +187,18 @@ def _body_identity(
     uid: str,
     impl: Any,
 ) -> EnrichedRowIdentity:
+    """Create an EnrichedRowIdentity for a body (full email) candidate.
+
+    Args:
+        db: The email database.
+        metadata: Metadata dict for the email.
+        result: The search result object.
+        uid: The unique identifier of the email.
+        impl: The implementation object with snippet and provenance methods.
+
+    Returns:
+        An EnrichedRowIdentity configured for a body candidate with computed provenance.
+    """
     retrieval_snippet = impl._snippet(getattr(result, "text", "") or "")
     snippet, body_render_mode, body_render_source, verification_status, provenance_payload, full_email = (
         impl._provenance_for_candidate(db, uid, retrieval_snippet, metadata=metadata)
@@ -169,6 +229,20 @@ def _enrich_body_candidate(
     index: int,
     uid: str,
 ) -> dict[str, Any]:
+    """Enrich a body (full email) candidate into a full evidence row.
+
+    Args:
+        db: The email database.
+        entry: The original bank entry dict.
+        metadata: Metadata dict for the email.
+        result: The search result object.
+        impl: The implementation object.
+        index: The rank/index of this candidate.
+        uid: The unique identifier of the email.
+
+    Returns:
+        A dict representing the enriched evidence row for the body candidate.
+    """
     return _build_enriched_row_identity(
         index,
         entry,
@@ -179,13 +253,30 @@ def _enrich_body_candidate(
 
 
 def _db_uid_map(db: Any, method_name: str, candidate_uids: list[str]) -> dict[str, Any]:
+    """Retrieve a map of UIDs to values using a database method.
+
+    Args:
+        db: The email database.
+        method_name: The name of the method to call on the database.
+        candidate_uids: List of UIDs to look up.
+
+    Returns:
+        A dict mapping UIDs to their values, or empty dict if method doesn't exist or fails.
+    """
     if not hasattr(db, method_name):
         return {}
     value = getattr(db, method_name)(candidate_uids)
-    return value if isinstance(value, dict) else {}
+    return _as_dict(value)
 
 
 def _attach_row_list(row: dict[str, Any], *, key: str, values: Any) -> None:
+    """Attach a list of dict values to a row under a specified key.
+
+    Args:
+        row: The row dict to modify in-place.
+        key: The key under which to store the values.
+        values: The values to attach. If a list of dicts, they are copied.
+    """
     if isinstance(values, list) and values:
         row[key] = [dict(item) for item in values if isinstance(item, dict)]
 
@@ -194,6 +285,12 @@ def _augment_event_occurrences(
     db: Any,
     enriched_rows: list[dict[str, Any]],
 ) -> None:
+    """Augment enriched rows with event records and entity occurrences from the database.
+
+    Args:
+        db: The email database with event_records_for_uids and entity_occurrences_for_uids methods.
+        enriched_rows: List of evidence rows to augment in-place.
+    """
     candidate_uids = [str(item.get("uid") or "") for item in enriched_rows if _compact(item.get("uid"))]
     if db is None or not candidate_uids:
         return
@@ -214,6 +311,19 @@ def _enriched_attachment_candidate(
     index: int,
     answer_params: EmailAnswerContextInput,
 ) -> dict[str, Any]:
+    """Enrich an attachment candidate into a full evidence row.
+
+    Args:
+        db: The email database.
+        entry: The original bank entry dict.
+        result: The search result object for the attachment.
+        impl: The implementation object with attachment candidate methods.
+        index: The rank/index of this candidate.
+        answer_params: The email answer context input parameters.
+
+    Returns:
+        A dict representing the enriched evidence row for the attachment candidate.
+    """
     attachment_candidate = impl._attachment_candidate(db, result, rank=index + 1, params=answer_params)
     attachment_candidate["harvest_source"] = "search_result"
     attachment_candidate["harvest_round"] = int(entry.get("harvest_round") or 0)
@@ -229,9 +339,22 @@ def _enriched_bank_entry(
     impl: Any,
     index: int,
 ) -> dict[str, Any]:
+    """Enrich a single bank entry based on its type (segment, attachment, or body).
+
+    Args:
+        db: The email database.
+        answer_params: The email answer context input parameters.
+        entry: The original bank entry dict.
+        result: The search result object.
+        impl: The implementation object.
+        index: The rank/index of this entry.
+
+    Returns:
+        A dict representing the enriched evidence row.
+    """
     if result is None:
         return dict(entry)
-    metadata = dict(result.metadata) if isinstance(result.metadata, dict) else {}
+    metadata = dict(_as_dict(result.metadata))
     metadata.setdefault("evidence_mode", answer_params.evidence_mode)
     uid = _compact(metadata.get("uid"))
     if _compact(metadata.get("score_kind")) == "segment_sql":
@@ -253,6 +376,15 @@ def _expansion_diagnostics_payload(
     thread_diagnostics: dict[str, Any],
     attachment_diagnostics: dict[str, Any],
 ) -> dict[str, Any]:
+    """Create a combined diagnostics payload from thread and attachment diagnostics.
+
+    Args:
+        thread_diagnostics: Diagnostics dict from thread expansion.
+        attachment_diagnostics: Diagnostics dict from attachment expansion.
+
+    Returns:
+        A combined diagnostics dict with aggregated error counts and status.
+    """
     thread_error_count = int(thread_diagnostics.get("error_count") or 0)
     attachment_error_count = int(attachment_diagnostics.get("error_count") or 0)
     total_error_count = thread_error_count + attachment_error_count
@@ -270,6 +402,17 @@ def _expand_enriched_rows(
     enriched: list[dict[str, Any]],
     exhaustive_review: bool,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Expand enriched rows with thread and attachment expansion.
+
+    Args:
+        db: The email database.
+        enriched: List of already-enriched evidence rows.
+        exhaustive_review: Whether to perform exhaustive review.
+
+    Returns:
+        A tuple of (all_rows, diagnostics) where all_rows includes original enriched rows
+        plus expanded thread and attachment rows, and diagnostics contains expansion stats.
+    """
     thread_rows, thread_diagnostics = _coerce_expansion_stage_result(
         _thread_expansion_rows(db, evidence_bank=enriched, exhaustive_review=exhaustive_review),
         stage="thread_expansion",
@@ -295,6 +438,20 @@ def _enrich_evidence_bank(
     bank_results: list[Any],
     exhaustive_review: bool,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Enrich a bank of entries and results into evidence rows with expansion.
+
+    Args:
+        db: The email database.
+        answer_params: The email answer context input parameters.
+        bank_entries: List of bank entry dicts.
+        bank_results: List of search result objects corresponding to entries.
+        exhaustive_review: Whether to perform exhaustive review.
+
+    Returns:
+        A tuple of (enriched_rows, diagnostics) where enriched_rows are the fully
+        enriched evidence rows (including expansions), and diagnostics contains
+        expansion and enrichment statistics.
+    """
     from .tools import search_answer_context_impl as impl
 
     enriched = [

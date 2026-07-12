@@ -90,34 +90,38 @@ def _legal_support_payload() -> dict[str, object]:
             "controlled_draft": {"tone": "firm_professional_evidence_bound"},
         },
         "retaliation_timeline_assessment": {"version": "1", "overall_evidentiary_rating": {"rating": "moderate"}},
-        "comparative_treatment": {
-            "summary": {"matrix_row_count": 1, "available_comparator_count": 1},
-            "comparator_summaries": [
-                {
-                    "comparator_actor_id": "actor-comparator",
-                    "comparator_email": "pat@example.org",
-                    "status": "comparator_available",
-                    "comparison_quality": "high",
-                    "comparison_quality_label": "high_quality_comparator",
-                    "comparator_matrix": {
-                        "row_count": 1,
-                        "rows": [
-                            {
-                                "issue_id": "mobile_work_approvals_or_restrictions",
-                                "claimant_treatment": "Restricted",
-                                "comparator_treatment": "Approved",
-                                "comparison_strength": "strong",
-                            }
-                        ],
-                    },
-                }
-            ],
-        },
+        "comparative_treatment": _comparative_treatment_payload(),
         "case_dashboard": {
             "dashboard_format": "refreshable_case_dashboard",
             "cards": {"main_claims_or_issues": [{"entry_id": "card-1", "title": "Retaliation", "summary": "Requires review."}]},
         },
         "investigation_report": {"version": "1", "sections": {"executive_summary": {"status": "supported"}}},
+    }
+
+
+def _comparative_treatment_payload() -> dict[str, object]:
+    return {
+        "summary": {"matrix_row_count": 1, "available_comparator_count": 1},
+        "comparator_summaries": [
+            {
+                "comparator_actor_id": "actor-comparator",
+                "comparator_email": "pat@example.org",
+                "status": "comparator_available",
+                "comparison_quality": "high",
+                "comparison_quality_label": "high_quality_comparator",
+                "comparator_matrix": {
+                    "row_count": 1,
+                    "rows": [
+                        {
+                            "issue_id": "mobile_work_approvals_or_restrictions",
+                            "claimant_treatment": "Restricted",
+                            "comparator_treatment": "Approved",
+                            "comparison_strength": "strong",
+                        }
+                    ],
+                },
+            }
+        ],
     }
 
 

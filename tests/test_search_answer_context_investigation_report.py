@@ -12,7 +12,7 @@ from src.mcp_models import (
     EmailAnswerContextInput,
 )
 
-from ._search_answer_context_investigation_report_report_case import *  # noqa: F403
+from ._search_answer_context_investigation_report_report_case import *  # noqa
 
 
 @pytest.mark.asyncio

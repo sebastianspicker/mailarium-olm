@@ -30,40 +30,44 @@ def message_findings_by_uid(finding_evidence_index: dict[str, Any]) -> dict[str,
     for finding in finding_evidence_index.get("findings", []) if isinstance(finding_evidence_index, dict) else []:
         if not isinstance(finding, dict):
             continue
-        finding_id = str(finding.get("finding_id") or "")
-        finding_label = str(finding.get("finding_label") or "")
-        evidence_strength = str((finding.get("evidence_strength") or {}).get("label") or "")
-        alternative_explanations = [str(item) for item in finding.get("alternative_explanations", []) if str(item).strip()]
-        counter_indicators = [str(item) for item in finding.get("counter_indicators", []) if str(item).strip()]
+        metadata = _finding_metadata(finding)
         for citation in finding.get("supporting_evidence", []):
             if not isinstance(citation, dict):
                 continue
             uid = str(citation.get("message_or_document_id") or "")
             if not uid:
                 continue
-            bucket = by_uid.setdefault(
-                uid,
-                {
-                    "finding_ids": [],
-                    "finding_labels": [],
-                    "evidence_strength_labels": [],
-                    "alternative_explanations": [],
-                    "counter_indicators": [],
-                },
-            )
-            if finding_id and finding_id not in bucket["finding_ids"]:
-                bucket["finding_ids"].append(finding_id)
-            if finding_label and finding_label not in bucket["finding_labels"]:
-                bucket["finding_labels"].append(finding_label)
-            if evidence_strength and evidence_strength not in bucket["evidence_strength_labels"]:
-                bucket["evidence_strength_labels"].append(evidence_strength)
-            for item in alternative_explanations:
-                if item not in bucket["alternative_explanations"]:
-                    bucket["alternative_explanations"].append(item)
-            for item in counter_indicators:
-                if item not in bucket["counter_indicators"]:
-                    bucket["counter_indicators"].append(item)
+            _merge_finding_metadata(by_uid.setdefault(uid, _empty_finding_summary()), metadata)
     return by_uid
+
+
+def _empty_finding_summary() -> dict[str, list[str]]:
+    return {
+        "finding_ids": [],
+        "finding_labels": [],
+        "evidence_strength_labels": [],
+        "alternative_explanations": [],
+        "counter_indicators": [],
+    }
+
+
+def _finding_metadata(finding: dict[str, Any]) -> dict[str, list[str]]:
+    return {
+        "finding_ids": _nonempty_values([finding.get("finding_id")]),
+        "finding_labels": _nonempty_values([finding.get("finding_label")]),
+        "evidence_strength_labels": _nonempty_values([(finding.get("evidence_strength") or {}).get("label")]),
+        "alternative_explanations": _nonempty_values(finding.get("alternative_explanations", [])),
+        "counter_indicators": _nonempty_values(finding.get("counter_indicators", [])),
+    }
+
+
+def _nonempty_values(values: Any) -> list[str]:
+    return [str(value) for value in values if str(value).strip()]
+
+
+def _merge_finding_metadata(bucket: dict[str, Any], metadata: dict[str, list[str]]) -> None:
+    for key, values in metadata.items():
+        bucket[key].extend(value for value in values if value not in bucket[key])
 
 
 def strength_rank(label: str) -> int:
@@ -108,98 +112,99 @@ def build_message_appendix(payload: dict[str, Any], *, include_message_appendix:
         if not isinstance(candidate, dict):
             continue
         uid = str(candidate.get("uid") or "")
-        language = (candidate.get("language_rhetoric") or {}).get("authored_text") or {}
-        message_findings = (candidate.get("message_findings") or {}).get("authored_text") or {}
-        behavior_candidates = [
-            {
-                "behavior_id": str(item.get("behavior_id") or ""),
-                "label": str(item.get("label") or ""),
-                "confidence": str(item.get("confidence") or ""),
-            }
-            for item in message_findings.get("behavior_candidates", [])
-            if isinstance(item, dict)
-        ]
-        finding_summary = findings.get(
-            uid,
-            {
-                "finding_ids": [],
-                "finding_labels": [],
-                "evidence_strength_labels": [],
-                "alternative_explanations": [],
-                "counter_indicators": [],
-            },
-        )
-        row_counter_indicators = [str(item) for item in message_findings.get("counter_indicators", []) if str(item).strip()]
-        for item in finding_summary["counter_indicators"]:
-            if item not in row_counter_indicators:
-                row_counter_indicators.append(item)
-        communication_classification = dict(message_findings.get("communication_classification") or {})
-        rows.append(
-            {
-                "uid": uid,
-                "date": str(candidate.get("date") or ""),
-                "sender": {
-                    "name": str(candidate.get("sender_name") or ""),
-                    "email": str(candidate.get("sender_email") or ""),
-                },
-                "recipients_summary": candidate.get("recipients_summary") or {"status": "not_available_in_case_payload"},
-                "subject": str(candidate.get("subject") or ""),
-                "message_level_summary": str(candidate.get("snippet") or ""),
-                "finding_ids": list(finding_summary["finding_ids"]),
-                "finding_labels": list(finding_summary["finding_labels"]),
-                "language_signals": [
-                    {
-                        "signal_id": str(signal.get("signal_id") or ""),
-                        "label": str(signal.get("label") or ""),
-                        "confidence": str(signal.get("confidence") or ""),
-                    }
-                    for signal in language.get("signals", [])
-                    if isinstance(signal, dict)
-                ],
-                "behavior_candidates": behavior_candidates,
-                "tone_summary": str(message_findings.get("tone_summary") or ""),
-                "relevant_wording": [
-                    {
-                        "text": str(item.get("text") or ""),
-                        "source_scope": str(item.get("source_scope") or ""),
-                        "basis_id": str(item.get("basis_id") or ""),
-                    }
-                    for item in message_findings.get("relevant_wording", [])
-                    if isinstance(item, dict)
-                ],
-                "omissions_or_process_signals": [
-                    {
-                        "signal": str(item.get("signal") or ""),
-                        "summary": str(item.get("summary") or ""),
-                    }
-                    for item in message_findings.get("omissions_or_process_signals", [])
-                    if isinstance(item, dict)
-                ],
-                "included_actors": [str(item) for item in message_findings.get("included_actors", []) if str(item).strip()],
-                "excluded_actors": [str(item) for item in message_findings.get("excluded_actors", []) if str(item).strip()],
-                "communication_classification": {
-                    "primary_class": str(communication_classification.get("primary_class") or "neutral"),
-                    "applied_classes": [
-                        str(item) for item in communication_classification.get("applied_classes", []) if str(item).strip()
-                    ]
-                    or ["neutral"],
-                    "confidence": str(communication_classification.get("confidence") or "low"),
-                    "rationale": str(communication_classification.get("rationale") or ""),
-                },
-                "evidence_strength": message_row_strength(
-                    language_signal_count=int(language.get("signal_count") or 0),
-                    behavior_candidate_count=len(behavior_candidates),
-                    finding_strengths=list(finding_summary["evidence_strength_labels"]),
-                ),
-                "counter_indicators": row_counter_indicators,
-                "alternative_explanations": list(finding_summary["alternative_explanations"]),
-                "supporting_citation_ids": citations.get(uid, []),
-            }
-        )
+        rows.append(_message_appendix_row(candidate, findings.get(uid, _empty_finding_summary()), citations.get(uid, [])))
     rows.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("uid") or "")))
     return {
         "included": True,
         "review_table_version": "2",
         "row_count": len(rows),
         "rows": rows,
+    }
+
+
+def _message_appendix_row(candidate: dict[str, Any], finding_summary: dict[str, Any], citation_ids: list[str]) -> dict[str, Any]:
+    language = (candidate.get("language_rhetoric") or {}).get("authored_text") or {}
+    message_findings = (candidate.get("message_findings") or {}).get("authored_text") or {}
+    behaviors = [
+        _project_fields(item, ("behavior_id", "label", "confidence"))
+        for item in message_findings.get("behavior_candidates", [])
+        if isinstance(item, dict)
+    ]
+    counter_indicators = _nonempty_values(message_findings.get("counter_indicators", []))
+    _merge_unique(counter_indicators, finding_summary["counter_indicators"])
+    return {
+        **_message_identity(candidate),
+        **_message_finding_fields(finding_summary, citation_ids),
+        **_message_analysis_fields(language, message_findings, behaviors),
+        "communication_classification": _communication_classification(message_findings),
+        "evidence_strength": message_row_strength(
+            language_signal_count=int(language.get("signal_count") or 0),
+            behavior_candidate_count=len(behaviors),
+            finding_strengths=list(finding_summary["evidence_strength_labels"]),
+        ),
+        "counter_indicators": counter_indicators,
+    }
+
+
+def _message_finding_fields(summary: dict[str, Any], citation_ids: list[str]) -> dict[str, Any]:
+    return {
+        "finding_ids": list(summary["finding_ids"]),
+        "finding_labels": list(summary["finding_labels"]),
+        "alternative_explanations": list(summary["alternative_explanations"]),
+        "supporting_citation_ids": citation_ids,
+    }
+
+
+def _message_analysis_fields(
+    language: dict[str, Any], findings: dict[str, Any], behaviors: list[dict[str, str]]
+) -> dict[str, Any]:
+    return {
+        "language_signals": [
+            _project_fields(item, ("signal_id", "label", "confidence"))
+            for item in language.get("signals", [])
+            if isinstance(item, dict)
+        ],
+        "behavior_candidates": behaviors,
+        "tone_summary": str(findings.get("tone_summary") or ""),
+        "relevant_wording": [
+            _project_fields(item, ("text", "source_scope", "basis_id"))
+            for item in findings.get("relevant_wording", [])
+            if isinstance(item, dict)
+        ],
+        "omissions_or_process_signals": [
+            _project_fields(item, ("signal", "summary"))
+            for item in findings.get("omissions_or_process_signals", [])
+            if isinstance(item, dict)
+        ],
+        "included_actors": _nonempty_values(findings.get("included_actors", [])),
+        "excluded_actors": _nonempty_values(findings.get("excluded_actors", [])),
+    }
+
+
+def _project_fields(item: dict[str, Any], fields: tuple[str, ...]) -> dict[str, str]:
+    return {field: str(item.get(field) or "") for field in fields}
+
+
+def _merge_unique(target: list[str], additions: list[str]) -> None:
+    target.extend(item for item in additions if item not in target)
+
+
+def _message_identity(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "uid": str(candidate.get("uid") or ""),
+        "date": str(candidate.get("date") or ""),
+        "sender": {"name": str(candidate.get("sender_name") or ""), "email": str(candidate.get("sender_email") or "")},
+        "recipients_summary": candidate.get("recipients_summary") or {"status": "not_available_in_case_payload"},
+        "subject": str(candidate.get("subject") or ""),
+        "message_level_summary": str(candidate.get("snippet") or ""),
+    }
+
+
+def _communication_classification(findings: dict[str, Any]) -> dict[str, Any]:
+    classification = dict(findings.get("communication_classification") or {})
+    return {
+        "primary_class": str(classification.get("primary_class") or "neutral"),
+        "applied_classes": _nonempty_values(classification.get("applied_classes", [])) or ["neutral"],
+        "confidence": str(classification.get("confidence") or "low"),
+        "rationale": str(classification.get("rationale") or ""),
     }

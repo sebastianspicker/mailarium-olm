@@ -4,7 +4,41 @@ from src.lawyer_briefing_memo import build_lawyer_briefing_memo
 
 
 def test_build_lawyer_briefing_memo_renders_compact_evidence_bound_sections() -> None:
-    payload = build_lawyer_briefing_memo(
+    payload = _fixture_test_build_lawyer_briefing_memo_renders_compact_evidence_bound_sections_payload()
+
+    assert payload is not None
+    assert payload["version"] == "1"
+    assert payload["memo_format"] == "lawyer_onboarding_brief"
+    assert payload["summary"]["compact_length_budget"] == "short_onboarding_memo"
+    assert payload["summary"]["non_repetition_policy"] is True
+    assert payload["sections"]["executive_summary"]
+    assert payload["sections"]["executive_summary"][0]["supporting_source_ids"] == ["email:uid-1"]
+    assert payload["sections"]["key_facts"][0]["text"] == "Shows a documented exclusion step."
+    assert payload["sections"]["core_theories"][0]["supporting_issue_ids"] == ["issue-1"]
+    assert any("Retaliation timing:" in entry["text"] for entry in payload["sections"]["core_theories"])
+    assert payload["sections"]["strongest_evidence"][0]["supporting_exhibit_ids"] == ["EXH-001"]
+    assert any(
+        "Retaliation timing remains bounded by explicit confounders" in entry["text"]
+        for entry in payload["sections"]["weaknesses_or_risks"]
+    )
+    assert payload["sections"]["open_questions_for_counsel"][0]["supporting_source_ids"] == [
+        "meeting:uid-1:meeting_data",
+        "email:uid-1",
+    ]
+    assert payload["sections"]["urgent_next_steps"][0]["supporting_issue_ids"] == ["issue-1"]
+
+
+def test_build_lawyer_briefing_memo_labels_unlinked_chronology_when_no_source_backed_entries() -> None:
+    payload = _fixture_test_build_lawyer_briefing_memo_labels_unlinked_chronology_when_no_source_backed_entries_payload()
+
+    assert payload is not None
+    timeline = payload["sections"]["timeline"]
+    assert timeline[0]["text"].startswith("[Scope-supplied chronology]")
+    assert timeline[1]["text"].startswith("[Timeline-only chronology]")
+
+
+def _fixture_test_build_lawyer_briefing_memo_renders_compact_evidence_bound_sections_payload():
+    return build_lawyer_briefing_memo(
         case_bundle={
             "scope": {
                 "target_person": {"name": "Alex Example", "email": "alex@example.com"},
@@ -104,30 +138,9 @@ def test_build_lawyer_briefing_memo_renders_compact_evidence_bound_sections() ->
         },
     )
 
-    assert payload is not None
-    assert payload["version"] == "1"
-    assert payload["memo_format"] == "lawyer_onboarding_brief"
-    assert payload["summary"]["compact_length_budget"] == "short_onboarding_memo"
-    assert payload["summary"]["non_repetition_policy"] is True
-    assert payload["sections"]["executive_summary"]
-    assert payload["sections"]["executive_summary"][0]["supporting_source_ids"] == ["email:uid-1"]
-    assert payload["sections"]["key_facts"][0]["text"] == "Shows a documented exclusion step."
-    assert payload["sections"]["core_theories"][0]["supporting_issue_ids"] == ["issue-1"]
-    assert any("Retaliation timing:" in entry["text"] for entry in payload["sections"]["core_theories"])
-    assert payload["sections"]["strongest_evidence"][0]["supporting_exhibit_ids"] == ["EXH-001"]
-    assert any(
-        "Retaliation timing remains bounded by explicit confounders" in entry["text"]
-        for entry in payload["sections"]["weaknesses_or_risks"]
-    )
-    assert payload["sections"]["open_questions_for_counsel"][0]["supporting_source_ids"] == [
-        "meeting:uid-1:meeting_data",
-        "email:uid-1",
-    ]
-    assert payload["sections"]["urgent_next_steps"][0]["supporting_issue_ids"] == ["issue-1"]
 
-
-def test_build_lawyer_briefing_memo_labels_unlinked_chronology_when_no_source_backed_entries() -> None:
-    payload = build_lawyer_briefing_memo(
+def _fixture_test_build_lawyer_briefing_memo_labels_unlinked_chronology_when_no_source_backed_entries_payload():
+    return build_lawyer_briefing_memo(
         case_bundle={"scope": {"target_person": {"name": "Alex Example"}}},
         matter_workspace={"matter": {"case_label": "Case A"}},
         matter_evidence_index={"rows": [{"exhibit_id": "EXH-001", "short_description": "Record"}], "top_15_exhibits": []},
@@ -153,8 +166,3 @@ def test_build_lawyer_briefing_memo_labels_unlinked_chronology_when_no_source_ba
         document_request_checklist={},
         promise_contradiction_analysis={},
     )
-
-    assert payload is not None
-    timeline = payload["sections"]["timeline"]
-    assert timeline[0]["text"].startswith("[Scope-supplied chronology]")
-    assert timeline[1]["text"].startswith("[Timeline-only chronology]")

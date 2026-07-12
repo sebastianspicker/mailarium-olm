@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
 from typing import Any
 
+from ._utils import _as_dict, _as_list
 from .qa_eval_cases import QuestionCase
+from .qa_eval_scoring_core import _append_unique, _ratio
 
 _ANSWER_TERM_RE = re.compile(r"[0-9a-zA-ZäöüÄÖÜß._-]+")
 _ANSWER_STOPWORDS = {
@@ -56,14 +57,14 @@ _ANSWER_STOPWORDS = {
     "without",
 }
 
-# ruff: noqa: F401,F821
-
 
 def _slice_a_config(case: QuestionCase) -> dict[str, Any]:
+    """Extract slice A configuration from a question case."""
     return _as_dict(_as_dict(case.benchmark_pack).get("slice_a"))
 
 
 def _source_id_from_candidate(item: dict[str, Any]) -> str:
+    """Extract a source ID from a candidate item, trying multiple possible fields."""
     source_id = str(item.get("source_id") or "").strip()
     if source_id:
         return source_id
@@ -82,6 +83,7 @@ def _source_id_from_candidate(item: dict[str, Any]) -> str:
 
 
 def _quote_match_class_from_candidate(item: dict[str, Any]) -> str:
+    """Extract the quote match class from a candidate item, trying multiple possible fields."""
     for key in ("quote_match_class", "quote_match", "match_class", "verification_state"):
         value = str(item.get(key) or "").strip().casefold()
         if value:
@@ -95,6 +97,7 @@ def _quote_match_class_from_candidate(item: dict[str, Any]) -> str:
 
 
 def _quote_support_source_ids(payload: dict[str, Any], *, classes: set[str]) -> list[str]:
+    """Extract source IDs from payload that support the given quote match classes."""
     observed: list[str] = []
     metrics = _as_dict(payload.get("quote_attribution_metrics"))
     if "exact" in classes:
@@ -124,6 +127,7 @@ def _quote_support_source_ids(payload: dict[str, Any], *, classes: set[str]) -> 
 
 
 def _locator_has_reversible_fields(locator: dict[str, Any]) -> bool:
+    """Check if a locator has any reversible fields that can be used to re-find the source."""
     if not locator:
         return False
     reversible_keys = {
@@ -144,6 +148,7 @@ def _locator_has_reversible_fields(locator: dict[str, Any]) -> bool:
 
 
 def _slice_a_exact_verified_quote_rate(case: QuestionCase, payload: dict[str, Any]) -> float | None:
+    """Calculate the exact verified quote rate for slice A scoring."""
     config = _slice_a_config(case)
     expected = [str(value).strip() for value in _as_list(config.get("exact_support_source_ids")) if str(value).strip()]
     if not expected:
@@ -154,6 +159,7 @@ def _slice_a_exact_verified_quote_rate(case: QuestionCase, payload: dict[str, An
 
 
 def _slice_a_near_exact_quote_rate(case: QuestionCase, payload: dict[str, Any]) -> float | None:
+    """Calculate the near-exact quote rate for slice A scoring."""
     config = _slice_a_config(case)
     expected = [str(value).strip() for value in _as_list(config.get("near_exact_support_source_ids")) if str(value).strip()]
     if not expected:
@@ -164,6 +170,7 @@ def _slice_a_near_exact_quote_rate(case: QuestionCase, payload: dict[str, Any]) 
 
 
 def _slice_a_false_exact_flag(case: QuestionCase, payload: dict[str, Any]) -> float | None:
+    """Check if any forbidden exact source IDs are present in the payload."""
     config = _slice_a_config(case)
     forbidden = [str(value).strip() for value in _as_list(config.get("forbidden_exact_source_ids")) if str(value).strip()]
     if not forbidden:
@@ -173,6 +180,7 @@ def _slice_a_false_exact_flag(case: QuestionCase, payload: dict[str, Any]) -> fl
 
 
 def _slice_a_locator_completeness(case: QuestionCase, payload: dict[str, Any]) -> float | None:
+    """Calculate the locator completeness score for slice A."""
     config = _slice_a_config(case)
     if not bool(config.get("require_locator_coverage")):
         return None
@@ -192,48 +200,44 @@ def _slice_a_locator_completeness(case: QuestionCase, payload: dict[str, Any]) -
 
 
 def _slice_a_authored_german_primary_match(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if the authored language matches the expected German primary language."""
     config = _slice_a_config(case)
     expected_authored = str(config.get("expected_authored_language") or "").strip().casefold()
     if not expected_authored:
         return None
 
     analytics = _as_dict(payload.get("language_analytics"))
-    surface_rollup = _as_dict(analytics.get("surface_rollup"))
-    dominant_languages = _as_dict(analytics.get("dominant_languages"))
-    observed_authored = (
-        str(analytics.get("authored_dominant_language") or "").strip().casefold()
-        or str(surface_rollup.get("authored_dominant_language") or "").strip().casefold()
-        or str(dominant_languages.get("authored") or "").strip().casefold()
-    )
+    observed_authored = _observed_dominant_language(analytics, "authored")
     if not observed_authored:
         return False
 
     expected_quoted = str(config.get("expected_quoted_language") or "").strip().casefold()
     if expected_quoted:
-        observed_quoted = (
-            str(analytics.get("quoted_dominant_language") or "").strip().casefold()
-            or str(surface_rollup.get("quoted_dominant_language") or "").strip().casefold()
-            or str(dominant_languages.get("quoted") or "").strip().casefold()
-        )
+        observed_quoted = _observed_dominant_language(analytics, "quoted")
         if observed_quoted != expected_quoted:
             return False
     return observed_authored == expected_authored
 
 
+def _observed_dominant_language(analytics: dict[str, Any], surface: str) -> str:
+    rollup = _as_dict(analytics.get("surface_rollup"))
+    dominant = _as_dict(analytics.get("dominant_languages"))
+    candidates = (
+        analytics.get(f"{surface}_dominant_language"),
+        rollup.get(f"{surface}_dominant_language"),
+        dominant.get(surface),
+    )
+    return next((str(value).strip().casefold() for value in candidates if str(value or "").strip()), "")
+
+
 def _slice_a_contradiction_pair_precision(case: QuestionCase, payload: dict[str, Any]) -> float | None:
+    """Calculate the precision of contradiction pairs for slice A scoring."""
     config = _slice_a_config(case)
     required_pairs = int(config.get("required_contradiction_pairs") or 0)
     if required_pairs <= 0:
         return None
 
-    pairs: list[dict[str, Any]] = []
-    findings = _as_list(_as_dict(payload.get("finding_evidence_index")).get("findings"))
-    for finding in findings:
-        if not isinstance(finding, dict):
-            continue
-        for pair in _as_list(finding.get("contradiction_pairs")):
-            if isinstance(pair, dict):
-                pairs.append(pair)
+    pairs = _contradiction_pairs(payload)
     if not pairs:
         return 0.0
 
@@ -252,21 +256,35 @@ def _slice_a_contradiction_pair_precision(case: QuestionCase, payload: dict[str,
             return locator
         return _as_dict(pair.get(f"{side}_locator"))
 
-    valid_pairs = 0
-    for pair in pairs:
-        left_source = _pair_source(pair, side="left")
-        right_source = _pair_source(pair, side="right")
-        if not left_source or not right_source or left_source == right_source:
-            continue
-        if not _locator_has_reversible_fields(_pair_locator(pair, side="left")):
-            continue
-        if not _locator_has_reversible_fields(_pair_locator(pair, side="right")):
-            continue
-        valid_pairs += 1
+    valid_pairs = sum(_valid_contradiction_pair(pair, _pair_source, _pair_locator) for pair in pairs)
     return _ratio(valid_pairs, len(pairs))
 
 
+def _contradiction_pairs(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    findings = _as_list(_as_dict(payload.get("finding_evidence_index")).get("findings"))
+    return [
+        pair
+        for finding in findings
+        if isinstance(finding, dict)
+        for pair in _as_list(finding.get("contradiction_pairs"))
+        if isinstance(pair, dict)
+    ]
+
+
+def _valid_contradiction_pair(pair, source_fn, locator_fn) -> bool:
+    left_source = source_fn(pair, side="left")
+    right_source = source_fn(pair, side="right")
+    return (
+        bool(left_source)
+        and bool(right_source)
+        and left_source != right_source
+        and _locator_has_reversible_fields(locator_fn(pair, side="left"))
+        and _locator_has_reversible_fields(locator_fn(pair, side="right"))
+    )
+
+
 def _slice_a_ocr_heavy_attachment_recall(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if OCR was used on heavy attachments for slice A scoring."""
     config = _slice_a_config(case)
     if not bool(config.get("require_ocr_attachment_recall")):
         return None
@@ -289,6 +307,7 @@ def _slice_a_ocr_heavy_attachment_recall(case: QuestionCase, payload: dict[str, 
 
 
 def _slice_a_mixed_source_completeness(case: QuestionCase, payload: dict[str, Any]) -> float | None:
+    """Calculate the mixed source completeness score for slice A."""
     config = _slice_a_config(case)
     required_source_types = {str(value).strip() for value in _as_list(config.get("required_source_types")) if str(value).strip()}
     if not required_source_types:
@@ -300,6 +319,7 @@ def _slice_a_mixed_source_completeness(case: QuestionCase, payload: dict[str, An
 
 
 def _slice_a_calendar_exclusion_visible(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if calendar evidence is visible in the payload for slice A."""
     config = _slice_a_config(case)
     if not bool(config.get("require_calendar_evidence")):
         return None
@@ -311,6 +331,7 @@ def _slice_a_calendar_exclusion_visible(case: QuestionCase, payload: dict[str, A
 
 
 def _slice_a_silence_omission_anchor_match(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if silence omission anchor match is present for slice A scoring."""
     config = _slice_a_config(case)
     if not bool(config.get("require_reply_expectation_anchor")):
         return None

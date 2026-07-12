@@ -43,39 +43,10 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
         """
 
         def _run():
-            if not params.uid and not params.query:
-                return json_error("Provide either uid or query.")
-
-            retriever = deps.get_retriever()
-            query = params.query
-            if params.uid and not query:
-                db = deps.get_email_db()
-                if db:
-                    email = db.get_email_full(params.uid)
-                    if not email:
-                        return json_error(f"Email not found: {params.uid}")
-                    body = email.get("body_text") or email.get("subject") or ""
-                    query = body[:1500]
-                if not query:
-                    return json_error("Could not retrieve email text for similarity search.")
-
-            if query is None:
-                return json_error("Provide either uid or query.")
-            # Use search_filtered instead of search to get per-email
-            # deduplication (only the best chunk per email is returned).
-            results = retriever.search_filtered(query, top_k=params.top_k + 1)
-            if params.uid:
-                results = [r for r in results if r.metadata.get("uid") != params.uid]
-            results = results[: params.top_k]
-            scan_meta = None
-            if params.scan_id:
-                from ..scan_session import filter_seen
-
-                results, scan_meta = filter_seen(params.scan_id, results)
-            payload = retriever.serialize_results(query or "", results)
-            if scan_meta:
-                payload["_scan"] = scan_meta
-            return json_response(payload)
+            query, error = _similarity_query(deps, params)
+            if error:
+                return json_error(error)
+            return _similarity_response(deps, params, query)
 
         return await deps.offload(_run)
 
@@ -99,19 +70,11 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
 
     @mcp.tool(name="email_discovery", annotations=deps.tool_annotations("Keyword & Suggestion Discovery"))
     async def email_discovery(params: EmailDiscoveryInput) -> str:
-        """Discover keywords or get search suggestions.
-
-        mode='keywords': top keywords across the archive (filterable by sender/folder).
-        mode='suggestions': categorized search suggestions based on indexed data.
-        """
+        """Discover keywords or get search suggestions."""
 
         def _work(db):
             if params.mode == "keywords":
-                results = db.top_keywords(
-                    sender=params.sender,
-                    folder=params.folder,
-                    limit=params.limit,
-                )
+                results = db.top_keywords(sender=params.sender, folder=params.folder, limit=params.limit)
                 if not results:
                     return json_error("No keywords available. Run ingestion with --extract-keywords.")
                 return json_response(results)
@@ -122,3 +85,41 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
             return json_error(f"Invalid mode: {params.mode}. Use 'keywords' or 'suggestions'.")
 
         return await run_with_db(deps, _work)
+
+
+def _similarity_query(deps: ToolDepsProto, params: FindSimilarInput) -> tuple[str | None, str | None]:
+    """Resolve a direct or UID-derived similarity query without searching."""
+    if not params.uid and not params.query:
+        return None, "Provide either uid or query."
+    if params.query:
+        return params.query, None
+    assert params.uid is not None
+    db = deps.get_email_db()
+    email = db.get_email_full(params.uid) if db else None
+    if db and not email:
+        return None, f"Email not found: {params.uid}"
+    query = (email or {}).get("body_text") or (email or {}).get("subject") or ""
+    return (query[:1500], None) if query else (None, "Could not retrieve email text for similarity search.")
+
+
+def _similarity_response(deps: ToolDepsProto, params: FindSimilarInput, query: str | None) -> str:
+    """Run the filtered search and preserve the existing compact response shape."""
+    if query is None:
+        return json_error("Provide either uid or query.")
+    results = deps.get_retriever().search_filtered(query, top_k=params.top_k + 1)
+    if params.uid:
+        results = [result for result in results if result.metadata.get("uid") != params.uid]
+    visible_results, scan_payload = _similarity_scan(params.scan_id, results[: params.top_k])
+    payload = deps.get_retriever().serialize_results(query, visible_results)
+    if scan_payload:
+        payload["_scan"] = scan_payload
+    return json_response(payload)
+
+
+def _similarity_scan(scan_id: str | None, results: list[Any]) -> tuple[list[Any], Any]:
+    """Apply optional scan-session de-duplication to already bounded results."""
+    if not scan_id:
+        return results, None
+    from ..scan_session import filter_seen
+
+    return filter_seen(scan_id, results)

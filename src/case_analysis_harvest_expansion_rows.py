@@ -18,6 +18,10 @@ from .case_analysis_harvest_quality import _seed_relevance_terms, _text_overlap_
 
 
 def _attachment_relevance_haystack(attachment: dict[str, Any]) -> str:
+    """Build a searchable text haystack from an attachment for relevance scoring.
+
+    Combines name, extracted_text, text_preview, and source_type_hint into a single string.
+    """
     return " ".join(
         [
             str(attachment.get("name") or ""),
@@ -29,6 +33,16 @@ def _attachment_relevance_haystack(attachment: dict[str, Any]) -> str:
 
 
 def _attachment_sort_key(attachment: dict[str, Any], relevance_terms: list[str]) -> tuple[int, int, int, int, int, str]:
+    """Generate sort key for ranking attachments by relevance.
+
+    Returns a tuple that sorts attachments by:
+    1. Text overlap score (descending - negative for ascending sort)
+    2. Not inline (0) before inline (1)
+    3. Has extracted text (0) before no text (1)
+    4. Preferred source types (0) before others (1)
+    5. Preferred extensions (0) before others (1)
+    6. Filename (alphabetical)
+    """
     return (
         -_text_overlap_score(haystack=_attachment_relevance_haystack(attachment), terms=relevance_terms),
         0 if not bool(attachment.get("is_inline")) else 1,
@@ -43,6 +57,10 @@ def _attachment_sort_key(attachment: dict[str, Any], relevance_terms: list[str])
 
 
 def _rank_attachments(attachments: list[Any], relevance_terms: list[str]) -> list[dict[str, Any]]:
+    """Rank attachments by relevance to the given terms.
+
+    Returns a sorted list of attachment dicts, filtered to only include dict items.
+    """
     return sorted(
         [attachment for attachment in attachments if isinstance(attachment, dict)],
         key=lambda attachment: _attachment_sort_key(attachment, relevance_terms),
@@ -55,6 +73,11 @@ def _select_attachments(
     relevance_terms: list[str],
     exhaustive_review: bool,
 ) -> list[dict[str, Any]]:
+    """Select top attachments for expansion.
+
+    Returns up to 5 (exhaustive) or 3 (non-exhaustive) attachments,
+    skipping inline attachments without extracted text.
+    """
     selected = []
     for attachment in _rank_attachments(attachments, relevance_terms):
         if bool(attachment.get("is_inline")) and not _compact(attachment.get("extracted_text") or attachment.get("text_preview")):
@@ -73,6 +96,10 @@ def _attachment_expansion_row(
     filename: str,
     relevance_terms: list[str],
 ) -> dict[str, Any]:
+    """Build an expansion row for an attachment.
+
+    Returns a dict with all fields needed for an attachment expansion evidence row.
+    """
     attachment_text = _attachment_display_text(attachment)
     relevance_score = _attachment_expansion_relevance_score(attachment, relevance_terms)
     attachment_summary = _attachment_expansion_summary(attachment, filename)
@@ -105,10 +132,18 @@ def _attachment_expansion_row(
 
 
 def _attachment_display_text(attachment: dict[str, Any]) -> str:
+    """Extract display text from an attachment.
+
+    Returns extracted_text if available, otherwise text_preview, otherwise name.
+    """
     return _compact(attachment.get("extracted_text") or attachment.get("text_preview") or attachment.get("name"))
 
 
 def _attachment_expansion_relevance_score(attachment: dict[str, Any], relevance_terms: list[str]) -> int:
+    """Calculate relevance score for an attachment.
+
+    Returns the text overlap score between attachment content and relevance terms.
+    """
     return _text_overlap_score(
         haystack=" ".join(
             [
@@ -122,10 +157,18 @@ def _attachment_expansion_relevance_score(attachment: dict[str, Any], relevance_
 
 
 def _attachment_expansion_score(seed: dict[str, Any], relevance_score: int) -> float:
+    """Calculate final expansion score for an attachment.
+
+    Returns seed score multiplied by a relevance-based boost factor.
+    """
     return float(seed.get("score") or 0.0) * (0.8 + min(relevance_score, 4) * 0.04)
 
 
 def _attachment_expansion_summary(attachment: dict[str, Any], filename: str) -> dict[str, Any]:
+    """Build summary dict for an attachment expansion.
+
+    Returns a dict with filename, mime_type, evidence_strength, and text_available.
+    """
     return {
         "filename": filename,
         "mime_type": _compact(attachment.get("mime_type")),
@@ -135,6 +178,10 @@ def _attachment_expansion_summary(attachment: dict[str, Any], filename: str) -> 
 
 
 def _attachment_expansion_provenance(*, uid: str, filename: str) -> dict[str, str]:
+    """Build provenance dict for an attachment expansion.
+
+    Returns evidence_handle, uid, attachment_filename, and body_render_source.
+    """
     return {
         "evidence_handle": f"attachment:{uid}:{filename}",
         "uid": uid,
@@ -144,6 +191,13 @@ def _attachment_expansion_provenance(*, uid: str, filename: str) -> dict[str, st
 
 
 def _thread_row_sort_key(row: dict[str, Any], relevance_terms: list[str]) -> tuple[int, int, str]:
+    """Generate sort key for ranking thread rows by relevance.
+
+    Returns a tuple that sorts by:
+    1. Text overlap score (descending - negative for ascending sort)
+    2. Has attachments (0) before no attachments (1)
+    3. Date (chronological)
+    """
     return (
         -_text_overlap_score(
             haystack=" ".join(
@@ -162,6 +216,10 @@ def _thread_row_sort_key(row: dict[str, Any], relevance_terms: list[str]) -> tup
 
 
 def _rank_thread_rows(thread_rows: list[Any], relevance_terms: list[str]) -> list[dict[str, Any]]:
+    """Rank thread rows by relevance to the given terms.
+
+    Returns a sorted list of thread row dicts, filtered to only include dict items.
+    """
     return sorted(
         [row for row in thread_rows if isinstance(row, dict)],
         key=lambda row: _thread_row_sort_key(row, relevance_terms),
@@ -175,6 +233,10 @@ def _thread_expansion_error(
     seed: dict[str, Any],
     exc: Exception,
 ) -> None:
+    """Record a thread expansion error in diagnostics.
+
+    Adds an error entry with conversation_id, seed_uid, error_type, and error message.
+    """
     _expansion_error_entry(
         diagnostics,
         {
@@ -194,6 +256,10 @@ def _thread_expansion_row(
     conversation_id: str,
     relevance_terms: list[str],
 ) -> dict[str, Any]:
+    """Build an expansion row for a thread message.
+
+    Returns a dict with all fields needed for a thread expansion evidence row.
+    """
     relevance_score = _text_overlap_score(
         haystack=" ".join([str(row.get("subject") or ""), _best_body_text(dict(row))]),
         terms=relevance_terms,
@@ -237,6 +303,11 @@ def _thread_expansion_seed_rows(
     conversation_id: str,
     exhaustive_review: bool,
 ) -> list[dict[str, Any]]:
+    """Generate thread expansion rows for a seed.
+
+    Returns up to 4 (exhaustive) or 2 (non-exhaustive) expanded rows from thread.
+    Skips rows already in existing_uids.
+    """
     relevance_terms = _seed_relevance_terms(seed)
     expanded: list[dict[str, Any]] = []
     for row in _rank_thread_rows(thread_rows, relevance_terms):
@@ -265,6 +336,11 @@ def _thread_rows_for_seed(
     seed: dict[str, Any],
     conversation_id: str,
 ) -> list[Any]:
+    """Fetch thread rows for a seed's conversation from the database.
+
+    Returns list of thread emails or empty list on error.
+    Records errors in diagnostics.
+    """
     try:
         return db.get_thread_emails(conversation_id) or []
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -273,16 +349,26 @@ def _thread_rows_for_seed(
 
 
 def _thread_seed_conversation_id(seed: dict[str, Any]) -> str:
+    """Extract conversation_id from a seed for thread expansion.
+
+    Returns empty string for attachment candidates, otherwise the seed's conversation_id.
+    """
     if str(seed.get("candidate_kind") or "") == "attachment":
         return ""
     return _compact(seed.get("conversation_id"))
 
 
 def _mark_attempted(diagnostics: dict[str, Any]) -> None:
+    """Increment the attempted count in diagnostics."""
     diagnostics["attempted_count"] = int(diagnostics.get("attempted_count") or 0) + 1
 
 
 def _finalize_expansion_diagnostics(diagnostics: dict[str, Any], expanded: list[dict[str, Any]]) -> dict[str, Any]:
+    """Finalize expansion diagnostics with results.
+
+    Sets expanded_row_count and status (partial if errors, otherwise ok).
+    Returns the updated diagnostics dict.
+    """
     diagnostics["expanded_row_count"] = len(expanded)
     diagnostics["status"] = "partial" if int(diagnostics.get("error_count") or 0) > 0 else "ok"
     return diagnostics
@@ -294,6 +380,11 @@ def _thread_expansion_rows(
     evidence_bank: list[dict[str, Any]],
     exhaustive_review: bool,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Generate thread expansion rows from evidence bank.
+
+    Returns tuple of (expanded_rows, diagnostics).
+    Skips seeds without conversation_id or when db doesn't support get_thread_emails.
+    """
     diagnostics = _default_expansion_stage_diagnostics("thread_expansion")
     if db is None or not hasattr(db, "get_thread_emails"):
         return [], diagnostics
@@ -318,6 +409,10 @@ def _thread_expansion_rows(
 
 
 def _attachment_expansion_error(diagnostics: dict[str, Any], *, uid: str, item: dict[str, Any], exc: Exception) -> None:
+    """Record an attachment expansion error in diagnostics.
+
+    Adds an error entry with uid, seed_result_key, error_type, and error message.
+    """
     _expansion_error_entry(
         diagnostics,
         {
@@ -337,6 +432,11 @@ def _attachment_expansion_seed_rows(
     exhaustive_review: bool,
     seen: set[tuple[str, str]],
 ) -> list[dict[str, Any]]:
+    """Generate attachment expansion rows for a seed.
+
+    Returns list of expansion rows for selected attachments.
+    Skips attachments already seen (by uid, filename pair).
+    """
     relevance_terms = _seed_relevance_terms(seed)
     rows: list[dict[str, Any]] = []
     for attachment in _select_attachments(
@@ -366,6 +466,11 @@ def _attachment_expansion_rows(
     evidence_bank: list[dict[str, Any]],
     exhaustive_review: bool,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Generate attachment expansion rows from evidence bank.
+
+    Returns tuple of (expanded_rows, diagnostics).
+    Skips items without uid or when db doesn't support attachments_for_email.
+    """
     diagnostics = _default_expansion_stage_diagnostics("attachment_expansion")
     if db is None or not hasattr(db, "attachments_for_email"):
         return [], diagnostics

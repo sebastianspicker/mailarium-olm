@@ -36,7 +36,7 @@ def _make_db_with_threads() -> EmailDatabase:
             body_html="",
             folder="Inbox",
             has_attachments=False,
-            in_reply_to=None,
+            in_reply_to="",
             conversation_id="thread_a",
         ),
         Email(
@@ -85,7 +85,7 @@ def _make_db_with_threads() -> EmailDatabase:
             body_html="",
             folder="Sent",
             has_attachments=True,
-            in_reply_to=None,
+            in_reply_to="",
             conversation_id="thread_b",
         ),
         Email(
@@ -104,26 +104,29 @@ def _make_db_with_threads() -> EmailDatabase:
             in_reply_to="<b1@test>",
             conversation_id="thread_b",
         ),
-        # Standalone email (no thread)
-        Email(
-            message_id="<s1@test>",
-            subject="Newsletter",
-            sender_name="News",
-            sender_email="news@example.test",
-            to=["alice@example.test"],
-            cc=[],
-            bcc=[],
-            date="2024-01-20T08:00:00",
-            body_text="Weekly newsletter content here.",
-            body_html="",
-            folder="Inbox",
-            has_attachments=False,
-            in_reply_to=None,
-        ),
+        _standalone_email(Email),
     ]
     for email in emails:
         db.insert_email(email)
     return db
+
+
+def _standalone_email(email_cls):
+    return email_cls(
+        message_id="<s1@test>",
+        subject="Newsletter",
+        sender_name="News",
+        sender_email="news@example.test",
+        to=["alice@example.test"],
+        cc=[],
+        bcc=[],
+        date="2024-01-20T08:00:00",
+        body_text="Weekly newsletter content here.",
+        body_html="",
+        folder="Inbox",
+        has_attachments=False,
+        in_reply_to="",
+    )
 
 
 # ── _truncate ────────────────────────────────────────────────────

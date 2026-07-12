@@ -45,20 +45,63 @@ def persist_snapshot(
         return None
 
     snapshot_json = json_text(payload)
-    snapshot_hash = hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
     persisted_snapshot_id = snapshot_id(payload)
-    persisted_review_state = review_state(payload)
-    existing_snapshot = db.latest_matter_snapshot(workspace_id=workspace_id)
-    if existing_snapshot and str(existing_snapshot.get("snapshot_id") or "") == persisted_snapshot_id:
-        existing_review_state = compact(existing_snapshot.get("review_state"))
-        if _REVIEW_STATE_RANK.get(existing_review_state, 0) > _REVIEW_STATE_RANK.get(persisted_review_state, 0):
-            persisted_review_state = existing_review_state
+    persisted_review_state = _persisted_review_state(db, payload, workspace_id, persisted_snapshot_id)
     coverage_summary = as_dict(as_dict(payload.get("matter_coverage_ledger")).get("summary"))
     previous_approved_snapshot = db.latest_matter_snapshot(
         workspace_id=workspace_id,
         review_states={"human_verified", "export_approved"},
     )
 
+    _upsert_matter(db, matter, workspace_id, matter_id, persisted_snapshot_id)
+    _upsert_snapshot(
+        db,
+        snapshot_id=persisted_snapshot_id,
+        workspace_id=workspace_id,
+        matter_id=matter_id,
+        review_mode=review_mode,
+        source_scope=source_scope,
+        review_state=persisted_review_state,
+        snapshot_json=snapshot_json,
+        coverage_summary=coverage_summary,
+    )
+    _clear_snapshot_rows(db, snapshot_id=persisted_snapshot_id)
+    row_counts = _persist_snapshot_registry_rows(db, payload=payload, snapshot_id=persisted_snapshot_id)
+    db.conn.commit()
+    _log_snapshot_custody(
+        db,
+        snapshot_id=persisted_snapshot_id,
+        workspace_id=workspace_id,
+        matter_id=matter_id,
+        review_mode=review_mode,
+        source_scope=source_scope,
+        review_state=persisted_review_state,
+        row_counts=row_counts,
+        snapshot_json=snapshot_json,
+    )
+    changes = _changes_since_approved(db, previous_approved_snapshot, persisted_snapshot_id)
+    return _snapshot_response(
+        workspace_id,
+        matter_id,
+        persisted_snapshot_id,
+        persisted_review_state,
+        previous_approved_snapshot,
+        changes,
+        row_counts,
+    )
+
+
+def _persisted_review_state(db: Any, payload: dict[str, Any], workspace_id: str, persisted_snapshot_id: str) -> str:
+    persisted_state = review_state(payload)
+    existing = db.latest_matter_snapshot(workspace_id=workspace_id)
+    if existing and compact(existing.get("snapshot_id")) == persisted_snapshot_id:
+        existing_state = compact(existing.get("review_state"))
+        if _REVIEW_STATE_RANK.get(existing_state, 0) > _REVIEW_STATE_RANK.get(persisted_state, 0):
+            return existing_state
+    return persisted_state
+
+
+def _upsert_matter(db: Any, matter: dict[str, Any], workspace_id: str, matter_id: str, persisted_snapshot_id: str) -> None:
     db.conn.execute(
         """INSERT INTO matters(
                matter_id, workspace_id, case_label, analysis_goal, date_from, date_to,
@@ -84,6 +127,20 @@ def persist_snapshot(
             persisted_snapshot_id,
         ),
     )
+
+
+def _upsert_snapshot(
+    db: Any,
+    *,
+    snapshot_id: str,
+    workspace_id: str,
+    matter_id: str,
+    review_mode: str,
+    source_scope: str,
+    review_state: str,
+    snapshot_json: str,
+    coverage_summary: dict[str, Any],
+) -> None:
     db.conn.execute(
         """INSERT INTO matter_snapshots(
                snapshot_id, workspace_id, matter_id, review_mode, source_scope,
@@ -96,42 +153,66 @@ def persist_snapshot(
                payload_json=excluded.payload_json,
                coverage_summary_json=excluded.coverage_summary_json""",
         (
-            persisted_snapshot_id,
+            snapshot_id,
             workspace_id,
             matter_id,
             review_mode,
             source_scope,
-            persisted_review_state,
+            review_state,
             snapshot_json,
             json_text(coverage_summary),
         ),
     )
 
-    _clear_snapshot_rows(db, snapshot_id=persisted_snapshot_id)
-    row_counts = _persist_snapshot_registry_rows(db, payload=payload, snapshot_id=persisted_snapshot_id)
 
-    db.conn.commit()
+def _log_snapshot_custody(
+    db: Any,
+    *,
+    snapshot_id: str,
+    workspace_id: str,
+    matter_id: str,
+    review_mode: str,
+    source_scope: str,
+    review_state: str,
+    row_counts: dict[str, int],
+    snapshot_json: str,
+) -> None:
     db.log_custody_event(
         "matter_snapshot_upsert",
         target_type="matter_snapshot",
-        target_id=persisted_snapshot_id,
+        target_id=snapshot_id,
         details={
             "workspace_id": workspace_id,
             "matter_id": matter_id,
             "review_mode": review_mode,
             "source_scope": source_scope,
-            "review_state": persisted_review_state,
+            "review_state": review_state,
             "row_counts": row_counts,
         },
-        content_hash=snapshot_hash,
+        content_hash=hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest(),
     )
 
-    changes_since_last_approved: dict[str, Any] | None = None
-    if previous_approved_snapshot and str(previous_approved_snapshot.get("snapshot_id") or "") != persisted_snapshot_id:
-        changes_since_last_approved = db.diff_matter_snapshots(
+
+def _changes_since_approved(
+    db: Any, previous_approved_snapshot: dict[str, Any] | None, persisted_snapshot_id: str
+) -> dict[str, Any] | None:
+    if previous_approved_snapshot and compact(previous_approved_snapshot.get("snapshot_id")) != persisted_snapshot_id:
+        return db.diff_matter_snapshots(
             older_snapshot_id=str(previous_approved_snapshot.get("snapshot_id") or ""),
             newer_snapshot_id=persisted_snapshot_id,
         )
+    return None
+
+
+def _snapshot_response(
+    workspace_id: str,
+    matter_id: str,
+    persisted_snapshot_id: str,
+    persisted_review_state: str,
+    previous_approved_snapshot: dict[str, Any] | None,
+    changes_since_last_approved: dict[str, Any] | None,
+    row_counts: dict[str, int],
+) -> dict[str, Any]:
     return {
         "workspace_id": workspace_id,
         "matter_id": matter_id,
@@ -219,10 +300,33 @@ def _clear_snapshot_rows(db: Any, *, snapshot_id: str) -> None:
 
 
 def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapshot_id: str) -> dict[str, int]:
-    source_rows = [
-        row for row in as_list(as_dict(payload.get("multi_source_case_bundle")).get("sources")) if isinstance(row, dict)
-    ]
-    if source_rows:
+    source_rows = _persist_source_rows(db, payload, snapshot_id)
+    exhibit_rows = _persist_exhibit_rows(db, payload, snapshot_id)
+    chronology_rows = _persist_chronology_rows(db, payload, snapshot_id)
+    actor_rows = _persist_actor_rows(db, payload, snapshot_id)
+    persisted_witness_rows = _persist_witness_rows(db, payload, snapshot_id)
+    persisted_comparator_rows = _persist_comparator_rows(db, payload, snapshot_id)
+    issue_rows = _persist_issue_rows(db, payload, snapshot_id)
+    persisted_dashboard_rows = _persist_dashboard_rows(db, payload, snapshot_id)
+    return {
+        "matter_sources": len(source_rows),
+        "matter_exhibits": len(exhibit_rows),
+        "matter_chronology_entries": len(chronology_rows),
+        "matter_actors": len(actor_rows),
+        "matter_witnesses": len(persisted_witness_rows),
+        "matter_comparator_points": len(persisted_comparator_rows),
+        "matter_issue_rows": len(issue_rows),
+        "matter_dashboard_cards": len(persisted_dashboard_rows),
+    }
+
+
+def _dict_rows(value: Any) -> list[dict[str, Any]]:
+    return [row for row in as_list(value) if isinstance(row, dict)]
+
+
+def _persist_source_rows(db: Any, payload: dict[str, Any], snapshot_id: str) -> list[dict[str, Any]]:
+    rows = _dict_rows(as_dict(payload.get("multi_source_case_bundle")).get("sources"))
+    if rows:
         db.conn.executemany(
             """INSERT INTO matter_sources(
                    snapshot_id, source_id, source_type, document_kind, source_date,
@@ -242,13 +346,16 @@ def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapsho
                     int(bool(as_dict(row.get("source_weighting")).get("text_available"))),
                     json_text(row),
                 )
-                for row in source_rows
+                for row in rows
                 if compact(row.get("source_id"))
             ],
         )
+    return rows
 
-    exhibit_rows = [row for row in as_list(as_dict(payload.get("matter_evidence_index")).get("rows")) if isinstance(row, dict)]
-    if exhibit_rows:
+
+def _persist_exhibit_rows(db: Any, payload: dict[str, Any], snapshot_id: str) -> list[dict[str, Any]]:
+    rows = _dict_rows(as_dict(payload.get("matter_evidence_index")).get("rows"))
+    if rows:
         db.conn.executemany(
             """INSERT INTO matter_exhibits(
                    snapshot_id, exhibit_id, source_id, exhibit_date, strength, readiness, payload_json
@@ -263,13 +370,16 @@ def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapsho
                     compact(as_dict(as_dict(row.get("exhibit_reliability")).get("next_step_logic")).get("readiness")),
                     json_text(row),
                 )
-                for row in exhibit_rows
+                for row in rows
                 if compact(row.get("exhibit_id"))
             ],
         )
+    return rows
 
-    chronology_rows = [row for row in as_list(as_dict(payload.get("master_chronology")).get("entries")) if isinstance(row, dict)]
-    if chronology_rows:
+
+def _persist_chronology_rows(db: Any, payload: dict[str, Any], snapshot_id: str) -> list[dict[str, Any]]:
+    rows = _dict_rows(as_dict(payload.get("master_chronology")).get("entries"))
+    if rows:
         db.conn.executemany(
             """INSERT INTO matter_chronology_entries(
                    snapshot_id, chronology_id, chronology_date, entry_type, title, primary_read, payload_json
@@ -284,13 +394,16 @@ def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapsho
                     compact(first_supported_read(row)),
                     json_text(row),
                 )
-                for row in chronology_rows
+                for row in rows
                 if compact(row.get("chronology_id"))
             ],
         )
+    return rows
 
-    actor_rows = [row for row in as_list(as_dict(payload.get("actor_map")).get("actors")) if isinstance(row, dict)]
-    if actor_rows:
+
+def _persist_actor_rows(db: Any, payload: dict[str, Any], snapshot_id: str) -> list[dict[str, Any]]:
+    rows = _dict_rows(as_dict(payload.get("actor_map")).get("actors"))
+    if rows:
         db.conn.executemany(
             """INSERT INTO matter_actors(
                    snapshot_id, actor_id, name, email, role_hint, classification, payload_json
@@ -305,13 +418,16 @@ def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapsho
                     compact(row.get("helps_hurts_mixed")),
                     json_text(row),
                 )
-                for row in actor_rows
+                for row in rows
                 if compact(row.get("actor_id"))
             ],
         )
+    return rows
 
-    persisted_witness_rows = witness_rows(payload)
-    if persisted_witness_rows:
+
+def _persist_witness_rows(db: Any, payload: dict[str, Any], snapshot_id: str) -> list[dict[str, Any]]:
+    rows = witness_rows(payload)
+    if rows:
         db.conn.executemany(
             """INSERT INTO matter_witnesses(
                    snapshot_id, witness_id, actor_id, witness_kind, title, payload_json
@@ -325,13 +441,16 @@ def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapsho
                     compact(row.get("title")),
                     json_text(row),
                 )
-                for row in persisted_witness_rows
+                for row in rows
                 if compact(row.get("witness_id"))
             ],
         )
+    return rows
 
-    persisted_comparator_rows = comparator_rows(payload)
-    if persisted_comparator_rows:
+
+def _persist_comparator_rows(db: Any, payload: dict[str, Any], snapshot_id: str) -> list[dict[str, Any]]:
+    rows = comparator_rows(payload)
+    if rows:
         db.conn.executemany(
             """INSERT INTO matter_comparator_points(
                    snapshot_id, comparator_point_id, comparator_issue, comparison_strength,
@@ -347,13 +466,16 @@ def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapsho
                     compact(row.get("comparator_treatment")),
                     json_text(row),
                 )
-                for row in persisted_comparator_rows
+                for row in rows
                 if compact(row.get("comparator_point_id"))
             ],
         )
+    return rows
 
-    issue_rows = [row for row in as_list(as_dict(payload.get("lawyer_issue_matrix")).get("rows")) if isinstance(row, dict)]
-    if issue_rows:
+
+def _persist_issue_rows(db: Any, payload: dict[str, Any], snapshot_id: str) -> list[dict[str, Any]]:
+    rows = _dict_rows(as_dict(payload.get("lawyer_issue_matrix")).get("rows"))
+    if rows:
         db.conn.executemany(
             """INSERT INTO matter_issue_rows(
                    snapshot_id, issue_id, title, legal_relevance_status, payload_json
@@ -366,13 +488,16 @@ def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapsho
                     compact(row.get("legal_relevance_status")),
                     json_text(row),
                 )
-                for row in issue_rows
+                for row in rows
                 if compact(row.get("issue_id"))
             ],
         )
+    return rows
 
-    persisted_dashboard_rows = dashboard_rows(payload)
-    if persisted_dashboard_rows:
+
+def _persist_dashboard_rows(db: Any, payload: dict[str, Any], snapshot_id: str) -> list[dict[str, Any]]:
+    rows = dashboard_rows(payload)
+    if rows:
         db.conn.executemany(
             """INSERT INTO matter_dashboard_cards(
                    snapshot_id, card_id, card_group, title, summary, payload_json
@@ -386,18 +511,8 @@ def _persist_snapshot_registry_rows(db: Any, *, payload: dict[str, Any], snapsho
                     compact(row.get("summary")),
                     json_text(row),
                 )
-                for row in persisted_dashboard_rows
+                for row in rows
                 if compact(row.get("card_id"))
             ],
         )
-
-    return {
-        "matter_sources": len(source_rows),
-        "matter_exhibits": len(exhibit_rows),
-        "matter_chronology_entries": len(chronology_rows),
-        "matter_actors": len(actor_rows),
-        "matter_witnesses": len(persisted_witness_rows),
-        "matter_comparator_points": len(persisted_comparator_rows),
-        "matter_issue_rows": len(issue_rows),
-        "matter_dashboard_cards": len(persisted_dashboard_rows),
-    }
+    return rows

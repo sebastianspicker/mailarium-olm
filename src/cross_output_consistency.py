@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._utils import _as_dict, _as_list, _compact
 from .trigger_retaliation import shared_retaliation_points
 
 CROSS_OUTPUT_CONSISTENCY_VERSION = "1"
@@ -24,18 +25,6 @@ _READ_TO_ISSUE_IDS: dict[str, tuple[str, ...]] = {
 }
 _SUPPORTING_EVENT_STATUSES = {"direct_event_support", "contextual_support_only"}
 _STRICT_CEILINGS = {"observed_facts_only", "insufficient_for_adversarial_draft"}
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
 
 
 def _check(
@@ -64,6 +53,7 @@ def _check(
 
 
 def _collect_referenced_ids(rows: list[dict[str, Any]], field: str) -> list[str]:
+    """Collect unique non-empty string values from a field across rows."""
     ids: list[str] = []
     for row in rows:
         for item in _as_list(row.get(field)):
@@ -86,44 +76,80 @@ def build_cross_output_consistency(
     actor_map: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Return machine-detectable parity checks across major legal-support outputs."""
-    chronology_entries = [row for row in _as_list(_as_dict(master_chronology).get("entries")) if isinstance(row, dict)]
-    evidence_rows = [row for row in _as_list(_as_dict(matter_evidence_index).get("rows")) if isinstance(row, dict)]
-    issue_rows = [row for row in _as_list(_as_dict(lawyer_issue_matrix).get("rows")) if isinstance(row, dict)]
+    chronology_entries = _dict_rows(_as_dict(master_chronology).get("entries"))
+    evidence_rows = _dict_rows(_as_dict(matter_evidence_index).get("rows"))
+    issue_rows = _dict_rows(_as_dict(lawyer_issue_matrix).get("rows"))
     memo_sections = _as_dict(_as_dict(lawyer_briefing_memo).get("sections"))
     dashboard_cards = _as_dict(_as_dict(case_dashboard).get("cards"))
-    skeptical_weaknesses = [
-        row for row in _as_list(_as_dict(skeptical_employer_review).get("weaknesses")) if isinstance(row, dict)
-    ]
+    skeptical_weaknesses = _dict_rows(_as_dict(skeptical_employer_review).get("weaknesses"))
     retaliation_points = shared_retaliation_points(retaliation_timeline_assessment=_as_dict(retaliation_timeline_assessment))
     drafting = _as_dict(controlled_factual_drafting)
     draft_sections = _as_dict(_as_dict(drafting.get("controlled_draft")).get("sections"))
-    actor_rows = [row for row in _as_list(_as_dict(actor_map).get("actors")) if isinstance(row, dict)]
+    actor_rows = _dict_rows(_as_dict(actor_map).get("actors"))
 
-    if not any(
-        (
-            chronology_entries,
-            evidence_rows,
-            issue_rows,
-            memo_sections,
-            dashboard_cards,
-            skeptical_weaknesses,
-            draft_sections,
-        )
+    if not _has_consistency_input(
+        chronology_entries, evidence_rows, issue_rows, memo_sections, dashboard_cards, skeptical_weaknesses, draft_sections
     ):
         return None
 
-    chronology_ids = {str(row.get("chronology_id") or "") for row in chronology_entries if _compact(row.get("chronology_id"))}
-    evidence_by_id = {str(row.get("exhibit_id") or ""): row for row in evidence_rows if _compact(row.get("exhibit_id"))}
-    issue_by_id = {str(row.get("issue_id") or ""): row for row in issue_rows if _compact(row.get("issue_id"))}
-    actor_by_id = {str(row.get("actor_id") or ""): row for row in actor_rows if _compact(row.get("actor_id"))}
-    top_exhibit_ids = [
-        str(row.get("exhibit_id") or "")
-        for row in _as_list(_as_dict(matter_evidence_index).get("top_15_exhibits"))[:4]
-        if isinstance(row, dict) and _compact(row.get("exhibit_id"))
-    ]
+    chronology_ids = set(_row_ids(chronology_entries, "chronology_id"))
+    evidence_by_id = _index_rows(evidence_rows, "exhibit_id")
+    issue_by_id = _index_rows(issue_rows, "issue_id")
+    actor_by_id = _index_rows(actor_rows, "actor_id")
+    top_exhibit_ids = _row_ids(_dict_rows(_as_dict(matter_evidence_index).get("top_15_exhibits"))[:4], "exhibit_id")
 
     checks: list[dict[str, Any]] = []
 
+    _append_chronology_reference_check(checks, memo_sections, dashboard_cards, draft_sections, chronology_ids)
+
+    _append_retaliation_check(checks, issue_by_id, retaliation_points)
+
+    _append_issue_reference_check(checks, memo_sections, dashboard_cards, draft_sections, issue_by_id)
+
+    _append_exhibit_check(checks, memo_sections, dashboard_cards, draft_sections, evidence_by_id, top_exhibit_ids)
+
+    _append_chronology_issue_check(checks, chronology_entries, issue_by_id)
+
+    _append_actor_check(checks, dashboard_cards, actor_by_id)
+
+    _append_skeptical_check(checks, memo_sections, dashboard_cards, skeptical_weaknesses)
+
+    _append_draft_check(checks, drafting, draft_sections)
+
+    return _consistency_result(checks)
+
+
+def _dict_rows(value: object) -> list[dict[str, Any]]:
+    return [row for row in _as_list(value) if isinstance(row, dict)]
+
+
+def _has_consistency_input(*values: object) -> bool:
+    return any(values)
+
+
+def _row_ids(rows: list[dict[str, Any]], field: str) -> list[str]:
+    return [value for row in rows if (value := _compact(row.get(field)))]
+
+
+def _index_rows(rows: list[dict[str, Any]], field: str) -> dict[str, dict[str, Any]]:
+    return {value: row for row in rows if (value := _compact(row.get(field)))}
+
+
+def _consistency_result(checks: list[dict[str, Any]]) -> dict[str, Any]:
+    mismatch_count = sum(1 for check in checks if check.get("status") == "mismatch")
+    pass_count = sum(1 for check in checks if check.get("status") == "pass")
+    affected = sorted({output for check in checks for output in _as_list(check.get("affected_outputs")) if _compact(output)})
+    return {
+        "version": CROSS_OUTPUT_CONSISTENCY_VERSION,
+        "overall_status": "review_required" if mismatch_count else "consistent",
+        "machine_review_required": bool(mismatch_count),
+        "summary": {"check_count": len(checks), "pass_count": pass_count, "mismatch_count": mismatch_count},
+        "affected_outputs": affected,
+        "checks": checks,
+    }
+
+
+def _append_chronology_reference_check(checks, memo_sections, dashboard_cards, draft_sections, chronology_ids) -> None:
     memo_timeline = [row for row in _as_list(memo_sections.get("timeline")) if isinstance(row, dict)]
     dashboard_dates = [row for row in _as_list(dashboard_cards.get("key_dates")) if isinstance(row, dict)]
     draft_facts = [row for row in _as_list(draft_sections.get("established_facts")) if isinstance(row, dict)]
@@ -147,6 +173,8 @@ def build_cross_output_consistency(
         )
     )
 
+
+def _append_retaliation_check(checks, issue_by_id, retaliation_points) -> None:
     retaliation_issue_present = "retaliation_massregelungsverbot" in issue_by_id
     retaliation_support_present = any(
         str(row.get("support_strength") or "") in {"moderate", "limited"} for row in retaliation_points
@@ -171,69 +199,59 @@ def build_cross_output_consistency(
         )
     )
 
-    memo_issues = [row for row in _as_list(memo_sections.get("core_theories")) if isinstance(row, dict)]
-    dashboard_issues = [row for row in _as_list(dashboard_cards.get("main_claims_or_issues")) if isinstance(row, dict)]
-    draft_issue_rows = [
-        row
-        for section_name in ("concerns", "requests_for_clarification", "formal_demands")
-        for row in _as_list(draft_sections.get(section_name))
-        if isinstance(row, dict)
-    ]
-    missing_issue_ids = [
-        item
-        for item in _collect_referenced_ids(memo_issues + draft_issue_rows, "supporting_issue_ids")
-        if item not in issue_by_id
-    ]
-    dashboard_issue_ids = [str(row.get("issue_id") or "") for row in dashboard_issues if _compact(row.get("issue_id"))]
+
+def _append_issue_reference_check(checks, memo_sections, dashboard_cards, draft_sections, issue_by_id) -> None:
+    memo_issues = _dict_rows(memo_sections.get("core_theories"))
+    dashboard_issues = _dict_rows(dashboard_cards.get("main_claims_or_issues"))
+    draft_issue_rows = _section_rows(draft_sections, ("concerns", "requests_for_clarification", "formal_demands"))
+    missing_issue_ids = _missing_references(memo_issues + draft_issue_rows, "supporting_issue_ids", issue_by_id)
+    dashboard_issue_ids = _row_ids(dashboard_issues, "issue_id")
     dashboard_issue_mismatches = [item for item in dashboard_issue_ids if item not in issue_by_id]
+    mismatches = [*missing_issue_ids, *dashboard_issue_mismatches]
     checks.append(
         _check(
             check_id="issue_references",
             title="Issue References",
-            status="mismatch" if (missing_issue_ids or dashboard_issue_mismatches) else "pass",
+            status="mismatch" if mismatches else "pass",
             summary=(
                 "Some downstream outputs reference issue rows that are missing from the shared issue matrix."
-                if (missing_issue_ids or dashboard_issue_mismatches)
+                if mismatches
                 else "Issue references remain aligned across the issue matrix, memo, dashboard, and draft outputs."
             ),
             affected_outputs=["lawyer_issue_matrix", "lawyer_briefing_memo", "case_dashboard", "controlled_factual_drafting"],
-            details=[f"Missing issue id: {item}" for item in [*missing_issue_ids, *dashboard_issue_mismatches][:6]],
-            linked_ids={"issue_ids": [*missing_issue_ids, *dashboard_issue_mismatches][:6]},
+            details=[f"Missing issue id: {item}" for item in mismatches[:6]],
+            linked_ids={"issue_ids": mismatches[:6]},
         )
     )
 
-    memo_evidence = [row for row in _as_list(memo_sections.get("strongest_evidence")) if isinstance(row, dict)]
-    dashboard_exhibits = [row for row in _as_list(dashboard_cards.get("strongest_exhibits")) if isinstance(row, dict)]
-    draft_exhibit_rows = [
-        row
-        for section_name in ("established_facts", "concerns", "requests_for_clarification", "formal_demands")
-        for row in _as_list(draft_sections.get(section_name))
-        if isinstance(row, dict)
-    ]
-    missing_exhibit_ids = [
-        item
-        for item in _collect_referenced_ids(memo_evidence + draft_exhibit_rows, "supporting_exhibit_ids")
-        if item not in evidence_by_id
-    ]
-    dashboard_exhibit_ids = [str(row.get("exhibit_id") or "") for row in dashboard_exhibits if _compact(row.get("exhibit_id"))]
+
+def _section_rows(sections: dict[str, Any], names: tuple[str, ...]) -> list[dict[str, Any]]:
+    return [row for name in names for row in _dict_rows(sections.get(name))]
+
+
+def _missing_references(rows, field, registry):
+    return [item for item in _collect_referenced_ids(rows, field) if item not in registry]
+
+
+def _append_exhibit_check(checks, memo_sections, dashboard_cards, draft_sections, evidence_by_id, top_exhibit_ids) -> None:
+    memo_evidence = _dict_rows(memo_sections.get("strongest_evidence"))
+    dashboard_exhibits = _dict_rows(dashboard_cards.get("strongest_exhibits"))
+    draft_exhibit_rows = _section_rows(
+        draft_sections, ("established_facts", "concerns", "requests_for_clarification", "formal_demands")
+    )
+    missing_exhibit_ids = _missing_references(memo_evidence + draft_exhibit_rows, "supporting_exhibit_ids", evidence_by_id)
+    dashboard_exhibit_ids = _row_ids(dashboard_exhibits, "exhibit_id")
     ranking_mismatches = [item for item in dashboard_exhibit_ids if top_exhibit_ids and item not in top_exhibit_ids]
-    strength_mismatches: list[str] = []
-    for row in dashboard_exhibits:
-        exhibit_id = _compact(row.get("exhibit_id"))
-        if not exhibit_id or exhibit_id not in evidence_by_id:
-            continue
-        expected_strength = _compact(_as_dict(evidence_by_id[exhibit_id].get("exhibit_reliability")).get("strength"))
-        actual_strength = _compact(row.get("strength"))
-        if expected_strength and actual_strength and expected_strength != actual_strength:
-            strength_mismatches.append(exhibit_id)
+    strength_mismatches = _strength_mismatches(dashboard_exhibits, evidence_by_id)
+    mismatch = bool(missing_exhibit_ids or ranking_mismatches or strength_mismatches)
     checks.append(
         _check(
             check_id="exhibit_rankings_and_strength",
             title="Exhibit Rankings And Strength",
-            status="mismatch" if (missing_exhibit_ids or ranking_mismatches or strength_mismatches) else "pass",
+            status="mismatch" if mismatch else "pass",
             summary=(
                 "Some downstream exhibit references drift from the shared evidence index or its ranking/strength data."
-                if (missing_exhibit_ids or ranking_mismatches or strength_mismatches)
+                if mismatch
                 else "Exhibit references and strength summaries remain aligned with the shared evidence index."
             ),
             affected_outputs=["matter_evidence_index", "lawyer_briefing_memo", "case_dashboard", "controlled_factual_drafting"],
@@ -248,6 +266,21 @@ def build_cross_output_consistency(
         )
     )
 
+
+def _strength_mismatches(dashboard_exhibits, evidence_by_id):
+    mismatches = []
+    for row in dashboard_exhibits:
+        exhibit_id = _compact(row.get("exhibit_id"))
+        if not exhibit_id or exhibit_id not in evidence_by_id:
+            continue
+        expected = _compact(_as_dict(evidence_by_id[exhibit_id].get("exhibit_reliability")).get("strength"))
+        actual = _compact(row.get("strength"))
+        if expected and actual and expected != actual:
+            mismatches.append(exhibit_id)
+    return mismatches
+
+
+def _append_chronology_issue_check(checks, chronology_entries, issue_by_id) -> None:
     missing_issue_rows_for_chronology: list[str] = []
     for entry in chronology_entries:
         event_support_matrix = _as_dict(entry.get("event_support_matrix"))
@@ -278,6 +311,8 @@ def build_cross_output_consistency(
         )
     )
 
+
+def _append_actor_check(checks, dashboard_cards, actor_by_id) -> None:
     dashboard_actor_rows = [row for row in _as_list(dashboard_cards.get("main_actors")) if isinstance(row, dict)]
     actor_role_mismatches: list[str] = []
     for row in dashboard_actor_rows:
@@ -303,6 +338,8 @@ def build_cross_output_consistency(
         )
     )
 
+
+def _append_skeptical_check(checks, memo_sections, dashboard_cards, skeptical_weaknesses) -> None:
     memo_weaknesses = [row for row in _as_list(memo_sections.get("weaknesses_or_risks")) if isinstance(row, dict)]
     dashboard_risks = [row for row in _as_list(dashboard_cards.get("risks_or_weak_spots")) if isinstance(row, dict)]
     skeptical_parity_mismatches: list[str] = []
@@ -326,6 +363,8 @@ def build_cross_output_consistency(
         )
     )
 
+
+def _append_draft_check(checks, drafting, draft_sections) -> None:
     preflight = _as_dict(drafting.get("framing_preflight"))
     allegation_ceiling = _as_dict(preflight.get("allegation_ceiling"))
     draft = _as_dict(drafting.get("controlled_draft"))
@@ -352,21 +391,3 @@ def build_cross_output_consistency(
             linked_ids={},
         )
     )
-
-    mismatch_count = sum(1 for check in checks if check.get("status") == "mismatch")
-    pass_count = sum(1 for check in checks if check.get("status") == "pass")
-    affected_outputs = sorted(
-        {output for check in checks for output in _as_list(check.get("affected_outputs")) if _compact(output)}
-    )
-    return {
-        "version": CROSS_OUTPUT_CONSISTENCY_VERSION,
-        "overall_status": "review_required" if mismatch_count else "consistent",
-        "machine_review_required": bool(mismatch_count),
-        "summary": {
-            "check_count": len(checks),
-            "pass_count": pass_count,
-            "mismatch_count": mismatch_count,
-        },
-        "affected_outputs": affected_outputs,
-        "checks": checks,
-    }

@@ -101,6 +101,14 @@ _MAX_ARCHIVE_MEMBER_BYTES = 2_000_000
 
 
 def _get_extension(filename: str) -> str:
+    """Extract the file extension from a filename.
+
+    Args:
+        filename: The filename to extract the extension from.
+
+    Returns:
+        The lowercase file extension including the dot, or empty string if no extension.
+    """
     dot_pos = filename.rfind(".")
     if dot_pos == -1:
         return ""
@@ -115,6 +123,15 @@ def is_image_attachment(filename: str) -> bool:
 
 
 def _dispatch_extension(filename: str, mime_type: str | None = None) -> str:
+    """Determine the effective extension for a file, considering MIME type overrides.
+
+    Args:
+        filename: The filename to check.
+        mime_type: Optional MIME type to use for override mapping.
+
+    Returns:
+        The determined extension string.
+    """
     ext = _get_extension(filename)
     normalized_mime = str(mime_type or "").split(";", 1)[0].strip().lower()
     mime_ext = _MIME_EXTENSION_MAP.get(normalized_mime, "")
@@ -124,7 +141,11 @@ def _dispatch_extension(filename: str, mime_type: str | None = None) -> str:
 
 
 def _get_image_embedder():
-    """Return the module-level ImageEmbedder singleton (lazy-init)."""
+    """Return the module-level ImageEmbedder singleton (lazy-init).
+
+    Returns:
+        The ImageEmbedder instance, initializing it if necessary.
+    """
     global _image_embedder  # pylint: disable=global-statement
     if _image_embedder is None:
         from .image_embedder import ImageEmbedder
@@ -153,56 +174,48 @@ def _extract_text_with_dispatch(
     content: bytes,
     *,
     mime_type: str | None = None,
-    plain_text_extractor: Callable[[bytes], str | None],
-    html_extractor: Callable[[bytes], str | None],
-    pdf_extractor: Callable[[bytes], str | None],
-    docx_extractor: Callable[[bytes], str | None],
-    xlsx_extractor: Callable[[bytes], str | None],
-    ods_extractor: Callable[[bytes], str | None],
-    legacy_office_extractor: Callable[[bytes, str], str | None],
-    pptx_extractor: Callable[[bytes], str | None],
+    extractors: dict[str, Callable[..., str | None]],
 ) -> str | None:
-    """Shared routing matrix for attachment text extraction."""
+    """Shared routing matrix for attachment text extraction.
+
+    Args:
+        filename: The filename to extract text from.
+        content: The raw bytes to extract text from.
+        mime_type: Optional MIME type for extension dispatch override.
+        extractors: Named extractors for the supported attachment formats.
+
+    Returns:
+        The extracted text, or None if no matching extractor found.
+    """
     if not filename or not content:
         return None
 
     ext = _dispatch_extension(filename, mime_type)
-
-    if ext in _SKIP_EXTENSIONS or ext in _IMAGE_EXTENSIONS:
-        return None
-    if ext in _TEXT_EXTENSIONS:
-        return plain_text_extractor(content)
-    if ext in (".html", ".htm"):
-        return html_extractor(content)
-    if ext == ".pdf":
-        return pdf_extractor(content)
-    if ext == ".docx":
-        return docx_extractor(content)
-    if ext in {".xlsx", ".xlsm"}:
-        return xlsx_extractor(content)
-    if ext == ".ods":
-        return ods_extractor(content)
-    if ext == ".xls":
-        return legacy_office_extractor(content, "XLS")
-    if ext == ".doc":
-        return legacy_office_extractor(content, "DOC")
-    if ext == ".pptx":
-        return pptx_extractor(content)
     if ext == ".eml":
         return _extract_eml(content)
     if ext == ".zip":
-        return _extract_zip_archive(
-            content,
-            mime_type=mime_type,
-            plain_text_extractor=plain_text_extractor,
-            html_extractor=html_extractor,
-            pdf_extractor=pdf_extractor,
-            docx_extractor=docx_extractor,
-            xlsx_extractor=xlsx_extractor,
-            ods_extractor=ods_extractor,
-            legacy_office_extractor=legacy_office_extractor,
-            pptx_extractor=pptx_extractor,
-        )
+        return _extract_zip_archive(content, extractors=extractors)
+    return _extract_standard_attachment(ext, content, extractors=extractors)
+
+
+def _extract_standard_attachment(
+    ext: str,
+    content: bytes,
+    *,
+    extractors: dict[str, Callable[..., str | None]],
+) -> str | None:
+    if ext in _SKIP_EXTENSIONS or ext in _IMAGE_EXTENSIONS:
+        return None
+    if ext in _TEXT_EXTENSIONS:
+        return extractors["plain"](content)
+    if ext in {".html", ".htm"}:
+        return extractors["html"](content)
+    if ext in {".pdf", ".docx", ".ods", ".pptx"}:
+        return extractors[ext[1:]](content)
+    if ext in {".xlsx", ".xlsm"}:
+        return extractors["xlsx"](content)
+    if ext in {".xls", ".doc"}:
+        return extractors["legacy_office"](content, ext[1:].upper())
     return None
 
 
@@ -212,30 +225,60 @@ def extract_text(filename: str, content: bytes, *, mime_type: str | None = None)
         filename,
         content,
         mime_type=mime_type,
-        plain_text_extractor=_extract_plain_text,
-        html_extractor=_extract_html,
-        pdf_extractor=_extract_pdf,
-        docx_extractor=_extract_docx,
-        xlsx_extractor=_extract_xlsx,
-        ods_extractor=_extract_ods,
-        legacy_office_extractor=lambda data, label: _extract_legacy_binary_office(data, format_label=label),
-        pptx_extractor=_extract_pptx,
+        extractors=_default_extractors(),
     )
 
 
+def _default_extractors() -> dict[str, Callable[..., str | None]]:
+    return {
+        "plain": _extract_plain_text,
+        "html": _extract_html,
+        "pdf": _extract_pdf,
+        "docx": _extract_docx,
+        "xlsx": _extract_xlsx,
+        "ods": _extract_ods,
+        "legacy_office": lambda data, label: _extract_legacy_binary_office(data, format_label=label),
+        "pptx": _extract_pptx,
+    }
+
+
 def _truncate(text: str) -> str:
+    """Truncate text to the maximum allowed length.
+
+    Args:
+        text: The text to truncate.
+
+    Returns:
+        The text truncated to MAX_EXTRACTED_CHARS with a truncation marker if needed.
+    """
     if len(text) <= MAX_EXTRACTED_CHARS:
         return text
     return text[:MAX_EXTRACTED_CHARS] + "\n[... content truncated ...]"
 
 
 def _extract_plain_text(content: bytes) -> str | None:
+    """Extract text from plain text content.
+
+    Args:
+        content: The raw bytes to decode and extract.
+
+    Returns:
+        The decoded and stripped text, truncated if necessary, or None if empty.
+    """
     text = _decode_text_bytes(content)
     text = text.strip()
     return _truncate(text) if text else None
 
 
 def _extract_html(content: bytes) -> str | None:
+    """Extract text from HTML content.
+
+    Args:
+        content: The HTML bytes to convert.
+
+    Returns:
+        The converted and stripped text, truncated if necessary, or None if empty.
+    """
     html = _decode_text_bytes(content)
 
     from .html_converter import html_to_text as _html_to_text
@@ -245,36 +288,59 @@ def _extract_html(content: bytes) -> str | None:
 
 
 def _extract_eml(content: bytes) -> str | None:
+    """Extract text from an EML (email) file.
+
+    Args:
+        content: The EML file bytes.
+
+    Returns:
+        The extracted email metadata and body text, or None if extraction fails.
+    """
+    raw_source = _decode_text_bytes(content)
+    headers = _eml_headers(raw_source)
+    if not any(headers.values()) and "\n" not in raw_source and "\r" not in raw_source:
+        return None
+    text = "\n".join(_eml_parts(headers, _eml_message(content), _eml_body(raw_source))).strip()
+    return _truncate(text) if text else None
+
+
+def _eml_headers(raw_source: str) -> dict[str, str]:
+    return {name: _extract_header(raw_source, name) for name in ("Subject", "From", "Date")}
+
+
+def _eml_message(content: bytes):
     try:
-        message = email.message_from_bytes(content, policy=cast(Any, email.policy.default))
+        return email.message_from_bytes(content, policy=cast(Any, email.policy.default))
     except (ValueError, TypeError, AttributeError):
         logger.debug("Failed to parse .eml attachment.", exc_info=True)
-        message = None
-    raw_source = _decode_text_bytes(content)
+        return None
+
+
+def _eml_body(raw_source: str) -> str:
     body_text, body_html = _extract_body_from_source(raw_source)
     if not body_text and body_html:
-        body_text = _extract_html(body_html.encode("utf-8", errors="ignore")) or ""
-    subject = _extract_header(raw_source, "Subject")
-    sender = _extract_header(raw_source, "From")
-    date = _extract_header(raw_source, "Date")
-    if not any((subject, sender, date)) and "\n" not in raw_source and "\r" not in raw_source:
-        return None
-    parts = []
-    if subject:
-        parts.append(f"Subject: {subject}")
-    if sender:
-        parts.append(f"From: {sender}")
-    if date:
-        parts.append(f"Date: {date}")
+        return _extract_html(body_html.encode("utf-8", errors="ignore")) or ""
+    return body_text
+
+
+def _eml_parts(headers: dict[str, str], message: Any, body_text: str) -> list[str]:
+    parts = [f"{name}: {value}" for name, value in headers.items() if value]
     if message and message.get_content_type():
         parts.append(f"Content-Type: {message.get_content_type()}")
     if body_text:
         parts.extend(["", body_text.strip()])
-    text = "\n".join(parts).strip()
-    return _truncate(text) if text else None
+    return parts
 
 
 def _looks_like_utf16(content: bytes) -> bool:
+    """Check if byte content appears to be UTF-16 encoded.
+
+    Args:
+        content: The bytes to check.
+
+    Returns:
+        True if the content looks like UTF-16 (has BOM or high null byte density).
+    """
     if content.startswith((b"\xff\xfe", b"\xfe\xff")):
         return True
     if len(content) < 4:
@@ -285,6 +351,14 @@ def _looks_like_utf16(content: bytes) -> bool:
 
 
 def _decode_text_bytes(content: bytes) -> str:
+    """Decode bytes to a string using appropriate encoding detection.
+
+    Args:
+        content: The bytes to decode.
+
+    Returns:
+        The decoded string, trying UTF-8-sig, UTF-16 variants, cp1252, and latin-1.
+    """
     encodings = ["utf-8-sig"]
     if _looks_like_utf16(content):
         encodings.extend(["utf-16", "utf-16le", "utf-16be"])
@@ -307,6 +381,19 @@ def _optional_extract(
     fmt_label: str,
     failure_recorder: Callable[[str], None] | None = None,
 ) -> str | None:
+    """Optionally extract text using an external library.
+
+    Args:
+        content: The bytes to extract text from.
+        import_name: The module name to import.
+        import_from: The symbol to import from the module.
+        extractor: The extraction function to call with the imported symbol and stream.
+        fmt_label: The format label for logging.
+        failure_recorder: Optional function to record failures.
+
+    Returns:
+        The extracted text, truncated if necessary, or None if extraction fails.
+    """
     try:
         mod = __import__(import_name)
         imported = getattr(mod, import_from)
@@ -330,16 +417,17 @@ def _optional_extract(
 def _extract_zip_archive(
     content: bytes,
     *,
-    mime_type: str | None,
-    plain_text_extractor: Callable[[bytes], str | None],
-    html_extractor: Callable[[bytes], str | None],
-    pdf_extractor: Callable[[bytes], str | None],
-    docx_extractor: Callable[[bytes], str | None],
-    xlsx_extractor: Callable[[bytes], str | None],
-    ods_extractor: Callable[[bytes], str | None],
-    legacy_office_extractor: Callable[[bytes, str], str | None],
-    pptx_extractor: Callable[[bytes], str | None],
+    extractors: dict[str, Callable[..., str | None]],
 ) -> str | None:
+    """Extract text from a ZIP archive by extracting text from its members.
+
+    Args:
+        content: The ZIP archive bytes.
+        extractors: Named extractors for supported archive members.
+
+    Returns:
+        The extracted text from archive members, or None if extraction fails.
+    """
     try:
         archive = zipfile.ZipFile(io.BytesIO(content))
     except zipfile.BadZipFile:
@@ -353,29 +441,7 @@ def _extract_zip_archive(
             if member.is_dir():
                 continue
             inventory_lines.append(member.filename)
-            if member.file_size > _MAX_ARCHIVE_MEMBER_BYTES:
-                continue
-            ext = _dispatch_extension(member.filename, mime_type=None)
-            if ext in _SKIP_EXTENSIONS or ext in _IMAGE_EXTENSIONS or ext in {".zip", ".gz", ".tar", ".rar", ".7z"}:
-                continue
-            try:
-                member_bytes = archive.read(member)
-            except OSError:
-                logger.debug("Failed to read ZIP member %s.", member.filename, exc_info=True)
-                continue
-            member_text = _extract_text_with_dispatch(
-                member.filename,
-                member_bytes,
-                mime_type=None,
-                plain_text_extractor=plain_text_extractor,
-                html_extractor=html_extractor,
-                pdf_extractor=pdf_extractor,
-                docx_extractor=docx_extractor,
-                xlsx_extractor=xlsx_extractor,
-                ods_extractor=ods_extractor,
-                legacy_office_extractor=legacy_office_extractor,
-                pptx_extractor=pptx_extractor,
-            )
+            member_text = _archive_member_text(archive, member, extractors=extractors)
             if member_text:
                 extracted_sections.append(f"[Member: {member.filename}]\n{member_text}")
 
@@ -392,7 +458,35 @@ def _extract_zip_archive(
     return None
 
 
+def _archive_member_text(
+    archive: zipfile.ZipFile,
+    member: zipfile.ZipInfo,
+    *,
+    extractors: dict[str, Callable[..., str | None]],
+) -> str | None:
+    if member.file_size > _MAX_ARCHIVE_MEMBER_BYTES:
+        return None
+    ext = _dispatch_extension(member.filename)
+    if ext in _SKIP_EXTENSIONS or ext in _IMAGE_EXTENSIONS or ext in {".zip", ".gz", ".tar", ".rar", ".7z"}:
+        return None
+    try:
+        member_bytes = archive.read(member)
+    except OSError:
+        logger.debug("Failed to read ZIP member %s.", member.filename, exc_info=True)
+        return None
+    return _extract_text_with_dispatch(member.filename, member_bytes, extractors=extractors)
+
+
 def _pdf_extractor(pdf_reader_cls, stream):
+    """Extract text from a PDF file using PyPDF2.
+
+    Args:
+        pdf_reader_cls: The PdfReader class from PyPDF2.
+        stream: A file-like object containing PDF data.
+
+    Returns:
+        The extracted text with page markers, or empty string.
+    """
     reader = pdf_reader_cls(stream)
     pages: list[str] = []
     for page_index, page in enumerate(reader.pages, start=1):
@@ -403,12 +497,30 @@ def _pdf_extractor(pdf_reader_cls, stream):
 
 
 def _docx_extractor(document_cls, stream):
+    """Extract text from a DOCX file using python-docx.
+
+    Args:
+        document_cls: The Document class from python-docx.
+        stream: A file-like object containing DOCX data.
+
+    Returns:
+        The extracted text joined from all non-empty paragraphs.
+    """
     doc = document_cls(stream)
     paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
     return "\n".join(paragraphs).strip()
 
 
 def _xlsx_extractor(load_workbook, stream):
+    """Extract text from an XLSX file using openpyxl.
+
+    Args:
+        load_workbook: The load_workbook function from openpyxl.
+        stream: A file-like object containing XLSX data.
+
+    Returns:
+        The extracted text with sheet and row markers.
+    """
     wb = load_workbook(stream, read_only=True, data_only=True)
     lines = []
     for sheet in wb.sheetnames:
@@ -423,6 +535,14 @@ def _xlsx_extractor(load_workbook, stream):
 
 
 def _extract_ods(content: bytes) -> str | None:
+    """Extract text from an ODS (OpenDocument Spreadsheet) file.
+
+    Args:
+        content: The ODS file bytes.
+
+    Returns:
+        The extracted text from content.xml, or None if extraction fails.
+    """
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             xml_text = archive.read("content.xml")
@@ -443,7 +563,15 @@ def _extract_ods(content: bytes) -> str | None:
 
 
 def _extract_legacy_binary_office(content: bytes, *, format_label: str) -> str | None:
-    """Return a conservative printable-text fallback for legacy binary Office files."""
+    """Return a conservative printable-text fallback for legacy binary Office files.
+
+    Args:
+        content: The binary Office file bytes.
+        format_label: The format label for logging (e.g., 'XLS', 'DOC').
+
+    Returns:
+        The extracted printable text, or None if no printable text found.
+    """
     decoded_variants = [
         _decode_text_bytes(content),
         content.decode("utf-16le", errors="ignore"),
@@ -464,6 +592,15 @@ def _extract_legacy_binary_office(content: bytes, *, format_label: str) -> str |
 
 
 def _pptx_extractor(presentation_cls, stream):
+    """Extract text from a PPTX file using python-pptx.
+
+    Args:
+        presentation_cls: The Presentation class from python-pptx.
+        stream: A file-like object containing PPTX data.
+
+    Returns:
+        The extracted text with slide and shape markers.
+    """
     prs = presentation_cls(stream)
     lines: list[str] = []
     for slide_num, slide in enumerate(prs.slides, 1):
@@ -478,16 +615,48 @@ def _pptx_extractor(presentation_cls, stream):
 
 
 def _extract_pdf(content: bytes) -> str | None:
+    """Extract text from a PDF file.
+
+    Args:
+        content: The PDF file bytes.
+
+    Returns:
+        The extracted text, or None if extraction fails.
+    """
     return _optional_extract(content, "PyPDF2", "PdfReader", _pdf_extractor, "PDF")
 
 
 def _extract_docx(content: bytes) -> str | None:
+    """Extract text from a DOCX file.
+
+    Args:
+        content: The DOCX file bytes.
+
+    Returns:
+        The extracted text, or None if extraction fails.
+    """
     return _optional_extract(content, "docx", "Document", _docx_extractor, "DOCX")
 
 
 def _extract_xlsx(content: bytes) -> str | None:
+    """Extract text from an XLSX file.
+
+    Args:
+        content: The XLSX file bytes.
+
+    Returns:
+        The extracted text, or None if extraction fails.
+    """
     return _optional_extract(content, "openpyxl", "load_workbook", _xlsx_extractor, "XLSX")
 
 
 def _extract_pptx(content: bytes) -> str | None:
+    """Extract text from a PPTX file.
+
+    Args:
+        content: The PPTX file bytes.
+
+    Returns:
+        The extracted text, or None if extraction fails.
+    """
     return _optional_extract(content, "pptx", "Presentation", _pptx_extractor, "PPTX")

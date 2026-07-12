@@ -7,9 +7,11 @@ import hashlib
 import mimetypes
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ._utils import _as_dict, _as_list, _compact
 from .attachment_extractor import extract_text
 from .repo_paths import validate_local_read_path
 
@@ -41,16 +43,10 @@ _OPERATOR_CONTROL_CONTENT_MARKERS = (
 )
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
+@dataclass(frozen=True)
+class _ChatExportResult:
+    row: dict[str, Any] | None = None
+    warning: dict[str, Any] | None = None
 
 
 def _ordered_unique(values: list[str]) -> list[str]:
@@ -133,76 +129,11 @@ def ingest_chat_exports(chat_exports: list[dict[str, Any]] | None) -> dict[str, 
     for index, export in enumerate(chat_exports or [], start=1):
         if not isinstance(export, dict):
             continue
-        source_path = Path(_compact(export.get("source_path"))).expanduser()
-        source_id = _compact(export.get("source_id")) or f"chat-export:{index}"
-        try:
-            source_path = validate_local_read_path(str(source_path), field_name="source_path")
-        except ValueError:
-            warnings.append(
-                {
-                    "source_id": source_id,
-                    "status": "unauthorized",
-                    "reason": "source_path_not_authorized",
-                    "source_path": str(source_path),
-                }
-            )
-            continue
-        if not source_path.exists() or not source_path.is_file():
-            warnings.append(
-                {
-                    "source_id": source_id,
-                    "status": "unreadable",
-                    "reason": "source_path_unreadable",
-                    "source_path": str(source_path),
-                }
-            )
-            continue
-        content = source_path.read_bytes()
-        raw_text = (
-            extract_text(
-                source_path.name,
-                content,
-                mime_type=str(mimetypes.guess_type(source_path.name)[0] or ""),
-            )
-            or ""
-        )
-        if not _compact(raw_text):
-            warnings.append(
-                {
-                    "source_id": source_id,
-                    "status": "degraded",
-                    "reason": "no_recoverable_text",
-                    "source_path": str(source_path),
-                }
-            )
-            continue
-        text = _compact(raw_text)
-        parsed_messages = _parse_chat_export_messages(raw_text)
-        participants = [str(item).strip() for item in _as_list(export.get("participants")) if _compact(item)]
-        if not participants and parsed_messages:
-            participants = _ordered_unique(
-                [message["speaker"] for message in parsed_messages if _compact(message.get("speaker"))]
-            )
-        rows.append(
-            {
-                "source_id": source_id,
-                "platform": _compact(export.get("platform")),
-                "title": _compact(export.get("title")) or source_path.name,
-                "date": _chat_export_date(export, parsed_messages),
-                "participants": participants,
-                "text": text,
-                "parsed_messages": parsed_messages,
-                "chat_message_count": len(parsed_messages),
-                "related_email_uid": _compact(export.get("related_email_uid")),
-                "provenance": {
-                    "source_kind": "native_chat_export",
-                    "source_path": str(source_path),
-                    "file_size_bytes": len(content),
-                    "content_sha256": hashlib.sha256(content).hexdigest(),
-                    "speaker_time_parsing": "common_line_patterns" if parsed_messages else "not_detected",
-                },
-            }
-        )
+        result = _ingest_chat_export(export, index)
+        if result.row is not None:
+            rows.append(result.row)
+        if result.warning is not None:
+            warnings.append(result.warning)
     return {
         "version": "1",
         "entries": rows,
@@ -215,26 +146,105 @@ def ingest_chat_exports(chat_exports: list[dict[str, Any]] | None) -> dict[str, 
     }
 
 
+def _chat_export_warning(source_id: str, source_path: Path, status: str, reason: str) -> _ChatExportResult:
+    return _ChatExportResult(
+        warning={"source_id": source_id, "status": status, "reason": reason, "source_path": str(source_path)}
+    )
+
+
+def _ingest_chat_export(export: dict[str, Any], index: int) -> _ChatExportResult:
+    source_id = _compact(export.get("source_id")) or f"chat-export:{index}"
+    source_path, warning_result = _validated_chat_export_path(export, source_id)
+    if warning_result is not None:
+        return warning_result
+    assert source_path is not None
+    content = source_path.read_bytes()
+    raw_text = _chat_export_text(source_path, content)
+    if not _compact(raw_text):
+        return _chat_export_warning(source_id, source_path, "degraded", "no_recoverable_text")
+    parsed_messages = _parse_chat_export_messages(raw_text)
+    participants = _chat_export_participants(export, parsed_messages)
+    return _ChatExportResult(
+        row=_chat_export_row(export, source_path, source_id, content, raw_text, parsed_messages, participants)
+    )
+
+
+def _validated_chat_export_path(export: dict[str, Any], source_id: str) -> tuple[Path | None, _ChatExportResult | None]:
+    source_path = Path(_compact(export.get("source_path"))).expanduser()
+    try:
+        source_path = validate_local_read_path(str(source_path), field_name="source_path")
+    except ValueError:
+        return None, _chat_export_warning(source_id, source_path, "unauthorized", "source_path_not_authorized")
+    if not source_path.exists() or not source_path.is_file():
+        return None, _chat_export_warning(source_id, source_path, "unreadable", "source_path_unreadable")
+    return source_path, None
+
+
+def _chat_export_text(source_path: Path, content: bytes) -> str:
+    return (
+        extract_text(
+            source_path.name,
+            content,
+            mime_type=str(mimetypes.guess_type(source_path.name)[0] or ""),
+        )
+        or ""
+    )
+
+
+def _chat_export_participants(export: dict[str, Any], parsed_messages: list[dict[str, str]]) -> list[str]:
+    participants = [str(item).strip() for item in _as_list(export.get("participants")) if _compact(item)]
+    if not participants and parsed_messages:
+        participants = _ordered_unique([message["speaker"] for message in parsed_messages if _compact(message.get("speaker"))])
+    return participants
+
+
+def _chat_export_row(
+    export: dict[str, Any],
+    source_path: Path,
+    source_id: str,
+    content: bytes,
+    raw_text: str,
+    parsed_messages: list[dict[str, str]],
+    participants: list[str],
+) -> dict[str, Any]:
+    return {
+        "source_id": source_id,
+        "platform": _compact(export.get("platform")),
+        "title": _compact(export.get("title")) or source_path.name,
+        "date": _chat_export_date(export, parsed_messages),
+        "participants": participants,
+        "text": _compact(raw_text),
+        "parsed_messages": parsed_messages,
+        "chat_message_count": len(parsed_messages),
+        "related_email_uid": _compact(export.get("related_email_uid")),
+        "provenance": {
+            "source_kind": "native_chat_export",
+            "source_path": str(source_path),
+            "file_size_bytes": len(content),
+            "content_sha256": hashlib.sha256(content).hexdigest(),
+            "speaker_time_parsing": "common_line_patterns" if parsed_messages else "not_detected",
+        },
+    }
+
+
 def infer_manifest_source_class(path: Path) -> str:
     """Return a conservative manifest source class for one supplied local file."""
     normalized_name = path.name.lower()
     suffix = path.suffix.lower()
-    if any(keyword in normalized_name for keyword in _CHAT_KEYWORDS):
-        return "chat_export"
-    if suffix in _IMAGE_EXTENSIONS:
-        return "screenshot"
-    if suffix in _CALENDAR_EXTENSIONS:
-        return "calendar_export"
-    if any(keyword in normalized_name for keyword in _TIME_KEYWORDS):
-        return "attendance_export" if suffix in _SPREADSHEET_EXTENSIONS else "time_record"
-    if any(keyword in normalized_name for keyword in _PARTICIPATION_KEYWORDS):
-        return "participation_record"
-    if any(keyword in normalized_name for keyword in _NOTE_KEYWORDS):
-        return "note_record"
-    if suffix in _WORD_PROCESSING_EXTENSIONS:
-        return "formal_document"
-    if suffix in _SPREADSHEET_EXTENSIONS:
-        return "time_record"
+    time_class = "attendance_export" if suffix in _SPREADSHEET_EXTENSIONS else "time_record"
+    rules = (
+        (any(keyword in normalized_name for keyword in _CHAT_KEYWORDS), "chat_export"),
+        (suffix in _IMAGE_EXTENSIONS, "screenshot"),
+        (suffix in _CALENDAR_EXTENSIONS, "calendar_export"),
+        (any(keyword in normalized_name for keyword in _TIME_KEYWORDS), time_class),
+        (any(keyword in normalized_name for keyword in _PARTICIPATION_KEYWORDS), "participation_record"),
+        (any(keyword in normalized_name for keyword in _NOTE_KEYWORDS), "note_record"),
+        (suffix in _WORD_PROCESSING_EXTENSIONS, "formal_document"),
+        (suffix in _SPREADSHEET_EXTENSIONS, "time_record"),
+    )
+    for matches, source_class in rules:
+        if matches:
+            return source_class
     return "attachment"
 
 
@@ -322,23 +332,7 @@ def build_detection_benchmark_pack(
     The benchmark pack is an evaluation surface. It must not be used as a hard
     search filter for later harvesting.
     """
-    artifacts: list[dict[str, Any]] = []
-    digest_rows: list[str] = []
-    for raw_path in source_paths:
-        path = Path(_compact(raw_path)).expanduser()
-        if not path.exists() or not path.is_file():
-            continue
-        content_sha256 = _hash_file(path)
-        text_preview = path.read_text(encoding="utf-8", errors="ignore")[:2000]
-        artifact = {
-            "source_path": str(path),
-            "title": path.name,
-            "source_class": infer_manifest_source_class(path),
-            "content_sha256": content_sha256,
-            "text_preview": text_preview,
-        }
-        artifacts.append(artifact)
-        digest_rows.append(f"{path}|{content_sha256}")
+    artifacts, digest_rows = _benchmark_artifacts(source_paths)
     pack_digest = hashlib.sha256("\n".join(digest_rows).encode("utf-8")).hexdigest()[:12] if digest_rows else "empty"
     return {
         "benchmark_id": f"detection-benchmark:{pack_digest}",
@@ -346,30 +340,60 @@ def build_detection_benchmark_pack(
         "artifacts": artifacts,
         "seed_actors": _ordered_unique([_compact(item) for item in (seed_actors or [])]),
         "issue_families": _ordered_unique([_compact(item) for item in (issue_families or [])]),
-        "chronology_anchor_markers": [
+        "chronology_anchor_markers": _benchmark_chronology_markers(chronology_anchor_markers),
+        "manifest_link_targets": _benchmark_manifest_targets(manifest_link_targets),
+        "required_report_sections": _ordered_unique([_compact(item) for item in (required_report_sections or [])]),
+        "usage_rule": "evaluation_only_not_search_filter",
+    }
+
+
+def _benchmark_artifacts(source_paths: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
+    artifacts: list[dict[str, Any]] = []
+    digest_rows: list[str] = []
+    for raw_path in source_paths:
+        path = Path(_compact(raw_path)).expanduser()
+        if not path.exists() or not path.is_file():
+            continue
+        content_sha256 = _hash_file(path)
+        artifacts.append(
             {
-                "date": _compact(item.get("date")),
-                "title_terms": _ordered_unique([_compact(term) for term in _as_list(item.get("title_terms"))]),
-                "description_terms": _ordered_unique([_compact(term) for term in _as_list(item.get("description_terms"))]),
+                "source_path": str(path),
+                "title": path.name,
+                "source_class": infer_manifest_source_class(path),
+                "content_sha256": content_sha256,
+                "text_preview": path.read_text(encoding="utf-8", errors="ignore")[:2000],
             }
-            for item in (chronology_anchor_markers or [])
-            if isinstance(item, dict)
-            and (
-                _compact(item.get("date"))
-                or any(_compact(term) for term in _as_list(item.get("title_terms")))
-                or any(_compact(term) for term in _as_list(item.get("description_terms")))
-            )
-        ],
-        "manifest_link_targets": [
+        )
+        digest_rows.append(f"{path}|{content_sha256}")
+    return artifacts, digest_rows
+
+
+def _benchmark_chronology_markers(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    markers: list[dict[str, Any]] = []
+    for item in rows or []:
+        if not isinstance(item, dict):
+            continue
+        marker = {
+            "date": _compact(item.get("date")),
+            "title_terms": _ordered_unique([_compact(term) for term in _as_list(item.get("title_terms"))]),
+            "description_terms": _ordered_unique([_compact(term) for term in _as_list(item.get("description_terms"))]),
+        }
+        if any(marker.values()):
+            markers.append(marker)
+    return markers
+
+
+def _benchmark_manifest_targets(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    targets: list[dict[str, Any]] = []
+    for item in rows or []:
+        if not isinstance(item, dict):
+            continue
+        targets.append(
             {
                 "document_source_id": _compact(item.get("document_source_id")),
                 "email_source_id": _compact(item.get("email_source_id")),
                 "document_title_terms": _ordered_unique([_compact(term) for term in _as_list(item.get("document_title_terms"))]),
                 "email_title_terms": _ordered_unique([_compact(term) for term in _as_list(item.get("email_title_terms"))]),
             }
-            for item in (manifest_link_targets or [])
-            if isinstance(item, dict)
-        ],
-        "required_report_sections": _ordered_unique([_compact(item) for item in (required_report_sections or [])]),
-        "usage_rule": "evaluation_only_not_search_filter",
-    }
+        )
+    return targets

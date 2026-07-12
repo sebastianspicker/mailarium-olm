@@ -46,22 +46,7 @@ def query_with_embedding_impl(
     if where:
         kwargs["where"] = where
 
-    results = retriever.collection.query(**kwargs)
-    ids = (results.get("ids") or [[]])[0]
-    documents = (results.get("documents") or [[]])[0]
-    metadatas = (results.get("metadatas") or [[]])[0]
-    distances = (results.get("distances") or [[]])[0]
-
-    if not ids:
-        return []
-    if not documents:
-        documents = [""] * len(ids)
-    if not metadatas:
-        metadatas = [{} for _ in ids]
-    if not distances:
-        distances = [1.0] * len(ids)
-
-    rows = min(len(ids), len(documents), len(metadatas), len(distances))
+    ids, documents, metadatas, distances = _query_rows(retriever.collection.query(**kwargs))
     return [
         SearchResult(
             chunk_id=ids[index],
@@ -69,8 +54,19 @@ def query_with_embedding_impl(
             metadata=metadatas[index],
             distance=distances[index],
         )
-        for index in range(rows)
+        for index in range(min(len(ids), len(documents), len(metadatas), len(distances)))
     ]
+
+
+def _query_rows(results: dict[str, Any]) -> tuple[list[Any], list[Any], list[Any], list[Any]]:
+    """Normalize optional Chroma response fields into parallel row sequences."""
+    ids = (results.get("ids") or [[]])[0]
+    if not ids:
+        return [], [], [], []
+    documents = (results.get("documents") or [[]])[0] or [""] * len(ids)
+    metadatas = (results.get("metadatas") or [[]])[0] or [{} for _ in ids]
+    distances = (results.get("distances") or [[]])[0] or [1.0] * len(ids)
+    return ids, documents, metadatas, distances
 
 
 def search_impl(

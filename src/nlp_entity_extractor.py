@@ -161,6 +161,23 @@ def extract_spacy_entities(text: str, lang: str | None = None) -> list[Extracted
     return entities
 
 
+def _cached_detected_language(text: str) -> str | None:
+    import hashlib as _hashlib
+
+    key = _hashlib.sha256(text[:500].encode()).hexdigest()
+    if key in _sender_lang_cache:
+        _sender_lang_cache.move_to_end(key)
+        return _sender_lang_cache[key]
+    from .language_detector import detect_language
+
+    language = detect_language(text)
+    resolved = None if language == "unknown" else language
+    _sender_lang_cache[key] = resolved
+    if len(_sender_lang_cache) > _LANG_CACHE_MAX:
+        _sender_lang_cache.popitem(last=False)
+    return resolved
+
+
 def extract_nlp_entities(text: str, sender_email: str | None = None, lang: str | None = None) -> list[ExtractedEntity]:
     """Extract entities using spaCy NER + regex, with deduplication.
 
@@ -184,22 +201,7 @@ def extract_nlp_entities(text: str, sender_email: str | None = None, lang: str |
     # sender_email avoids misclassification when a sender writes in multiple
     # languages across different emails.
     if lang is None and is_spacy_available():
-        import hashlib as _hashlib
-
-        text_prefix = text[:500] if text else ""
-        cache_key = _hashlib.sha256(text_prefix.encode()).hexdigest()
-        if cache_key in _sender_lang_cache:
-            _sender_lang_cache.move_to_end(cache_key)  # LRU: mark as recently used
-            lang = _sender_lang_cache[cache_key]
-        else:
-            from .language_detector import detect_language
-
-            lang = detect_language(text)
-            if lang == "unknown":
-                lang = None
-            _sender_lang_cache[cache_key] = lang
-            if len(_sender_lang_cache) > _LANG_CACHE_MAX:
-                _sender_lang_cache.popitem(last=False)  # evict LRU entry
+        lang = _cached_detected_language(text)
 
     # Always get regex entities (URLs, phones, mentions, emails, org-from-domain)
     regex_entities = extract_entities(text, sender_email)

@@ -40,9 +40,9 @@ from .retriever_hybrid import (
     get_sparse_results_impl,
     merge_hybrid_impl,
 )
+from .retriever_models import FilteredSearchRequest, SearchResult
 from .retriever_models import SearchFilters as _SearchFilters
 from .retriever_models import SearchPlan as _SearchPlan
-from .retriever_models import SearchResult
 from .retriever_query import encode_query_impl, query_with_embedding_impl, search_impl
 from .retriever_threads import search_by_thread_impl
 from .storage import get_chroma_client, get_collection
@@ -173,32 +173,7 @@ class EmailRetriever:
         """Execute a collection query from a precomputed embedding."""
         return query_with_embedding_impl(self, query_embedding, n_results, where=where)
 
-    def search_filtered(
-        self,
-        query: str,
-        top_k: int = 10,
-        sender: str | None = None,
-        date_from: str | None = None,
-        date_to: str | None = None,
-        subject: str | None = None,
-        folder: str | None = None,
-        cc: str | None = None,
-        to: str | None = None,
-        bcc: str | None = None,
-        has_attachments: bool | None = None,
-        priority: int | None = None,
-        min_score: float | None = None,
-        email_type: str | None = None,
-        rerank: bool = False,
-        hybrid: bool = False,
-        topic_id: int | None = None,
-        cluster_id: int | None = None,
-        expand_query: bool = False,
-        category: str | None = None,
-        is_calendar: bool | None = None,
-        attachment_name: str | None = None,
-        attachment_type: str | None = None,
-    ) -> list[SearchResult]:
+    def search_filtered(self, query: str, top_k: int = 10, **filter_values: Any) -> list[SearchResult]:
         """Search with optional filters.
 
         Supports: sender, date_from, date_to, subject, folder, cc, to, bcc,
@@ -207,89 +182,15 @@ class EmailRetriever:
         Results are deduplicated per email UID — only the best-scoring chunk
         per email is returned.
         """
-        plan, filters = self._prepare_filtered_search(
-            query=query,
-            top_k=top_k,
-            sender=sender,
-            date_from=date_from,
-            date_to=date_to,
-            subject=subject,
-            folder=folder,
-            cc=cc,
-            to=to,
-            bcc=bcc,
-            has_attachments=has_attachments,
-            priority=priority,
-            min_score=min_score,
-            email_type=email_type,
-            rerank=rerank,
-            hybrid=hybrid,
-            topic_id=topic_id,
-            cluster_id=cluster_id,
-            expand_query=expand_query,
-            category=category,
-            is_calendar=is_calendar,
-            attachment_name=attachment_name,
-            attachment_type=attachment_type,
-        )
+        request = FilteredSearchRequest(query=query, top_k=top_k, **filter_values)
+        plan, filters = self._prepare_filtered_search(request)
         if plan is None:
             return []
         return self._execute_filtered_search(plan, filters)
 
-    def _prepare_filtered_search(
-        self,
-        *,
-        query: str,
-        top_k: int,
-        sender: str | None,
-        date_from: str | None,
-        date_to: str | None,
-        subject: str | None,
-        folder: str | None,
-        cc: str | None,
-        to: str | None,
-        bcc: str | None,
-        has_attachments: bool | None,
-        priority: int | None,
-        min_score: float | None,
-        email_type: str | None,
-        rerank: bool,
-        hybrid: bool,
-        topic_id: int | None,
-        cluster_id: int | None,
-        expand_query: bool,
-        category: str | None,
-        is_calendar: bool | None,
-        attachment_name: str | None,
-        attachment_type: str | None,
-    ) -> tuple[_SearchPlan | None, _SearchFilters]:
+    def _prepare_filtered_search(self, request: FilteredSearchRequest) -> tuple[_SearchPlan | None, _SearchFilters]:
         """Normalize request inputs and derive a search plan."""
-        return prepare_filtered_search_impl(
-            self,
-            query=query,
-            top_k=top_k,
-            sender=sender,
-            date_from=date_from,
-            date_to=date_to,
-            subject=subject,
-            folder=folder,
-            cc=cc,
-            to=to,
-            bcc=bcc,
-            has_attachments=has_attachments,
-            priority=priority,
-            min_score=min_score,
-            email_type=email_type,
-            rerank=rerank,
-            hybrid=hybrid,
-            topic_id=topic_id,
-            cluster_id=cluster_id,
-            expand_query=expand_query,
-            category=category,
-            is_calendar=is_calendar,
-            attachment_name=attachment_name,
-            attachment_type=attachment_type,
-        )
+        return prepare_filtered_search_impl(self, request)
 
     def _resolve_allowed_uids(self, *, topic_id: int | None, cluster_id: int | None) -> set[str] | None:
         """Resolve semantic UID constraints for topic and cluster filters."""
@@ -297,7 +198,8 @@ class EmailRetriever:
             return None
         return self._resolve_semantic_uids(topic_id=topic_id, cluster_id=cluster_id)
 
-    def _validate_filtered_search(self, *, top_k: int, min_score: float | None, filters: _SearchFilters) -> None:
+    @staticmethod
+    def _validate_filtered_search(*, top_k: int, min_score: float | None, filters: _SearchFilters) -> None:
         """Validate normalized filtered-search inputs."""
         if top_k <= 0:
             raise ValueError("top_k must be a positive integer.")

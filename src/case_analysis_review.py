@@ -18,7 +18,7 @@ _REVIEWABLE_TARGET_TYPES = (
 
 def review_provenance_entry(override: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return one review-provenance row."""
-    override = override if isinstance(override, dict) else {}
+    override = as_dict(override)
     return {
         "review_state": str(override.get("review_state") or "machine_extracted"),
         "provenance_status": ("human_override_applied" if override else "machine_output_only"),
@@ -29,32 +29,55 @@ def review_provenance_entry(override: dict[str, Any] | None = None) -> dict[str,
     }
 
 
+def _annotate_rows(rows: list[Any]) -> None:
+    """Attach default provenance to mutable review rows that lack it."""
+    for row in rows:
+        if isinstance(row, dict) and "review_provenance" not in row:
+            row["review_provenance"] = review_provenance_entry()
+
+
+def _apply_override(row: dict[str, Any], override: dict[str, Any]) -> None:
+    """Merge one persisted human override and record its provenance."""
+    row.update(merge_dict(row, as_dict(override.get("override_payload"))))
+    row["review_provenance"] = review_provenance_entry(override)
+
+
+def _apply_keyed_overrides(
+    rows: list[Any], by_target: dict[tuple[str, str], dict[str, Any]], target_type: str, id_field: str
+) -> None:
+    """Apply one target-type override to each matching mutable row."""
+    for row in rows:
+        if isinstance(row, dict):
+            override = by_target.get((target_type, str(row.get(id_field) or "")))
+            if override:
+                _apply_override(row, override)
+
+
+def _apply_evidence_overrides(rows: list[Any], by_target: dict[tuple[str, str], dict[str, Any]]) -> None:
+    """Apply the independent description and issue-tag overrides for evidence rows."""
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        identifiers = (str(row.get("source_id") or ""), str(row.get("exhibit_id") or ""))
+        overrides = [
+            by_target.get((target_type, identifiers[0])) or by_target.get((target_type, identifiers[1]))
+            for target_type in ("exhibit_description", "issue_tag_assignment")
+        ]
+        for override in (item for item in overrides if item):
+            _apply_override(row, override)
+
+
 def annotate_reviewable_items(payload: dict[str, Any]) -> dict[str, Any]:
     """Mark machine-generated reviewable items with default review provenance."""
-    actor_graph = as_dict(payload.get("actor_identity_graph"))
-    for actor in as_list(actor_graph.get("actors")):
-        if isinstance(actor, dict) and "review_provenance" not in actor:
-            actor["review_provenance"] = review_provenance_entry()
-
-    actor_map = as_dict(payload.get("actor_map"))
-    for actor in as_list(actor_map.get("actors")):
-        if isinstance(actor, dict) and "review_provenance" not in actor:
-            actor["review_provenance"] = review_provenance_entry()
-
-    chronology = as_dict(payload.get("master_chronology"))
-    for entry in as_list(chronology.get("entries")):
-        if isinstance(entry, dict) and "review_provenance" not in entry:
-            entry["review_provenance"] = review_provenance_entry()
-
-    evidence_index = as_dict(payload.get("matter_evidence_index"))
-    for row in as_list(evidence_index.get("rows")):
-        if isinstance(row, dict) and "review_provenance" not in row:
-            row["review_provenance"] = review_provenance_entry()
-
-    contradictions = as_dict(payload.get("promise_contradiction_analysis"))
-    for row in as_list(contradictions.get("contradiction_table")):
-        if isinstance(row, dict) and "review_provenance" not in row:
-            row["review_provenance"] = review_provenance_entry()
+    targets = (
+        ("actor_identity_graph", "actors"),
+        ("actor_map", "actors"),
+        ("master_chronology", "entries"),
+        ("matter_evidence_index", "rows"),
+        ("promise_contradiction_analysis", "contradiction_table"),
+    )
+    for section_name, row_name in targets:
+        _annotate_rows(as_list(as_dict(payload.get(section_name)).get(row_name)))
 
     return payload
 
@@ -67,65 +90,20 @@ def apply_review_overrides(payload: dict[str, Any], overrides: list[dict[str, An
         if isinstance(item, dict) and bool(item.get("target_type")) and bool(item.get("target_id"))
     }
 
-    actor_graph = as_dict(payload.get("actor_identity_graph"))
-    for actor in as_list(actor_graph.get("actors")):
-        if not isinstance(actor, dict):
-            continue
-        actor_id = str(actor.get("actor_id") or "")
-        override = by_target.get(("actor_link", actor_id))
-        if not override:
-            continue
-        actor.update(merge_dict(actor, as_dict(override.get("override_payload"))))
-        actor["review_provenance"] = review_provenance_entry(override)
-
-    actor_map = as_dict(payload.get("actor_map"))
-    for actor in as_list(actor_map.get("actors")):
-        if not isinstance(actor, dict):
-            continue
-        actor_id = str(actor.get("actor_id") or "")
-        override = by_target.get(("actor_link", actor_id))
-        if not override:
-            continue
-        actor.update(merge_dict(actor, as_dict(override.get("override_payload"))))
-        actor["review_provenance"] = review_provenance_entry(override)
-
-    chronology = as_dict(payload.get("master_chronology"))
-    for entry in as_list(chronology.get("entries")):
-        if not isinstance(entry, dict):
-            continue
-        chronology_id = str(entry.get("chronology_id") or "")
-        override = by_target.get(("chronology_entry", chronology_id))
-        if not override:
-            continue
-        entry.update(merge_dict(entry, as_dict(override.get("override_payload"))))
-        entry["review_provenance"] = review_provenance_entry(override)
-
-    evidence_index = as_dict(payload.get("matter_evidence_index"))
-    for row in as_list(evidence_index.get("rows")):
-        if not isinstance(row, dict):
-            continue
-        source_id = str(row.get("source_id") or "")
-        exhibit_id = str(row.get("exhibit_id") or "")
-        exhibit_override = by_target.get(("exhibit_description", source_id)) or by_target.get(("exhibit_description", exhibit_id))
-        tag_override = by_target.get(("issue_tag_assignment", source_id)) or by_target.get(("issue_tag_assignment", exhibit_id))
-        applied_override = exhibit_override or tag_override
-        if exhibit_override:
-            row.update(merge_dict(row, as_dict(exhibit_override.get("override_payload"))))
-        if tag_override:
-            row.update(merge_dict(row, as_dict(tag_override.get("override_payload"))))
-        if applied_override:
-            row["review_provenance"] = review_provenance_entry(applied_override)
-
-    contradictions = as_dict(payload.get("promise_contradiction_analysis"))
-    for row in as_list(contradictions.get("contradiction_table")):
-        if not isinstance(row, dict):
-            continue
-        row_id = str(row.get("row_id") or "")
-        override = by_target.get(("contradiction_judgment", row_id))
-        if not override:
-            continue
-        row.update(merge_dict(row, as_dict(override.get("override_payload"))))
-        row["review_provenance"] = review_provenance_entry(override)
+    _apply_keyed_overrides(
+        as_list(as_dict(payload.get("actor_identity_graph")).get("actors")), by_target, "actor_link", "actor_id"
+    )
+    _apply_keyed_overrides(as_list(as_dict(payload.get("actor_map")).get("actors")), by_target, "actor_link", "actor_id")
+    _apply_keyed_overrides(
+        as_list(as_dict(payload.get("master_chronology")).get("entries")), by_target, "chronology_entry", "chronology_id"
+    )
+    _apply_evidence_overrides(as_list(as_dict(payload.get("matter_evidence_index")).get("rows")), by_target)
+    _apply_keyed_overrides(
+        as_list(as_dict(payload.get("promise_contradiction_analysis")).get("contradiction_table")),
+        by_target,
+        "contradiction_judgment",
+        "row_id",
+    )
 
     return payload
 

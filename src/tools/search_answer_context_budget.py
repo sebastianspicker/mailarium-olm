@@ -65,28 +65,24 @@ def _is_weak_evidence_item(item: dict[str, Any]) -> bool:
     return isinstance(attachment, dict) and attachment.get("evidence_strength") == "weak_reference"
 
 
+def _attachment_strength_score(item: dict[str, Any]) -> int:
+    if _is_weak_evidence_item(item):
+        return 0
+    attachment = item.get("attachment")
+    if not isinstance(attachment, dict):
+        return 3
+    if attachment.get("evidence_strength") == "strong_text":
+        return 3
+    return 2 if attachment.get("text_available") else 1
+
+
 def _packing_priority(
     item: dict[str, Any],
     *,
     cited_candidate_uids: list[str],
 ) -> tuple[int, int, int, int, float, int]:
     """Return a best-evidence-first packing priority for one evidence item."""
-    attachment = item.get("attachment")
-    attachment_strength = ""
-    if isinstance(attachment, dict):
-        attachment_strength = str(attachment.get("evidence_strength") or "")
-    is_weak = _is_weak_evidence_item(item)
-    strength_score = 0
-    if not is_weak:
-        if isinstance(attachment, dict):
-            if attachment_strength == "strong_text":
-                strength_score = 3
-            elif attachment.get("text_available"):
-                strength_score = 2
-            else:
-                strength_score = 1
-        else:
-            strength_score = 3
+    strength_score = _attachment_strength_score(item)
     verification_status = str(item.get("verification_status") or "")
     exact_verified = 1 if verification_status in {"retrieval_exact", "forensic_exact", "hybrid_verified_forensic"} else 0
     forensic_verified = 1 if "forensic" in verification_status else 0
@@ -182,6 +178,29 @@ def _estimated_json_chars(payload: dict[str, Any]) -> int:
     return len(json.dumps(payload, indent=2, default=str))
 
 
+def _anchor_timeline_events(events: list[dict[str, Any]], wanted: list[str]) -> tuple[list[dict[str, Any]], set[str]]:
+    kept: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    by_uid = {str(event.get("uid") or ""): event for event in events}
+    for uid in wanted:
+        event = by_uid.get(uid)
+        if event is not None and uid not in seen:
+            kept.append(event)
+            seen.add(uid)
+    return kept, seen
+
+
+def _fill_timeline_events(events: list[dict[str, Any]], kept: list[dict[str, Any]], seen: set[str], max_events: int) -> None:
+    for event in events:
+        event_uid = str(event.get("uid") or "")
+        if event_uid in seen:
+            continue
+        if len(kept) >= max_events:
+            return
+        kept.append(event)
+        seen.add(event_uid)
+
+
 def _compact_timeline_events(
     timeline: dict[str, Any],
     *,
@@ -195,23 +214,8 @@ def _compact_timeline_events(
     last_uid = str(timeline.get("last_uid") or "")
     key_transition_uid = str(timeline.get("key_transition_uid") or "")
     wanted = [uid for uid in [first_uid, key_transition_uid, last_uid] if uid]
-    kept: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for uid in wanted:
-        for event in events:
-            event_uid = str(event.get("uid") or "")
-            if event_uid == uid and event_uid not in seen:
-                kept.append(event)
-                seen.add(event_uid)
-                break
-    for event in events:
-        event_uid = str(event.get("uid") or "")
-        if event_uid in seen:
-            continue
-        if len(kept) >= max_events:
-            break
-        kept.append(event)
-        seen.add(event_uid)
+    kept, seen = _anchor_timeline_events(events, wanted)
+    _fill_timeline_events(events, kept, seen, max_events)
     compacted = {**timeline, "event_count": len(kept), "events": kept}
     return compacted, len(events) - len(kept)
 
@@ -237,26 +241,46 @@ def _summarize_timeline_for_budget(timeline: dict[str, Any]) -> tuple[dict[str, 
     }, dropped
 
 
+def _compact_conversation_group(group: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "conversation_id": str(group.get("conversation_id") or ""),
+        "inferred_thread_id": str(group.get("inferred_thread_id") or ""),
+        "thread_group_id": str(group.get("thread_group_id") or ""),
+        "thread_group_source": str(group.get("thread_group_source") or ""),
+        "top_uid": str(group.get("top_uid") or ""),
+        "message_count": int(group.get("message_count") or 0),
+        "date_range": dict(group.get("date_range") or {}),
+        "participants": list(group.get("participants") or [])[:2],
+        "matched_uids": [str(uid) for uid in list(group.get("matched_uids") or [])[:2] if uid],
+    }
+
+
 def _summarize_conversation_groups_for_budget(groups: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     """Return compact conversation-group summaries for tight response budgets."""
     if not groups:
         return groups, 0
-    kept: list[dict[str, Any]] = []
-    for group in groups[:1]:
-        kept.append(
-            {
-                "conversation_id": str(group.get("conversation_id") or ""),
-                "inferred_thread_id": str(group.get("inferred_thread_id") or ""),
-                "thread_group_id": str(group.get("thread_group_id") or ""),
-                "thread_group_source": str(group.get("thread_group_source") or ""),
-                "top_uid": str(group.get("top_uid") or ""),
-                "message_count": int(group.get("message_count") or 0),
-                "date_range": dict(group.get("date_range") or {}),
-                "participants": list(group.get("participants") or [])[:2],
-                "matched_uids": [str(uid) for uid in list(group.get("matched_uids") or [])[:2] if uid],
-            }
-        )
+    kept = [_compact_conversation_group(group) for group in groups[:1]]
     return kept, max(0, len(groups) - len(kept))
+
+
+def _pop_fields(item: dict[str, Any], fields: list[str]) -> int:
+    changes = 0
+    for field in fields:
+        if field in item:
+            item.pop(field, None)
+            changes += 1
+    return changes
+
+
+def _compact_attachment_field(candidate: dict[str, Any]) -> int:
+    attachment = candidate.get("attachment")
+    if not isinstance(attachment, dict):
+        return 0
+    compact = {"filename": attachment.get("filename"), "extraction_state": attachment.get("extraction_state")}
+    if compact == attachment:
+        return 0
+    candidate["attachment"] = compact
+    return 1
 
 
 def _strip_optional_evidence_fields(
@@ -268,37 +292,12 @@ def _strip_optional_evidence_fields(
     """Remove optional heavy fields from evidence items and return count of changes."""
     changes = 0
     for item in [*candidates, *attachment_candidates]:
-        if "conversation_context" in item:
-            item.pop("conversation_context", None)
-            changes += 1
-        if "follow_up" in item:
-            item.pop("follow_up", None)
-            changes += 1
-        if "thread_graph" in item:
-            item.pop("thread_graph", None)
-            changes += 1
-        if "sender_name" in item:
-            item.pop("sender_name", None)
-            changes += 1
-        if "conversation_id" in item:
-            item.pop("conversation_id", None)
-            changes += 1
+        changes += _pop_fields(item, ["conversation_context", "follow_up", "thread_graph", "sender_name", "conversation_id"])
     for candidate in candidates:
         removable_fields = ["body_render_mode", "body_render_source", "verification_status", "speaker_attribution"]
         if force_deep_candidate_analysis_strip:
             removable_fields.extend(["language_rhetoric", "message_findings", "reply_pairing"])
-        for field in removable_fields:
-            if field in candidate:
-                candidate.pop(field, None)
-                changes += 1
+        changes += _pop_fields(candidate, removable_fields)
     for attachment_candidate in attachment_candidates:
-        attachment = attachment_candidate.get("attachment")
-        if isinstance(attachment, dict):
-            compact_attachment = {
-                "filename": attachment.get("filename"),
-                "extraction_state": attachment.get("extraction_state"),
-            }
-            if compact_attachment != attachment:
-                attachment_candidate["attachment"] = compact_attachment
-                changes += 1
+        changes += _compact_attachment_field(attachment_candidate)
     return changes

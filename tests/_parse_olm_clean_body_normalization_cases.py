@@ -1,30 +1,44 @@
-# ruff: noqa: F401
 """Extended tests for src/parse_olm.py — targeting uncovered lines."""
 
 from __future__ import annotations
 
-import base64
-import zipfile
-from pathlib import Path
+import time
 
-import pytest
-from lxml import etree
-
-from src.olm_xml_helpers import (
-    _detect_namespace,
-    _extract_attachment_contents,
-    _extract_attachment_field,
-    _extract_html_body,
-    _find,
-    _find_text,
-)
 from src.parse_olm import (
-    _NS_OUTLOOK,
     Email,
-    _parse_email_xml,
-    parse_olm,
 )
-from src.parse_olm_normalization import BODY_NORMALIZATION_VERSION
+from src.parse_olm_normalization import (
+    BODY_NORMALIZATION_VERSION,
+    _has_newsletter_hint,
+    _has_normalized_quoted_separator,
+    _has_sent_from_footer,
+    _is_normalized_quoted_separator,
+    _is_normalized_reply_header_line,
+    _is_outlook_separator_line,
+    _normalized_body_noise_score,
+)
+
+
+def test_normalization_line_parsers_preserve_regex_parity() -> None:
+    assert _is_normalized_reply_header_line("From: Alice")
+    assert _is_normalized_reply_header_line("Envoyée: vendredi")
+    assert _is_normalized_reply_header_line("Wysłano: poniedziałek")
+    assert not _is_normalized_reply_header_line("From:")
+    assert _is_normalized_quoted_separator("----- Original Message -----")
+    assert _is_normalized_quoted_separator("-- Ursprüngliche Nachricht")
+    assert _has_normalized_quoted_separator("Lead\n-- Forwarded message --\nBody")
+    assert _is_outlook_separator_line("__________")
+    assert not _is_outlook_separator_line("_________")
+    assert _has_sent_from_footer("Body\nSent from my iPhone")
+    assert _has_newsletter_hint("To stop these messages, unsubscribe here.")
+
+
+def test_normalization_line_parsers_are_linear_on_adversarial_input() -> None:
+    adversarial = ("From-not-a-header " * 20_000) + "\n" + ("_-" * 50_000)
+    started = time.perf_counter()
+    _normalized_body_noise_score(adversarial)
+    assert time.perf_counter() - started < 1.0
+
 
 # ── Email.uid fallback (lines 98-99) ─────────────────────────
 

@@ -8,6 +8,15 @@ from typing import Any
 from .behavioral_interpretation_policy import classify_claim_level, guarded_statement_for_finding
 from .investigation_report_sections import _as_dict, _as_list, _title
 
+_TRIAGE_INSUFFICIENCY_REASON = (
+    "The current case bundle does not yet contain enough evidence to triage direct support, "
+    "inference, unresolved points, or missing proof."
+)
+_TRIAGE_UNRESOLVED_POLICY_REASON = (
+    "This point remains outside the direct-evidence layer because ambiguity, weakness, low confidence, "
+    "or live alternative explanations still limit the current read."
+)
+
 
 def strength_rank(label: str) -> int:
     """Rank evidence-strength labels for stable ordering."""
@@ -228,58 +237,13 @@ def evidence_triage_section(
     unresolved_points: list[dict[str, Any]] = []
 
     for finding in ordered_findings(findings):
-        statement, _, policy_reason, ambiguity_disclosures, alternative_explanations = guarded_statement_for_finding(finding)
-        claim_level, _ = classify_claim_level(finding)
-        evidence_strength = str(_as_dict(finding.get("evidence_strength")).get("label") or "insufficient_evidence")
-        interpretation_confidence = str(
-            _as_dict(_as_dict(finding.get("confidence_split")).get("interpretation_confidence")).get("label") or "low"
-        )
-
-        if claim_level == "observed_fact":
-            direct_evidence.append(
-                triage_entry_for_finding(
-                    finding,
-                    entry_prefix="triage:direct",
-                    statement=statement,
-                    policy_reason=policy_reason,
-                    ambiguity_disclosures=ambiguity_disclosures,
-                    alternative_explanations=alternative_explanations,
-                )
-            )
-        elif claim_level in {"pattern_concern", "stronger_interpretation"}:
-            reasonable_inference.append(
-                triage_entry_for_finding(
-                    finding,
-                    entry_prefix="triage:inference",
-                    statement=statement,
-                    policy_reason=policy_reason,
-                    ambiguity_disclosures=ambiguity_disclosures,
-                    alternative_explanations=alternative_explanations,
-                )
-            )
-
-        unresolved_reasons = unresolved_reason_list(
-            claim_level=claim_level,
-            evidence_strength=evidence_strength,
-            interpretation_confidence=interpretation_confidence,
-            ambiguity_disclosures=ambiguity_disclosures,
-            alternative_explanations=alternative_explanations,
-        )
-        if unresolved_reasons:
-            label = _title(str(finding.get("finding_label") or "finding")).lower()
-            unresolved_points.append(
-                triage_entry_for_finding(
-                    finding,
-                    entry_prefix="triage:unresolved",
-                    statement=f"Whether the current record ultimately proves {label} remains unresolved.",
-                    policy_reason=(
-                        "This point remains outside the direct-evidence layer because ambiguity, weakness, low confidence, "
-                        "or live alternative explanations still limit the current read."
-                    ),
-                    ambiguity_disclosures=unresolved_reasons,
-                    alternative_explanations=alternative_explanations,
-                )
-            )
+        direct, inference, unresolved = _triage_finding(finding)
+        if direct:
+            direct_evidence.append(direct)
+        if inference:
+            reasonable_inference.append(inference)
+        if unresolved:
+            unresolved_points.append(unresolved)
 
     missing_proof = [
         {
@@ -306,17 +270,73 @@ def evidence_triage_section(
         "title": "Evidence Triage",
         "status": "supported" if has_content else "insufficient_evidence",
         "entries": [],
-        "insufficiency_reason": (
-            ""
-            if has_content
-            else (
-                "The current case bundle does not yet contain enough evidence to triage direct support, "
-                "inference, unresolved points, or missing proof."
-            )
-        ),
+        "insufficiency_reason": "" if has_content else _TRIAGE_INSUFFICIENCY_REASON,
         "summary": summary,
         "direct_evidence": direct_evidence[:4],
         "reasonable_inference": reasonable_inference[:4],
         "unresolved_points": unresolved_points[:4],
         "missing_proof": missing_proof[:4],
     }
+
+
+def _triage_finding(finding: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    statement, _, policy_reason, ambiguity, alternatives = guarded_statement_for_finding(finding)
+    claim_level, _ = classify_claim_level(finding)
+    direct, inference = _triage_supported_entry(finding, claim_level, statement, policy_reason, ambiguity, alternatives)
+    unresolved = _triage_unresolved_entry(finding, claim_level, ambiguity, alternatives)
+    return direct, inference, unresolved
+
+
+def _triage_supported_entry(
+    finding: dict[str, Any], claim_level: str, statement: str, policy_reason: str, ambiguity: list[str], alternatives: list[str]
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    if claim_level == "observed_fact":
+        return (
+            triage_entry_for_finding(
+                finding,
+                entry_prefix="triage:direct",
+                statement=statement,
+                policy_reason=policy_reason,
+                ambiguity_disclosures=ambiguity,
+                alternative_explanations=alternatives,
+            ),
+            None,
+        )
+    if claim_level in {"pattern_concern", "stronger_interpretation"}:
+        return (
+            None,
+            triage_entry_for_finding(
+                finding,
+                entry_prefix="triage:inference",
+                statement=statement,
+                policy_reason=policy_reason,
+                ambiguity_disclosures=ambiguity,
+                alternative_explanations=alternatives,
+            ),
+        )
+    return None, None
+
+
+def _triage_unresolved_entry(
+    finding: dict[str, Any], claim_level: str, ambiguity: list[str], alternatives: list[str]
+) -> dict[str, Any] | None:
+    strength = str(_as_dict(finding.get("evidence_strength")).get("label") or "insufficient_evidence")
+    confidence = str(_as_dict(_as_dict(finding.get("confidence_split")).get("interpretation_confidence")).get("label") or "low")
+    reasons = unresolved_reason_list(
+        claim_level=claim_level,
+        evidence_strength=strength,
+        interpretation_confidence=confidence,
+        ambiguity_disclosures=ambiguity,
+        alternative_explanations=alternatives,
+    )
+    if not reasons:
+        return None
+    label = _title(str(finding.get("finding_label") or "finding")).lower()
+    return triage_entry_for_finding(
+        finding,
+        entry_prefix="triage:unresolved",
+        statement=f"Whether the current record ultimately proves {label} remains unresolved.",
+        policy_reason=_TRIAGE_UNRESOLVED_POLICY_REASON,
+        ambiguity_disclosures=reasons,
+        alternative_explanations=alternatives,
+    )

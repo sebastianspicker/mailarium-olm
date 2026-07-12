@@ -4,7 +4,39 @@ from src.investigation_report import build_investigation_report
 
 
 def test_build_investigation_report_uses_guarded_pattern_concern_wording_for_interpretive_findings():
-    report = build_investigation_report(
+    report = _fixture_test_build_investigation_report_uses_guarded_pattern_concern_wording_for_interpretive_findings_report()
+
+    executive_entry = report["sections"]["executive_summary"]["entries"][1]
+    assert executive_entry["claim_level"] == "pattern_concern"
+    assert "raises a concern pattern" in executive_entry["statement"].lower()
+    assert "motive" not in executive_entry["statement"].lower()
+    assert "legal conclusion" not in executive_entry["statement"].lower()
+    overall = report["sections"]["overall_assessment"]
+    assert overall["primary_assessment"] == "insufficient_evidence"
+    assert overall["assessment_strength"] == "weak_indicator"
+    assert overall["secondary_plausible_interpretations"] == ["retaliation_concern", "poor_communication_or_process_noise"]
+    assert "The strongest supported findings remain in the weak-indicator range." in overall["downgrade_reasons"]
+    assert "insufficient evidence" in overall["entries"][0]["statement"].lower()
+    triage = report["sections"]["evidence_triage"]
+    assert triage["summary"]["direct_evidence_count"] == 0
+    assert triage["summary"]["reasonable_inference_count"] == 1
+    assert triage["summary"]["unresolved_point_count"] == 1
+    assert "proves retaliatory sequence remains unresolved" in triage["unresolved_points"][0]["statement"].lower()
+
+
+def test_build_investigation_report_surfaces_mixed_evidence_in_overall_assessment():
+    report = _fixture_test_build_investigation_report_surfaces_mixed_evidence_in_overall_assessment_report()
+
+    overall = report["sections"]["overall_assessment"]
+    assert overall["primary_assessment"] == "targeted_hostility_concern"
+    assert "The current record contains mixed evidence and material alternative explanations." in overall["downgrade_reasons"]
+    mixed_entry = next(entry for entry in overall["entries"] if entry["entry_id"] == "overall:mixed_evidence")
+    assert "record remains mixed" in mixed_entry["statement"].lower()
+    assert len(mixed_entry["alternative_explanations"]) == 2
+
+
+def _fixture_test_build_investigation_report_uses_guarded_pattern_concern_wording_for_interpretive_findings_report():
+    return build_investigation_report(
         case_bundle={"scope": {"trigger_events": []}},
         candidates=[],
         timeline={},
@@ -81,26 +113,9 @@ def test_build_investigation_report_uses_guarded_pattern_concern_wording_for_int
         },
     )
 
-    executive_entry = report["sections"]["executive_summary"]["entries"][1]
-    assert executive_entry["claim_level"] == "pattern_concern"
-    assert "raises a concern pattern" in executive_entry["statement"].lower()
-    assert "motive" not in executive_entry["statement"].lower()
-    assert "legal conclusion" not in executive_entry["statement"].lower()
-    overall = report["sections"]["overall_assessment"]
-    assert overall["primary_assessment"] == "insufficient_evidence"
-    assert overall["assessment_strength"] == "weak_indicator"
-    assert overall["secondary_plausible_interpretations"] == ["retaliation_concern", "poor_communication_or_process_noise"]
-    assert "The strongest supported findings remain in the weak-indicator range." in overall["downgrade_reasons"]
-    assert "insufficient evidence" in overall["entries"][0]["statement"].lower()
-    triage = report["sections"]["evidence_triage"]
-    assert triage["summary"]["direct_evidence_count"] == 0
-    assert triage["summary"]["reasonable_inference_count"] == 1
-    assert triage["summary"]["unresolved_point_count"] == 1
-    assert "proves retaliatory sequence remains unresolved" in triage["unresolved_points"][0]["statement"].lower()
 
-
-def test_build_investigation_report_surfaces_mixed_evidence_in_overall_assessment():
-    report = build_investigation_report(
+def _fixture_test_build_investigation_report_surfaces_mixed_evidence_in_overall_assessment_report():
+    return build_investigation_report(
         case_bundle={"scope": {"trigger_events": []}},
         candidates=[],
         timeline={},
@@ -199,10 +214,3 @@ def test_build_investigation_report_surfaces_mixed_evidence_in_overall_assessmen
             "source_links": [],
         },
     )
-
-    overall = report["sections"]["overall_assessment"]
-    assert overall["primary_assessment"] == "targeted_hostility_concern"
-    assert "The current record contains mixed evidence and material alternative explanations." in overall["downgrade_reasons"]
-    mixed_entry = next(entry for entry in overall["entries"] if entry["entry_id"] == "overall:mixed_evidence")
-    assert "record remains mixed" in mixed_entry["statement"].lower()
-    assert len(mixed_entry["alternative_explanations"]) == 2

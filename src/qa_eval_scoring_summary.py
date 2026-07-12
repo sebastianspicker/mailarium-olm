@@ -8,7 +8,7 @@ import re
 from collections import Counter
 from typing import Any
 
-from .qa_eval_cases import QuestionCase
+from .qa_eval_scoring_core import _average_metric
 
 _ANSWER_TERM_RE = re.compile(r"[0-9a-zA-ZäöüÄÖÜß._-]+")
 _ANSWER_STOPWORDS = {
@@ -55,8 +55,6 @@ _ANSWER_STOPWORDS = {
     "with",
     "without",
 }
-
-# ruff: noqa: F401,F821
 
 
 def summarize_evaluation(results: list[dict[str, Any]]) -> dict[str, Any]:

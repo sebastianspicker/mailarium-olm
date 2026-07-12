@@ -7,6 +7,16 @@ and this project adheres to semantic versioning principles for public interfaces
 
 ## [Unreleased]
 
+### Changed: Publication Hygiene
+
+- Removed stale local audit and verification-log artifacts from the tracked
+  public documentation surface.
+- Ignored CodeGraph, Serena, local audit-report, and remediation-ledger state.
+- Updated the public docs to describe the verified 2026-07-12 local checkout
+  without implying a release, remote publication, or Codacy Cloud closure.
+- Clarified that tracked `.live.json` QA assets are synthetic frozen regression
+  scenarios; real run output remains under ignored `private/` paths.
+
 ## [0.2.0] - 2026-04-21
 
 ### Release Polish Highlights
@@ -32,7 +42,7 @@ and this project adheres to semantic versioning principles for public interfaces
 - **`get_settings()` cache could be stale** -- `cache_clear()` called after `load_dotenv()` so settings reflect `.env` values.
 - **Image attachment chunk IDs used `::` separator** -- changed to `__img_` for consistency with ChromaDB ID conventions.
 
-### Changed
+### Changed: Integration & Polish Pass
 
 - CI: bumped `actions/checkout` to v6.0.2 and `actions/setup-python` to v6.2.0 (Dependabot PRs #5 and #6).
 - Gitignore: added `data/mcp_server.lock` (runtime PID lock file should not be tracked).
@@ -161,7 +171,7 @@ The sections below retain implementation and audit detail that matters for maint
 
 - **Evidence Management**: `evidence_add`, `evidence_add_batch`, `evidence_list`, `evidence_get`, `evidence_update`, `evidence_remove`, `evidence_search`, `evidence_verify`, `evidence_export`, `evidence_stats`, `evidence_timeline`, `evidence_categories`.
 
-#### New CLI Flags
+#### New CLI Flags: Search and Analysis
 
 - `--evidence-list` — list evidence items with optional `--category` and `--min-relevance` filters.
 - `--evidence-export PATH` — export evidence report.
@@ -241,7 +251,7 @@ The sections below retain implementation and audit detail that matters for maint
 - **Data Quality**: `email_find_duplicates`, `email_language_stats`, `email_sentiment_overview`.
 - **Reporting & Export**: `email_generate_report`, `email_export_network`, `email_writing_analysis`.
 
-#### New CLI Flags
+#### New CLI Flags: Proof Dossier
 
 - `--to`, `--bcc`, `--has-attachments`, `--priority`, `--email-type` filters.
 - `--rerank`, `--hybrid`, `--expand-query` search mode flags.
@@ -352,7 +362,7 @@ The sections below retain implementation and audit detail that matters for maint
 - `--custody-chain` — view chain-of-custody audit trail.
 - `--provenance UID` — view email provenance (OLM source hash, ingestion run, custody events).
 
-### Changed
+### Changed: Provider Simplification
 
 - Removed provider-specific SDK dependency — MCP server is now the sole client integration point.
 - Removed provider-specific synthesis from CLI; results are always shown as formatted retrieval output.
@@ -381,7 +391,7 @@ The sections below retain implementation and audit detail that matters for maint
 
 ## [0.1.0] - 2026-03-02
 
-### Added
+### Added: Initial Release
 
 - Initial public release for local Outlook email RAG.
 - Interfaces:

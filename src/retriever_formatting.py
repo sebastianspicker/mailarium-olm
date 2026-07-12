@@ -23,6 +23,88 @@ def _result_header(result_num: int, result: SearchResult) -> str:
     return f"=== Email Result {result_num} (relevance: {result.score:.2f}) ==="
 
 
+def _group_results(results: list[SearchResult]) -> tuple[dict[str, list[SearchResult]], list[SearchResult]]:
+    """Separate conversation members from standalone results in input order."""
+    threads: dict[str, list[SearchResult]] = {}
+    standalone: list[SearchResult] = []
+    for result in results:
+        conversation_id = str(result.metadata.get("conversation_id", "") or "").strip()
+        if conversation_id:
+            threads.setdefault(conversation_id, []).append(result)
+        else:
+            standalone.append(result)
+    return threads, standalone
+
+
+def _result_parts(result_num: int, result: SearchResult, body_limit: int) -> tuple[str, str]:
+    """Create a stable result header and bounded body block."""
+    return _result_header(result_num, result), format_context_block(
+        result.text, result.metadata, result.score, max_body_chars=body_limit
+    )
+
+
+def _append_result_if_fits(
+    parts: list[str], running_tokens: int, response_limit: int, header: str, block: str
+) -> tuple[int, bool]:
+    """Append one fully-rendered result only when the response budget permits it."""
+    result_tokens = estimate_tokens(header) + estimate_tokens(block)
+    if response_limit > 0 and running_tokens + estimate_tokens(f"{header}\n{block}") > response_limit:
+        return running_tokens, False
+    parts.extend((header, block))
+    return running_tokens + result_tokens, True
+
+
+def _append_thread_groups(
+    parts: list[str],
+    thread_groups: dict[str, list[SearchResult]],
+    standalone: list[SearchResult],
+    body_limit: int,
+    response_limit: int,
+    running_tokens: int,
+) -> tuple[int, int, int, bool]:
+    """Append multi-email threads and return rendering state for standalone results."""
+    result_num = 1
+    emitted = 0
+    for members in thread_groups.values():
+        if len(members) < 2:
+            standalone.extend(members)
+            continue
+        members.sort(key=lambda result: str(result.metadata.get("date", "")))
+        thread_header = f"--- Conversation Thread ({len(members)} emails) ---"
+        parts.append(thread_header)
+        running_tokens += estimate_tokens(thread_header)
+        for result in members:
+            header, block = _result_parts(result_num, result, body_limit)
+            running_tokens, appended = _append_result_if_fits(parts, running_tokens, response_limit, header, block)
+            if not appended:
+                return result_num, emitted, running_tokens, True
+            result_num += 1
+            emitted += 1
+        parts.append("--- End Thread ---\n")
+        running_tokens += estimate_tokens(parts[-1])
+    return result_num, emitted, running_tokens, False
+
+
+def _append_standalone_results(
+    parts: list[str],
+    standalone: list[SearchResult],
+    body_limit: int,
+    response_limit: int,
+    result_num: int,
+    emitted: int,
+    running_tokens: int,
+) -> tuple[int, bool]:
+    """Append unthreaded results, preserving their original retrieval order."""
+    for result in standalone:
+        header, block = _result_parts(result_num, result, body_limit)
+        running_tokens, appended = _append_result_if_fits(parts, running_tokens, response_limit, header, block)
+        if not appended:
+            return emitted, True
+        result_num += 1
+        emitted += 1
+    return emitted, False
+
+
 def format_results_for_llm_impl(
     retriever: EmailRetriever,
     results: list[SearchResult],
@@ -45,74 +127,16 @@ def format_results_for_llm_impl(
         f"Found {len(results)} relevant email(s):\n",
     ]
 
-    thread_groups: dict[str, list[tuple[int, SearchResult]]] = {}
-    standalone: list[tuple[int, SearchResult]] = []
+    thread_groups, standalone = _group_results(results)
 
-    for index, result in enumerate(results):
-        conv_id = str(result.metadata.get("conversation_id", "") or "").strip()
-        if conv_id:
-            thread_groups.setdefault(conv_id, []).append((index, result))
-        else:
-            standalone.append((index, result))
-
-    result_num = 1
-    emitted = 0
-    budget_exhausted = False
     running_tokens = sum(estimate_tokens(part) for part in parts)
-
-    def within_budget(new_block: str) -> bool:
-        if response_limit <= 0:
-            return True
-        return running_tokens + estimate_tokens(new_block) <= response_limit
-
-    def append_part(text: str) -> None:
-        nonlocal running_tokens
-        parts.append(text)
-        running_tokens += estimate_tokens(text)
-
-    for members in thread_groups.values():
-        if budget_exhausted:
-            break
-        if len(members) >= 2:
-            members.sort(key=lambda member: str(member[1].metadata.get("date", "")))
-            append_part(f"--- Conversation Thread ({len(members)} emails) ---")
-            for _, result in members:
-                block = format_context_block(
-                    result.text,
-                    result.metadata,
-                    result.score,
-                    max_body_chars=body_limit,
-                )
-                header = _result_header(result_num, result)
-                if not within_budget(header + "\n" + block):
-                    budget_exhausted = True
-                    break
-                append_part(header)
-                append_part(block)
-                result_num += 1
-                emitted += 1
-            if not budget_exhausted:
-                append_part("--- End Thread ---\n")
-        else:
-            standalone.extend(members)
-
-    for _, result in standalone:
-        if budget_exhausted:
-            break
-        block = format_context_block(
-            result.text,
-            result.metadata,
-            result.score,
-            max_body_chars=body_limit,
+    result_num, emitted, running_tokens, budget_exhausted = _append_thread_groups(
+        parts, thread_groups, standalone, body_limit, response_limit, running_tokens
+    )
+    if not budget_exhausted:
+        emitted, budget_exhausted = _append_standalone_results(
+            parts, standalone, body_limit, response_limit, result_num, emitted, running_tokens
         )
-        header = _result_header(result_num, result)
-        if not within_budget(header + "\n" + block):
-            budget_exhausted = True
-            break
-        append_part(header)
-        append_part(block)
-        result_num += 1
-        emitted += 1
 
     remaining = len(results) - emitted
     if budget_exhausted and remaining > 0:

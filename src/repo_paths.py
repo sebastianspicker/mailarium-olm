@@ -24,6 +24,7 @@ _DEFAULT_RUNTIME_ROOTS = (
 
 
 def _split_env_path_list(raw: str) -> list[str]:
+    """Split an environment path list string by the OS path separator."""
     return [part.strip() for part in raw.split(os.pathsep) if part.strip()]
 
 
@@ -33,6 +34,7 @@ def repo_root() -> Path:
 
 
 def _normalized_roots(default_roots: tuple[str, ...], *, env_var: str) -> tuple[Path, ...]:
+    """Get normalized path roots from defaults and environment variable."""
     root = repo_root()
     configured = _split_env_path_list(os.getenv(env_var, ""))
     roots: list[Path] = [root / rel for rel in default_roots]
@@ -49,6 +51,7 @@ def _normalized_roots(default_roots: tuple[str, ...], *, env_var: str) -> tuple[
 
 
 def _validate_contained_path(value: str, *, field_name: str, roots: tuple[Path, ...], label: str) -> Path:
+    """Validate that a path is contained within one of the allowed roots."""
     normalized = normalize_local_path(value, field_name=field_name)
     if any(normalized.is_relative_to(root) for root in roots):
         return normalized
@@ -67,6 +70,7 @@ def normalize_local_path(value: str, *, field_name: str = "path") -> Path:
 
 @lru_cache(maxsize=1)
 def _tracked_repo_paths() -> frozenset[str]:
+    """Get all paths tracked by git in the repository."""
     git_path = shutil.which("git") or "git"
     completed = subprocess.run(  # nosemgrep
         [git_path, "ls-files", "-z"],
@@ -80,6 +84,7 @@ def _tracked_repo_paths() -> frozenset[str]:
 
 
 def _is_tracked_repo_path(path: Path) -> bool:
+    """Check if a path is tracked by git in the repository."""
     root = repo_root()
     try:
         relative = path.resolve().relative_to(root).as_posix()

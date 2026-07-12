@@ -1,14 +1,8 @@
-# ruff: noqa: F401
 """Targeted coverage tests for src/retriever.py uncovered lines.
 
 Each test targets a specific branch or code path identified by coverage analysis.
 All tests run without GPU, real models, or network access.
 """
-
-import types
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from src.retriever import EmailRetriever, SearchResult
 

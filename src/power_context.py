@@ -24,41 +24,40 @@ def _enrich_person_ref(person: dict[str, Any], actor_graph: dict[str, Any]) -> d
 def build_power_context(case_scope: Any | None, actor_graph: dict[str, Any]) -> dict[str, Any]:
     """Build case-scoped power-context output from structured BA3 inputs."""
     if case_scope is None:
-        return {
-            "org_context_provided": False,
-            "missing_org_context": True,
-            "supplied_role_facts": [],
-            "reporting_lines": [],
-            "dependency_relations": [],
-            "vulnerability_contexts": [],
-            "inferred_hierarchy_hints": [],
-        }
+        return _missing_power_context([])
 
     org_context = getattr(case_scope, "org_context", None)
     if org_context is None:
-        inferred_hints: list[dict[str, Any]] = []
-        for actor in actor_graph.get("actors", []):
-            if not isinstance(actor, dict):
-                continue
-            for hint in actor.get("role_hints", []) or []:
-                hint_text = str(hint or "").strip().lower()
-                if hint_text in {"manager", "hr", "admin", "external", "peer"}:
-                    inferred_hints.append(
-                        {
-                            "actor_id": actor.get("actor_id"),
-                            "hint": hint_text,
-                            "source": "case_party.role_hint",
-                        }
-                    )
-        return {
-            "org_context_provided": False,
-            "missing_org_context": True,
-            "supplied_role_facts": [],
-            "reporting_lines": [],
-            "dependency_relations": [],
-            "vulnerability_contexts": [],
-            "inferred_hierarchy_hints": inferred_hints,
-        }
+        return _missing_power_context(_inferred_hierarchy_hints(actor_graph))
+
+    return _supplied_power_context(org_context, actor_graph)
+
+
+def _missing_power_context(inferred_hints: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "org_context_provided": False,
+        "missing_org_context": True,
+        "supplied_role_facts": [],
+        "reporting_lines": [],
+        "dependency_relations": [],
+        "vulnerability_contexts": [],
+        "inferred_hierarchy_hints": inferred_hints,
+    }
+
+
+def _inferred_hierarchy_hints(actor_graph: dict[str, Any]) -> list[dict[str, Any]]:
+    inferred_hints: list[dict[str, Any]] = []
+    for actor in actor_graph.get("actors", []):
+        if not isinstance(actor, dict):
+            continue
+        for hint in actor.get("role_hints", []) or []:
+            hint_text = str(hint or "").strip().lower()
+            if hint_text in {"manager", "hr", "admin", "external", "peer"}:
+                inferred_hints.append({"actor_id": actor.get("actor_id"), "hint": hint_text, "source": "case_party.role_hint"})
+    return inferred_hints
+
+
+def _supplied_power_context(org_context: Any, actor_graph: dict[str, Any]) -> dict[str, Any]:
 
     supplied_role_facts = [
         {
@@ -167,20 +166,25 @@ def apply_power_context_to_actor_graph(actor_graph: dict[str, Any], power_contex
             "vulnerability_contexts": [],
         }
 
-    for role_fact in power_context.get("supplied_role_facts", []):
-        if not isinstance(role_fact, dict):
-            continue
-        actor_id = str((role_fact.get("person") or {}).get("actor_id") or "")
-        if actor_id and actor_id in actor_map:
-            actor_map[actor_id]["role_context"]["supplied_role_facts"].append(role_fact)
+    _attach_person_items(actor_map, power_context, "supplied_role_facts", "person")
+    _attach_person_items(actor_map, power_context, "inferred_hierarchy_hints", None)
+    _attach_dependencies(actor_map, power_context)
+    _attach_person_items(actor_map, power_context, "vulnerability_contexts", "person")
 
-    for hint in power_context.get("inferred_hierarchy_hints", []):
-        if not isinstance(hint, dict):
-            continue
-        actor_id = str(hint.get("actor_id") or "")
-        if actor_id and actor_id in actor_map:
-            actor_map[actor_id]["role_context"]["inferred_hierarchy_hints"].append(hint)
 
+def _attach_person_items(
+    actor_map: dict[str, dict[str, Any]], power_context: dict[str, Any], collection: str, person_key: str | None
+) -> None:
+    for item in power_context.get(collection, []):
+        if not isinstance(item, dict):
+            continue
+        person = item.get(person_key) or {} if person_key else item
+        actor_id = str(person.get("actor_id") or "")
+        if actor_id and actor_id in actor_map:
+            actor_map[actor_id]["role_context"][collection].append(item)
+
+
+def _attach_dependencies(actor_map: dict[str, dict[str, Any]], power_context: dict[str, Any]) -> None:
     for relation in power_context.get("dependency_relations", []):
         if not isinstance(relation, dict):
             continue
@@ -190,10 +194,3 @@ def apply_power_context_to_actor_graph(actor_graph: dict[str, Any], power_contex
             actor_map[controller_id]["role_context"]["dependencies_as_controller"].append(relation)
         if dependent_id and dependent_id in actor_map:
             actor_map[dependent_id]["role_context"]["dependencies_as_dependent"].append(relation)
-
-    for context in power_context.get("vulnerability_contexts", []):
-        if not isinstance(context, dict):
-            continue
-        actor_id = str((context.get("person") or {}).get("actor_id") or "")
-        if actor_id and actor_id in actor_map:
-            actor_map[actor_id]["role_context"]["vulnerability_contexts"].append(context)

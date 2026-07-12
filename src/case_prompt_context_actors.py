@@ -7,16 +7,14 @@ import re
 import unicodedata
 from typing import Any
 
+from ._utils import _compact
+
 _EMAIL_RE = re.compile(r"(?i)\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b")
 _NATURAL_PERSONS_RE = re.compile(r"(?im)^\s*[-*]\s*natural persons:\s*(.+)$")
 _FUNCTIONAL_ACTORS_RE = re.compile(r"(?im)^\s*[-*]\s*functional actors and surfaces:\s*(.+)$")
 _INSTITUTIONAL_ACTORS_SECTION_RE = re.compile(
     r"(?ims)^\s{0,3}#{1,6}\s+Institutional Actors and Mailbox Surfaces\s*$\n(?P<body>.*?)(?=^\s{0,3}#{1,6}\s+|\Z)"
 )
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
 
 
 def _ascii_fold(value: str) -> str:
@@ -36,26 +34,10 @@ def best_matching_email(name: str, emails: list[str]) -> str | None:
     best_email: str | None = None
     best_score = 0
     tied = False
-    name_token_set = set(name_tokens)
     for email in emails:
-        local_tokens = _identifier_tokens(str(email).split("@", 1)[0])
-        if not local_tokens:
+        score = _email_match_score(name_tokens, email)
+        if score == 0:
             continue
-        local_token_set = set(local_tokens)
-        score = 0
-        if tuple(local_tokens) == tuple(name_tokens):
-            score = 100
-        elif name_token_set and name_token_set.issubset(local_token_set):
-            score = 90
-        else:
-            overlap = len(name_token_set & local_token_set)
-            if overlap == 0:
-                continue
-            if name_tokens[-1] in local_token_set:
-                score += 40
-            if name_tokens[0] in local_token_set:
-                score += 30
-            score += overlap * 10
         if score > best_score:
             best_email = email
             best_score = score
@@ -65,6 +47,24 @@ def best_matching_email(name: str, emails: list[str]) -> str | None:
     if tied or best_score < 50:
         return None
     return best_email
+
+
+def _email_match_score(name_tokens: tuple[str, ...], email: str) -> int:
+    local_tokens = _identifier_tokens(str(email).split("@", 1)[0])
+    if not local_tokens:
+        return 0
+    name_token_set = set(name_tokens)
+    local_token_set = set(local_tokens)
+    if local_tokens == name_tokens:
+        return 100
+    if name_token_set.issubset(local_token_set):
+        return 90
+    overlap = len(name_token_set & local_token_set)
+    if overlap == 0:
+        return 0
+    surname_score = 40 if name_tokens[-1] in local_token_set else 0
+    given_name_score = 30 if name_tokens[0] in local_token_set else 0
+    return surname_score + given_name_score + overlap * 10
 
 
 def _normalized_name_key(name: str) -> str:
@@ -168,19 +168,28 @@ def _context_people_from_names(
 def _actor_type_from_hint(type_hint: str, label: str) -> str:
     hint = _ascii_fold(type_hint).lower()
     label_hint = _ascii_fold(label).lower()
-    if "distribution list" in hint or "verteiler" in label_hint or label_hint.startswith("kw pr"):
-        return "distribution_list"
-    if "workflow surface" in hint or any(token in label_hint for token in ("route", "workflow", "queue")):
-        return "workflow_surface"
-    if "system" in hint or any(token in label_hint for token in ("time system", "ticket system")):
-        return "system_surface"
-    if "external body" in hint or any(token in label_hint for token in ("integrationsamt", "inklusionsamt")):
-        return "external_body"
-    if "mailbox" in hint:
-        return "shared_mailbox"
-    if "body" in hint:
-        return "institutional_body"
+    rules = (
+        ("distribution_list", "distribution list", ("verteiler",), ("kw pr",)),
+        ("workflow_surface", "workflow surface", ("route", "workflow", "queue"), ()),
+        ("system_surface", "system", ("time system", "ticket system"), ()),
+        ("external_body", "external body", ("integrationsamt", "inklusionsamt"), ()),
+        ("shared_mailbox", "mailbox", (), ()),
+        ("institutional_body", "body", (), ()),
+    )
+    for actor_type, hint_token, label_tokens, label_prefixes in rules:
+        if _actor_type_rule_matches(hint, label_hint, hint_token, label_tokens, label_prefixes):
+            return actor_type
     return "other"
+
+
+def _actor_type_rule_matches(
+    hint: str,
+    label: str,
+    hint_token: str,
+    label_tokens: tuple[str, ...],
+    label_prefixes: tuple[str, ...],
+) -> bool:
+    return any((hint_token in hint, any(token in label for token in label_tokens), label.startswith(label_prefixes)))
 
 
 def _institutional_label_and_email(cell_text: str) -> tuple[str, str | None]:
@@ -219,26 +228,9 @@ def institutional_actors_from_matter(context_text: str) -> list[dict[str, Any]]:
     section_match = _INSTITUTIONAL_ACTORS_SECTION_RE.search(str(context_text or ""))
     section_body = section_match.group("body") if section_match else ""
     for raw_line in section_body.splitlines():
-        line = raw_line.strip()
-        if not line.startswith("|"):
-            continue
-        cells = [cell.strip() for cell in line.split("|")[1:-1]]
-        if len(cells) < 4 or all(set(cell) <= {"-", ":"} for cell in cells):
-            continue
-        if cells[0].strip().lower() == "label" and cells[1].strip().lower() == "type":
-            continue
-        label, email = _institutional_label_and_email(cells[0])
-        if not label:
-            continue
-        rows.append(
-            {
-                "label": label,
-                "actor_type": _actor_type_from_hint(cells[1], label),
-                "email": email,
-                "function": _clean_markdown_atom(cells[2]) or None,
-                "notes": _clean_markdown_atom(cells[3]) or None,
-            }
-        )
+        row = _institutional_actor_row(raw_line)
+        if row is not None:
+            rows.append(row)
     for label in functional_labels:
         rows.append(
             {
@@ -250,6 +242,27 @@ def institutional_actors_from_matter(context_text: str) -> list[dict[str, Any]]:
             }
         )
     return _dedupe_institutional_actor_rows(rows)
+
+
+def _institutional_actor_row(raw_line: str) -> dict[str, Any] | None:
+    line = raw_line.strip()
+    if not line.startswith("|"):
+        return None
+    cells = [cell.strip() for cell in line.split("|")[1:-1]]
+    if len(cells) < 4 or all(set(cell) <= {"-", ":"} for cell in cells):
+        return None
+    if cells[0].strip().lower() == "label" and cells[1].strip().lower() == "type":
+        return None
+    label, email = _institutional_label_and_email(cells[0])
+    if not label:
+        return None
+    return {
+        "label": label,
+        "actor_type": _actor_type_from_hint(cells[1], label),
+        "email": email,
+        "function": _clean_markdown_atom(cells[2]) or None,
+        "notes": _clean_markdown_atom(cells[3]) or None,
+    }
 
 
 def context_people_from_matter(context_text: str, *, exclude_people: list[dict[str, Any]]) -> list[dict[str, Any]]:

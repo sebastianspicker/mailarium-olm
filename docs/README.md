@@ -32,9 +32,14 @@ Use these rules when deciding where to start:
 
 ## Current Local Checkout State
 
-The current local checkout includes broad in-progress source, test, tooling, and
-documentation changes. Public docs should describe verified interface facts, but
-must not imply release readiness from dirty-checkout evidence alone.
+The current checkout is based on the completed whole-corpus local remediation
+branch. On 2026-07-12, the full local suite passed 3,402 tests with 4 skipped and
+92.64% coverage. Local Codacy analysis completed without analyzer errors;
+quality analyzers were clean, while 66 Semgrep findings and 2 no-fix Trivy
+findings remained only as exact, invariant-backed local reviews.
+
+These measurements describe this local checkout only. They do not imply a
+release, push, pull request, Codacy Cloud reanalysis, or remote repository state.
 
 Current local interface facts:
 
@@ -78,7 +83,8 @@ The public reading path should stay in the files above unless you are intentiona
 
 Treat [`agent/README.md`](agent/README.md) as the single entry point for advanced legal-support product docs, operator runbooks, synthetic fixtures/goldens, and archive/history surfaces. Keep the top-level public docs hub focused on stable product and operations references.
 
-`agent/Documentation.md` is a verification/change log, not the public docs map.
+Local verification logs, audit reports, remediation ledgers, and tool state are
+ignored workspace artifacts, not public documentation.
 
 Historical audit artifacts live under
 [`archive/2026-05-16-remediation-closure/`](archive/2026-05-16-remediation-closure/)

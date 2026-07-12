@@ -1,4 +1,4 @@
-# ruff: noqa: F401,I001
+# ruff: noqa: I001
 """Tests for CLI command handler functions (_cmd_* and helpers).
 
 These tests exercise the uncovered handler logic in src/cli.py by:
@@ -12,44 +12,14 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import (
-    _cmd_admin,
-    _cmd_analytics,
-    _cmd_browse,
-    _cmd_evidence,
-    _cmd_export,
-    _cmd_search,
-    _cmd_training,
-    _interactive_action,
-    _print_sender_lines,
-    _render_interactive_intro,
-    _render_results_table,
-    _render_senders,
-    _render_stats,
-    _run_browse,
-    _run_custody_chain,
-    _run_dossier,
-    _run_evidence_export,
-    _run_evidence_list,
-    _run_evidence_stats,
-    _run_evidence_verify,
-    _run_export_email,
-    _run_export_thread,
-    _run_fine_tune,
-    _run_generate_training_data,
-    _run_provenance,
-    resolve_output_format,
-    run_single_query,
-)
 
 # ── Fake SearchResult ────────────────────────────────────────────────
 
-from .helpers.cli_fakes import _FakeSearchResult, _make_result, _make_retriever
+from .helpers.cli_fakes import _make_result, _make_retriever
 
 
 class TestCmdLegacy:

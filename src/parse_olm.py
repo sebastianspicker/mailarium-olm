@@ -25,20 +25,22 @@ from functools import cached_property
 
 from .body_recovery import BodyRecovery, classify_body_state
 from .conversation_segments import ConversationSegment
-from .html_converter import clean_text as _clean_text  # noqa: F401 - re-exported for backward compat
-from .html_converter import html_to_text as _html_to_text  # noqa: F401 - re-exported for backward compat
+from .html_converter import clean_text as _clean_text
+from .html_converter import html_to_text as _html_to_text
+
+# Compatibility re-exports retained for older callers and direct test seams.
 from .olm_xml_helpers import (
-    _NS_OUTLOOK,  # noqa: F401 — re-exported for backward compat
-    _extract_attachment_field,  # noqa: F401 — re-exported for backward compat
-    _parse_address_element,  # noqa: F401 — re-exported for backward compat
+    _NS_OUTLOOK,
+    _extract_attachment_field,
+    _parse_address_element,
 )
 from .olm_xml_helpers import (
     _read_limited_bytes as _read_limited_bytes_impl,
 )
 from .parse_olm_normalization import (
-    BODY_NORMALIZATION_VERSION,  # noqa: F401 - re-exported for backward compat
+    BODY_NORMALIZATION_VERSION,
     NormalizedBody,
-    _normalize_preview_candidate,  # noqa: F401 - re-exported for backward compat
+    _normalize_preview_candidate,
     _select_normalized_body,
     _strip_normalized_leading_forward_header_block,
     _strip_normalized_quoted_content,
@@ -65,12 +67,33 @@ from .parse_olm_xml_parser import (
 from .parse_olm_xml_parser import parse_email_xml_impl as _parse_email_xml_impl
 from .parse_olm_xml_parser import parse_olm_archive_impl as _parse_olm_archive_impl
 from .rfc2822 import (
-    _calendar_to_text,  # noqa: F401 — re-exported for backward compat (used by tests)
-    _extract_body_from_source,  # noqa: F401 — re-exported for backward compat (used by tests)
-    _extract_email_from_header,  # noqa: F401 — re-exported for backward compat (used by tests)
-    _extract_header,  # noqa: F401 — re-exported for backward compat (used by tests)
-    _extract_name_from_header,  # noqa: F401 — re-exported for backward compat (used by tests)
+    _calendar_to_text,
+    _extract_body_from_source,
+    _extract_email_from_header,
+    _extract_header,
+    _extract_name_from_header,
     _parse_address_list,
+)
+
+_COMPATIBILITY_EXPORTS = (
+    BODY_NORMALIZATION_VERSION,
+    NormalizedBody,
+    _NS_OUTLOOK,
+    _calendar_to_text,
+    _clean_text,
+    _extract_attachment_field,
+    _extract_body_from_source,
+    _extract_email_from_header,
+    _extract_header,
+    _extract_name_from_header,
+    _html_to_text,
+    _normalize_preview_candidate,
+    _parse_address_element,
+    _parse_address_list,
+    _select_normalized_body,
+    _strip_normalized_leading_forward_header_block,
+    _strip_normalized_quoted_content,
+    _strip_normalized_reply_header_tail,
 )
 
 logger = logging.getLogger(__name__)
@@ -177,16 +200,15 @@ class Email:
         fallback case (no Message-ID), includes a body hash to reduce
         collision risk when subject+date+sender are identical.
 
-        Uses MD5 as a stable non-security identifier hash. This is NOT a
-        cryptographic digest — changing the algorithm would change all
-        existing email UIDs and break deduplication with previously
+        Uses SHA-256 as a stable identifier hash. Changing the algorithm
+        changes all existing email UIDs and deduplication with previously
         ingested archives.
         """
         if self.message_id:
-            return hashlib.md5(self.message_id.encode(), usedforsecurity=False).hexdigest()
+            return hashlib.sha256(self.message_id.encode()).hexdigest()
         body_snippet = (self.body_text or "")[:500]
         key = f"{self.subject}|{self.date}|{self.sender_email}|{body_snippet}"
-        return hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()
+        return hashlib.sha256(key.encode()).hexdigest()
 
     @property
     def email_type(self) -> str:

@@ -76,65 +76,65 @@ class ColBERTReranker:
 
         q_vecs = query_vecs[0]  # (num_query_tokens, dim)
 
-        # Separate cached and uncached documents
-        doc_vecs_by_id: dict[str, np.ndarray | None] = {}
-        uncached_results: list[SearchResult] = []
-        for r in results:
-            if r.chunk_id in self._doc_vec_cache:
-                self._doc_vec_cache.move_to_end(r.chunk_id)
-                doc_vecs_by_id[r.chunk_id] = self._doc_vec_cache[r.chunk_id]
-            else:
-                uncached_results.append(r)
-
-        # Encode only uncached documents
-        if uncached_results:
-            uncached_texts = [r.text for r in uncached_results]
-            new_vecs = self._embedder.encode_colbert(uncached_texts)
-            if new_vecs and len(new_vecs) == len(uncached_results):
-                for r, d_vecs in zip(uncached_results, new_vecs, strict=True):
-                    doc_vecs_by_id[r.chunk_id] = d_vecs
-                    self._doc_vec_cache[r.chunk_id] = d_vecs
-                    if len(self._doc_vec_cache) > _DOC_VEC_CACHE_MAX:
-                        self._doc_vec_cache.popitem(last=False)
-            elif new_vecs:
-                logger.warning(
-                    "ColBERT encode returned %d vectors for %d texts — skipping cache",
-                    len(new_vecs),
-                    len(uncached_results),
-                )
+        doc_vecs_by_id = self._document_vectors(results)
 
         if not doc_vecs_by_id:
             return results[:top_k] if top_k else results
 
-        scored: list[tuple[SearchResult, float]] = []
-        for result in results:
-            result_vecs = doc_vecs_by_id.get(result.chunk_id)
-            if result_vecs is None or len(result_vecs) == 0:
-                scored.append((result, 0.0))
-                continue
-            score = maxsim(q_vecs, result_vecs)
-            scored.append((result, score))
+        scored = self._score_results(q_vecs, results, doc_vecs_by_id)
+        return self._reranked_results(scored, top_k)
 
-        scored.sort(key=lambda x: x[1], reverse=True)
+    def _document_vectors(self, results: list[SearchResult]) -> dict[str, np.ndarray | None]:
+        """Return cached vectors plus successfully encoded cache misses."""
+        cached, uncached = self._split_cached_results(results)
+        if not uncached:
+            return cached
+        new_vecs = self._embedder.encode_colbert([result.text for result in uncached])
+        if not new_vecs or len(new_vecs) != len(uncached):
+            if new_vecs:
+                logger.warning("ColBERT encode returned %d vectors for %d texts — skipping cache", len(new_vecs), len(uncached))
+            return cached
+        for result, vectors in zip(uncached, new_vecs, strict=True):
+            cached[result.chunk_id] = vectors
+            self._doc_vec_cache[result.chunk_id] = vectors
+            if len(self._doc_vec_cache) > _DOC_VEC_CACHE_MAX:
+                self._doc_vec_cache.popitem(last=False)
+        return cached
+
+    def _split_cached_results(self, results: list[SearchResult]) -> tuple[dict[str, np.ndarray | None], list[SearchResult]]:
+        """Separate cache hits from documents that still require encoding."""
+        cached: dict[str, np.ndarray | None] = {}
+        uncached: list[SearchResult] = []
+        for result in results:
+            if result.chunk_id not in self._doc_vec_cache:
+                uncached.append(result)
+                continue
+            self._doc_vec_cache.move_to_end(result.chunk_id)
+            cached[result.chunk_id] = self._doc_vec_cache[result.chunk_id]
+        return cached, uncached
+
+    @staticmethod
+    def _score_results(
+        query_vectors: np.ndarray, results: list[SearchResult], vectors_by_id: dict[str, np.ndarray | None]
+    ) -> list[tuple[SearchResult, float]]:
+        """Score each original candidate while preserving candidate order for ties."""
+        scored = [
+            (result, maxsim(query_vectors, vectors) if vectors is not None and len(vectors) else 0.0)
+            for result in results
+            for vectors in [vectors_by_id.get(result.chunk_id)]
+        ]
+        return sorted(scored, key=lambda item: item[1], reverse=True)
+
+    @staticmethod
+    def _reranked_results(scored: list[tuple[SearchResult, float]], top_k: int | None) -> list[SearchResult]:
+        """Convert scores back to the public SearchResult shape."""
+        from .retriever import SearchResult as SearchResultModel
 
         limit = top_k if top_k is not None else len(scored)
-
-        from .retriever import SearchResult as SR
-
-        reranked = []
-        for result, score in scored[:limit]:
-            # Convert score to distance (lower = more relevant)
-            distance = max(0.0, 1.0 - score)
-            reranked.append(
-                SR(
-                    chunk_id=result.chunk_id,
-                    text=result.text,
-                    metadata=result.metadata,
-                    distance=distance,
-                )
-            )
-
-        return reranked
+        return [
+            SearchResultModel(result.chunk_id, result.text, result.metadata, max(0.0, 1.0 - score))
+            for result, score in scored[:limit]
+        ]
 
 
 def maxsim(query_vecs: np.ndarray, doc_vecs: np.ndarray) -> float:

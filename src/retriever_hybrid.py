@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _collection_revision(instance: EmailRetriever) -> tuple[int, str]:
+    """Get the current collection revision info (count and index_revision metadata)."""
     collection = getattr(instance, "collection", None)
     if collection is None:
         return (0, "")
@@ -28,6 +29,7 @@ def _collection_revision(instance: EmailRetriever) -> tuple[int, str]:
 
 
 def _result_text(result: SearchResult) -> str:
+    """Extract combined text from a search result and its metadata for scoring."""
     metadata = result.metadata if isinstance(result.metadata, dict) else {}
     return " ".join(
         part
@@ -50,51 +52,53 @@ def _legal_support_result_boost(query: str, result: SearchResult) -> int:
         return 0
     text = _result_text(result)
     metadata = result.metadata if isinstance(result.metadata, dict) else {}
-    boost = 0
-    if "chronology" in profile["intents"]:
-        chronology_terms = (
-            "meeting",
-            "calendar",
-            "timeline",
-            "chronology",
-            "attendance",
-            "time record",
-            "timesheet",
+    intents = profile["intents"]
+    return sum(
+        (
+            _chronology_boost(intents, text, metadata),
+            _intent_term_boost(
+                intents, "participation", text, ("sbv", "personalrat", "betriebsrat", "participation", "consultation", "bem"), 5
+            ),
+            _intent_term_boost(
+                intents, "contradiction", text, (" not ", " without ", " didn't ", " kein ", " keine ", " nicht "), 4
+            ),
+            _intent_term_boost(
+                intents,
+                "comparator",
+                text,
+                ("comparator", "peer", "unequal", "similarly situated", "other employee", "vergleich"),
+                4,
+            ),
+            _intent_term_boost(
+                intents, "document_request", text, ("record", "document", "attachment", "file", "custodian", "preserve"), 2
+            ),
+            _attachment_boost(metadata),
         )
-        if any(term in text for term in chronology_terms):
-            boost += 4
-        if str(metadata.get("is_calendar_message") or "").lower() in {"true", "1"}:
-            boost += 3
-    if "participation" in profile["intents"] and any(
-        term in text for term in ("sbv", "personalrat", "betriebsrat", "participation", "consultation", "bem")
-    ):
-        boost += 5
-    if "contradiction" in profile["intents"] and any(
-        term in text
-        for term in (
-            " not ",
-            " without ",
-            " didn't ",
-            " kein ",
-            " keine ",
-            " nicht ",
-        )
-    ):
-        boost += 4
-    if "comparator" in profile["intents"] and any(
-        term in text for term in ("comparator", "peer", "unequal", "similarly situated", "other employee", "vergleich")
-    ):
-        boost += 4
-    if "document_request" in profile["intents"] and any(
-        term in text for term in ("record", "document", "attachment", "file", "custodian", "preserve")
-    ):
-        boost += 2
-    if metadata.get("attachment_filename") or metadata.get("attachment_name") or metadata.get("filename"):
-        boost += 1
-    return boost
+    )
+
+
+def _chronology_boost(intents: Any, text: str, metadata: Mapping[str, Any]) -> int:
+    """Score chronology terms and calendar metadata independently."""
+    if "chronology" not in intents:
+        return 0
+    terms = ("meeting", "calendar", "timeline", "chronology", "attendance", "time record", "timesheet")
+    return (4 if any(term in text for term in terms) else 0) + (
+        3 if str(metadata.get("is_calendar_message") or "").lower() in {"true", "1"} else 0
+    )
+
+
+def _intent_term_boost(intents: Any, intent: str, text: str, terms: tuple[str, ...], weight: int) -> int:
+    """Return one intent's bounded term bonus."""
+    return weight if intent in intents and any(term in text for term in terms) else 0
+
+
+def _attachment_boost(metadata: Mapping[str, Any]) -> int:
+    """Give attachment-backed results their existing small tie-break bonus."""
+    return int(bool(metadata.get("attachment_filename") or metadata.get("attachment_name") or metadata.get("filename")))
 
 
 def _record_sparse_diagnostic(instance: EmailRetriever, key: str, value: Any) -> None:
+    """Record a diagnostic entry for sparse retrieval on the instance."""
     debug = getattr(instance, "_last_search_debug", None)
     if not isinstance(debug, dict):
         return
@@ -106,6 +110,7 @@ def _record_sparse_diagnostic(instance: EmailRetriever, key: str, value: Any) ->
 
 
 def _record_bm25_diagnostic(instance: EmailRetriever, payload: dict[str, Any]) -> None:
+    """Record BM25 diagnostic information on the instance."""
     debug = getattr(instance, "_last_search_debug", None)
     if not isinstance(debug, dict):
         return
@@ -120,72 +125,10 @@ def merge_hybrid_impl(
 ) -> list[SearchResult]:
     """Merge semantic results with sparse/BM25 keyword results via RRF."""
     try:
-        keyword_ids = instance._get_sparse_results(query, fetch_size)
-
-        if keyword_ids is None:
-            keyword_ids = instance._get_bm25_results(query, fetch_size)
-
+        keyword_ids = _hybrid_keyword_ids(instance, query, fetch_size)
         if not keyword_ids:
             return semantic_results
-
-        from .bm25_index import reciprocal_rank_fusion
-
-        semantic_ids = [result.chunk_id for result in semantic_results]
-        fused_ids = reciprocal_rank_fusion(semantic_ids, keyword_ids)
-
-        result_map = {result.chunk_id: result for result in semantic_results}
-
-        missing_ids = [chunk_id for chunk_id in fused_ids if chunk_id not in result_map]
-        if missing_ids and instance.collection:
-            try:
-                fetched = instance.collection.get(
-                    ids=missing_ids,
-                    include=["documents", "metadatas"],
-                )
-                fetched_docs = fetched.get("documents") or []
-                fetched_metas = fetched.get("metadatas") or []
-                for index, chunk_id in enumerate(fetched.get("ids", [])):
-                    from .retriever import SearchResult
-
-                    doc = fetched_docs[index] if index < len(fetched_docs) else ""
-                    meta = fetched_metas[index] if index < len(fetched_metas) else {}
-                    meta_dict: dict[str, Any]
-                    if isinstance(meta, Mapping):
-                        meta_dict = {
-                            **dict(meta),
-                            "score_kind": "keyword_fused",
-                            "score_calibration": "synthetic",
-                            "hybrid_source": "keyword_only",
-                        }
-                    else:
-                        meta_dict = {}
-                    result_map[chunk_id] = SearchResult(
-                        chunk_id=chunk_id,
-                        text=doc or "",
-                        metadata=meta_dict,
-                        distance=0.5,
-                    )
-            except Exception:  # pylint: disable=broad-exception-caught
-                logger.debug(
-                    "Hybrid merge: failed to fetch %d keyword-only results",
-                    len(missing_ids),
-                    exc_info=True,
-                )
-
-        fused_rank = {chunk_id: index for index, chunk_id in enumerate(fused_ids)}
-        merged = [result_map[chunk_id] for chunk_id in fused_ids if chunk_id in result_map]
-        merged.sort(
-            key=lambda result: (
-                -_legal_support_result_boost(query, result),
-                fused_rank.get(result.chunk_id, len(fused_ids)),
-                result.distance,
-            )
-        )
-        seen = set(fused_ids)
-        for result in semantic_results:
-            if result.chunk_id not in seen:
-                merged.append(result)
-        return merged
+        return _merged_hybrid_results(instance, query, semantic_results, keyword_ids)
     except ImportError:
         logger.warning("rank_bm25 not installed; hybrid search disabled")
         return semantic_results
@@ -194,110 +137,168 @@ def merge_hybrid_impl(
         return semantic_results
 
 
+def _hybrid_keyword_ids(instance: EmailRetriever, query: str, fetch_size: int) -> list[str] | None:
+    """Prefer learned sparse retrieval and retain BM25 as its fallback."""
+    sparse_ids = instance._get_sparse_results(query, fetch_size)
+    return sparse_ids if sparse_ids is not None else instance._get_bm25_results(query, fetch_size)
+
+
+def _merged_hybrid_results(
+    instance: EmailRetriever, query: str, semantic_results: list[SearchResult], keyword_ids: list[str]
+) -> list[SearchResult]:
+    """Fuse rankings, add keyword-only rows, then preserve semantic tail order."""
+    from .bm25_index import reciprocal_rank_fusion
+
+    fused_ids = reciprocal_rank_fusion([result.chunk_id for result in semantic_results], keyword_ids)
+    result_map = {result.chunk_id: result for result in semantic_results}
+    _add_keyword_only_results(instance, fused_ids, result_map)
+    return _rank_hybrid_results(query, semantic_results, fused_ids, result_map)
+
+
+def _add_keyword_only_results(instance: EmailRetriever, fused_ids: list[str], result_map: dict[str, SearchResult]) -> None:
+    """Populate the result map with query-independent keyword-only records."""
+    missing_ids = [chunk_id for chunk_id in fused_ids if chunk_id not in result_map]
+    if not missing_ids or not instance.collection:
+        return
+    try:
+        fetched = instance.collection.get(ids=missing_ids, include=["documents", "metadatas"])
+        documents = fetched.get("documents") or []
+        metadatas = fetched.get("metadatas") or []
+        for index, chunk_id in enumerate(fetched.get("ids", [])):
+            result_map[chunk_id] = _keyword_only_result(chunk_id, documents, metadatas, index)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.debug("Hybrid merge: failed to fetch %d keyword-only results", len(missing_ids), exc_info=True)
+
+
+def _keyword_only_result(chunk_id: str, documents: list[Any], metadatas: list[Any], index: int) -> SearchResult:
+    """Create the stable synthetic-score row for a keyword-only chunk."""
+    from .retriever import SearchResult as SearchResultModel
+
+    metadata = metadatas[index] if index < len(metadatas) else {}
+    payload = dict(metadata) if isinstance(metadata, Mapping) else {}
+    payload.update(score_kind="keyword_fused", score_calibration="synthetic", hybrid_source="keyword_only")
+    text = documents[index] if index < len(documents) else ""
+    return SearchResultModel(chunk_id=chunk_id, text=text or "", metadata=payload, distance=0.5)
+
+
+def _rank_hybrid_results(
+    query: str, semantic_results: list[SearchResult], fused_ids: list[str], result_map: dict[str, SearchResult]
+) -> list[SearchResult]:
+    """Apply deterministic boost/rank ordering and append non-fused semantic rows."""
+    fused_rank = {chunk_id: index for index, chunk_id in enumerate(fused_ids)}
+    merged = [result_map[chunk_id] for chunk_id in fused_ids if chunk_id in result_map]
+    merged.sort(key=lambda result: (-_legal_support_result_boost(query, result), fused_rank[result.chunk_id], result.distance))
+    seen = set(fused_ids)
+    return merged + [result for result in semantic_results if result.chunk_id not in seen]
+
+
 def get_sparse_results_impl(instance: EmailRetriever, query: str, top_k: int) -> list[str] | None:
     """Try learned sparse retrieval. Returns None if unavailable."""
-    if not instance.embedder.has_sparse:
-        return None
-
     db = instance.email_db
-    if db is None:
+    if not instance.embedder.has_sparse or db is None:
         return None
-
     try:
-        if instance._sparse_index is None:
-            from .sparse_index import SparseIndex
-
-            instance._sparse_index = SparseIndex()
-            instance._sparse_index.build_from_db(db)
-            instance._sparse_build_count = _collection_revision(instance)
-        else:
-            try:
-                collection_count, collection_revision = _collection_revision(instance)
-                last_count = getattr(instance, "_sparse_build_count", None)
-                if last_count != (collection_count, collection_revision):
-                    instance._sparse_index.build_from_db(db)
-                    instance._sparse_build_count = (collection_count, collection_revision)
-            except Exception:  # pylint: disable=broad-exception-caught
-                logger.debug("Skipping sparse index staleness check", exc_info=True)
-
-        if not instance._sparse_index.is_built or instance._sparse_index.doc_count == 0:
+        sparse_index = _current_sparse_index(instance, db)
+        if not sparse_index.is_built or sparse_index.doc_count == 0:
             _record_sparse_diagnostic(instance, "status", "empty")
             return None
-        collection_count, _collection_revision_value = _collection_revision(instance)
-        if collection_count > 0 and instance._sparse_index.doc_count != collection_count:
-            _record_sparse_diagnostic(
-                instance,
-                "coverage",
-                {
-                    "status": "partial",
-                    "indexed_docs": int(instance._sparse_index.doc_count),
-                    "collection_docs": int(collection_count),
-                },
-            )
-            logger.debug(
-                "Sparse coverage incomplete (%d/%d); continuing with partial sparse retrieval",
-                instance._sparse_index.doc_count,
-                collection_count,
-            )
-        else:
-            _record_sparse_diagnostic(
-                instance,
-                "coverage",
-                {
-                    "status": "full",
-                    "indexed_docs": int(instance._sparse_index.doc_count),
-                    "collection_docs": int(collection_count),
-                },
-            )
-
-        query_sparse = instance.embedder.encode_sparse([query])
-        if not query_sparse or not query_sparse[0]:
-            _record_sparse_diagnostic(instance, "status", "query_encoding_empty")
-            return None
-
-        results = instance._sparse_index.search(query_sparse[0], top_k=top_k)
-        _record_sparse_diagnostic(instance, "status", "ok")
-        return [chunk_id for chunk_id, _ in results] if results else None
+        _record_sparse_coverage(instance, sparse_index)
+        return _sparse_query_ids(instance, sparse_index, query, top_k)
     except Exception:  # pylint: disable=broad-exception-caught
         _record_sparse_diagnostic(instance, "status", "error")
         logger.debug("Sparse retrieval failed", exc_info=True)
         return None
 
 
+def _current_sparse_index(instance: EmailRetriever, db: Any) -> Any:
+    """Create or refresh the sparse index against the collection revision."""
+    if instance._sparse_index is None:
+        from .sparse_index import SparseIndex
+
+        instance._sparse_index = SparseIndex()
+        instance._sparse_index.build_from_db(db)
+        instance._sparse_build_count = _collection_revision(instance)
+        return instance._sparse_index
+    try:
+        revision = _collection_revision(instance)
+        if getattr(instance, "_sparse_build_count", None) != revision:
+            instance._sparse_index.build_from_db(db)
+            instance._sparse_build_count = revision
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.debug("Skipping sparse index staleness check", exc_info=True)
+    return instance._sparse_index
+
+
+def _record_sparse_coverage(instance: EmailRetriever, sparse_index: Any) -> None:
+    """Preserve full versus partial sparse-index diagnostics."""
+    collection_count, _revision = _collection_revision(instance)
+    indexed_docs = int(sparse_index.doc_count)
+    partial = collection_count > 0 and indexed_docs != collection_count
+    _record_sparse_diagnostic(
+        instance,
+        "coverage",
+        {"status": "partial" if partial else "full", "indexed_docs": indexed_docs, "collection_docs": int(collection_count)},
+    )
+    if partial:
+        logger.debug(
+            "Sparse coverage incomplete (%d/%d); continuing with partial sparse retrieval", indexed_docs, collection_count
+        )
+
+
+def _sparse_query_ids(instance: EmailRetriever, sparse_index: Any, query: str, top_k: int) -> list[str] | None:
+    """Encode the query and return sparse-hit IDs while retaining status diagnostics."""
+    query_sparse = instance.embedder.encode_sparse([query])
+    if not query_sparse or not query_sparse[0]:
+        _record_sparse_diagnostic(instance, "status", "query_encoding_empty")
+        return None
+    results = sparse_index.search(query_sparse[0], top_k=top_k)
+    _record_sparse_diagnostic(instance, "status", "ok")
+    return [chunk_id for chunk_id, _ in results] if results else None
+
+
 def get_bm25_results_impl(instance: EmailRetriever, query: str, top_k: int) -> list[str] | None:
     """BM25 keyword retrieval fallback."""
     try:
-        if instance._bm25_index is None:
-            from .bm25_index import BM25Index
-
-            instance._bm25_index = BM25Index()
-            instance._bm25_index.build_from_collection(instance.collection)
-            instance._bm25_build_revision = _collection_revision(instance)
-        else:
-            try:
-                current_revision = _collection_revision(instance)
-                if getattr(instance, "_bm25_build_revision", None) != current_revision:
-                    instance._bm25_index.build_from_collection(instance.collection)
-                    instance._bm25_build_revision = current_revision
-            except Exception:  # pylint: disable=broad-exception-caught
-                logger.debug("Skipping BM25 staleness check", exc_info=True)
-
-        if not instance._bm25_index.is_built:
+        bm25_index = _current_bm25_index(instance)
+        if not bm25_index.is_built:
             return None
-
-        results = None
-        diagnostic_search = getattr(instance._bm25_index, "search_with_diagnostics", None)
-        if callable(diagnostic_search):
-            diagnostic_result = diagnostic_search(query, top_k=top_k)
-            if isinstance(diagnostic_result, tuple) and len(diagnostic_result) == 2:
-                results, diagnostics = diagnostic_result
-                if isinstance(diagnostics, dict):
-                    _record_bm25_diagnostic(instance, diagnostics)
-        if results is None:
-            results = instance._bm25_index.search(query, top_k=top_k)
+        results = _bm25_search_results(instance, bm25_index, query, top_k)
         return [chunk_id for chunk_id, _ in results] if results else None
     except ImportError:
         return None
     except Exception:  # pylint: disable=broad-exception-caught
         logger.debug("BM25 retrieval failed", exc_info=True)
         return None
+
+
+def _current_bm25_index(instance: EmailRetriever) -> Any:
+    """Create or refresh BM25 only when the collection revision changes."""
+    if instance._bm25_index is None:
+        from .bm25_index import BM25Index
+
+        instance._bm25_index = BM25Index()
+        instance._bm25_index.build_from_collection(instance.collection)
+        instance._bm25_build_revision = _collection_revision(instance)
+        return instance._bm25_index
+    try:
+        revision = _collection_revision(instance)
+        if getattr(instance, "_bm25_build_revision", None) != revision:
+            instance._bm25_index.build_from_collection(instance.collection)
+            instance._bm25_build_revision = revision
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.debug("Skipping BM25 staleness check", exc_info=True)
+    return instance._bm25_index
+
+
+def _bm25_search_results(instance: EmailRetriever, bm25_index: Any, query: str, top_k: int) -> Any:
+    """Use diagnostic search when available, retaining fallback search semantics."""
+    diagnostic_search = getattr(bm25_index, "search_with_diagnostics", None)
+    if not callable(diagnostic_search):
+        return bm25_index.search(query, top_k=top_k)
+    diagnostic_result = diagnostic_search(query, top_k=top_k)
+    if not isinstance(diagnostic_result, tuple) or len(diagnostic_result) != 2:
+        return bm25_index.search(query, top_k=top_k)
+    results, diagnostics = diagnostic_result
+    if isinstance(diagnostics, dict):
+        _record_bm25_diagnostic(instance, diagnostics)
+    return results

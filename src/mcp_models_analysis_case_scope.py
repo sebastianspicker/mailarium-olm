@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
 from .mcp_models_analysis_case_events import AdverseActionInput, TriggerEventInput
 from .mcp_models_analysis_case_parties import BehavioralOrgContextInput, CasePartyInput, InstitutionalActorInput
 from .mcp_models_base import DateRangeInput, StrictInput
+
+
+def _validate_distinct_actor_emails(target_email: str, actors: list[Any], field_name: str) -> None:
+    for actor in actors:
+        actor_email = (actor.email or "").strip().lower()
+        if all((target_email, actor_email, actor_email == target_email)):
+            raise ValueError(f"{field_name} must not duplicate the target_person email.")
 
 
 class BehavioralCaseScopeInput(DateRangeInput, StrictInput):
@@ -207,16 +214,7 @@ class BehavioralCaseScopeInput(DateRangeInput, StrictInput):
     @model_validator(mode="after")
     def validate_actor_set(self):
         target_email = (self.target_person.email or "").strip().lower()  # pylint: disable=no-member
-        for actor in self.suspected_actors:
-            actor_email = (actor.email or "").strip().lower()
-            if target_email and actor_email and actor_email == target_email:
-                raise ValueError("suspected_actors must not duplicate the target_person email.")
-        for actor in self.comparator_actors:
-            actor_email = (actor.email or "").strip().lower()
-            if target_email and actor_email and actor_email == target_email:
-                raise ValueError("comparator_actors must not duplicate the target_person email.")
-        for actor in self.context_people:
-            actor_email = (actor.email or "").strip().lower()
-            if target_email and actor_email and actor_email == target_email:
-                raise ValueError("context_people must not duplicate the target_person email.")
+        _validate_distinct_actor_emails(target_email, self.suspected_actors, "suspected_actors")
+        _validate_distinct_actor_emails(target_email, self.comparator_actors, "comparator_actors")
+        _validate_distinct_actor_emails(target_email, self.context_people, "context_people")
         return self

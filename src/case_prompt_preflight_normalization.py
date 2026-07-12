@@ -5,11 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from ._utils import _as_dict
+
 CASE_PROMPT_PREFLIGHT_HELPER_KEYS = frozenset({"extraction_basis", "date_confidence"})
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

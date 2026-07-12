@@ -63,14 +63,16 @@ LIVE_CORPUS_TERMS = (
 
 TRACKED_FORBIDDEN_PATH_PATTERNS = (
     re.compile(r"(^|/)\.env$"),
-    re.compile(r"(^|/)\.kilo/"),
+    re.compile(r"(^|/)\.(agents|codacy|codegraph|codex|kilo|serena)/"),
     re.compile(r"(^|/)private/"),
     re.compile(r"(^|/)data/(chromadb|email_metadata\.db)"),
+    re.compile(r"^AUDIT_REPORT_.*\.md$", re.IGNORECASE),
+    re.compile(r"^docs/agent/Documentation\.md$"),
     re.compile(r"\.(olm|sqlite3|db|db-wal|db-shm)$", re.IGNORECASE),
 )
 
 UNTRACKED_FORBIDDEN_PATH_PATTERNS = (
-    re.compile(r"(^|/)\.kilo/"),
+    re.compile(r"(^|/)\.(agents|codacy|codegraph|codex|kilo|serena)/"),
     re.compile(r"(^|/)\.example/"),
     re.compile(r"(^|/)private/"),
     re.compile(r"(^|/)data/(chromadb|email_metadata\.db)"),
@@ -153,7 +155,7 @@ def _run_git_bytes(args: list[str], *, check: bool = True) -> bytes:
 
 
 def _tracked_paths() -> list[str]:
-    return _run_git(["ls-files"])
+    return [path for path in _run_git(["ls-files"]) if (REPO_ROOT / path).is_file()]
 
 
 def _untracked_paths() -> list[str]:

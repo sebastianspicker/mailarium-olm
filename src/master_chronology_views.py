@@ -9,6 +9,18 @@ from .master_chronology_common import _as_dict, _best_supportive_read
 
 
 def _issue_categories(entry: dict[str, Any]) -> list[str]:
+    """Extract issue categories from an entry's event support matrix.
+
+    Returns category labels for all reads in the matrix that have direct_event_support
+    or contextual_support_only status, excluding ordinary_managerial_explanation.
+
+    Args:
+        entry: A chronology entry dictionary with event_support_matrix.
+
+    Returns:
+        A list of issue category strings (read_id with underscores replaced by spaces).
+        Limited to 4 categories.
+    """
     matrix = _as_dict(entry.get("event_support_matrix"))
     categories = [
         read_id.replace("_", " ")
@@ -21,6 +33,18 @@ def _issue_categories(entry: dict[str, Any]) -> list[str]:
 
 
 def _significance(entry: dict[str, Any], *, case_bundle: dict[str, Any]) -> str:
+    """Determine the significance explanation for a chronology entry.
+
+    Uses the best supportive read's reason if available, otherwise falls back to
+    the ordinary managerial explanation reason.
+
+    Args:
+        entry: A chronology entry dictionary.
+        case_bundle: The case bundle dictionary for context.
+
+    Returns:
+        A string explaining the significance of this entry to the case.
+    """
     _read_id, read_payload = _best_supportive_read(entry, case_bundle=case_bundle)
     if read_payload is not None:
         return str(read_payload.get("reason") or "")
@@ -29,52 +53,90 @@ def _significance(entry: dict[str, Any], *, case_bundle: dict[str, Any]) -> str:
 
 
 def _structured_row(entry: dict[str, Any], *, case_bundle: dict[str, Any]) -> dict[str, Any]:
+    """Create a structured row representation for a chronology entry.
+
+    Extracts and formats key information from the entry including date, description,
+    people involved, source documents, issue categories, significance, and support status
+    for various issue types.
+
+    Args:
+        entry: A chronology entry dictionary.
+        case_bundle: The case bundle dictionary for context.
+
+    Returns:
+        A dictionary containing structured entry information.
+    """
     matrix = _as_dict(entry.get("event_support_matrix"))
     source_linkage = _as_dict(entry.get("source_linkage"))
     source_document = _as_dict(entry.get("source_document"))
-    prevention_statuses = [
-        str(_as_dict(matrix.get(read_id)).get("status") or "")
-        for read_id in ("prevention_duty_gap", "participation_duty_gap")
-        if str(_as_dict(matrix.get(read_id)).get("status") or "")
-    ]
-    prevention_status = (
-        "direct_event_support"
-        if "direct_event_support" in prevention_statuses
-        else "contextual_support_only"
-        if "contextual_support_only" in prevention_statuses
-        else prevention_statuses[0]
-        if prevention_statuses
-        else "not_signaled"
-    )
     return {
         "exact_or_approximate_date": {
             "value": str(entry.get("date") or ""),
             "precision": str(entry.get("date_precision") or ""),
         },
         "event_description": str(entry.get("description") or entry.get("title") or ""),
-        "people_involved": [str(item) for item in entry.get("people_involved", []) if str(item).strip()],
-        "source_document": {
-            "title": str(source_document.get("title") or entry.get("title") or ""),
-            "source_ids": [str(item) for item in source_linkage.get("source_ids", []) if str(item).strip()],
-            "source_types": [str(item) for item in source_linkage.get("source_types", []) if str(item).strip()],
-        },
+        "people_involved": _string_items(entry.get("people_involved", [])),
+        "source_document": _source_document_payload(entry, source_document, source_linkage),
         "issue_category": _issue_categories(entry),
         "significance_to_case": _significance(entry, case_bundle=case_bundle),
-        "supports": {
-            "disability_related_disadvantage": str(
-                _as_dict(matrix.get("disability_disadvantage")).get("status") or "not_signaled"
-            ),
-            "retaliation": str(_as_dict(matrix.get("retaliation_after_protected_event")).get("status") or "not_signaled"),
-            "eingruppierung": str(_as_dict(matrix.get("eingruppierung_dispute")).get("status") or "not_signaled"),
-            "prevention_or_participation_failures": prevention_status,
-            "ordinary_managerial_explanation": str(
-                _as_dict(matrix.get("ordinary_managerial_explanation")).get("status") or "not_signaled"
-            ),
-        },
+        "supports": _support_statuses(matrix),
     }
 
 
+def _string_items(values: Any) -> list[str]:
+    return [str(item) for item in values if str(item).strip()]
+
+
+def _source_document_payload(
+    entry: dict[str, Any], source_document: dict[str, Any], source_linkage: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "title": str(source_document.get("title") or entry.get("title") or ""),
+        "source_ids": _string_items(source_linkage.get("source_ids", [])),
+        "source_types": _string_items(source_linkage.get("source_types", [])),
+    }
+
+
+def _support_statuses(matrix: dict[str, Any]) -> dict[str, str]:
+    return {
+        "disability_related_disadvantage": _matrix_status(matrix, "disability_disadvantage"),
+        "retaliation": _matrix_status(matrix, "retaliation_after_protected_event"),
+        "eingruppierung": _matrix_status(matrix, "eingruppierung_dispute"),
+        "prevention_or_participation_failures": _prevention_status(matrix),
+        "ordinary_managerial_explanation": _matrix_status(matrix, "ordinary_managerial_explanation"),
+    }
+
+
+def _matrix_status(matrix: dict[str, Any], key: str) -> str:
+    return str(_as_dict(matrix.get(key)).get("status") or "not_signaled")
+
+
+def _prevention_status(matrix: dict[str, Any]) -> str:
+    statuses = [
+        str(_as_dict(matrix.get(read_id)).get("status") or "")
+        for read_id in ("prevention_duty_gap", "participation_duty_gap")
+        if str(_as_dict(matrix.get(read_id)).get("status") or "")
+    ]
+    if "direct_event_support" in statuses:
+        return "direct_event_support"
+    if "contextual_support_only" in statuses:
+        return "contextual_support_only"
+    return statuses[0] if statuses else "not_signaled"
+
+
 def _neutral_view(entries: list[dict[str, Any]], *, case_bundle: dict[str, Any]) -> dict[str, Any]:
+    """Create a neutral chronology view from entries.
+
+    Generates a short, neutral chronology that presents each entry with its date,
+    title, and entry type without favoring any particular interpretation.
+
+    Args:
+        entries: A list of chronology entry dictionaries.
+        case_bundle: The case bundle dictionary for context.
+
+    Returns:
+        A view dictionary with view_id, entry_count, and items list.
+    """
     items = []
     for entry in entries:
         entry_date = str(entry.get("date") or "")
@@ -92,6 +154,19 @@ def _neutral_view(entries: list[dict[str, Any]], *, case_bundle: dict[str, Any])
 
 
 def _claimant_view(entries: list[dict[str, Any]], *, case_bundle: dict[str, Any]) -> dict[str, Any]:
+    """Create a claimant-favorable chronology view from entries.
+
+    Generates a chronology that emphasizes claimant-favorable readings of each
+    entry, including the favored read ID, statement, uncertainty notes, and
+    counterargument notes.
+
+    Args:
+        entries: A list of chronology entry dictionaries.
+        case_bundle: The case bundle dictionary for context.
+
+    Returns:
+        A view dictionary with view_id, entry_count, and items list.
+    """
     items: list[dict[str, Any]] = []
     for entry in entries:
         read_id, read_payload = _best_supportive_read(entry, case_bundle=case_bundle)
@@ -121,6 +196,19 @@ def _claimant_view(entries: list[dict[str, Any]], *, case_bundle: dict[str, Any]
 
 
 def _defense_view(entries: list[dict[str, Any]], *, case_bundle: dict[str, Any]) -> dict[str, Any]:
+    """Create a defense-favorable chronology view from entries.
+
+    Generates a chronology that emphasizes defense-favorable readings (ordinary
+    managerial explanations) of each entry, including uncertainty notes and
+    counterargument notes referencing claimant-side support.
+
+    Args:
+        entries: A list of chronology entry dictionaries.
+        case_bundle: The case bundle dictionary for context.
+
+    Returns:
+        A view dictionary with view_id, entry_count, and items list.
+    """
     items: list[dict[str, Any]] = []
     for entry in entries:
         managerial = _as_dict(_as_dict(entry.get("event_support_matrix")).get("ordinary_managerial_explanation"))
@@ -157,6 +245,20 @@ def _balanced_view(
     case_bundle: dict[str, Any],
     date_gaps: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Create a balanced timeline assessment view from entries and date gaps.
+
+    Generates a view that weighs both issue-linked support and ordinary managerial
+    explanations, including summary information about strongest inferences and limits.
+
+    Args:
+        entries: A list of chronology entry dictionaries.
+        case_bundle: The case bundle dictionary for context.
+        date_gaps: A list of date gap dictionaries to include in the assessment.
+
+    Returns:
+        A view dictionary with view_id, entry_count, items list, and summary
+        containing strongest_timeline_inferences and strongest_limits.
+    """
     items: list[dict[str, Any]] = []
     strongest_inferences: list[str] = []
     strongest_limits: list[str] = []
@@ -207,6 +309,22 @@ def _chronology_views(
     case_bundle: dict[str, Any],
     date_gaps: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Generate all chronology views for a set of entries.
+
+    Creates and returns all four chronology views:
+    - short_neutral_chronology
+    - claimant_favorable_chronology
+    - defense_favorable_chronology
+    - balanced_timeline_assessment
+
+    Args:
+        entries: A list of chronology entry dictionaries.
+        case_bundle: The case bundle dictionary for context.
+        date_gaps: A list of date gap dictionaries for the balanced view.
+
+    Returns:
+        A dictionary mapping view IDs to their respective view dictionaries.
+    """
     return {
         "short_neutral_chronology": _neutral_view(entries, case_bundle=case_bundle),
         "claimant_favorable_chronology": _claimant_view(entries, case_bundle=case_bundle),

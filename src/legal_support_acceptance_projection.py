@@ -7,13 +7,7 @@ import json
 import re
 from typing import Any
 
-
-def _as_list(value: object) -> list[object]:
-    return value if isinstance(value, list) else []
-
-
-def _as_dict(value: object) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from ._utils import _as_dict, _as_list
 
 
 def _chronology_source_id(row: dict[str, Any]) -> Any:
@@ -65,6 +59,23 @@ def build_golden_projection(payload: dict[str, Any]) -> dict[str, Any]:
     full_case_analysis = payload.get("full_case_analysis") if isinstance(payload, dict) else {}
     if not isinstance(full_case_analysis, dict):
         full_case_analysis = {}
+    issue_rows = _project_issue_rows(full_case_analysis)
+    matter_index = _as_dict(full_case_analysis.get("matter_evidence_index"))
+    ranked_evidence_rows = _as_list(matter_index.get("top_15_exhibits")) or _as_list(matter_index.get("rows"))
+    chronology_summary = _as_dict(_as_dict(full_case_analysis.get("master_chronology")).get("summary"))
+    matter_ingestion_report = _as_dict(full_case_analysis.get("matter_ingestion_report"))
+    projection: dict[str, Any] = {}
+    projection.update(_projection_base(payload, full_case_analysis, matter_ingestion_report))
+    projection.update(_projection_evidence(ranked_evidence_rows))
+    projection.update(_projection_chronology(full_case_analysis, chronology_summary))
+    projection.update(_projection_legal(full_case_analysis, issue_rows))
+    projection.update(_projection_memo_dashboard(full_case_analysis))
+    projection.update(_projection_final(full_case_analysis))
+    public_projection = _public_golden_value(projection)
+    return public_projection if isinstance(public_projection, dict) else projection
+
+
+def _project_issue_rows(full_case_analysis: dict[str, Any]) -> list[dict[str, Any]]:
     issue_rows_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
     for row in _as_list((full_case_analysis.get("lawyer_issue_matrix") or {}).get("rows")):
         if not isinstance(row, dict):
@@ -97,11 +108,13 @@ def build_golden_projection(payload: dict[str, Any]) -> dict[str, Any]:
         ],
         key=lambda row: json.dumps(row, sort_keys=True, ensure_ascii=False),
     )
-    matter_index = _as_dict(full_case_analysis.get("matter_evidence_index"))
-    ranked_evidence_rows = _as_list(matter_index.get("top_15_exhibits")) or _as_list(matter_index.get("rows"))
-    chronology_summary = _as_dict(_as_dict(full_case_analysis.get("master_chronology")).get("summary"))
-    matter_ingestion_report = _as_dict(full_case_analysis.get("matter_ingestion_report"))
-    projection = {
+    return issue_rows
+
+
+def _projection_base(
+    payload: dict[str, Any], full_case_analysis: dict[str, Any], matter_ingestion_report: dict[str, Any]
+) -> dict[str, Any]:
+    return {
         "workflow": str(payload.get("workflow") or ""),
         "status": str(payload.get("status") or ""),
         "acceptance_lane": _as_dict(payload.get("acceptance_lane")),
@@ -120,6 +133,11 @@ def build_golden_projection(payload: dict[str, Any]) -> dict[str, Any]:
             "coverage_status", ""
         ),
         "analysis_limit_notes": list(_as_list((full_case_analysis.get("analysis_limits") or {}).get("notes"))),
+    }
+
+
+def _projection_evidence(ranked_evidence_rows: list[Any]) -> dict[str, Any]:
+    return {
         "evidence_rows": [
             {
                 "exhibit_id": row.get("exhibit_id"),
@@ -143,30 +161,43 @@ def build_golden_projection(payload: dict[str, Any]) -> dict[str, Any]:
             for row in _head_tail_slice(ranked_evidence_rows, limit=5)
             if isinstance(row, dict)
         ],
-        "chronology_gap_ids": [
-            str(item.get("gap_id") or "")
-            for item in _as_list(chronology_summary.get("date_gaps_and_unexplained_sequences"))
-            if isinstance(item, dict) and str(item.get("gap_id") or "")
-        ],
-        "chronology_conflict_ids": [
-            str(item.get("conflict_id") or "")
-            for item in _as_list(_as_dict(chronology_summary.get("source_conflict_registry")).get("conflicts"))
-            if isinstance(item, dict) and str(item.get("conflict_id") or "")
-        ],
-        "chronology_entries": [
-            {
-                "chronology_id": row.get("chronology_id"),
-                "date": row.get("date"),
-                "title": row.get("title"),
-                "issue_category": _chronology_issue_category(row),
-                "source_id": _chronology_source_id(row),
-                "source_ids": _as_dict(row.get("source_linkage")).get("source_ids"),
-                "linked_source_ids": _as_dict(row.get("source_linkage")).get("linked_source_ids"),
-                "supporting_citation_ids": _as_dict(row.get("source_linkage")).get("supporting_citation_ids"),
-            }
-            for row in _head_tail_slice(_as_list((full_case_analysis.get("master_chronology") or {}).get("entries")), limit=10)
-            if isinstance(row, dict)
-        ],
+    }
+
+
+def _projection_chronology(full_case_analysis: dict[str, Any], chronology_summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "chronology_gap_ids": _projection_ids(chronology_summary.get("date_gaps_and_unexplained_sequences"), "gap_id"),
+        "chronology_conflict_ids": _projection_ids(
+            _as_dict(chronology_summary.get("source_conflict_registry")).get("conflicts"), "conflict_id"
+        ),
+        "chronology_entries": _project_chronology_entries(full_case_analysis),
+    }
+
+
+def _projection_ids(rows: object, field: str) -> list[str]:
+    return [value for item in _as_list(rows) if isinstance(item, dict) and (value := str(item.get(field) or ""))]
+
+
+def _project_chronology_entries(full_case_analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = _head_tail_slice(_as_list((full_case_analysis.get("master_chronology") or {}).get("entries")), limit=10)
+    return [
+        {
+            "chronology_id": row.get("chronology_id"),
+            "date": row.get("date"),
+            "title": row.get("title"),
+            "issue_category": _chronology_issue_category(row),
+            "source_id": _chronology_source_id(row),
+            "source_ids": _as_dict(row.get("source_linkage")).get("source_ids"),
+            "linked_source_ids": _as_dict(row.get("source_linkage")).get("linked_source_ids"),
+            "supporting_citation_ids": _as_dict(row.get("source_linkage")).get("supporting_citation_ids"),
+        }
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
+def _projection_legal(full_case_analysis: dict[str, Any], issue_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
         "comparator_points": [
             {
                 "comparator_point_id": row.get("comparator_point_id"),
@@ -193,41 +224,52 @@ def build_golden_projection(payload: dict[str, Any]) -> dict[str, Any]:
             )
             if isinstance(row, dict)
         ],
+    }
+
+
+def _projection_memo_dashboard(full_case_analysis: dict[str, Any]) -> dict[str, Any]:
+    sections = (full_case_analysis.get("lawyer_briefing_memo") or {}).get("sections") or {}
+    return {
         "memo_sections": {
-            "executive_summary": [
-                row.get("text")
-                for row in _as_list(
-                    ((full_case_analysis.get("lawyer_briefing_memo") or {}).get("sections") or {}).get("executive_summary")
-                )[:5]
-                if isinstance(row, dict)
-            ],
-            "strongest_evidence": [
-                row.get("text")
-                for row in _as_list(
-                    ((full_case_analysis.get("lawyer_briefing_memo") or {}).get("sections") or {}).get("strongest_evidence")
-                )[:5]
-                if isinstance(row, dict)
-            ],
+            "executive_summary": _memo_texts(sections, "executive_summary"),
+            "strongest_evidence": _memo_texts(sections, "strongest_evidence"),
         },
         "draft_preflight": (full_case_analysis.get("controlled_factual_drafting") or {}).get("framing_preflight", {}),
-        "dashboard_cards": {
-            key: [
-                {
-                    "entry_id": row.get("entry_id"),
-                    "title": row.get("title"),
-                    "summary": row.get("summary"),
-                    "evidence_hint": row.get("evidence_hint"),
-                    "supporting_source_ids": row.get("supporting_source_ids"),
-                    "supporting_uids": row.get("supporting_uids"),
-                    "gap_id": row.get("gap_id"),
-                    "group_id": row.get("group_id"),
-                }
-                for row in _head_tail_slice(value, limit=6)
-                if isinstance(row, dict)
-            ]
-            for key, value in ((full_case_analysis.get("case_dashboard") or {}).get("cards") or {}).items()
-            if isinstance(value, list)
-        },
+        "dashboard_cards": _dashboard_projection(full_case_analysis),
+    }
+
+
+def _memo_texts(sections: dict[str, Any], key: str) -> list[Any]:
+    return [row.get("text") for row in _as_list(sections.get(key))[:5] if isinstance(row, dict)]
+
+
+def _dashboard_projection(full_case_analysis: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    cards = (full_case_analysis.get("case_dashboard") or {}).get("cards") or {}
+    return {
+        key: [_dashboard_card(row) for row in _head_tail_slice(value, limit=6) if isinstance(row, dict)]
+        for key, value in cards.items()
+        if isinstance(value, list)
+    }
+
+
+def _dashboard_card(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: row.get(key)
+        for key in (
+            "entry_id",
+            "title",
+            "summary",
+            "evidence_hint",
+            "supporting_source_ids",
+            "supporting_uids",
+            "gap_id",
+            "group_id",
+        )
+    }
+
+
+def _projection_final(full_case_analysis: dict[str, Any]) -> dict[str, Any]:
+    return {
         "retaliation_points": [
             {
                 "retaliation_point_id": row.get("retaliation_point_id"),
@@ -247,5 +289,3 @@ def build_golden_projection(payload: dict[str, Any]) -> dict[str, Any]:
             if isinstance(row, dict)
         ],
     }
-    public_projection = _public_golden_value(projection)
-    return public_projection if isinstance(public_projection, dict) else projection

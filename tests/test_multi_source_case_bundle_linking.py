@@ -1,31 +1,11 @@
-# ruff: noqa: F401
 from __future__ import annotations
 
-from src.multi_source_case_bundle import append_chat_log_sources, append_manifest_sources, build_multi_source_case_bundle
+from src.multi_source_case_bundle import append_chat_log_sources, append_manifest_sources
 
 
 def test_append_manifest_sources_accounts_for_supplied_artifacts_and_source_classes(tmp_path) -> None:
     bundle = append_manifest_sources(
-        {
-            "version": "1",
-            "summary": {},
-            "sources": [
-                {
-                    "source_id": "email:uid-1",
-                    "source_type": "email",
-                    "document_kind": "email_body",
-                    "uid": "uid-1",
-                    "title": "Status",
-                    "date": "2026-03-11T10:00:00",
-                    "snippet": "Status email.",
-                    "source_weighting": {"text_available": True, "can_corroborate_or_contradict": True},
-                    "source_reliability": {"level": "high", "basis": "authored_email_body"},
-                }
-            ],
-            "source_links": [],
-            "source_type_profiles": [],
-            "chronology_anchors": [],
-        },
+        _fixture_test_append_manifest_sources_accounts_for_supplied_artifacts_and_source_classes_part(),
         matter_manifest={
             "manifest_id": "matter-1",
             "artifacts": [
@@ -376,3 +356,26 @@ def test_resolve_manifest_email_links_uses_message_or_thread_key_overlap() -> No
     assert links[0]["to_source_id"] == "email:uid-1"
     assert "message_or_thread_key_overlap" in links[0]["match_basis"]
     assert any("message_or_thread_key_overlap" in item["match_basis"] for item in diagnostics)
+
+
+def _fixture_test_append_manifest_sources_accounts_for_supplied_artifacts_and_source_classes_part():
+    return {
+        "version": "1",
+        "summary": {},
+        "sources": [
+            {
+                "source_id": "email:uid-1",
+                "source_type": "email",
+                "document_kind": "email_body",
+                "uid": "uid-1",
+                "title": "Status",
+                "date": "2026-03-11T10:00:00",
+                "snippet": "Status email.",
+                "source_weighting": {"text_available": True, "can_corroborate_or_contradict": True},
+                "source_reliability": {"level": "high", "basis": "authored_email_body"},
+            }
+        ],
+        "source_links": [],
+        "source_type_profiles": [],
+        "chronology_anchors": [],
+    }

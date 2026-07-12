@@ -154,138 +154,141 @@ def _maybe_reexec_embedding(argv: list[str], *, live_backend: str) -> int | None
 
 
 def main(argv: list[str] | None = None) -> int:
-    from src.qa_eval import (
-        bootstrap_question_set,
-        build_remediation_summary,
-        default_bootstrap_questions_path,
-        default_live_report_path,
-        default_remediation_report_path,
-        evaluate_report_thresholds,
-        load_eval_report,
-        resolve_live_deps,
-        run_evaluation_sync,
-    )
+    from src import qa_eval
 
     parser = _build_parser()
     args = parser.parse_args(argv)
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
-
     reexec_code = _maybe_reexec_embedding(raw_argv, live_backend=args.live_backend)
     if reexec_code is not None:
         return reexec_code
+    special_code = _run_special_mode(args, parser, qa_eval)
+    if special_code is not None:
+        return special_code
+    _validate_evaluation_args(args, parser)
+    return _run_standard_evaluation(args, qa_eval)
 
+
+def _write_json(path: Path, payload: object) -> str:
+    rendered = json.dumps(payload, indent=2, ensure_ascii=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(rendered + "\n", encoding="utf-8")
+    return rendered
+
+
+def _run_special_mode(args, parser, qa_eval) -> int | None:
     if args.bootstrap:
-        if args.remediation_from:
-            parser.error("--bootstrap cannot be combined with --remediation-from")
-        if not args.questions:
-            parser.error("--questions is required when --bootstrap is used")
-        if not args.results:
-            parser.error("--results is required when --bootstrap is used")
-        if args.live:
-            parser.error("--bootstrap cannot be combined with --live")
-        output_path = Path(args.output) if args.output else default_bootstrap_questions_path(Path(args.questions))
-        bootstrapped = bootstrap_question_set(
-            questions_path=Path(args.questions),
-            results_path=Path(args.results),
-        )
-        rendered = json.dumps(bootstrapped, indent=2, ensure_ascii=False)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(rendered + "\n", encoding="utf-8")
-        print(json.dumps({"output": str(output_path), "mode": "bootstrap", "status": "ok"}, indent=2))
+        _validate_bootstrap_args(args, parser)
+        output = Path(args.output) if args.output else qa_eval.default_bootstrap_questions_path(Path(args.questions))
+        payload = qa_eval.bootstrap_question_set(questions_path=Path(args.questions), results_path=Path(args.results))
+        _write_json(output, payload)
+        print(json.dumps({"output": str(output), "mode": "bootstrap", "status": "ok"}, indent=2))
         return 0
+    if not args.remediation_from:
+        return None
+    report_path = Path(args.remediation_from)
+    output = Path(args.output) if args.output else qa_eval.default_remediation_report_path(report_path)
+    payload = qa_eval.build_remediation_summary(qa_eval.load_eval_report(report_path))
+    rendered = _write_json(output, payload)
+    if not args.output:
+        print(json.dumps({"output": str(output), "mode": "remediation", "status": "ok"}, indent=2))
+    else:
+        print(rendered)
+    return 0
 
-    if args.remediation_from:
-        report_path = Path(args.remediation_from)
-        output_path = Path(args.output) if args.output else default_remediation_report_path(report_path)
-        remediation = build_remediation_summary(load_eval_report(report_path))
-        rendered = json.dumps(remediation, indent=2, ensure_ascii=False)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(rendered + "\n", encoding="utf-8")
-        if not args.output:
-            print(json.dumps({"output": str(output_path), "mode": "remediation", "status": "ok"}, indent=2))
-        else:
-            print(rendered)
-        return 0
 
-    if not args.questions:
-        parser.error("--questions is required unless --remediation-from is used")
-    if not args.results and not args.live:
-        parser.error("provide at least one of --results or --live")
-    if args.results and args.live and args.source_mode == "auto":
-        parser.error("--source-mode is required when both --results and --live are provided")
-    if args.source_mode == "captured_only" and not args.results:
-        parser.error("--source-mode=captured_only requires --results")
-    if args.source_mode == "live_only" and not args.live:
-        parser.error("--source-mode=live_only requires --live")
-    if args.source_mode == "mixed" and (not args.results or not args.live):
-        parser.error("--source-mode=mixed requires both --results and --live")
+def _validate_bootstrap_args(args, parser) -> None:
+    conflicts = (
+        (args.remediation_from, "--bootstrap cannot be combined with --remediation-from"),
+        (not args.questions, "--questions is required when --bootstrap is used"),
+        (not args.results, "--results is required when --bootstrap is used"),
+        (args.live, "--bootstrap cannot be combined with --live"),
+    )
+    for invalid, message in conflicts:
+        if invalid:
+            parser.error(message)
 
+
+def _validate_evaluation_args(args, parser) -> None:
+    errors = (
+        (not args.questions, "--questions is required unless --remediation-from is used"),
+        (not args.results and not args.live, "provide at least one of --results or --live"),
+        (
+            args.results and args.live and args.source_mode == "auto",
+            "--source-mode is required when both --results and --live are provided",
+        ),
+        (args.source_mode == "captured_only" and not args.results, "--source-mode=captured_only requires --results"),
+        (args.source_mode == "live_only" and not args.live, "--source-mode=live_only requires --live"),
+        (
+            args.source_mode == "mixed" and (not args.results or not args.live),
+            "--source-mode=mixed requires both --results and --live",
+        ),
+    )
+    for invalid, message in errors:
+        if invalid:
+            parser.error(message)
+
+
+def _run_standard_evaluation(args, qa_eval) -> int:
     live_deps = None
-    output_path = Path(args.output) if args.output else None
-    if args.live and output_path is None:
-        output_path = default_live_report_path(
-            Path(args.questions),
-            backend=args.live_backend if args.live_backend != "auto" else None,
+    output = Path(args.output) if args.output else None
+    if args.live and output is None:
+        output = qa_eval.default_live_report_path(
+            Path(args.questions), backend=args.live_backend if args.live_backend != "auto" else None
         )
     try:
         if args.live:
-            live_deps = resolve_live_deps(preferred_backend=args.live_backend)
-
-        report = run_evaluation_sync(
+            live_deps = qa_eval.resolve_live_deps(preferred_backend=args.live_backend)
+        report = qa_eval.run_evaluation_sync(
             questions_path=Path(args.questions),
             results_path=Path(args.results) if args.results else None,
             live_deps=live_deps,
             limit=args.limit,
             source_mode=args.source_mode,
         )
-        threshold_verdict = evaluate_report_thresholds(report)
-        report["threshold_verdict"] = threshold_verdict
-        rendered = json.dumps(report, indent=2, ensure_ascii=False)
-
-        if output_path:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(rendered + "\n", encoding="utf-8")
-            if args.live and not args.output:
-                print(
-                    json.dumps(
-                        {
-                            "output": str(output_path),
-                            "mode": "live",
-                            "status": "ok",
-                            "live_backend": getattr(live_deps, "live_backend", None),
-                            "source_mode": args.source_mode,
-                            "threshold_status": str(threshold_verdict.get("status") or ""),
-                        },
-                        indent=2,
-                    )
-                )
-        else:
-            print(rendered)
-        if args.check_thresholds and str(threshold_verdict.get("status") or "") != "pass":
-            return 2
-        return 0
+        verdict = qa_eval.evaluate_report_thresholds(report)
+        report["threshold_verdict"] = verdict
+        _render_successful_evaluation(args, report, verdict, output, live_deps)
+        return 2 if args.check_thresholds and str(verdict.get("status") or "") != "pass" else 0
     except (RuntimeError, ValueError, OSError, ImportError) as exc:
         if not args.live:
             raise
-        report = _blocked_live_report(
-            questions_path=Path(args.questions),
-            output_path=output_path,
-            exc=exc,
-            source_mode=args.source_mode,
-        )
-        rendered = json.dumps(report, indent=2, ensure_ascii=False)
-        if output_path:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(rendered + "\n", encoding="utf-8")
-            print(
-                json.dumps(
-                    {"output": str(output_path), "mode": "live", "status": "blocked", "source_mode": args.source_mode},
-                    indent=2,
-                )
+        return _render_blocked_evaluation(args, output, exc)
+
+
+def _render_successful_evaluation(args, report, verdict, output, live_deps) -> None:
+    rendered = json.dumps(report, indent=2, ensure_ascii=False)
+    if not output:
+        print(rendered)
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(rendered + "\n", encoding="utf-8")
+    if args.live and not args.output:
+        print(
+            json.dumps(
+                {
+                    "output": str(output),
+                    "mode": "live",
+                    "status": "ok",
+                    "live_backend": getattr(live_deps, "live_backend", None),
+                    "source_mode": args.source_mode,
+                    "threshold_status": str(verdict.get("status") or ""),
+                },
+                indent=2,
             )
-        else:
-            print(rendered)
-        return 1
+        )
+
+
+def _render_blocked_evaluation(args, output, exc) -> int:
+    report = _blocked_live_report(questions_path=Path(args.questions), output_path=output, exc=exc, source_mode=args.source_mode)
+    rendered = json.dumps(report, indent=2, ensure_ascii=False)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered + "\n", encoding="utf-8")
+        print(json.dumps({"output": str(output), "mode": "live", "status": "blocked", "source_mode": args.source_mode}, indent=2))
+    else:
+        print(rendered)
+    return 1
 
 
 if __name__ == "__main__":

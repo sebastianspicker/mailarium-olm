@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from .matter_evidence_index_helpers import (
@@ -81,6 +82,200 @@ from .matter_evidence_index_helpers import (
 MATTER_EVIDENCE_INDEX_VERSION = "1"
 
 
+def _tag_counts(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
+    """Build a mapping from tag string to occurrence count across rows for a given key."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        tags = row.get(key) or []
+        if not isinstance(tags, list):
+            tags = []
+        for tag in tags:
+            if isinstance(tag, str) and tag:
+                counts[tag] = counts.get(tag, 0) + 1
+    return counts
+
+
+@dataclass(frozen=True)
+class _IndexContext:
+    case_bundle: dict[str, Any]
+    finding_evidence_index: dict[str, Any]
+    source_lookup: dict[str, dict[str, Any]]
+    source_links: list[dict[str, Any]]
+    conflicts_by_source_id: dict[str, list[dict[str, Any]]]
+
+
+def _text(values: dict[str, Any], key: str) -> str:
+    return str(values.get(key) or "")
+
+
+def _sorted_sources(bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return sorted(
+        _source_rows(bundle), key=lambda item: (_text(item, "date"), _text(item, "source_type"), _text(item, "source_id"))
+    )
+
+
+def _source_links(bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return [link for link in _as_list(bundle.get("source_links")) if isinstance(link, dict)]
+
+
+def _unique_nonempty(values: list[str]) -> list[str]:
+    return [value for value in dict.fromkeys(values) if value]
+
+
+def _supporting_uids(source: dict[str, Any], linked_ids: list[str], source_lookup: dict[str, dict[str, Any]]) -> list[str]:
+    linked_uids = [_text(_as_dict(source_lookup.get(linked_id)), "uid") for linked_id in linked_ids]
+    return _unique_nonempty([_text(source, "uid"), *linked_uids])
+
+
+def _tag_ids(issue_tags: list[dict[str, Any]], assignment_basis: str | None = None) -> list[str]:
+    values: list[str] = []
+    for tag in issue_tags:
+        tag_id = _text(tag, "tag_id")
+        if tag_id and (assignment_basis is None or _text(tag, "assignment_basis") == assignment_basis):
+            values.append(tag_id)
+    return list(dict.fromkeys(values))
+
+
+def _linked_conflict_payload(conflicts: list[dict[str, Any]]) -> list[dict[str, str]]:
+    return [
+        {
+            "conflict_id": _text(conflict, "conflict_id"),
+            "conflict_kind": _text(conflict, "conflict_kind"),
+            "resolution_status": _text(conflict, "resolution_status"),
+            "summary": _text(conflict, "summary"),
+        }
+        for conflict in conflicts[:2]
+    ]
+
+
+def _evidence_row(index: int, source: dict[str, Any], context: _IndexContext) -> dict[str, Any]:
+    findings = _findings_for_source(
+        context.finding_evidence_index, source, source_lookup=context.source_lookup, source_links=context.source_links
+    )
+    citation_ids = _citation_ids_for_source(
+        context.finding_evidence_index, source, source_lookup=context.source_lookup, source_links=context.source_links
+    )
+    source_id = _text(source, "source_id")
+    linked_source_ids = [item for item in _linked_source_ids(source_id, context.source_links) if item]
+    supporting_uids = _supporting_uids(source, linked_source_ids, context.source_lookup)
+    provenance = _as_dict(source.get("provenance"))
+    document_locator = _as_dict(source.get("document_locator"))
+    issue_tags = _issue_tags(context.case_bundle, source, findings)
+    linked_conflicts = context.conflicts_by_source_id.get(source_id, [])
+    language = _source_language(source)
+    reliability = _exhibit_reliability(source, findings)
+    readiness = _text(_as_dict(reliability.get("next_step_logic")), "readiness")
+    documentary_support = _as_dict(source.get("documentary_support"))
+    return {
+        "exhibit_id": f"EXH-{index:03d}",
+        "date": _text(source, "date"),
+        "document_type": _text(source, "document_kind") or _text(source, "source_type"),
+        "sender_or_author": _sender_or_author(source, source_lookup=context.source_lookup, source_links=context.source_links),
+        "sender_identity": _sender_identity(source, source_lookup=context.source_lookup, source_links=context.source_links),
+        "recipients": _recipients(source, context.source_lookup, context.source_links),
+        "recipient_identities": _recipient_identities(
+            source, source_lookup=context.source_lookup, source_links=context.source_links
+        ),
+        "short_description": _short_description(source),
+        "issue_tags": issue_tags,
+        "main_issue_tags": _tag_ids(issue_tags, "direct_document_content"),
+        "scope_issue_tags": _tag_ids(issue_tags, "operator_supplied"),
+        "inferred_issue_tags": _tag_ids(issue_tags, "bounded_inference"),
+        "all_issue_tags": _tag_ids(issue_tags),
+        "key_quoted_passage": _text(source, "snippet"),
+        "source_language": language,
+        "quoted_evidence": _make_quoted_evidence(source, source_language=language),
+        "why_it_matters": _why_it_matters(source, findings),
+        "exhibit_reliability": reliability,
+        "strength": _text(reliability, "strength"),
+        "readiness": readiness,
+        "reliability_or_evidentiary_strength": _reliability_label(source),
+        "source_reliability": _as_dict(source.get("source_reliability")),
+        "promotability_status": _text(source, "promotability_status"),
+        "follow_up_needed": _follow_up_needed(source, findings),
+        "source_format_support": _as_dict(documentary_support.get("format_profile")),
+        "extraction_quality": _as_dict(documentary_support.get("extraction_quality")),
+        "source_id": source_id,
+        "source_type": _text(source, "source_type"),
+        "supporting_finding_ids": _finding_ids(findings),
+        "supporting_citation_ids": citation_ids,
+        "supporting_uids": supporting_uids,
+        "linked_uids": [item for item in supporting_uids if item != _text(source, "uid")],
+        "supporting_source_ids": _unique_nonempty([source_id, *linked_source_ids]),
+        "linked_source_ids": linked_source_ids,
+        "candidate_related_source_ids": _candidate_related_source_ids(source),
+        "source_link_ambiguity": _as_dict(source.get("source_link_ambiguity")),
+        "supporting_evidence_handles": _unique_nonempty(
+            [_text(provenance, "evidence_handle"), _text(document_locator, "evidence_handle")]
+        ),
+        "provenance": provenance,
+        "document_locator": document_locator,
+        "source_conflict_ids": [
+            _text(conflict, "conflict_id") for conflict in linked_conflicts if _text(conflict, "conflict_id")
+        ],
+        "source_conflict_status": "disputed" if linked_conflicts else "stable",
+        "linked_source_conflicts": _linked_conflict_payload(linked_conflicts),
+    }
+
+
+def _candidate_related_source_ids(source: dict[str, Any]) -> list[str]:
+    return [text for item in _as_list(source.get("candidate_related_source_ids")) if (text := str(item).strip())][:6]
+
+
+def _ranked_rows(rows: list[dict[str, Any]], source_lookup: dict[str, dict[str, Any]]) -> list[tuple[int, dict[str, Any]]]:
+    scored = [(_exhibit_priority_score(row, _as_dict(source_lookup.get(_text(row, "source_id")))), row) for row in rows]
+    return sorted(scored, key=lambda item: (-item[0], _text(item[1], "date"), _text(item[1], "exhibit_id")))
+
+
+def _top_exhibits(
+    ranked_rows: list[tuple[int, dict[str, Any]]], source_lookup: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    return [
+        _top_exhibit_payload(
+            row,
+            source=_as_dict(source_lookup.get(_text(row, "source_id"))),
+            rank=index,
+            priority_score=score,
+        )
+        for index, (score, row) in enumerate(ranked_rows[:15], start=1)
+    ]
+
+
+def _value_counts(values: list[str], expected: tuple[str, ...]) -> dict[str, int]:
+    return {value: values.count(value) for value in expected}
+
+
+def _row_text_values(rows: list[dict[str, Any]], key: str) -> list[str]:
+    return [_text(row, key) for row in rows]
+
+
+def _issue_tag_basis_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    bases = [_text(tag, "assignment_basis") for row in rows for tag in _as_list(row.get("issue_tags")) if isinstance(tag, dict)]
+    return _value_counts(bases, ("operator_supplied", "direct_document_content", "bounded_inference"))
+
+
+def _index_summary(
+    rows: list[dict[str, Any]], bundle: dict[str, Any], top_exhibits: list[dict[str, Any]], missing_exhibits: list[dict[str, Any]]
+) -> dict[str, Any]:
+    strengths = [_text(_as_dict(row.get("exhibit_reliability")), "strength") for row in rows]
+    readiness = [_text(_as_dict(_as_dict(row.get("exhibit_reliability")).get("next_step_logic")), "readiness") for row in rows]
+    return {
+        "source_type_counts": dict(_as_dict(bundle.get("summary")).get("source_type_counts") or {}),
+        "exhibit_strength_counts": _value_counts(strengths, ("strong", "moderate", "weak", "unknown")),
+        "exhibit_readiness_counts": _value_counts(
+            readiness, ("usable_now", "usable_with_original_source_check", "manual_review_required")
+        ),
+        "issue_tag_counts": _tag_counts(rows, "all_issue_tags"),
+        "main_issue_tag_counts": _tag_counts(rows, "main_issue_tags"),
+        "scope_issue_tag_counts": _tag_counts(rows, "scope_issue_tags"),
+        "inferred_issue_tag_counts": _tag_counts(rows, "inferred_issue_tags"),
+        "issue_tag_basis_counts": _issue_tag_basis_counts(rows),
+        "top_exhibit_count": len(top_exhibits),
+        "missing_exhibit_count": len(missing_exhibits),
+        "source_conflict_status_counts": _value_counts(_row_text_values(rows, "source_conflict_status"), ("stable", "disputed")),
+    }
+
+
 def build_matter_evidence_index(
     *,
     case_bundle: dict[str, Any] | None,
@@ -91,167 +286,19 @@ def build_matter_evidence_index(
     """Return a durable exhibit register from current case-analysis sources."""
     if not isinstance(case_bundle, dict) or not isinstance(multi_source_case_bundle, dict):
         return None
-
-    sources = _source_rows(multi_source_case_bundle)
     source_lookup = _source_by_id(multi_source_case_bundle)
-    source_links = [link for link in _as_list(multi_source_case_bundle.get("source_links")) if isinstance(link, dict)]
-    source_conflicts_by_source_id = _source_conflicts_by_source_id(_as_dict(master_chronology))
-    rows: list[dict[str, Any]] = []
-
-    for index, source in enumerate(
-        sorted(
-            sources,
-            key=lambda item: (
-                str(item.get("date") or ""),
-                str(item.get("source_type") or ""),
-                str(item.get("source_id") or ""),
-            ),
-        ),
-        start=1,
-    ):
-        findings = _findings_for_source(
-            _as_dict(finding_evidence_index),
-            source,
-            source_lookup=source_lookup,
-            source_links=source_links,
-        )
-        citation_ids = _citation_ids_for_source(
-            _as_dict(finding_evidence_index),
-            source,
-            source_lookup=source_lookup,
-            source_links=source_links,
-        )
-        source_id = str(source.get("source_id") or "")
-        linked_source_ids = [item for item in _linked_source_ids(source_id, source_links) if item]
-        supporting_source_ids = list(dict.fromkeys([source_id, *linked_source_ids]))
-        provenance = _as_dict(source.get("provenance"))
-        document_locator = _as_dict(source.get("document_locator"))
-        evidence_handles = list(
-            dict.fromkeys(
-                [
-                    str(provenance.get("evidence_handle") or ""),
-                    str(document_locator.get("evidence_handle") or ""),
-                ]
-            )
-        )
-        supporting_uids = list(
-            dict.fromkeys(
-                [
-                    str(source.get("uid") or ""),
-                    *[
-                        str(_as_dict(source_lookup.get(linked_source_id)).get("uid") or "")
-                        for linked_source_id in linked_source_ids
-                    ],
-                ]
-            )
-        )
-        supporting_uids = [item for item in supporting_uids if item]
-        exhibit_id = f"EXH-{index:03d}"
-        issue_tags = _issue_tags(case_bundle, source, findings)
-        linked_conflicts = source_conflicts_by_source_id.get(str(source.get("source_id") or ""), [])
-        source_language = _source_language(source)
-        exhibit_reliability = _exhibit_reliability(source, findings)
-        next_step_logic = _as_dict(exhibit_reliability.get("next_step_logic"))
-        sender_identity = _sender_identity(source, source_lookup=source_lookup, source_links=source_links)
-        recipient_identities = _recipient_identities(source, source_lookup=source_lookup, source_links=source_links)
-        rows.append(
-            {
-                "exhibit_id": exhibit_id,
-                "date": str(source.get("date") or ""),
-                "document_type": str(source.get("document_kind") or source.get("source_type") or ""),
-                "sender_or_author": _sender_or_author(source, source_lookup=source_lookup, source_links=source_links),
-                "sender_identity": sender_identity,
-                "recipients": _recipients(source, source_lookup, source_links),
-                "recipient_identities": recipient_identities,
-                "short_description": _short_description(source),
-                "issue_tags": issue_tags,
-                "main_issue_tags": list(
-                    dict.fromkeys(
-                        str(tag.get("tag_id") or "")
-                        for tag in issue_tags
-                        if str(tag.get("tag_id") or "") and str(tag.get("assignment_basis") or "") == "direct_document_content"
-                    )
-                ),
-                "scope_issue_tags": list(
-                    dict.fromkeys(
-                        str(tag.get("tag_id") or "")
-                        for tag in issue_tags
-                        if str(tag.get("tag_id") or "") and str(tag.get("assignment_basis") or "") == "operator_supplied"
-                    )
-                ),
-                "inferred_issue_tags": list(
-                    dict.fromkeys(
-                        str(tag.get("tag_id") or "")
-                        for tag in issue_tags
-                        if str(tag.get("tag_id") or "") and str(tag.get("assignment_basis") or "") == "bounded_inference"
-                    )
-                ),
-                "all_issue_tags": list(
-                    dict.fromkeys(str(tag.get("tag_id") or "") for tag in issue_tags if str(tag.get("tag_id") or ""))
-                ),
-                "key_quoted_passage": str(source.get("snippet") or ""),
-                "source_language": source_language,
-                "quoted_evidence": _make_quoted_evidence(source, source_language=source_language),
-                "why_it_matters": _why_it_matters(source, findings),
-                "exhibit_reliability": exhibit_reliability,
-                "strength": str(exhibit_reliability.get("strength") or ""),
-                "readiness": str(next_step_logic.get("readiness") or ""),
-                "reliability_or_evidentiary_strength": _reliability_label(source),
-                "source_reliability": _as_dict(source.get("source_reliability")),
-                "promotability_status": str(source.get("promotability_status") or ""),
-                "follow_up_needed": _follow_up_needed(source, findings),
-                "source_format_support": _as_dict(_as_dict(source.get("documentary_support")).get("format_profile")),
-                "extraction_quality": _as_dict(_as_dict(source.get("documentary_support")).get("extraction_quality")),
-                "source_id": str(source.get("source_id") or ""),
-                "source_type": str(source.get("source_type") or ""),
-                "supporting_finding_ids": _finding_ids(findings),
-                "supporting_citation_ids": citation_ids,
-                "supporting_uids": supporting_uids,
-                "linked_uids": [item for item in supporting_uids if item != str(source.get("uid") or "")],
-                "supporting_source_ids": list(dict.fromkeys([item for item in supporting_source_ids if item])),
-                "linked_source_ids": linked_source_ids,
-                "candidate_related_source_ids": [
-                    str(item) for item in _as_list(source.get("candidate_related_source_ids")) if str(item).strip()
-                ][:6],
-                "source_link_ambiguity": _as_dict(source.get("source_link_ambiguity")),
-                "supporting_evidence_handles": [item for item in evidence_handles if item],
-                "provenance": provenance,
-                "document_locator": document_locator,
-                "source_conflict_ids": [
-                    str(conflict.get("conflict_id") or "")
-                    for conflict in linked_conflicts
-                    if str(conflict.get("conflict_id") or "")
-                ],
-                "source_conflict_status": ("disputed" if linked_conflicts else "stable"),
-                "linked_source_conflicts": [
-                    {
-                        "conflict_id": str(conflict.get("conflict_id") or ""),
-                        "conflict_kind": str(conflict.get("conflict_kind") or ""),
-                        "resolution_status": str(conflict.get("resolution_status") or ""),
-                        "summary": str(conflict.get("summary") or ""),
-                    }
-                    for conflict in linked_conflicts[:2]
-                ],
-            }
-        )
-
-    ranked_rows = sorted(
-        [(_exhibit_priority_score(row, _as_dict(source_lookup.get(str(row.get("source_id") or "")))), row) for row in rows],
-        key=lambda item: (
-            -item[0],
-            str(item[1].get("date") or ""),
-            str(item[1].get("exhibit_id") or ""),
-        ),
+    source_links = _source_links(multi_source_case_bundle)
+    context = _IndexContext(
+        case_bundle=case_bundle,
+        finding_evidence_index=_as_dict(finding_evidence_index),
+        source_lookup=source_lookup,
+        source_links=source_links,
+        conflicts_by_source_id=_source_conflicts_by_source_id(_as_dict(master_chronology)),
     )
-    top_15_exhibits = [
-        _top_exhibit_payload(
-            row,
-            source=_as_dict(source_lookup.get(str(row.get("source_id") or ""))),
-            rank=index,
-            priority_score=score,
-        )
-        for index, (score, row) in enumerate(ranked_rows[:15], start=1)
+    rows = [
+        _evidence_row(index, source, context) for index, source in enumerate(_sorted_sources(multi_source_case_bundle), start=1)
     ]
+    top_15_exhibits = _top_exhibits(_ranked_rows(rows, source_lookup), source_lookup)
     top_10_missing_exhibits = _missing_exhibit_rows(
         case_bundle=case_bundle,
         rows=rows,
@@ -259,61 +306,10 @@ def build_matter_evidence_index(
         as_dict=_as_dict,
         as_list=_as_list,
     )
-
     return {
         "version": MATTER_EVIDENCE_INDEX_VERSION,
         "row_count": len(rows),
-        "summary": {
-            "source_type_counts": dict(_as_dict(multi_source_case_bundle.get("summary")).get("source_type_counts") or {}),
-            "exhibit_strength_counts": {
-                strength: sum(
-                    1 for row in rows if str(_as_dict(row.get("exhibit_reliability")).get("strength") or "") == strength
-                )
-                for strength in ("strong", "moderate", "weak", "unknown")
-            },
-            "exhibit_readiness_counts": {
-                readiness: sum(
-                    1
-                    for row in rows
-                    if str(_as_dict(_as_dict(row.get("exhibit_reliability")).get("next_step_logic")).get("readiness") or "")
-                    == readiness
-                )
-                for readiness in ("usable_now", "usable_with_original_source_check", "manual_review_required")
-            },
-            "issue_tag_counts": {
-                tag: sum(1 for row in rows if tag in _as_list(row.get("all_issue_tags")))
-                for tag in {tag for row in rows for tag in _as_list(row.get("all_issue_tags")) if isinstance(tag, str) and tag}
-            },
-            "main_issue_tag_counts": {
-                tag: sum(1 for row in rows if tag in _as_list(row.get("main_issue_tags")))
-                for tag in {tag for row in rows for tag in _as_list(row.get("main_issue_tags")) if isinstance(tag, str) and tag}
-            },
-            "scope_issue_tag_counts": {
-                tag: sum(1 for row in rows if tag in _as_list(row.get("scope_issue_tags")))
-                for tag in {tag for row in rows for tag in _as_list(row.get("scope_issue_tags")) if isinstance(tag, str) and tag}
-            },
-            "inferred_issue_tag_counts": {
-                tag: sum(1 for row in rows if tag in _as_list(row.get("inferred_issue_tags")))
-                for tag in {
-                    tag for row in rows for tag in _as_list(row.get("inferred_issue_tags")) if isinstance(tag, str) and tag
-                }
-            },
-            "issue_tag_basis_counts": {
-                basis: sum(
-                    1
-                    for row in rows
-                    for tag in _as_list(row.get("issue_tags"))
-                    if isinstance(tag, dict) and str(tag.get("assignment_basis") or "") == basis
-                )
-                for basis in ("operator_supplied", "direct_document_content", "bounded_inference")
-            },
-            "top_exhibit_count": len(top_15_exhibits),
-            "missing_exhibit_count": len(top_10_missing_exhibits),
-            "source_conflict_status_counts": {
-                status: sum(1 for row in rows if str(row.get("source_conflict_status") or "") == status)
-                for status in ("stable", "disputed")
-            },
-        },
+        "summary": _index_summary(rows, multi_source_case_bundle, top_15_exhibits, top_10_missing_exhibits),
         "rows": rows,
         "top_15_exhibits": top_15_exhibits,
         "top_10_missing_exhibits": top_10_missing_exhibits,

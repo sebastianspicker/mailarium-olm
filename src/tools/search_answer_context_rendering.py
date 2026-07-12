@@ -6,6 +6,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .._utils import _as_dict
+
 
 def _is_weak_evidence_item(item: dict[str, Any]) -> bool:
     """Return whether one evidence item is weak for answer synthesis."""
@@ -16,6 +18,17 @@ def _is_weak_evidence_item(item: dict[str, Any]) -> bool:
 
 
 def _evidence_rank_key(item: dict[str, Any]) -> tuple[float, float, str]:
+    """Generate a sorting key for evidence items based on multiple score dimensions.
+
+    Creates a composite key for sorting evidence items by effective score,
+    raw score, and reference token to ensure deterministic ordering.
+
+    Args:
+        item: The evidence item dictionary.
+
+    Returns:
+        A tuple of (effective_score, raw_score, reference_token) for sorting.
+    """
     effective_score = _evidence_rank_score(item)
     reference = _citation_reference(item)
     reference_token = str(reference.get("evidence_handle") or reference.get("uid") or "")
@@ -23,32 +36,56 @@ def _evidence_rank_key(item: dict[str, Any]) -> tuple[float, float, str]:
 
 
 def _evidence_rank_score(item: dict[str, Any]) -> float:
-    score = float(item.get("score") or 0.0)
-    score_calibration = str(item.get("score_calibration") or "").strip()
-    score_kind = str(item.get("score_kind") or "").strip()
+    """Calculate the effective ranking score for an evidence item.
+
+    Computes a calibrated score that incorporates base score, calibration type,
+    score kind, verification status, attachment presence, and exact wording
+    bonuses/penalties.
+
+    Args:
+        item: The evidence item dictionary.
+
+    Returns:
+        The adjusted score as a float.
+    """
+    return float(item.get("score") or 0.0) + _evidence_rank_adjustment(item)
+
+
+def _evidence_rank_adjustment(item: dict[str, Any]) -> float:
     verification_status = str(item.get("verification_status") or "").strip()
-    attachment = item.get("attachment")
-    if score_calibration == "calibrated":
-        score += 0.03
-    elif score_calibration == "synthetic":
-        score -= 0.02
-    if score_kind == "segment_sql":
-        score += 0.015
-    if isinstance(attachment, dict):
-        score += 0.01
-    if verification_status in {"retrieval_exact", "forensic_exact", "hybrid_verified_forensic", "segment_exact"}:
-        score += 0.015
-    if bool(item.get("exact_wording_requested")):
-        body_render_source = str(item.get("body_render_source") or "").strip()
-        if verification_status in {"forensic_exact", "segment_exact"}:
-            score += 0.07
-        elif verification_status in {"retrieval_exact", "hybrid_verified_forensic"}:
-            score += 0.04
-        if body_render_source in {"forensic_body_text", "message_segments", "quoted_reply"}:
-            score += 0.02
-        if verification_status in {"thread_context", "attachment_reference", "mixed_source_reference"}:
-            score -= 0.025
-    return score
+    adjustment = _baseline_rank_adjustment(item, verification_status)
+    return adjustment + _exact_wording_rank_adjustment(item, verification_status)
+
+
+def _baseline_rank_adjustment(item: dict[str, Any], verification_status: str) -> float:
+    calibration_adjustment = {"calibrated": 0.03, "synthetic": -0.02}.get(str(item.get("score_calibration") or "").strip(), 0.0)
+    score_kind_adjustment = 0.015 if str(item.get("score_kind") or "").strip() == "segment_sql" else 0.0
+    attachment_adjustment = 0.01 if isinstance(item.get("attachment"), dict) else 0.0
+    verified_adjustment = 0.015 if verification_status in _EXACT_VERIFICATION_STATUSES else 0.0
+    return calibration_adjustment + score_kind_adjustment + attachment_adjustment + verified_adjustment
+
+
+_EXACT_VERIFICATION_STATUSES = {"retrieval_exact", "forensic_exact", "hybrid_verified_forensic", "segment_exact"}
+
+
+def _exact_wording_rank_adjustment(item: dict[str, Any], verification_status: str) -> float:
+    if not bool(item.get("exact_wording_requested")):
+        return 0.0
+    verification_adjustment = {
+        "forensic_exact": 0.07,
+        "segment_exact": 0.07,
+        "retrieval_exact": 0.04,
+        "hybrid_verified_forensic": 0.04,
+    }.get(verification_status, 0.0)
+    source_adjustment = (
+        0.02
+        if str(item.get("body_render_source") or "").strip() in {"forensic_body_text", "message_segments", "quoted_reply"}
+        else 0.0
+    )
+    weak_source_adjustment = (
+        -0.025 if verification_status in {"thread_context", "attachment_reference", "mixed_source_reference"} else 0.0
+    )
+    return verification_adjustment + source_adjustment + weak_source_adjustment
 
 
 def _answer_quality(
@@ -60,68 +97,81 @@ def _answer_quality(
     """Return a compact confidence and ambiguity summary for the answer bundle."""
     ordered = sorted([*candidates, *attachment_candidates], key=_evidence_rank_key, reverse=True)
     if not ordered:
-        return {
-            "confidence_label": "low",
-            "confidence_score": 0.0,
-            "ambiguity_reason": "no_evidence",
-            "alternative_candidates": [],
-            "alternative_candidate_references": [],
-            "top_candidate_uid": "",
-            "top_candidate_reference": {"uid": "", "evidence_handle": ""},
-            "top_conversation_id": "",
-            "top_thread_group_id": "",
-            "top_thread_group_source": "",
-        }
+        return _empty_answer_quality()
 
     top = ordered[0]
     top_score = _evidence_rank_score(top)
     second_score = _evidence_rank_score(ordered[1]) if len(ordered) > 1 else 0.0
     gap = top_score - second_score
-    ambiguity_reason = ""
-    confidence_label = "medium"
-
-    if len(ordered) > 1 and gap <= 0.03:
-        confidence_label = "ambiguous"
-        ambiguity_reason = "close_top_scores"
-    elif top_score >= 0.85 and gap >= 0.15:
-        confidence_label = "high"
-    elif top_score < 0.6:
-        confidence_label = "low"
-        ambiguity_reason = "weak_top_score"
-
-    top_reference = _citation_reference(top)
-    alternative_candidates = [str(item.get("uid") or "") for item in ordered[1:3] if item.get("uid")]
-    alternative_candidate_references = [_citation_reference(item) for item in ordered[1:3]]
-    if confidence_label == "high":
-        alternative_candidates = []
-        alternative_candidate_references = []
-
-    top_conversation_id = ""
-    top_thread_group_id = ""
-    top_thread_group_source = ""
-    if conversation_groups:
-        top_conversation_id = str(conversation_groups[0].get("conversation_id") or "")
-        top_thread_group_id = str(conversation_groups[0].get("thread_group_id") or "")
-        top_thread_group_source = str(conversation_groups[0].get("thread_group_source") or "")
-    elif top.get("conversation_id"):
-        top_conversation_id = str(top.get("conversation_id") or "")
-        top_thread_group_id = top_conversation_id
-        top_thread_group_source = "canonical"
-    elif top.get("inferred_thread_id"):
-        top_thread_group_id = str(top.get("inferred_thread_id") or "")
-        top_thread_group_source = "inferred"
+    confidence_label, ambiguity_reason = _confidence_label(len(ordered), top_score, gap)
+    alternatives, alternative_references = _alternative_candidates(ordered, confidence_label)
+    thread_context = _top_thread_context(top, conversation_groups)
 
     return {
         "confidence_label": confidence_label,
         "confidence_score": round(top_score, 3),
         "ambiguity_reason": ambiguity_reason,
-        "alternative_candidates": alternative_candidates,
-        "alternative_candidate_references": alternative_candidate_references,
+        "alternative_candidates": alternatives,
+        "alternative_candidate_references": alternative_references,
         "top_candidate_uid": str(top.get("uid") or ""),
-        "top_candidate_reference": top_reference,
-        "top_conversation_id": top_conversation_id,
-        "top_thread_group_id": top_thread_group_id,
-        "top_thread_group_source": top_thread_group_source,
+        "top_candidate_reference": _citation_reference(top),
+        **thread_context,
+    }
+
+
+def _empty_answer_quality() -> dict[str, Any]:
+    return {
+        "confidence_label": "low",
+        "confidence_score": 0.0,
+        "ambiguity_reason": "no_evidence",
+        "alternative_candidates": [],
+        "alternative_candidate_references": [],
+        "top_candidate_uid": "",
+        "top_candidate_reference": {"uid": "", "evidence_handle": ""},
+        "top_conversation_id": "",
+        "top_thread_group_id": "",
+        "top_thread_group_source": "",
+    }
+
+
+def _confidence_label(item_count: int, top_score: float, gap: float) -> tuple[str, str]:
+    if item_count > 1 and gap <= 0.03:
+        return "ambiguous", "close_top_scores"
+    if top_score >= 0.85 and gap >= 0.15:
+        return "high", ""
+    if top_score < 0.6:
+        return "low", "weak_top_score"
+    return "medium", ""
+
+
+def _alternative_candidates(ordered: list[dict[str, Any]], confidence_label: str) -> tuple[list[str], list[dict[str, str]]]:
+    if confidence_label == "high":
+        return [], []
+    alternatives = ordered[1:3]
+    return [str(item.get("uid") or "") for item in alternatives if item.get("uid")], [
+        _citation_reference(item) for item in alternatives
+    ]
+
+
+def _top_thread_context(top: dict[str, Any], conversation_groups: list[dict[str, Any]]) -> dict[str, str]:
+    if conversation_groups:
+        group = conversation_groups[0]
+        return {
+            "top_conversation_id": str(group.get("conversation_id") or ""),
+            "top_thread_group_id": str(group.get("thread_group_id") or ""),
+            "top_thread_group_source": str(group.get("thread_group_source") or ""),
+        }
+    if top.get("conversation_id"):
+        conversation_id = str(top.get("conversation_id") or "")
+        return {
+            "top_conversation_id": conversation_id,
+            "top_thread_group_id": conversation_id,
+            "top_thread_group_source": "canonical",
+        }
+    return {
+        "top_conversation_id": "",
+        "top_thread_group_id": str(top.get("inferred_thread_id") or ""),
+        "top_thread_group_source": "inferred" if top.get("inferred_thread_id") else "",
     }
 
 
@@ -164,6 +214,17 @@ def _citation_reference(item: dict[str, Any]) -> dict[str, str]:
 
 
 def _reference_token(reference: dict[str, str]) -> str:
+    """Extract a stable token from a citation reference for deduplication.
+
+    Creates a string token from either evidence_handle or uid for use in
+    tracking and deduplicating citations.
+
+    Args:
+        reference: A citation reference dictionary with uid and/or evidence_handle.
+
+    Returns:
+        The evidence_handle if present, otherwise the uid, or empty string.
+    """
     return str(reference.get("evidence_handle") or reference.get("uid") or "").strip()
 
 
@@ -218,51 +279,14 @@ def _answer_policy(
     alternative_candidate_references = _citation_reference_payloads(answer_quality.get("alternative_candidate_references"))
     exact_wording = _resolve_exact_wording_requested(question=question, explicit=exact_wording_requested)
     weak_evidence = _has_weak_evidence(candidates, attachment_candidates)
-    verification_mode = "already_forensic" if evidence_mode == "forensic" else "retrieval_ok"
-    if evidence_mode != "forensic" and (exact_wording or confidence_label in {"ambiguous", "medium"} or weak_evidence):
-        verification_mode = "verify_forensic"
-
-    if confidence_label == "ambiguous":
-        decision = "ambiguous"
-    elif confidence_label == "low" or ambiguity_reason in {"no_evidence", "weak_top_score", "weak_scan_body"} or weak_evidence:
-        decision = "insufficient_evidence"
-    else:
-        decision = "answer"
-
-    ordered = _ordered_evidence(candidates, attachment_candidates)
+    verification_mode = _verification_mode(evidence_mode, exact_wording, confidence_label, weak_evidence)
+    decision = _answer_decision(confidence_label, ambiguity_reason, weak_evidence)
     cite_candidate_uids = [uid for uid in [top_candidate_uid, *alternative_candidates] if uid]
     requested_references = [top_candidate_reference, *alternative_candidate_references]
-    requested_tokens = {_reference_token(reference) for reference in requested_references if _reference_token(reference)}
-    citation_references: list[dict[str, str]] = []
-    seen_tokens: set[str] = set()
-    for item in ordered:
-        reference = _citation_reference(item)
-        token = _reference_token(reference)
-        uid = str(item.get("uid") or "")
-        if not token:
-            continue
-        if requested_tokens:
-            if token not in requested_tokens:
-                continue
-        elif not uid or uid not in cite_candidate_uids:
-            continue
-        if token in seen_tokens:
-            continue
-        citation_references.append(reference)
-        seen_tokens.add(token)
-    max_citations = 1
-    if decision == "ambiguous":
-        requested_count = len([reference for reference in requested_references if _reference_token(reference)])
-        max_citations = min(2, max(requested_count, len(cite_candidate_uids), 1))
-    elif decision == "insufficient_evidence" and cite_candidate_uids:
-        max_citations = 1
-
-    if decision == "answer" and confidence_label == "high":
-        confidence_phrase = "The evidence strongly indicates"
-    elif decision == "answer":
-        confidence_phrase = "The available evidence suggests"
-    else:
-        confidence_phrase = "The available evidence is limited"
+    citation_references = _requested_citation_references(
+        candidates, attachment_candidates, requested_references, cite_candidate_uids
+    )
+    max_citations = _max_citations(decision, requested_references, cite_candidate_uids)
 
     return {
         "decision": decision,
@@ -272,7 +296,7 @@ def _answer_policy(
         "cite_candidate_uids": cite_candidate_uids[:max_citations],
         "cite_candidate_references": citation_references[:max_citations],
         "top_candidate_reference": top_candidate_reference,
-        "confidence_phrase": confidence_phrase,
+        "confidence_phrase": _confidence_phrase(decision, confidence_label),
         "ambiguity_phrase": "The available evidence is ambiguous",
         "fallback_phrase": (
             "I can identify the likely message, but the available evidence is too weak to state the content confidently."
@@ -281,41 +305,107 @@ def _answer_policy(
     }
 
 
+def _verification_mode(evidence_mode: str, exact_wording: bool, confidence_label: str, weak_evidence: bool) -> str:
+    needs_forensic = exact_wording or confidence_label in {"ambiguous", "medium"} or weak_evidence
+    return (
+        "verify_forensic"
+        if evidence_mode != "forensic" and needs_forensic
+        else "already_forensic"
+        if evidence_mode == "forensic"
+        else "retrieval_ok"
+    )
+
+
+def _answer_decision(confidence_label: str, ambiguity_reason: str, weak_evidence: bool) -> str:
+    if confidence_label == "ambiguous":
+        return "ambiguous"
+    if confidence_label == "low" or ambiguity_reason in {"no_evidence", "weak_top_score", "weak_scan_body"} or weak_evidence:
+        return "insufficient_evidence"
+    return "answer"
+
+
+def _requested_citation_references(
+    candidates: list[dict[str, Any]],
+    attachment_candidates: list[dict[str, Any]],
+    requested_references: list[dict[str, str]],
+    cite_uids: list[str],
+) -> list[dict[str, str]]:
+    requested_tokens = {_reference_token(reference) for reference in requested_references if _reference_token(reference)}
+    references: list[dict[str, str]] = []
+    for item in _ordered_evidence(candidates, attachment_candidates):
+        reference = _citation_reference(item)
+        token = _reference_token(reference)
+        if (
+            token
+            and _citation_is_requested(token, str(item.get("uid") or ""), requested_tokens, cite_uids)
+            and token not in {_reference_token(ref) for ref in references}
+        ):
+            references.append(reference)
+    return references
+
+
+def _citation_is_requested(token: str, uid: str, requested_tokens: set[str], cite_uids: list[str]) -> bool:
+    return token in requested_tokens if requested_tokens else bool(uid and uid in cite_uids)
+
+
+def _max_citations(decision: str, requested_references: list[dict[str, str]], cite_uids: list[str]) -> int:
+    if decision != "ambiguous":
+        return 1
+    requested_count = sum(bool(_reference_token(reference)) for reference in requested_references)
+    return min(2, max(requested_count, len(cite_uids), 1))
+
+
+def _confidence_phrase(decision: str, confidence_label: str) -> str:
+    if decision != "answer":
+        return "The available evidence is limited"
+    return "The evidence strongly indicates" if confidence_label == "high" else "The available evidence suggests"
+
+
 def _final_answer_contract(*, answer_policy: dict[str, Any]) -> dict[str, Any]:
     """Return the outward response contract for mailbox answers."""
     decision = str(answer_policy.get("decision") or "insufficient_evidence")
-    cite_candidate_uids = [str(uid) for uid in answer_policy.get("cite_candidate_uids", []) if uid]
     citation_references = _citation_reference_payloads(answer_policy.get("cite_candidate_references"))
-    required_handles = [str(ref.get("evidence_handle") or "") for ref in citation_references if ref.get("evidence_handle")]
-    if decision == "ambiguous":
-        answer_shape = "two_short_paragraphs"
-    else:
-        answer_shape = "single_paragraph"
     return {
         "decision": decision,
-        "answer_format": {
-            "shape": answer_shape,
-            "cite_at_sentence_end": True,
-            "max_citations": int(answer_policy.get("max_citations") or 0),
-            "include_confidence_wording": decision == "answer",
-            "include_ambiguity_wording": decision == "ambiguous",
-            "include_fallback_wording": decision == "insufficient_evidence",
-        },
-        "citation_format": {
-            "style": "inline_reference_brackets",
-            "pattern": "[ref:<EVIDENCE_HANDLE>] or [uid:<EMAIL_UID>] when no evidence handle is available",
-            "required_attribution": "Only cite references from required_citation_handles or required_citation_uids.",
-        },
+        "answer_format": _answer_format(answer_policy, decision),
+        "citation_format": _citation_format(),
         "confidence_wording": str(answer_policy.get("confidence_phrase") or ""),
         "ambiguity_wording": str(answer_policy.get("ambiguity_phrase") or ""),
         "fallback_wording": str(answer_policy.get("fallback_phrase") or ""),
-        "required_citation_uids": cite_candidate_uids,
-        "required_citation_handles": required_handles,
+        "required_citation_uids": _string_values(answer_policy.get("cite_candidate_uids")),
+        "required_citation_handles": _citation_handles(citation_references),
         "required_citation_references": citation_references,
         "verification_mode": str(answer_policy.get("verification_mode") or ""),
         "exact_wording_requested": bool(answer_policy.get("exact_wording_requested")),
         "refuse_to_overclaim": bool(answer_policy.get("refuse_to_overclaim", True)),
     }
+
+
+def _answer_format(policy: dict[str, Any], decision: str) -> dict[str, Any]:
+    return {
+        "shape": "two_short_paragraphs" if decision == "ambiguous" else "single_paragraph",
+        "cite_at_sentence_end": True,
+        "max_citations": int(policy.get("max_citations") or 0),
+        "include_confidence_wording": decision == "answer",
+        "include_ambiguity_wording": decision == "ambiguous",
+        "include_fallback_wording": decision == "insufficient_evidence",
+    }
+
+
+def _citation_format() -> dict[str, str]:
+    return {
+        "style": "inline_reference_brackets",
+        "pattern": "[ref:<EVIDENCE_HANDLE>] or [uid:<EMAIL_UID>] when no evidence handle is available",
+        "required_attribution": "Only cite references from required_citation_handles or required_citation_uids.",
+    }
+
+
+def _string_values(values: Any) -> list[str]:
+    return [str(value) for value in values or [] if value]
+
+
+def _citation_handles(references: list[dict[str, str]]) -> list[str]:
+    return [str(reference.get("evidence_handle") or "") for reference in references if reference.get("evidence_handle")]
 
 
 def _ordered_evidence(
@@ -333,30 +423,21 @@ def _evidence_description(item: dict[str, Any]) -> str:
     source_type = str(item.get("source_type") or "").strip()
     attachment = item.get("attachment")
     if source_type == "chat_log":
-        base = f'the chat record "{subject or item.get("source_id") or "chat record"}"'
-        if date:
-            base += f" from {date[:10]}"
-        return base
+        return _dated_description(f'the chat record "{subject or item.get("source_id") or "chat record"}"', date)
     if source_type in {"formal_document", "note_record", "time_record", "participation_record", "meeting_note"}:
-        base = f'the {source_type.replace("_", " ")} "{subject or item.get("source_id") or "record"}"'
-        if date:
-            base += f" from {date[:10]}"
-        return base
+        return _dated_description(f'the {source_type.replace("_", " ")} "{subject or item.get("source_id") or "record"}"', date)
     if isinstance(attachment, dict):
         filename = str(attachment.get("filename") or "attachment").strip()
         base = f'the attachment "{filename}"'
         if subject:
             base += f' in "{subject}"'
-        if date:
-            base += f" from {date[:10]}"
     else:
-        if subject:
-            base = f'the message "{subject}"'
-        else:
-            base = "the strongest matching message"
-        if date:
-            base += f" from {date[:10]}"
-    return base
+        base = f'the message "{subject}"' if subject else "the strongest matching message"
+    return _dated_description(base, date)
+
+
+def _dated_description(base: str, date: str) -> str:
+    return f"{base} from {date[:10]}" if date else base
 
 
 def _exact_excerpt(item: dict[str, Any]) -> str:
@@ -378,82 +459,105 @@ def _render_final_answer(
     """Render a deterministic final mailbox answer from the current evidence bundle."""
     ordered = _ordered_evidence(candidates, attachment_candidates)
     decision = str(answer_policy.get("decision") or final_answer_contract.get("decision") or "insufficient_evidence")
-    citation_references = _citation_reference_payloads(final_answer_contract.get("required_citation_references"))
-    required_citation_uids = [str(uid) for uid in final_answer_contract.get("required_citation_uids", []) if uid]
-    required_citation_handles = [str(handle) for handle in final_answer_contract.get("required_citation_handles", []) if handle]
-    if not citation_references:
-        citation_references = [
-            {"uid": uid, "evidence_handle": required_citation_handles[index] if index < len(required_citation_handles) else ""}
-            for index, uid in enumerate(required_citation_uids)
-        ]
-    if not citation_references:
-        citation_references = [{"uid": uid, "evidence_handle": ""} for uid in required_citation_uids]
-    citations = [_citation_token(reference) for reference in citation_references]
-    citation_text = " ".join(citations)
-    top_item = ordered[0] if ordered else None
+    citation_references = _contract_citation_references(final_answer_contract)
+    citation_text = " ".join(_citation_token(reference) for reference in citation_references)
     exact_wording_requested = bool(
         final_answer_contract.get("exact_wording_requested") or answer_policy.get("exact_wording_requested")
     )
+    text = _final_answer_text(
+        decision, ordered, answer_policy, final_answer_contract, citation_text, exact_wording_requested, citation_references
+    )
+    return _rendered_answer_payload(decision, text, citation_references, answer_policy, final_answer_contract)
 
+
+def _contract_citation_references(final_answer_contract: dict[str, Any]) -> list[dict[str, str]]:
+    references = _citation_reference_payloads(final_answer_contract.get("required_citation_references"))
+    if references:
+        return references
+    uids = [str(uid) for uid in final_answer_contract.get("required_citation_uids", []) if uid]
+    handles = [str(handle) for handle in final_answer_contract.get("required_citation_handles", []) if handle]
+    return [{"uid": uid, "evidence_handle": handles[index] if index < len(handles) else ""} for index, uid in enumerate(uids)]
+
+
+def _final_answer_text(
+    decision: str,
+    ordered: list[dict[str, Any]],
+    answer_policy: dict[str, Any],
+    final_answer_contract: dict[str, Any],
+    citation_text: str,
+    exact_wording_requested: bool,
+    references: list[dict[str, str]],
+) -> str:
     if decision == "ambiguous":
-        citation_tokens = {_reference_token(reference) for reference in citation_references if _reference_token(reference)}
-        cited_items = [item for item in ordered if _reference_token(_citation_reference(item)) in citation_tokens][:2]
-        ambiguity_wording = str(final_answer_contract.get("ambiguity_wording") or answer_policy.get("ambiguity_phrase") or "")
-        first = ambiguity_wording or "The available evidence is ambiguous."
-        if not first.endswith("."):
-            first += "."
-        descriptions = [_evidence_description(item) for item in cited_items]
-        if descriptions:
-            second = "The strongest candidates are " + " and ".join(descriptions) + "."
-        else:
-            second = "The strongest candidates remain too close to support one confident answer."
-        if citation_text:
-            second = f"{second} {citation_text}"
-        text = f"{first}\n\n{second}"
-    elif decision == "answer":
-        confidence = str(final_answer_contract.get("confidence_wording") or answer_policy.get("confidence_phrase") or "").strip()
-        if top_item is None:
-            text = "No answer-bearing evidence is available."
-        else:
-            prefix = confidence or "The available evidence suggests"
-            exact_excerpt = _exact_excerpt(top_item)
-            verification_status = str(top_item.get("verification_status") or "")
-            if (
-                exact_wording_requested
-                and exact_excerpt
-                and verification_status
-                in {
-                    "retrieval_exact",
-                    "forensic_exact",
-                    "hybrid_verified_forensic",
-                    "segment_exact",
-                }
-            ):
-                sentence = f"{prefix} the exact wording is {exact_excerpt}."
-            else:
-                description = _evidence_description(top_item)
-                sentence = f"{prefix} {description}."
-            text = f"{sentence} {citation_text}".strip()
-    else:
-        fallback = str(final_answer_contract.get("fallback_wording") or answer_policy.get("fallback_phrase") or "").strip()
-        if not fallback:
-            fallback = (
-                "I can identify the likely message, but the available evidence is too weak to state the content confidently."
-            )
-        if top_item is not None:
-            description = _evidence_description(top_item)
-            text = f"{fallback} The strongest candidate is {description}."
-            if citation_text:
-                text = f"{text} {citation_text}"
-        else:
-            text = fallback
+        return _ambiguous_answer_text(ordered, answer_policy, final_answer_contract, citation_text, references)
+    if decision == "answer":
+        return _supported_answer_text(
+            ordered[0] if ordered else None, answer_policy, final_answer_contract, citation_text, exact_wording_requested
+        )
+    return _insufficient_answer_text(ordered[0] if ordered else None, answer_policy, final_answer_contract, citation_text)
 
+
+def _ambiguous_answer_text(
+    ordered: list[dict[str, Any]],
+    answer_policy: dict[str, Any],
+    contract: dict[str, Any],
+    citation_text: str,
+    references: list[dict[str, str]],
+) -> str:
+    tokens = {_reference_token(reference) for reference in references if _reference_token(reference)}
+    descriptions = [_evidence_description(item) for item in ordered if _reference_token(_citation_reference(item)) in tokens][:2]
+    first = str(
+        contract.get("ambiguity_wording") or answer_policy.get("ambiguity_phrase") or "The available evidence is ambiguous."
+    )
+    first = first if first.endswith(".") else f"{first}."
+    second = (
+        "The strongest candidates are " + " and ".join(descriptions) + "."
+        if descriptions
+        else "The strongest candidates remain too close to support one confident answer."
+    )
+    return f"{first}\n\n{second}{f' {citation_text}' if citation_text else ''}"
+
+
+def _supported_answer_text(
+    item: dict[str, Any] | None, policy: dict[str, Any], contract: dict[str, Any], citation_text: str, exact_requested: bool
+) -> str:
+    if item is None:
+        return "No answer-bearing evidence is available."
+    prefix = str(
+        contract.get("confidence_wording") or policy.get("confidence_phrase") or "The available evidence suggests"
+    ).strip()
+    excerpt = _exact_excerpt(item)
+    verified = str(item.get("verification_status") or "") in _EXACT_VERIFICATION_STATUSES
+    sentence = (
+        f"{prefix} the exact wording is {excerpt}."
+        if exact_requested and excerpt and verified
+        else f"{prefix} {_evidence_description(item)}."
+    )
+    return f"{sentence} {citation_text}".strip()
+
+
+def _insufficient_answer_text(
+    item: dict[str, Any] | None, policy: dict[str, Any], contract: dict[str, Any], citation_text: str
+) -> str:
+    fallback = (
+        str(contract.get("fallback_wording") or policy.get("fallback_phrase") or "").strip()
+        or "I can identify the likely message, but the available evidence is too weak to state the content confidently."
+    )
+    if item is None:
+        return fallback
+    text = f"{fallback} The strongest candidate is {_evidence_description(item)}."
+    return f"{text} {citation_text}" if citation_text else text
+
+
+def _rendered_answer_payload(
+    decision: str, text: str, references: list[dict[str, str]], policy: dict[str, Any], contract: dict[str, Any]
+) -> dict[str, Any]:
     return {
         "decision": decision,
         "text": text.strip(),
-        "citations": [str(reference.get("evidence_handle") or reference.get("uid") or "") for reference in citation_references],
-        "verification_mode": str(final_answer_contract.get("verification_mode") or answer_policy.get("verification_mode") or ""),
-        "answer_shape": str((final_answer_contract.get("answer_format") or {}).get("shape") or ""),
+        "citations": [str(reference.get("evidence_handle") or reference.get("uid") or "") for reference in references],
+        "verification_mode": str(contract.get("verification_mode") or policy.get("verification_mode") or ""),
+        "answer_shape": str((contract.get("answer_format") or {}).get("shape") or ""),
     }
 
 
@@ -466,91 +570,117 @@ def _timeline_summary(
     dated_items = [item for item in [*candidates, *attachment_candidates] if str(item.get("date") or "").strip()]
     ordered = sorted(dated_items, key=lambda item: (str(item.get("date") or ""), str(item.get("uid") or "")))
     events: list[dict[str, Any]] = []
-    sender_change_count = 0
-    thread_change_count = 0
-    recipient_set_change_count = 0
-    previous_sender = ""
-    previous_thread = ""
-    previous_recipient_set = ""
+    transitions = {"sender": 0, "thread": 0, "recipients": 0}
+    previous = {"sender": "", "thread": "", "recipients": ""}
     for index, item in enumerate(ordered, start=1):
-        raw_recipients_summary = item.get("recipients_summary")
-        recipients_summary: dict[str, Any] = raw_recipients_summary if isinstance(raw_recipients_summary, dict) else {}
-        current_sender = str(item.get("sender_actor_id") or item.get("sender_email") or "")
-        current_thread = str(item.get("thread_group_id") or item.get("conversation_id") or "")
-        current_recipient_set = str(recipients_summary.get("signature") or "")
-        sender_changed = bool(index > 1 and current_sender and previous_sender and current_sender != previous_sender)
-        thread_changed = bool(index > 1 and current_thread and previous_thread and current_thread != previous_thread)
-        recipient_set_changed = bool(
-            index > 1 and current_recipient_set and previous_recipient_set and current_recipient_set != previous_recipient_set
-        )
-        if sender_changed:
-            sender_change_count += 1
-        if thread_changed:
-            thread_change_count += 1
-        if recipient_set_changed:
-            recipient_set_change_count += 1
-        events.append(
-            {
-                "sequence_index": index,
-                "uid": str(item.get("uid") or ""),
-                "date": str(item.get("date") or ""),
-                "conversation_id": str(item.get("conversation_id") or ""),
-                "thread_group_id": str(item.get("thread_group_id") or ""),
-                "thread_group_source": str(item.get("thread_group_source") or ""),
-                "sender_email": str(item.get("sender_email") or ""),
-                "sender_name": str(item.get("sender_name") or ""),
-                "sender_actor_id": str(item.get("sender_actor_id") or ""),
-                "score": round(float(item.get("score") or 0.0), 3),
-                "snippet": str(item.get("snippet") or ""),
-                "recipients_summary": recipients_summary,
-                "sender_changed_from_previous": sender_changed,
-                "thread_changed_from_previous": thread_changed,
-                "recipient_set_changed_from_previous": recipient_set_changed,
-            }
-        )
-        previous_sender = current_sender or previous_sender
-        previous_thread = current_thread or previous_thread
-        previous_recipient_set = current_recipient_set or previous_recipient_set
+        event, current = _timeline_event(index, item, previous)
+        _count_timeline_transitions(event, transitions)
+        events.append(event)
+        previous = {key: value or previous[key] for key, value in current.items()}
     if not events:
-        return {
-            "event_count": 0,
-            "date_range": {},
-            "first_uid": "",
-            "last_uid": "",
-            "key_transition_uid": "",
-            "unique_sender_count": 0,
-            "unique_thread_group_count": 0,
-            "sender_change_count": 0,
-            "thread_change_count": 0,
-            "recipient_set_change_count": 0,
-            "events": [],
-        }
+        return _empty_timeline_summary()
+    return _populated_timeline_summary(events, transitions)
 
-    first_uid = events[0]["uid"]
-    last_uid = events[-1]["uid"]
-    key_transition_uid = str(max(events, key=lambda event: float(event.get("score") or 0.0)).get("uid") or "")
+
+def _timeline_event(index: int, item: dict[str, Any], previous: dict[str, str]) -> tuple[dict[str, Any], dict[str, str]]:
+    recipients_summary: dict[str, Any] = _as_dict(item.get("recipients_summary"))
+    current = _timeline_current_values(item, recipients_summary)
+    changed = {key: bool(index > 1 and value and previous[key] and value != previous[key]) for key, value in current.items()}
+    return _timeline_event_payload(index, item, recipients_summary, changed), current
+
+
+def _timeline_current_values(item: dict[str, Any], recipients_summary: dict[str, Any]) -> dict[str, str]:
+    return {
+        "sender": _first_text(item, "sender_actor_id", "sender_email"),
+        "thread": _first_text(item, "thread_group_id", "conversation_id"),
+        "recipients": str(recipients_summary.get("signature") or ""),
+    }
+
+
+def _first_text(item: dict[str, Any], primary: str, fallback: str) -> str:
+    return str(item.get(primary) or item.get(fallback) or "")
+
+
+def _timeline_event_payload(
+    index: int, item: dict[str, Any], recipients_summary: dict[str, Any], changed: dict[str, bool]
+) -> dict[str, Any]:
+    return {
+        **_timeline_item_fields(index, item),
+        "recipients_summary": recipients_summary,
+        "sender_changed_from_previous": changed["sender"],
+        "thread_changed_from_previous": changed["thread"],
+        "recipient_set_changed_from_previous": changed["recipients"],
+    }
+
+
+def _timeline_item_fields(index: int, item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sequence_index": index,
+        "uid": str(item.get("uid") or ""),
+        "date": str(item.get("date") or ""),
+        "conversation_id": str(item.get("conversation_id") or ""),
+        "thread_group_id": str(item.get("thread_group_id") or ""),
+        "thread_group_source": str(item.get("thread_group_source") or ""),
+        "sender_email": str(item.get("sender_email") or ""),
+        "sender_name": str(item.get("sender_name") or ""),
+        "sender_actor_id": str(item.get("sender_actor_id") or ""),
+        "score": round(float(item.get("score") or 0.0), 3),
+        "snippet": str(item.get("snippet") or ""),
+    }
+
+
+def _count_timeline_transitions(event: dict[str, Any], transitions: dict[str, int]) -> None:
+    transitions["sender"] += int(bool(event["sender_changed_from_previous"]))
+    transitions["thread"] += int(bool(event["thread_changed_from_previous"]))
+    transitions["recipients"] += int(bool(event["recipient_set_changed_from_previous"]))
+
+
+def _empty_timeline_summary() -> dict[str, Any]:
+    return {
+        "event_count": 0,
+        "date_range": {},
+        "first_uid": "",
+        "last_uid": "",
+        "key_transition_uid": "",
+        "unique_sender_count": 0,
+        "unique_thread_group_count": 0,
+        "sender_change_count": 0,
+        "thread_change_count": 0,
+        "recipient_set_change_count": 0,
+        "events": [],
+    }
+
+
+def _populated_timeline_summary(events: list[dict[str, Any]], transitions: dict[str, int]) -> dict[str, Any]:
+    first, last = events[0], events[-1]
+    return {
+        **_timeline_summary_identity(events, first, last),
+        "sender_change_count": transitions["sender"],
+        "thread_change_count": transitions["thread"],
+        "recipient_set_change_count": transitions["recipients"],
+        "events": events,
+    }
+
+
+def _timeline_summary_identity(events: list[dict[str, Any]], first: dict[str, Any], last: dict[str, Any]) -> dict[str, Any]:
     return {
         "event_count": len(events),
-        "date_range": {"first": str(events[0].get("date") or "")[:10], "last": str(events[-1].get("date") or "")[:10]},
-        "first_uid": first_uid,
-        "last_uid": last_uid,
-        "key_transition_uid": key_transition_uid,
+        "date_range": {"first": str(first.get("date") or "")[:10], "last": str(last.get("date") or "")[:10]},
+        "first_uid": first["uid"],
+        "last_uid": last["uid"],
+        "key_transition_uid": str(max(events, key=lambda event: float(event.get("score") or 0.0)).get("uid") or ""),
         "unique_sender_count": len(
             {
-                str(event.get("sender_actor_id") or event.get("sender_email") or "")
+                _first_text(event, "sender_actor_id", "sender_email")
                 for event in events
-                if str(event.get("sender_actor_id") or event.get("sender_email") or "")
+                if _first_text(event, "sender_actor_id", "sender_email")
             }
         ),
         "unique_thread_group_count": len(
             {
-                str(event.get("thread_group_id") or event.get("conversation_id") or "")
+                _first_text(event, "thread_group_id", "conversation_id")
                 for event in events
-                if str(event.get("thread_group_id") or event.get("conversation_id") or "")
+                if _first_text(event, "thread_group_id", "conversation_id")
             }
         ),
-        "sender_change_count": sender_change_count,
-        "thread_change_count": thread_change_count,
-        "recipient_set_change_count": recipient_set_change_count,
-        "events": events,
     }

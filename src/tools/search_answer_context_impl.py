@@ -180,101 +180,91 @@ def _quote_attribution_details(
     reply_context_from, reply_context_identities = _reply_context_identities(full_email, normalized_authored_email)
 
     if quoted_from_header:
-        return {
-            "speaker_email": quoted_from_header,
-            "source": "quoted_from_header",
-            "confidence": 0.85,
-            "quote_attribution_status": "explicit_header",
-            "quote_attribution_reason": "",
-            "candidate_emails": [quoted_from_header],
-            "downgraded_due_to_quote_ambiguity": False,
-        }
+        return _attribution_decision(quoted_from_header, "quoted_from_header", 0.85, "explicit_header")
     if len(quoted_reply_context_identities) == 1:
-        speaker_email = quoted_reply_context_identities[0]
-        if reply_context_from and reply_context_from == speaker_email:
-            return {
-                "speaker_email": speaker_email,
-                "source": "reply_context_from_corroborated",
-                "confidence": 0.8,
-                "quote_attribution_status": "corroborated_reply_context",
-                "quote_attribution_reason": "",
-                "candidate_emails": [speaker_email],
-                "downgraded_due_to_quote_ambiguity": False,
-            }
-        return {
-            "speaker_email": speaker_email,
-            "source": "quoted_block_reply_context",
-            "confidence": 0.72,
-            "quote_attribution_status": "corroborated_reply_context",
-            "quote_attribution_reason": "",
-            "candidate_emails": [speaker_email],
-            "downgraded_due_to_quote_ambiguity": False,
-        }
+        return _quoted_reply_context_decision(quoted_reply_context_identities[0], reply_context_from)
     if len(quoted_block_emails) == 1:
-        speaker_email = quoted_block_emails[0]
-        status = "inferred_single_candidate"
-        confidence = 0.6
-        source = "quoted_block_email"
-        if reply_context_from and reply_context_from == speaker_email:
-            status = "corroborated_reply_context"
-            confidence = 0.78
-            source = "reply_context_from_corroborated"
-        return {
-            "speaker_email": speaker_email,
-            "source": source,
-            "confidence": confidence,
-            "quote_attribution_status": status,
-            "quote_attribution_reason": (
-                ""
-                if status == "corroborated_reply_context"
-                else "Only one non-authored identity is visible in the quoted block, so ownership remains inferred."
-            ),
-            "candidate_emails": quoted_block_emails,
-            "downgraded_due_to_quote_ambiguity": status != "corroborated_reply_context",
-        }
+        return _quoted_block_decision(quoted_block_emails[0], reply_context_from)
     if reply_context_from and not quoted_block_emails and not quoted_reply_context_identities:
-        return {
-            "speaker_email": reply_context_from,
-            "source": "reply_context_from",
-            "confidence": 0.8,
-            "quote_attribution_status": "reply_context_fallback",
-            "quote_attribution_reason": (
-                "Quoted ownership is inferred from the visible reply context because "
-                "the quoted block has no explicit identity markers."
-            ),
-            "candidate_emails": [reply_context_from],
-            "downgraded_due_to_quote_ambiguity": True,
-        }
-    participants = []
-    if conversation_context:
-        participants = [
-            str(participant).strip().lower() for participant in conversation_context.get("participants", []) if participant
-        ]
-    alternatives = [participant for participant in participants if participant and participant != normalized_authored_email]
-    unique_alternatives = list(dict.fromkeys(alternatives))
+        return _attribution_decision(
+            reply_context_from,
+            "reply_context_from",
+            0.8,
+            "reply_context_fallback",
+            "Quoted ownership is inferred from the visible reply context because "
+            "the quoted block has no explicit identity markers.",
+            downgraded=True,
+        )
+    unique_alternatives = _conversation_alternatives(conversation_context, normalized_authored_email)
     if len(unique_alternatives) == 1:
-        return {
-            "speaker_email": unique_alternatives[0],
-            "source": "conversation_participant_exclusion",
-            "confidence": 0.5,
-            "quote_attribution_status": "participant_exclusion",
-            "quote_attribution_reason": (
-                "Quoted ownership is inferred only from the remaining conversation participants, so it should be read cautiously."
-            ),
-            "candidate_emails": unique_alternatives,
-            "downgraded_due_to_quote_ambiguity": True,
-        }
+        return _attribution_decision(
+            unique_alternatives[0],
+            "conversation_participant_exclusion",
+            0.5,
+            "participant_exclusion",
+            "Quoted ownership is inferred only from the remaining conversation participants, so it should be read cautiously.",
+            downgraded=True,
+        )
+    return _attribution_decision(
+        "",
+        "unresolved",
+        0.0,
+        "unresolved",
+        "Quoted ownership remains unresolved because the visible reply chain includes multiple plausible speakers.",
+        candidates=list(dict.fromkeys([*quoted_block_emails, *reply_context_identities])),
+        downgraded=True,
+    )
+
+
+def _attribution_decision(
+    speaker_email: str,
+    source: str,
+    confidence: float,
+    status: str,
+    reason: str = "",
+    *,
+    candidates: list[str] | None = None,
+    downgraded: bool = False,
+) -> dict[str, Any]:
     return {
-        "speaker_email": "",
-        "source": "unresolved",
-        "confidence": 0.0,
-        "quote_attribution_status": "unresolved",
-        "quote_attribution_reason": (
-            "Quoted ownership remains unresolved because the visible reply chain includes multiple plausible speakers."
-        ),
-        "candidate_emails": list(dict.fromkeys([*quoted_block_emails, *reply_context_identities])),
-        "downgraded_due_to_quote_ambiguity": True,
+        "speaker_email": speaker_email,
+        "source": source,
+        "confidence": confidence,
+        "quote_attribution_status": status,
+        "quote_attribution_reason": reason,
+        "candidate_emails": candidates if candidates is not None else [speaker_email],
+        "downgraded_due_to_quote_ambiguity": downgraded,
     }
+
+
+def _quoted_reply_context_decision(speaker_email: str, reply_context_from: str) -> dict[str, Any]:
+    corroborated = bool(reply_context_from and reply_context_from == speaker_email)
+    return _attribution_decision(
+        speaker_email,
+        "reply_context_from_corroborated" if corroborated else "quoted_block_reply_context",
+        0.8 if corroborated else 0.72,
+        "corroborated_reply_context",
+    )
+
+
+def _quoted_block_decision(speaker_email: str, reply_context_from: str) -> dict[str, Any]:
+    corroborated = bool(reply_context_from and reply_context_from == speaker_email)
+    return _attribution_decision(
+        speaker_email,
+        "reply_context_from_corroborated" if corroborated else "quoted_block_email",
+        0.78 if corroborated else 0.6,
+        "corroborated_reply_context" if corroborated else "inferred_single_candidate",
+        "" if corroborated else "Only one non-authored identity is visible in the quoted block, so ownership remains inferred.",
+        downgraded=not corroborated,
+    )
+
+
+def _conversation_alternatives(conversation_context: dict[str, Any] | None, authored_email: str) -> list[str]:
+    participants = _as_dict(conversation_context).get("participants", [])
+    alternatives = [
+        str(participant).strip().lower() for participant in participants if participant and participant != authored_email
+    ]
+    return list(dict.fromkeys(alternatives))
 
 
 def _infer_quoted_speaker(
@@ -312,31 +302,63 @@ def _speaker_attribution_for_candidate(
     segments = _segment_rows_for_uid(db, uid)
     if not segments:
         return None
+    authored_email, authored_name = _canonical_sender_for_candidate(db, conversation_id, uid, sender_email, sender_name)
+    return {
+        "authored_speaker": {
+            "email": authored_email,
+            "name": authored_name,
+            "source": "canonical_sender",
+            "confidence": 1.0,
+        },
+        "quoted_blocks": _quoted_speaker_blocks(segments, full_email, sender_email, conversation_context),
+    }
+
+
+def _quoted_speaker_blocks(
+    segments: list[dict[str, Any]],
+    full_email: dict[str, Any] | None,
+    sender_email: str,
+    conversation_context: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     quoted_blocks: list[dict[str, Any]] = []
     for segment in segments:
         segment_type = str(segment.get("segment_type") or "")
         if segment_type not in {"quoted_reply", "forwarded_message"}:
             continue
-        quote_attribution = _quote_attribution_details(
-            full_email=full_email,
-            authored_email=sender_email,
-            conversation_context=conversation_context,
-            segment_text=str(segment.get("text") or ""),
-        )
-        quoted_blocks.append(
-            {
-                "segment_ordinal": int(segment.get("ordinal") or 0),
-                "segment_type": segment_type,
-                "speaker_email": str(quote_attribution.get("speaker_email") or ""),
-                "source": str(quote_attribution.get("source") or ""),
-                "confidence": float(quote_attribution.get("confidence") or 0.0),
-                "quote_attribution_status": str(quote_attribution.get("quote_attribution_status") or ""),
-                "quote_attribution_reason": str(quote_attribution.get("quote_attribution_reason") or ""),
-                "candidate_emails": list(quote_attribution.get("candidate_emails") or []),
-                "downgraded_due_to_quote_ambiguity": bool(quote_attribution.get("downgraded_due_to_quote_ambiguity", True)),
-                "text": str(segment.get("text") or ""),
-            }
-        )
+        quoted_blocks.append(_quoted_speaker_block(segment, segment_type, full_email, sender_email, conversation_context))
+    return quoted_blocks
+
+
+def _quoted_speaker_block(
+    segment: dict[str, Any],
+    segment_type: str,
+    full_email: dict[str, Any] | None,
+    sender_email: str,
+    conversation_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    quote_attribution = _quote_attribution_details(
+        full_email=full_email,
+        authored_email=sender_email,
+        conversation_context=conversation_context,
+        segment_text=str(segment.get("text") or ""),
+    )
+    return {
+        "segment_ordinal": int(segment.get("ordinal") or 0),
+        "segment_type": segment_type,
+        "speaker_email": str(quote_attribution.get("speaker_email") or ""),
+        "source": str(quote_attribution.get("source") or ""),
+        "confidence": float(quote_attribution.get("confidence") or 0.0),
+        "quote_attribution_status": str(quote_attribution.get("quote_attribution_status") or ""),
+        "quote_attribution_reason": str(quote_attribution.get("quote_attribution_reason") or ""),
+        "candidate_emails": list(quote_attribution.get("candidate_emails") or []),
+        "downgraded_due_to_quote_ambiguity": bool(quote_attribution.get("downgraded_due_to_quote_ambiguity", True)),
+        "text": str(segment.get("text") or ""),
+    }
+
+
+def _canonical_sender_for_candidate(
+    db: Any, conversation_id: str, uid: str, sender_email: str, sender_name: str
+) -> tuple[str, str]:
     authored_email = sender_email
     authored_name = sender_name
     if db and conversation_id and hasattr(db, "get_thread_emails"):
@@ -347,15 +369,7 @@ def _speaker_attribution_for_candidate(
             authored_email = str(email.get("sender_email") or authored_email)
             authored_name = str(email.get("sender_name") or authored_name)
             break
-    return {
-        "authored_speaker": {
-            "email": authored_email,
-            "name": authored_name,
-            "source": "canonical_sender",
-            "confidence": 1.0,
-        },
-        "quoted_blocks": quoted_blocks,
-    }
+    return authored_email, authored_name
 
 
 def _authored_text_for_candidate(
@@ -366,22 +380,25 @@ def _authored_text_for_candidate(
     fallback_text: str,
 ) -> str:
     """Return best-effort authored-only text for one message."""
-    segments = _segment_rows_for_uid(db, uid)
-    if segments:
-        authored_parts = [
-            str(segment.get("text") or "")
-            for segment in segments
-            if str(segment.get("segment_type") or "") not in {"quoted_reply", "forwarded_message"}
-            and str(segment.get("text") or "").strip()
-        ]
-        if authored_parts:
-            return "\n".join(authored_parts)
-    if full_email:
-        for field in ("forensic_body_text", "body_text", "normalized_body_text"):
-            text = str(full_email.get(field) or "").strip()
-            if text:
-                return text
-    return fallback_text
+    return _authored_segment_text(_segment_rows_for_uid(db, uid)) or _full_email_text(full_email) or fallback_text
+
+
+def _authored_segment_text(segments: list[dict[str, Any]]) -> str:
+    authored_parts = [
+        str(segment.get("text") or "")
+        for segment in segments
+        if str(segment.get("segment_type") or "") not in {"quoted_reply", "forwarded_message"}
+        and str(segment.get("text") or "").strip()
+    ]
+    return "\n".join(authored_parts)
+
+
+def _full_email_text(full_email: dict[str, Any] | None) -> str:
+    for field in ("forensic_body_text", "body_text", "normalized_body_text"):
+        text = str((full_email or {}).get(field) or "").strip()
+        if text:
+            return text
+    return ""
 
 
 def _language_rhetoric_for_candidate(
@@ -402,28 +419,7 @@ def _language_rhetoric_for_candidate(
         ),
         text_scope="authored_text",
     )
-    quoted_block_analyses: list[dict[str, Any]] = []
-    if isinstance(speaker_attribution, dict):
-        for block in speaker_attribution.get("quoted_blocks", []):
-            if not isinstance(block, dict):
-                continue
-            block_text = str(block.get("text") or "")
-            analysis = analyze_message_rhetoric(block_text, text_scope="quoted_text")
-            quoted_block_analyses.append(
-                {
-                    "segment_ordinal": int(block.get("segment_ordinal") or 0),
-                    "segment_type": str(block.get("segment_type") or ""),
-                    "speaker_email": str(block.get("speaker_email") or ""),
-                    "speaker_source": str(block.get("source") or ""),
-                    "speaker_confidence": float(block.get("confidence") or 0.0),
-                    "quote_attribution_status": str(block.get("quote_attribution_status") or ""),
-                    "quote_attribution_reason": str(block.get("quote_attribution_reason") or ""),
-                    "candidate_emails": list(block.get("candidate_emails") or []),
-                    "downgraded_due_to_quote_ambiguity": bool(block.get("downgraded_due_to_quote_ambiguity", True)),
-                    "text": block_text,
-                    "analysis": analysis,
-                }
-            )
+    quoted_block_analyses = _quoted_rhetoric_blocks(speaker_attribution)
     quoted_signal_count = sum(int(block["analysis"]["signal_count"]) for block in quoted_block_analyses)
     return {
         "version": LANGUAGE_RHETORIC_VERSION,
@@ -437,6 +433,29 @@ def _language_rhetoric_for_candidate(
     }
 
 
+def _quoted_rhetoric_blocks(speaker_attribution: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(speaker_attribution, dict):
+        return []
+    return [_quoted_rhetoric_block(block) for block in speaker_attribution.get("quoted_blocks", []) if isinstance(block, dict)]
+
+
+def _quoted_rhetoric_block(block: dict[str, Any]) -> dict[str, Any]:
+    block_text = str(block.get("text") or "")
+    return {
+        "segment_ordinal": int(block.get("segment_ordinal") or 0),
+        "segment_type": str(block.get("segment_type") or ""),
+        "speaker_email": str(block.get("speaker_email") or ""),
+        "speaker_source": str(block.get("source") or ""),
+        "speaker_confidence": float(block.get("confidence") or 0.0),
+        "quote_attribution_status": str(block.get("quote_attribution_status") or ""),
+        "quote_attribution_reason": str(block.get("quote_attribution_reason") or ""),
+        "candidate_emails": list(block.get("candidate_emails") or []),
+        "downgraded_due_to_quote_ambiguity": bool(block.get("downgraded_due_to_quote_ambiguity", True)),
+        "text": block_text,
+        "analysis": analyze_message_rhetoric(block_text, text_scope="quoted_text"),
+    }
+
+
 def _message_findings_for_candidate(
     *,
     db: Any,
@@ -446,47 +465,9 @@ def _message_findings_for_candidate(
     case_scope: Any,
 ) -> dict[str, Any]:
     """Return message-level behavioural findings derived from rhetoric plus message context."""
-    visible_recipients = [
-        str(value).strip().lower() for field in ("to", "cc", "bcc") for value in ((full_email or {}).get(field) or []) if value
-    ]
-    target_email = str(getattr(case_scope.target_person, "email", "") or "")
-    target_name = str(getattr(case_scope.target_person, "name", "") or "")
-    authored_analysis = analyze_message_behavior(
-        _authored_text_for_candidate(
-            db,
-            uid=uid,
-            full_email=full_email,
-            fallback_text=str((full_email or {}).get("body_text") or ""),
-        ),
-        text_scope="authored_text",
-        rhetoric=language_rhetoric["authored_text"],
-        recipient_count=len(visible_recipients),
-        visible_recipient_emails=visible_recipients,
-        case_target_email=target_email,
-        case_target_name=target_name,
-    )
-    quoted_block_findings: list[dict[str, Any]] = []
-    for block in language_rhetoric.get("quoted_blocks", []):
-        if not isinstance(block, dict):
-            continue
-        quoted_block_findings.append(
-            {
-                "segment_ordinal": int(block.get("segment_ordinal") or 0),
-                "segment_type": str(block.get("segment_type") or ""),
-                "speaker_email": str(block.get("speaker_email") or ""),
-                "speaker_source": str(block.get("speaker_source") or ""),
-                "speaker_confidence": float(block.get("speaker_confidence") or 0.0),
-                "quote_attribution_status": str(block.get("quote_attribution_status") or ""),
-                "quote_attribution_reason": str(block.get("quote_attribution_reason") or ""),
-                "candidate_emails": list(block.get("candidate_emails") or []),
-                "downgraded_due_to_quote_ambiguity": bool(block.get("downgraded_due_to_quote_ambiguity", True)),
-                "findings": analyze_message_behavior(
-                    str(block.get("text") or ""),
-                    text_scope="quoted_text",
-                    rhetoric=block.get("analysis", {}),
-                ),
-            }
-        )
+    visible_recipients = _visible_recipients(full_email)
+    authored_analysis = _authored_message_findings(db, uid, full_email, language_rhetoric, case_scope, visible_recipients)
+    quoted_block_findings = _quoted_message_findings(language_rhetoric)
     quoted_candidate_count = sum(int(block["findings"]["behavior_candidate_count"]) for block in quoted_block_findings)
     return normalize_message_findings_payload(
         {
@@ -504,6 +485,56 @@ def _message_findings_for_candidate(
     )
 
 
+def _visible_recipients(full_email: dict[str, Any] | None) -> list[str]:
+    return [
+        str(value).strip().lower() for field in ("to", "cc", "bcc") for value in ((full_email or {}).get(field) or []) if value
+    ]
+
+
+def _authored_message_findings(
+    db: Any,
+    uid: str,
+    full_email: dict[str, Any] | None,
+    language_rhetoric: dict[str, Any],
+    case_scope: Any,
+    visible_recipients: list[str],
+) -> dict[str, Any]:
+    return dict(
+        analyze_message_behavior(
+            _authored_text_for_candidate(
+                db, uid=uid, full_email=full_email, fallback_text=str((full_email or {}).get("body_text") or "")
+            ),
+            text_scope="authored_text",
+            rhetoric=language_rhetoric["authored_text"],
+            recipient_count=len(visible_recipients),
+            visible_recipient_emails=visible_recipients,
+            case_target_email=str(getattr(case_scope.target_person, "email", "") or ""),
+            case_target_name=str(getattr(case_scope.target_person, "name", "") or ""),
+        )
+    )
+
+
+def _quoted_message_findings(language_rhetoric: dict[str, Any]) -> list[dict[str, Any]]:
+    return [_quoted_message_finding(block) for block in language_rhetoric.get("quoted_blocks", []) if isinstance(block, dict)]
+
+
+def _quoted_message_finding(block: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "segment_ordinal": int(block.get("segment_ordinal") or 0),
+        "segment_type": str(block.get("segment_type") or ""),
+        "speaker_email": str(block.get("speaker_email") or ""),
+        "speaker_source": str(block.get("speaker_source") or ""),
+        "speaker_confidence": float(block.get("speaker_confidence") or 0.0),
+        "quote_attribution_status": str(block.get("quote_attribution_status") or ""),
+        "quote_attribution_reason": str(block.get("quote_attribution_reason") or ""),
+        "candidate_emails": list(block.get("candidate_emails") or []),
+        "downgraded_due_to_quote_ambiguity": bool(block.get("downgraded_due_to_quote_ambiguity", True)),
+        "findings": analyze_message_behavior(
+            str(block.get("text") or ""), text_scope="quoted_text", rhetoric=block.get("analysis", {})
+        ),
+    }
+
+
 def _apply_reply_pairings_to_candidates(
     *,
     candidates: list[dict[str, Any]],
@@ -513,7 +544,7 @@ def _apply_reply_pairings_to_candidates(
     """Annotate candidates with reply-pairing metadata and derived message findings."""
     reply_pairing_index = build_reply_pairing_index(
         candidates=candidates,
-        full_map=full_map if isinstance(full_map, dict) else {},
+        full_map=_as_dict(full_map),
         case_scope=case_scope,
     )
     for candidate in candidates:

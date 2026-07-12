@@ -18,27 +18,12 @@ from jinja2 import Environment, FileSystemLoader
 
 from .formatting import strip_html_tags, write_html_or_pdf
 from .repo_paths import validate_new_output_path
+from .sanitization import csv_safe_cell
 
 if TYPE_CHECKING:
     from .email_db import EmailDatabase
 
 logger = logging.getLogger(__name__)
-
-_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _csv_safe(value: Any) -> str:
-    """Prefix CSV cells starting with formula characters to prevent injection.
-
-    Spreadsheet applications (Excel, LibreOffice Calc) interpret cells
-    starting with ``=``, ``+``, ``-``, or ``@`` as formulas.  Prefixing
-    with a single-quote neutralises the formula while preserving readability.
-    """
-    s = str(value) if value is not None else ""
-    if s and s[0] in _CSV_FORMULA_PREFIXES:
-        return f"'{s}"
-    return s
-
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
@@ -154,21 +139,21 @@ class EvidenceExporter:
         for item in items:
             writer.writerow(
                 [
-                    item.get("id", ""),
-                    item.get("date", ""),
-                    _csv_safe(item.get("sender_name", "")),
-                    _csv_safe(item.get("sender_email", "")),
-                    _csv_safe(item.get("recipients", "")),
-                    _csv_safe(item.get("subject", "")),
-                    _csv_safe(item.get("category", "")),
-                    _csv_safe(item.get("key_quote", "")),
-                    _csv_safe(item.get("summary", "")),
-                    item.get("relevance", ""),
-                    "yes" if item.get("verified") else "no",
-                    _csv_safe(item.get("notes", "")),
-                    item.get("email_uid", ""),
-                    item.get("created_at", ""),
-                    item.get("updated_at", ""),
+                    csv_safe_cell(item.get("id", "")),
+                    csv_safe_cell(item.get("date", "")),
+                    csv_safe_cell(item.get("sender_name", "")),
+                    csv_safe_cell(item.get("sender_email", "")),
+                    csv_safe_cell(item.get("recipients", "")),
+                    csv_safe_cell(item.get("subject", "")),
+                    csv_safe_cell(item.get("category", "")),
+                    csv_safe_cell(item.get("key_quote", "")),
+                    csv_safe_cell(item.get("summary", "")),
+                    csv_safe_cell(item.get("relevance", "")),
+                    csv_safe_cell("yes" if item.get("verified") else "no"),
+                    csv_safe_cell(item.get("notes", "")),
+                    csv_safe_cell(item.get("email_uid", "")),
+                    csv_safe_cell(item.get("created_at", "")),
+                    csv_safe_cell(item.get("updated_at", "")),
                 ]
             )
 

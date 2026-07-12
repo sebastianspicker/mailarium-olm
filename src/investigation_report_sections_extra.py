@@ -7,6 +7,95 @@ from typing import Any
 from .investigation_report_sections import _as_dict, _as_list, _section_with_entries
 from .matter_evidence_index import build_matter_evidence_index
 
+_SKEPTICAL_REVIEW_INSUFFICIENCY_REASON = (
+    "The current case bundle does not yet expose enough concrete weakness patterns for a skeptical employer-side review."
+)
+_MATTER_INDEX_REASON = "The current case bundle does not yet contain enough source material for an exhibit index."
+_LAWYER_MATRIX_REASON = "The current case bundle does not yet contain enough issue-linked support for the lawyer issue matrix."
+_PROMISE_REASON = (
+    "The current case bundle does not yet contain enough mixed-source promise, omission, "
+    "or contradiction material for this section."
+)
+_MEMO_REASON = (
+    "The current case bundle does not yet contain enough stable matter, evidence, chronology, "
+    "and issue data for the lawyer briefing memo."
+)
+_DRAFTING_REASON = (
+    "The current case bundle does not yet contain enough stable evidence and framing data for controlled factual drafting."
+)
+
+
+def _empty_payload_section(
+    section_id: str, title: str, payload: dict[str, Any] | None, field: str, reason: str
+) -> dict[str, Any]:
+    section = _section_with_entries(section_id=section_id, title=title, entries=[], insufficiency_reason=reason)
+    section[field] = payload
+    return section
+
+
+def _short_values(value: object, limit: int = 3) -> list[str]:
+    return [str(item) for item in _as_list(value) if item][:limit]
+
+
+def _matter_index_entry(row: dict[str, Any], index: int) -> dict[str, Any]:
+    reliability = _as_dict(row.get("exhibit_reliability"))
+    readiness = _as_dict(reliability.get("next_step_logic")).get("readiness") or row.get("readiness") or "readiness_unknown"
+    strength = reliability.get("strength") or row.get("strength") or row.get("reliability_or_evidentiary_strength") or ""
+    return {
+        "entry_id": f"matter_index:{row.get('exhibit_id') or index}",
+        "statement": f"{row.get('exhibit_id') or ''}: {row.get('short_description') or ''} [{strength}; {readiness}]".strip(),
+        "supporting_finding_ids": _short_values(row.get("supporting_finding_ids")),
+        "supporting_citation_ids": _short_values(row.get("supporting_citation_ids")),
+        "supporting_uids": _short_values(row.get("supporting_uids")),
+        "supporting_source_ids": _short_values(row.get("supporting_source_ids")),
+        "supporting_evidence_handles": _short_values(row.get("supporting_evidence_handles")),
+    }
+
+
+def _lawyer_matrix_entry(row: dict[str, Any], index: int) -> dict[str, Any]:
+    status = str(row.get("legal_relevance_status") or "currently_under_supported").replace("_", " ")
+    return {
+        "entry_id": f"lawyer_matrix:{row.get('issue_id') or index}",
+        "statement": f"{row.get('title') or ''} is currently mapped as {status}.".strip(),
+        "supporting_finding_ids": _short_values(row.get("supporting_finding_ids")),
+        "supporting_citation_ids": _short_values(row.get("supporting_citation_ids")),
+        "supporting_uids": _short_values(row.get("supporting_uids")),
+        "supporting_source_ids": _short_values(row.get("supporting_source_ids")),
+    }
+
+
+def _promise_entry(row: dict[str, Any], index: int) -> dict[str, Any]:
+    source_ids = [
+        str(item)
+        for item in [row.get("original_source_id"), row.get("later_source_id"), *_as_list(row.get("later_source_ids"))]
+        if str(item or "")
+    ]
+    later = row.get("later_action") or row.get("later_summary_context") or "not clearly reflected"
+    confidence = row.get("confidence_level") or "low"
+    statement = f"{row.get('original_statement_or_promise') or ''} Later record: {later} [{confidence} confidence]"
+    return {
+        "entry_id": f"promise_contradiction:{row.get('row_id') or index}",
+        "statement": statement.strip(),
+        "supporting_finding_ids": [],
+        "supporting_citation_ids": [],
+        "supporting_uids": _short_values(row.get("supporting_uids")),
+        "supporting_source_ids": source_ids[:3],
+    }
+
+
+def _linked_entry(entry: dict[str, Any], identifier: str, fallback: str) -> dict[str, Any]:
+    return {
+        "entry_id": str(entry.get(identifier) or fallback),
+        "statement": str(entry.get("text") or ""),
+        "supporting_finding_ids": [],
+        "supporting_citation_ids": [],
+        "supporting_uids": [],
+        "supporting_exhibit_ids": _short_values(entry.get("supporting_exhibit_ids"), 2),
+        "supporting_chronology_ids": _short_values(entry.get("supporting_chronology_ids"), 2),
+        "supporting_issue_ids": _short_values(entry.get("supporting_issue_ids"), 2),
+        "supporting_source_ids": _short_values(entry.get("supporting_source_ids"), 2),
+    }
+
 
 def _matter_evidence_index_section(
     *,
@@ -23,36 +112,13 @@ def _matter_evidence_index_section(
         master_chronology=master_chronology,
     )
     if not isinstance(matter_evidence_index, dict):
-        return _section_with_entries(
-            section_id="matter_evidence_index",
-            title="Matter Evidence Index",
-            entries=[],
-            insufficiency_reason="The current case bundle does not yet contain enough source material for an exhibit index.",
+        return _empty_payload_section(
+            "matter_evidence_index", "Matter Evidence Index", {}, "matter_evidence_index", _MATTER_INDEX_REASON
         )
 
     ranked_exhibits = [row for row in _as_list(matter_evidence_index.get("top_15_exhibits")) if isinstance(row, dict)]
     rows = ranked_exhibits or [row for row in _as_list(matter_evidence_index.get("rows")) if isinstance(row, dict)]
-    entries: list[dict[str, Any]] = []
-    for index, row in enumerate(rows[:4], start=1):
-        exhibit_reliability = _as_dict(row.get("exhibit_reliability"))
-        next_step_logic = _as_dict(exhibit_reliability.get("next_step_logic"))
-        strength_label = str(
-            exhibit_reliability.get("strength") or row.get("strength") or row.get("reliability_or_evidentiary_strength") or ""
-        )
-        readiness_label = str(next_step_logic.get("readiness") or row.get("readiness") or "readiness_unknown")
-        entries.append(
-            {
-                "entry_id": f"matter_index:{row.get('exhibit_id') or index}",
-                "statement": (
-                    f"{row.get('exhibit_id') or ''}: {row.get('short_description') or ''} [{strength_label}; {readiness_label}]"
-                ).strip(),
-                "supporting_finding_ids": [str(item) for item in _as_list(row.get("supporting_finding_ids")) if item],
-                "supporting_citation_ids": [str(item) for item in _as_list(row.get("supporting_citation_ids")) if item],
-                "supporting_uids": [str(item) for item in _as_list(row.get("supporting_uids")) if item],
-                "supporting_source_ids": [str(item) for item in _as_list(row.get("supporting_source_ids")) if item],
-                "supporting_evidence_handles": [str(item) for item in _as_list(row.get("supporting_evidence_handles")) if item],
-            }
-        )
+    entries = [_matter_index_entry(row, index) for index, row in enumerate(rows[:4], start=1)]
     section = _section_with_entries(
         section_id="matter_evidence_index",
         title="Matter Evidence Index",
@@ -70,44 +136,25 @@ def _lawyer_issue_matrix_section(
     """Return a lawyer-facing issue matrix that stays at legal-relevance mapping."""
     matrix_rows = [row for row in _as_list(_as_dict(lawyer_issue_matrix).get("rows")) if isinstance(row, dict)]
     if not matrix_rows:
-        section = _section_with_entries(
-            section_id="lawyer_issue_matrix",
-            title="German Employment Lawyer Issue Matrix",
-            entries=[],
-            insufficiency_reason=(
-                "The current case bundle does not yet contain enough issue-linked support for the lawyer issue matrix."
-            ),
+        return _empty_payload_section(
+            "lawyer_issue_matrix",
+            "German Employment Lawyer Issue Matrix",
+            _as_dict(lawyer_issue_matrix),
+            "lawyer_issue_matrix",
+            _LAWYER_MATRIX_REASON,
         )
-        section["lawyer_issue_matrix"] = _as_dict(lawyer_issue_matrix)
-        return section
 
     actionable_rows = [row for row in matrix_rows if str(row.get("legal_relevance_status") or "") != "currently_under_supported"]
     if not actionable_rows:
-        section = _section_with_entries(
-            section_id="lawyer_issue_matrix",
-            title="German Employment Lawyer Issue Matrix",
-            entries=[],
-            insufficiency_reason=(
-                "The current case bundle does not yet contain enough issue-linked support for the lawyer issue matrix."
-            ),
+        return _empty_payload_section(
+            "lawyer_issue_matrix",
+            "German Employment Lawyer Issue Matrix",
+            lawyer_issue_matrix,
+            "lawyer_issue_matrix",
+            _LAWYER_MATRIX_REASON,
         )
-        section["lawyer_issue_matrix"] = lawyer_issue_matrix
-        return section
 
-    entries = [
-        {
-            "entry_id": f"lawyer_matrix:{row.get('issue_id') or index}",
-            "statement": (
-                f"{row.get('title') or ''} is currently mapped as "
-                f"{str(row.get('legal_relevance_status') or 'currently_under_supported').replace('_', ' ')}."
-            ).strip(),
-            "supporting_finding_ids": [str(item) for item in _as_list(row.get("supporting_finding_ids")) if item][:3],
-            "supporting_citation_ids": [str(item) for item in _as_list(row.get("supporting_citation_ids")) if item][:3],
-            "supporting_uids": [str(item) for item in _as_list(row.get("supporting_uids")) if item][:3],
-            "supporting_source_ids": [str(item) for item in _as_list(row.get("supporting_source_ids")) if item][:3],
-        }
-        for index, row in enumerate(actionable_rows[:4], start=1)
-    ]
+    entries = [_lawyer_matrix_entry(row, index) for index, row in enumerate(actionable_rows[:4], start=1)]
     section = _section_with_entries(
         section_id="lawyer_issue_matrix",
         title="German Employment Lawyer Issue Matrix",
@@ -187,39 +234,16 @@ def _promise_and_contradiction_analysis_section(
     omission_rows = [row for row in _as_list(analysis.get("omission_rows")) if isinstance(row, dict)]
     contradiction_rows = [row for row in _as_list(analysis.get("contradiction_table")) if isinstance(row, dict)]
     if not promise_rows and not omission_rows and not contradiction_rows:
-        section = _section_with_entries(
-            section_id="promise_and_contradiction_analysis",
-            title="Promise And Contradiction Analysis",
-            entries=[],
-            insufficiency_reason=(
-                "The current case bundle does not yet contain enough mixed-source promise, omission, "
-                "or contradiction material for this section."
-            ),
+        return _empty_payload_section(
+            "promise_and_contradiction_analysis",
+            "Promise And Contradiction Analysis",
+            analysis,
+            "promise_contradiction_analysis",
+            _PROMISE_REASON,
         )
-        section["promise_contradiction_analysis"] = analysis
-        return section
 
-    entries: list[dict[str, Any]] = []
-    for index, row in enumerate((promise_rows + omission_rows + contradiction_rows)[:4], start=1):
-        source_ids = [
-            str(item)
-            for item in [row.get("original_source_id"), row.get("later_source_id"), *_as_list(row.get("later_source_ids"))]
-            if str(item or "")
-        ]
-        entries.append(
-            {
-                "entry_id": f"promise_contradiction:{row.get('row_id') or index}",
-                "statement": (
-                    f"{row.get('original_statement_or_promise') or ''} "
-                    f"Later record: {row.get('later_action') or row.get('later_summary_context') or 'not clearly reflected'} "
-                    f"[{row.get('confidence_level') or 'low'} confidence]"
-                ).strip(),
-                "supporting_finding_ids": [],
-                "supporting_citation_ids": [],
-                "supporting_uids": [str(item) for item in _as_list(row.get("supporting_uids")) if item][:3],
-                "supporting_source_ids": source_ids[:3],
-            }
-        )
+    rows = promise_rows + omission_rows + contradiction_rows
+    entries = [_promise_entry(row, index) for index, row in enumerate(rows[:4], start=1)]
     section = _section_with_entries(
         section_id="promise_and_contradiction_analysis",
         title="Promise And Contradiction Analysis",
@@ -287,40 +311,13 @@ def _lawyer_briefing_memo_section(
     section_map = _as_dict(memo.get("sections"))
     executive_entries = [entry for entry in _as_list(section_map.get("executive_summary")) if isinstance(entry, dict)]
     if not executive_entries:
-        section = _section_with_entries(
-            section_id="lawyer_briefing_memo",
-            title="Lawyer Briefing Memo",
-            entries=[],
-            insufficiency_reason=(
-                "The current case bundle does not yet contain enough stable matter, evidence, chronology, "
-                "and issue data for the lawyer briefing memo."
-            ),
-        )
-        section["lawyer_briefing_memo"] = memo
-        return section
-
-    entries = [
-        {
-            "entry_id": str(entry.get("entry_id") or f"memo:{index}"),
-            "statement": str(entry.get("text") or ""),
-            "supporting_finding_ids": [],
-            "supporting_citation_ids": [],
-            "supporting_uids": [],
-            "supporting_exhibit_ids": [str(item) for item in _as_list(entry.get("supporting_exhibit_ids")) if item][:2],
-            "supporting_chronology_ids": [str(item) for item in _as_list(entry.get("supporting_chronology_ids")) if item][:2],
-            "supporting_issue_ids": [str(item) for item in _as_list(entry.get("supporting_issue_ids")) if item][:2],
-            "supporting_source_ids": [str(item) for item in _as_list(entry.get("supporting_source_ids")) if item][:2],
-        }
-        for index, entry in enumerate(executive_entries[:2], start=1)
-    ]
+        return _empty_payload_section("lawyer_briefing_memo", "Lawyer Briefing Memo", memo, "lawyer_briefing_memo", _MEMO_REASON)
+    entries = [_linked_entry(entry, "entry_id", f"memo:{index}") for index, entry in enumerate(executive_entries[:2], start=1)]
     section = _section_with_entries(
         section_id="lawyer_briefing_memo",
         title="Lawyer Briefing Memo",
         entries=entries,
-        insufficiency_reason=(
-            "The current case bundle does not yet contain enough stable matter, evidence, chronology, "
-            "and issue data for the lawyer briefing memo."
-        ),
+        insufficiency_reason=_MEMO_REASON,
     )
     section["lawyer_briefing_memo"] = memo
     return section
@@ -337,31 +334,15 @@ def _controlled_factual_drafting_section(
     draft_sections = _as_dict(draft.get("sections"))
     established_facts = [entry for entry in _as_list(draft_sections.get("established_facts")) if isinstance(entry, dict)]
     if not established_facts and not any(_as_list(value) for value in draft_sections.values() if isinstance(value, list)):
-        section = _section_with_entries(
-            section_id="controlled_factual_drafting",
-            title="Controlled Factual Drafting",
-            entries=[],
-            insufficiency_reason=(
-                "The current case bundle does not yet contain enough stable evidence and framing data "
-                "for controlled factual drafting."
-            ),
+        return _empty_payload_section(
+            "controlled_factual_drafting",
+            "Controlled Factual Drafting",
+            drafting,
+            "controlled_factual_drafting",
+            _DRAFTING_REASON,
         )
-        section["controlled_factual_drafting"] = drafting
-        return section
-
     entries = [
-        {
-            "entry_id": str(entry.get("item_id") or f"controlled_draft:{index}"),
-            "statement": str(entry.get("text") or ""),
-            "supporting_finding_ids": [],
-            "supporting_citation_ids": [],
-            "supporting_uids": [],
-            "supporting_exhibit_ids": [str(item) for item in _as_list(entry.get("supporting_exhibit_ids")) if item][:2],
-            "supporting_chronology_ids": [str(item) for item in _as_list(entry.get("supporting_chronology_ids")) if item][:2],
-            "supporting_issue_ids": [str(item) for item in _as_list(entry.get("supporting_issue_ids")) if item][:2],
-            "supporting_source_ids": [str(item) for item in _as_list(entry.get("supporting_source_ids")) if item][:2],
-        }
-        for index, entry in enumerate(established_facts[:2], start=1)
+        _linked_entry(entry, "item_id", f"controlled_draft:{index}") for index, entry in enumerate(established_facts[:2], start=1)
     ]
     if not entries:
         entries = [
@@ -377,10 +358,7 @@ def _controlled_factual_drafting_section(
         section_id="controlled_factual_drafting",
         title="Controlled Factual Drafting",
         entries=entries,
-        insufficiency_reason=(
-            "The current case bundle does not yet contain enough stable evidence and framing data "
-            "for controlled factual drafting."
-        ),
+        insufficiency_reason=_DRAFTING_REASON,
     )
     section["controlled_factual_drafting"] = drafting
     return section
@@ -490,27 +468,8 @@ def _skeptical_employer_review_section(
         weakness for weakness in _as_list(_as_dict(skeptical_employer_review).get("weaknesses")) if isinstance(weakness, dict)
     ]
     if not weaknesses:
-        section = _section_with_entries(
-            section_id="skeptical_employer_review",
-            title="Skeptical Employer-Side Review",
-            entries=[],
-            insufficiency_reason=(
-                "The current case bundle does not yet expose enough concrete weakness patterns "
-                "for a skeptical employer-side review."
-            ),
-        )
-        section["skeptical_employer_review"] = _as_dict(skeptical_employer_review)
-        return section
-    entries = [
-        {
-            "entry_id": str(weakness.get("weakness_id") or f"skeptical_review:{index}"),
-            "statement": str(weakness.get("critique") or ""),
-            "supporting_finding_ids": [str(item) for item in _as_list(weakness.get("supporting_finding_ids")) if item][:3],
-            "supporting_citation_ids": [str(item) for item in _as_list(weakness.get("supporting_citation_ids")) if item][:3],
-            "supporting_uids": [str(item) for item in _as_list(weakness.get("supporting_uids")) if item][:3],
-        }
-        for index, weakness in enumerate(weaknesses[:4], start=1)
-    ]
+        return _skeptical_review_empty_section(skeptical_employer_review)
+    entries = [_skeptical_review_entry(weakness, index) for index, weakness in enumerate(weaknesses[:4], start=1)]
     section = _section_with_entries(
         section_id="skeptical_employer_review",
         title="Skeptical Employer-Side Review",
@@ -521,6 +480,31 @@ def _skeptical_employer_review_section(
     )
     section["skeptical_employer_review"] = skeptical_employer_review
     return section
+
+
+def _skeptical_review_empty_section(review: dict[str, Any]) -> dict[str, Any]:
+    section = _section_with_entries(
+        section_id="skeptical_employer_review",
+        title="Skeptical Employer-Side Review",
+        entries=[],
+        insufficiency_reason=_SKEPTICAL_REVIEW_INSUFFICIENCY_REASON,
+    )
+    section["skeptical_employer_review"] = _as_dict(review)
+    return section
+
+
+def _skeptical_review_entry(weakness: dict[str, Any], index: int) -> dict[str, Any]:
+    return {
+        "entry_id": str(weakness.get("weakness_id") or f"skeptical_review:{index}"),
+        "statement": str(weakness.get("critique") or ""),
+        "supporting_finding_ids": _short_strings(weakness.get("supporting_finding_ids")),
+        "supporting_citation_ids": _short_strings(weakness.get("supporting_citation_ids")),
+        "supporting_uids": _short_strings(weakness.get("supporting_uids")),
+    }
+
+
+def _short_strings(value: object) -> list[str]:
+    return [str(item) for item in _as_list(value) if item][:3]
 
 
 def _document_request_checklist_section(

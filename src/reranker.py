@@ -73,10 +73,10 @@ class CrossEncoderReranker:
         limit = top_k if top_k is not None else len(scored)
         reranked = []
         for result, distance in scored[:limit]:
-            from .retriever import SearchResult
+            from .retriever import SearchResult as SearchResultModel
 
             reranked.append(
-                SearchResult(
+                SearchResultModel(
                     chunk_id=result.chunk_id,
                     text=result.text,
                     metadata=result.metadata,

@@ -275,14 +275,7 @@ def _truncate_json(data: Any, raw: str, max_chars: int, **kwargs: Any) -> str:
     Works on a shallow copy of *data* so the caller's dict is not mutated.
     """
     if not isinstance(data, dict):
-        if isinstance(data, list):
-            data = {"results": data}
-            raw = _serialize_json(data, pretty=False, **kwargs)
-            if len(raw) <= max_chars:
-                return raw
-            return _truncate_json(data, raw, max_chars, **kwargs)
-        # Can't intelligently trim non-dict responses — wrap in valid JSON
-        return _fallback_truncated_json(max_chars, snippet=raw[:max_chars], **kwargs)
+        return _truncate_non_dict(data, raw, max_chars, **kwargs)
 
     # Work on a copy so we don't mutate the caller's dict
     data = {**data}
@@ -291,25 +284,14 @@ def _truncate_json(data: Any, raw: str, max_chars: int, **kwargs: Any) -> str:
         return compact_raw
 
     # Find the largest list value in the top-level dict
-    largest_key = None
-    largest_len = 0
-    for key, val in data.items():
-        if isinstance(val, list) and len(val) > largest_len:
-            largest_key = key
-            largest_len = len(val)
+    largest_key, largest_len = _largest_list(data)
 
     if largest_key is None:
-        trimmed_string = _truncate_largest_string_field(data, max_chars, **kwargs)
-        if trimmed_string is not None:
-            return trimmed_string
-        return _fallback_truncated_json(max_chars, snippet=raw[:max_chars], **kwargs)
+        return _truncate_string_or_fallback(data, raw, max_chars, **kwargs)
     if largest_len <= 1:
         if len(compact_raw) <= max_chars:
             return compact_raw
-        trimmed_string = _truncate_largest_string_field(data, max_chars, **kwargs)
-        if trimmed_string is not None:
-            return trimmed_string
-        return _fallback_truncated_json(max_chars, snippet=raw[:max_chars], **kwargs)
+        return _truncate_string_or_fallback(data, raw, max_chars, **kwargs)
 
     # Binary search for how many items fit
     lo, hi = 0, largest_len
@@ -354,6 +336,24 @@ def _truncate_json(data: Any, raw: str, max_chars: int, **kwargs: Any) -> str:
         len(best_result),
     )
     return best_result
+
+
+def _truncate_non_dict(data: Any, raw: str, max_chars: int, **kwargs: Any) -> str:
+    if isinstance(data, list):
+        wrapped = {"results": data}
+        compact = _serialize_json(wrapped, pretty=False, **kwargs)
+        return compact if len(compact) <= max_chars else _truncate_json(wrapped, compact, max_chars, **kwargs)
+    return _fallback_truncated_json(max_chars, snippet=raw[:max_chars], **kwargs)
+
+
+def _largest_list(data: dict[str, Any]) -> tuple[str | None, int]:
+    lists = ((key, len(value)) for key, value in data.items() if isinstance(value, list))
+    return max(lists, key=lambda item: item[1], default=(None, 0))
+
+
+def _truncate_string_or_fallback(data: dict[str, Any], raw: str, max_chars: int, **kwargs: Any) -> str:
+    trimmed = _truncate_largest_string_field(data, max_chars, **kwargs)
+    return trimmed or _fallback_truncated_json(max_chars, snippet=raw[:max_chars], **kwargs)
 
 
 def json_error(message: str) -> str:

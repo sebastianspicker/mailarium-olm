@@ -12,14 +12,28 @@ ACTIVE_RESULTS_MANIFEST = "active_run.json"
 
 
 def _iso_utc_now() -> str:
+    """Return current UTC timestamp as ISO 8601 string."""
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _iso_utc_mtime(path: Path) -> str:
+    """Return file modification time as UTC ISO 8601 string."""
     return datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _resolve_within_results_root(results_root: Path, path: Path | str) -> Path:
+    """Resolve a path relative to results root, ensuring it stays within the root directory.
+
+    Args:
+        results_root: The root directory for investigation results.
+        path: A path (absolute or relative) to resolve within the root.
+
+    Returns:
+        The resolved absolute path within results_root.
+
+    Raises:
+        ValueError: If the resolved path escapes the results_root boundary.
+    """
     resolved_root = results_root.resolve()
     candidate = Path(path).expanduser()
     if candidate.is_absolute():
@@ -34,6 +48,15 @@ def _resolve_within_results_root(results_root: Path, path: Path | str) -> Path:
 
 
 def _relative_path(results_root: Path, path: Path | str | None) -> str | None:
+    """Convert a path to its relative form within results_root.
+
+    Args:
+        results_root: The root directory for investigation results.
+        path: A path to convert, or None.
+
+    Returns:
+        The relative path string within results_root, or None if path is None.
+    """
     if path is None:
         return None
     resolved_root = results_root.resolve()
@@ -53,6 +76,18 @@ def _ledger_reference_snapshot(
     phase_id: str,
     run_id: str,
 ) -> dict[str, Any]:
+    """Create a snapshot of a ledger file's reference state.
+
+    Args:
+        results_root: The root directory for investigation results.
+        path: Path to the ledger file.
+        phase_id: The phase identifier to search for in the file.
+        run_id: The run identifier to search for in the file.
+
+    Returns:
+        A dictionary containing path info, existence status, and whether
+        phase_id and run_id references are found in the file content.
+    """
     relative_path = _relative_path(results_root, path)
     if relative_path is None:
         return {
@@ -105,22 +140,8 @@ def _curation_state(
             run_id=run_id,
         ),
     }
-    configured = [entry for entry in ledgers.values() if entry["path"]]
-    current = [entry["path"] for entry in configured if entry["matches_active_run"]]
-    stale = [entry["path"] for entry in configured if entry["exists"] and not entry["matches_active_run"]]
-    missing = [entry["path"] for entry in configured if not entry["exists"]]
-
-    if not configured:
-        status = "raw_results_pending_curation"
-    elif missing:
-        status = "partially_curated_stale"
-    elif len(current) == len(configured):
-        status = "curated_current"
-    elif current:
-        status = "partially_curated_stale"
-    else:
-        status = "stale_curated_ledgers"
-
+    configured, current, stale, missing = _curation_ledger_sets(ledgers)
+    status = _curation_status(configured, current, missing)
     required_action = {
         "curated_current": "",
         "raw_results_pending_curation": "refresh_curated_ledgers_or_record_invalidation",
@@ -137,6 +158,22 @@ def _curation_state(
         "required_action": required_action,
         "ledgers": ledgers,
     }
+
+
+def _curation_ledger_sets(ledgers: dict[str, dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str], list[str], list[str]]:
+    configured = [entry for entry in ledgers.values() if entry["path"]]
+    current = [entry["path"] for entry in configured if entry["matches_active_run"]]
+    stale = [entry["path"] for entry in configured if entry["exists"] and not entry["matches_active_run"]]
+    missing = [entry["path"] for entry in configured if not entry["exists"]]
+    return configured, current, stale, missing
+
+
+def _curation_status(configured: list[dict[str, Any]], current: list[str], missing: list[str]) -> str:
+    if not configured:
+        return "raw_results_pending_curation"
+    if missing or current:
+        return "partially_curated_stale" if missing or len(current) != len(configured) else "curated_current"
+    return "stale_curated_ledgers"
 
 
 def write_active_results_manifest(

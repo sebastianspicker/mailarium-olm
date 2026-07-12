@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src._utils import as_dict, as_list
+
 BEHAVIORAL_INTERPRETATION_POLICY_VERSION = "1"
 
 _DIRECT_FINDING_SCOPES = {"message_behavior", "quoted_message_behavior"}
@@ -19,16 +21,6 @@ _CONCERN_CEILING_SCOPES = {"comparative_treatment", "communication_graph", "reta
 _CONCERN_CEILING_LABEL_TERMS = ("discrimin", "retaliat", "mobb", "hostile environment")
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    """Return one dict or an empty dict."""
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    """Return one list or an empty list."""
-    return value if isinstance(value, list) else []
-
-
 def _title(label: str) -> str:
     """Return a compact human-readable label."""
     return str(label or "").replace("_", " ").capitalize()
@@ -36,10 +28,10 @@ def _title(label: str) -> str:
 
 def _direct_text_support(finding: dict[str, Any]) -> bool:
     """Return whether the finding has direct authored or canonical quoted support."""
-    for citation in _as_list(finding.get("supporting_evidence")):
+    for citation in as_list(finding.get("supporting_evidence")):
         if not isinstance(citation, dict):
             continue
-        attribution = _as_dict(citation.get("text_attribution"))
+        attribution = as_dict(citation.get("text_attribution"))
         status = str(attribution.get("authored_quoted_inferred_status") or "")
         if status in {"authored", "quoted"}:
             return True
@@ -58,14 +50,14 @@ def _requires_concern_ceiling(finding: dict[str, Any]) -> bool:
 def _ambiguity_disclosures(finding: dict[str, Any]) -> list[str]:
     """Return compact ambiguity and uncertainty disclosures for one finding."""
     disclosures: list[str] = []
-    quote_ambiguity = _as_dict(finding.get("quote_ambiguity"))
+    quote_ambiguity = as_dict(finding.get("quote_ambiguity"))
     if bool(quote_ambiguity.get("downgraded_due_to_quote_ambiguity")):
         disclosures.append("Quoted-speaker ownership remains ambiguous in the cited material.")
-    confidence_split = _as_dict(finding.get("confidence_split"))
-    interpretation_confidence = _as_dict(confidence_split.get("interpretation_confidence"))
+    confidence_split = as_dict(finding.get("confidence_split"))
+    interpretation_confidence = as_dict(confidence_split.get("interpretation_confidence"))
     if str(interpretation_confidence.get("label") or "") == "low":
         disclosures.append("Interpretation confidence remains low for this finding.")
-    evidence_strength = _as_dict(finding.get("evidence_strength"))
+    evidence_strength = as_dict(finding.get("evidence_strength"))
     if str(evidence_strength.get("label") or "") == "weak_indicator":
         disclosures.append("The available support is limited and should be read cautiously.")
     return disclosures
@@ -74,13 +66,13 @@ def _ambiguity_disclosures(finding: dict[str, Any]) -> list[str]:
 def classify_claim_level(finding: dict[str, Any]) -> tuple[str, str]:
     """Return the BA17 claim level and a short policy reason for one finding."""
     finding_scope = str(finding.get("finding_scope") or "")
-    evidence_strength = str(_as_dict(finding.get("evidence_strength")).get("label") or "insufficient_evidence")
+    evidence_strength = str(as_dict(finding.get("evidence_strength")).get("label") or "insufficient_evidence")
     interpretation_confidence = str(
-        _as_dict(_as_dict(finding.get("confidence_split")).get("interpretation_confidence")).get("label") or "low"
+        as_dict(as_dict(finding.get("confidence_split")).get("interpretation_confidence")).get("label") or "low"
     )
-    quote_ambiguity = bool(_as_dict(finding.get("quote_ambiguity")).get("downgraded_due_to_quote_ambiguity"))
+    quote_ambiguity = bool(as_dict(finding.get("quote_ambiguity")).get("downgraded_due_to_quote_ambiguity"))
     direct_text_support = _direct_text_support(finding)
-    support_count = len([item for item in _as_list(finding.get("supporting_evidence")) if isinstance(item, dict)])
+    support_count = len([item for item in as_list(finding.get("supporting_evidence")) if isinstance(item, dict)])
 
     if evidence_strength == "insufficient_evidence" or support_count == 0:
         return (
@@ -89,38 +81,49 @@ def classify_claim_level(finding: dict[str, Any]) -> tuple[str, str]:
         )
 
     if finding_scope in _DIRECT_FINDING_SCOPES and direct_text_support and not quote_ambiguity:
-        if evidence_strength in {"strong_indicator", "moderate_indicator"}:
-            return (
-                "observed_fact",
-                "The cited material supports a direct observation about wording or behaviour in the message itself.",
-            )
-        return (
-            "pattern_concern",
-            "The message contains some direct support, but not enough for a firmer factual characterization.",
-        )
+        return _direct_claim_level(evidence_strength)
 
     if finding_scope in _INTERPRETIVE_FINDING_SCOPES:
-        if _requires_concern_ceiling(finding):
-            return (
-                "pattern_concern",
-                "This high-stakes interpretive finding must remain at concern wording rather than stronger attribution.",
-            )
-        if evidence_strength == "strong_indicator" and interpretation_confidence in {"high", "medium"}:
-            return (
-                "stronger_interpretation",
-                "The finding aggregates multiple signals, but it remains an interpretation rather than a legal conclusion.",
-            )
+        return _interpretive_claim_level(finding, evidence_strength, interpretation_confidence)
+
+    return _remaining_claim_level(evidence_strength, interpretation_confidence)
+
+
+def _direct_claim_level(evidence_strength: str) -> tuple[str, str]:
+    if evidence_strength in {"strong_indicator", "moderate_indicator"}:
+        return (
+            "observed_fact",
+            "The cited material supports a direct observation about wording or behaviour in the message itself.",
+        )
+    return (
+        "pattern_concern",
+        "The message contains some direct support, but not enough for a firmer factual characterization.",
+    )
+
+
+def _interpretive_claim_level(finding: dict[str, Any], evidence_strength: str, interpretation_confidence: str) -> tuple[str, str]:
+    if _requires_concern_ceiling(finding):
         return (
             "pattern_concern",
-            "The available record raises a concern pattern, but alternative explanations remain viable.",
+            "This high-stakes interpretive finding must remain at concern wording rather than stronger attribution.",
         )
+    if evidence_strength == "strong_indicator" and interpretation_confidence in {"high", "medium"}:
+        return (
+            "stronger_interpretation",
+            "The finding aggregates multiple signals, but it remains an interpretation rather than a legal conclusion.",
+        )
+    return (
+        "pattern_concern",
+        "The available record raises a concern pattern, but alternative explanations remain viable.",
+    )
 
+
+def _remaining_claim_level(evidence_strength: str, interpretation_confidence: str) -> tuple[str, str]:
     if evidence_strength in {"strong_indicator", "moderate_indicator"} and interpretation_confidence in {"high", "medium"}:
         return (
             "observed_fact",
             "The current support allows a bounded factual summary without extending to motive or legality.",
         )
-
     return (
         "pattern_concern",
         "The available support is suggestive but remains too limited for a stronger interpretation.",
@@ -131,7 +134,7 @@ def guarded_statement_for_finding(finding: dict[str, Any]) -> tuple[str, str, st
     """Return a guarded BA17 statement bundle for one finding."""
     label = _title(str(finding.get("finding_label") or "finding")).lower()
     claim_level, policy_reason = classify_claim_level(finding)
-    alternatives = [str(item) for item in _as_list(finding.get("alternative_explanations")) if str(item).strip()]
+    alternatives = [str(item) for item in as_list(finding.get("alternative_explanations")) if str(item).strip()]
     ambiguity_disclosures = _ambiguity_disclosures(finding)
 
     if claim_level == "observed_fact":

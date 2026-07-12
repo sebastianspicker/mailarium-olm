@@ -275,16 +275,16 @@ class AnalyticsMixin:
 
         placeholders = _sql_in_placeholders(sender_emails)
         query = (
-            f"SELECT r.address AS recipient,"
-            f" GROUP_CONCAT(DISTINCT e.sender_email) AS senders,"
-            f" COUNT(*) AS total_emails"
-            f" FROM recipients r"
-            f" JOIN emails e ON r.email_uid = e.uid"
-            f" WHERE e.sender_email IN ({placeholders})"
-            f" AND r.type IN ('to', 'cc')"
-            f" GROUP BY r.address"
-            f" HAVING COUNT(DISTINCT e.sender_email) >= ?"
-            f" ORDER BY total_emails DESC"
+            f"SELECT r.address AS recipient,"  # nosec B608
+            f" GROUP_CONCAT(DISTINCT e.sender_email) AS senders,"  # nosec B608
+            f" COUNT(*) AS total_emails"  # nosec B608
+            f" FROM recipients r"  # nosec B608
+            f" JOIN emails e ON r.email_uid = e.uid"  # nosec B608
+            f" WHERE e.sender_email IN ({placeholders})"  # nosec B608
+            f" AND r.type IN ('to', 'cc')"  # nosec B608
+            f" GROUP BY r.address"  # nosec B608
+            f" HAVING COUNT(DISTINCT e.sender_email) >= ?"  # nosec B608
+            f" ORDER BY total_emails DESC"  # nosec B608
         )
         rows = self.conn.execute(query, [*sender_emails, min_shared]).fetchall()
 
@@ -308,11 +308,11 @@ class AnalyticsMixin:
 
         placeholders = _sql_in_placeholders(sender_emails)
         query = (
-            f"SELECT sender_email, date, uid, subject"
-            f" FROM emails"
-            f" WHERE sender_email IN ({placeholders})"
-            f" AND date IS NOT NULL"
-            f" ORDER BY date ASC"
+            f"SELECT sender_email, date, uid, subject"  # nosec B608
+            f" FROM emails"  # nosec B608
+            f" WHERE sender_email IN ({placeholders})"  # nosec B608
+            f" AND date IS NOT NULL"  # nosec B608
+            f" ORDER BY date ASC"  # nosec B608
         )
         rows = self.conn.execute(query, sender_emails).fetchall()
 

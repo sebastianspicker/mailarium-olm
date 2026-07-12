@@ -1,4 +1,3 @@
-# ruff: noqa: F401
 """Extended tests for web_app.py — targeting >=80% coverage.
 
 Every test mocks Streamlit calls and database dependencies to avoid
@@ -7,46 +6,54 @@ requiring real databases or a running Streamlit server.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.retriever import SearchResult
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    chunk_id: str = "c1",
-    score_distance: float = 0.2,
-    date: str = "2024-01-15",
-    sender_email: str = "a@example.com",
-    sender_name: str = "Alice",
-    subject: str = "Test Subject",
-    folder: str = "Inbox",
-    text: str = "Hello world body text",
-    to: str = "",
-    conversation_id: str = "",
-    email_type: str = "original",
-    attachment_count: str = "0",
-    attachment_names: str = "",
-    priority: str = "0",
-) -> SearchResult:
+def _result(**overrides: object) -> SearchResult:
+    defaults: dict[str, object] = {
+        "chunk_id": "c1",
+        "score_distance": 0.2,
+        "date": "2024-01-15",
+        "sender_email": "a@example.com",
+        "sender_name": "Alice",
+        "subject": "Test Subject",
+        "folder": "Inbox",
+        "text": "Hello world body text",
+        "to": "",
+        "conversation_id": "",
+        "email_type": "original",
+        "attachment_count": "0",
+        "attachment_names": "",
+        "priority": "0",
+    }
+    unknown = sorted(set(overrides) - set(defaults))
+    if unknown:
+        raise TypeError(f"_result() got unexpected option(s): {', '.join(unknown)}")
+    values = defaults | overrides
     return SearchResult(
-        chunk_id=chunk_id,
-        text=text,
+        chunk_id=str(values["chunk_id"]),
+        text=str(values["text"]),
         metadata={
-            "subject": subject,
-            "sender_email": sender_email,
-            "sender_name": sender_name,
-            "date": date,
-            "folder": folder,
-            "to": to,
-            "conversation_id": conversation_id,
-            "email_type": email_type,
-            "attachment_count": attachment_count,
-            "attachment_names": attachment_names,
-            "priority": priority,
+            key: str(values[key])
+            for key in (
+                "subject",
+                "sender_email",
+                "sender_name",
+                "date",
+                "folder",
+                "to",
+                "conversation_id",
+                "email_type",
+                "attachment_count",
+                "attachment_names",
+                "priority",
+            )
         },
-        distance=score_distance,
+        distance=float(str(values["score_distance"])),
     )
 
 

@@ -14,82 +14,64 @@ def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _preflight_payload() -> dict[str, Any]:
+    return {
+        "draft_case_scope": {
+            "target_person": {"name": "employee", "email": "employee@example.test"},
+            "suspected_actors": [{"name": "manager", "email": "manager@example.test", "role_hint": "manager"}],
+            "context_people": [{"name": "Lara Langer", "email": "lara.langer@example.test"}],
+            "institutional_actors": [
+                {
+                    "label": "HR mailbox",
+                    "actor_type": "shared_mailbox",
+                    "email": "hr-mailbox@example.test",
+                    "function": "HR gatekeeper and notice route",
+                }
+            ],
+        },
+        "recommended_source_scope": "mixed_case_file",
+        "matter_factual_context": "## Explicit Address Directory\n\n- hr-mailbox@example.test",
+        "draft_case_analysis_input": {
+            "case_scope": {
+                "target_person": {
+                    "name": "employee",
+                    "email": "employee@example.test",
+                    "extraction_basis": "direct_prompt_text",
+                },
+                "suspected_actors": [
+                    {
+                        "name": "manager",
+                        "email": None,
+                        "role_hint": "manager",
+                        "extraction_basis": "named_person",
+                    }
+                ],
+                "trigger_events": [
+                    {
+                        "trigger_type": "complaint",
+                        "date": "2025-03-01",
+                        "date_confidence": "exact",
+                        "actor": {"name": "employee", "extraction_basis": "named_person"},
+                    }
+                ],
+                "allegation_focus": ["retaliation"],
+                "analysis_goal": "hr_review",
+                "date_from": "2025-01-01",
+                "date_to": "2025-06-30",
+            },
+            "matter_factual_context": "## Old Context\n\n- should be replaced",
+            "source_scope": "emails_only",
+            "review_mode": "retrieval_only",
+        },
+    }
+
+
 def test_prepare_case_inputs_builds_clean_case_json_and_overrides(tmp_path: Path) -> None:
     preflight_path = tmp_path / "preflight.json"
     case_json_path = tmp_path / "case.json"
     overrides_path = tmp_path / "full_pack_overrides.json"
     preflight_path.write_text(
-        json.dumps(
-            {
-                "draft_case_scope": {
-                    "target_person": {
-                        "name": "employee",
-                        "email": "employee@example.test",
-                    },
-                    "suspected_actors": [
-                        {
-                            "name": "manager",
-                            "email": "manager@example.test",
-                            "role_hint": "manager",
-                        }
-                    ],
-                    "context_people": [
-                        {
-                            "name": "Lara Langer",
-                            "email": "lara.langer@example.test",
-                        }
-                    ],
-                    "institutional_actors": [
-                        {
-                            "label": "HR mailbox",
-                            "actor_type": "shared_mailbox",
-                            "email": "hr-mailbox@example.test",
-                            "function": "HR gatekeeper and notice route",
-                        }
-                    ],
-                },
-                "recommended_source_scope": "mixed_case_file",
-                "matter_factual_context": "## Explicit Address Directory\n\n- hr-mailbox@example.test",
-                "draft_case_analysis_input": {
-                    "case_scope": {
-                        "target_person": {
-                            "name": "employee",
-                            "email": "employee@example.test",
-                            "extraction_basis": "direct_prompt_text",
-                        },
-                        "suspected_actors": [
-                            {
-                                "name": "manager",
-                                "email": None,
-                                "role_hint": "manager",
-                                "extraction_basis": "named_person",
-                            }
-                        ],
-                        "trigger_events": [
-                            {
-                                "trigger_type": "complaint",
-                                "date": "2025-03-01",
-                                "date_confidence": "exact",
-                                "actor": {
-                                    "name": "employee",
-                                    "extraction_basis": "named_person",
-                                },
-                            }
-                        ],
-                        "allegation_focus": ["retaliation"],
-                        "analysis_goal": "hr_review",
-                        "date_from": "2025-01-01",
-                        "date_to": "2025-06-30",
-                    },
-                    "matter_factual_context": "## Old Context\n\n- should be replaced",
-                    "source_scope": "emails_only",
-                    "review_mode": "retrieval_only",
-                },
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
+        json.dumps(_preflight_payload(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 

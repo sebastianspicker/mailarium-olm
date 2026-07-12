@@ -7,17 +7,40 @@ import re
 from datetime import UTC, date, datetime
 from typing import Any
 
+from ._utils import _as_dict, _as_list, _compact
+
 PROMISE_CONTRADICTION_ANALYSIS_VERSION = "1"
 _PROMISE_SOURCE_TYPES = {"meeting_note", "note_record", "email", "formal_document", "participation_record"}
 _SUMMARY_SOURCE_TYPES = {"meeting_note", "note_record", "email", "formal_document", "participation_record"}
-_PROMISE_CUE_RE = re.compile(
-    r"(?i)\b("
-    r"will|would|shall|agreed to|agree to|promised to|promise to|follow up|next step|"
-    r"will send|will provide|will share|will review|will schedule|will invite|will include|"
-    r"wird|werden|zugesagt|vereinbart|nachreichen|prüfen|pruefen|einladen|beteiligen|informieren"
-    r")\b"
+_PROMISE_CUES = (
+    "will",
+    "would",
+    "shall",
+    "agreed to",
+    "agree to",
+    "promised to",
+    "promise to",
+    "follow up",
+    "next step",
+    "will send",
+    "will provide",
+    "will share",
+    "will review",
+    "will schedule",
+    "will invite",
+    "will include",
+    "wird",
+    "werden",
+    "zugesagt",
+    "vereinbart",
+    "nachreichen",
+    "prüfen",
+    "pruefen",
+    "einladen",
+    "beteiligen",
+    "informieren",
 )
-_NEGATION_RE = re.compile(r"(?i)\b(no|not|without|never|did not|didn't|kein|keine|ohne|nicht)\b")
+_NEGATION_CUES = ("no", "not", "without", "never", "did not", "didn't", "kein", "keine", "ohne", "nicht")
 _ACTION_TAGS: dict[str, tuple[str, ...]] = {
     "provide_documents": ("provide", "send", "share", "submit", "nachreichen", "senden", "teilen", "provide the", "send the"),
     "schedule_or_meet": ("schedule", "meeting", "invite", "calendar", "termin", "einladen", "besprechung"),
@@ -33,8 +56,7 @@ _ACTION_TAGS: dict[str, tuple[str, ...]] = {
     ),
     "include_or_inform": ("include", "inform", "copy", "cc", "einbeziehen", "informieren"),
 }
-_TITLE_TOKEN_RE = re.compile(r"[a-zA-ZäöüÄÖÜß]{4,}")
-_TOPIC_TOKEN_RE = re.compile(r"[a-zA-ZäöüÄÖÜß]{3,}")
+_ALPHA_TOKEN_RE = re.compile(r"[^\W\d_]+")
 _TOPIC_STOPWORDS = {
     "and",
     "the",
@@ -81,23 +103,14 @@ _TOPIC_STOPWORDS = {
     "einer",
     "einem",
     "einen",
-    "noch",
 }
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
-
-
 def _source_text(source: dict[str, Any]) -> str:
+    """Extract text content from a source dict for analysis.
+
+    Combines title, snippet, and text_preview from documentary_support.
+    """
     documentary = _as_dict(source.get("documentary_support"))
     return " ".join(
         part
@@ -111,6 +124,10 @@ def _source_text(source: dict[str, Any]) -> str:
 
 
 def _content_text(source: dict[str, Any]) -> str:
+    """Extract content text from a source dict (snippet and text_preview only).
+
+    Unlike _source_text, this excludes the title.
+    """
     documentary = _as_dict(source.get("documentary_support"))
     return " ".join(
         part
@@ -123,11 +140,20 @@ def _content_text(source: dict[str, Any]) -> str:
 
 
 def _source_date(source: dict[str, Any]) -> str:
+    """Extract the date from a source dict.
+
+    Checks chronology_anchor first, then falls back to source date.
+    """
     chronology_anchor = _as_dict(source.get("chronology_anchor"))
     return str(chronology_anchor.get("date") or source.get("date") or "")
 
 
 def _source_locator_payload(source: dict[str, Any]) -> dict[str, Any]:
+    """Build a locator payload for a source.
+
+    Tries document_locator first, then provenance.document_locator,
+    then constructs one from evidence_handle or source_id.
+    """
     locator = _as_dict(source.get("document_locator"))
     if locator:
         return locator
@@ -146,6 +172,11 @@ def _source_locator_payload(source: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_ordering_datetime(value: str) -> datetime | None:
+    """Parse a date or datetime string into a timezone-aware datetime.
+
+    Handles ISO date format (YYYY-MM-DD) and ISO datetime format.
+    Returns None if parsing fails.
+    """
     raw = _compact(value)
     if not raw:
         return None
@@ -165,6 +196,11 @@ def _parse_ordering_datetime(value: str) -> datetime | None:
 
 
 def _is_stitched_thread_export(source: dict[str, Any]) -> bool:
+    """Check if a source is a stitched thread export.
+
+    Identifies formal_document sources that appear to be stitched email threads
+    based on source_id, title, or content containing multiple email headers.
+    """
     if str(source.get("source_type") or "") != "formal_document":
         return False
     source_id = _compact(source.get("source_id")).lower()
@@ -176,6 +212,11 @@ def _is_stitched_thread_export(source: dict[str, Any]) -> bool:
 
 
 def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences.
+
+    Normalizes line breaks to spaces, then splits on sentence-ending punctuation
+    followed by whitespace. Strips trailing punctuation from each sentence.
+    """
     if not text:
         return []
     normalized = re.sub(r"[\r\n]+", ". ", text)
@@ -183,24 +224,57 @@ def _split_sentences(text: str) -> list[str]:
     return [part.strip(" .;") for part in parts if _compact(part)]
 
 
+def _contains_bounded_phrase(text: str, phrases: tuple[str, ...]) -> bool:
+    """Return whether text contains a phrase at regex-compatible word boundaries."""
+    normalized = text.casefold()
+    for phrase in phrases:
+        start = 0
+        while (index := normalized.find(phrase, start)) >= 0:
+            end = index + len(phrase)
+            before_is_word = index > 0 and (normalized[index - 1].isalnum() or normalized[index - 1] == "_")
+            after_is_word = end < len(normalized) and (normalized[end].isalnum() or normalized[end] == "_")
+            if not before_is_word and not after_is_word:
+                return True
+            start = index + 1
+    return False
+
+
 def _title_tokens(value: Any) -> set[str]:
-    return {match.group(0).lower() for match in _TITLE_TOKEN_RE.finditer(_compact(value))}
+    """Extract title tokens from a value.
+
+    Finds all alphabetic tokens of length 4+ and returns them as lowercase strings.
+    """
+    return {match.group(0).lower() for match in _ALPHA_TOKEN_RE.finditer(_compact(value)) if len(match.group(0)) >= 4}
 
 
 def _action_tags(text: str) -> list[str]:
+    """Extract action tags from text.
+
+    Matches text against predefined action tag keywords and returns matching tags.
+    """
     lowered = _compact(text).lower()
     return [action_tag for action_tag, keywords in _ACTION_TAGS.items() if any(keyword in lowered for keyword in keywords)]
 
 
 def _topic_tokens(text: str) -> set[str]:
+    """Extract topic tokens from text.
+
+    Finds all alphabetic tokens of length 3+ that are not stopwords.
+    """
     return {
         match.group(0).lower()
-        for match in _TOPIC_TOKEN_RE.finditer(_compact(text))
-        if match.group(0).lower() not in _TOPIC_STOPWORDS
+        for match in _ALPHA_TOKEN_RE.finditer(_compact(text))
+        if len(match.group(0)) >= 3 and match.group(0).lower() not in _TOPIC_STOPWORDS
     }
 
 
 def _promise_candidates(source: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract promise candidates from a source.
+
+    Identifies sentences containing promise cues and action tags,
+    returning structured promise candidate records.
+    Skips stitched thread exports.
+    """
     if str(source.get("source_type") or "") not in _PROMISE_SOURCE_TYPES:
         return []
     if _is_stitched_thread_export(source):
@@ -208,7 +282,7 @@ def _promise_candidates(source: dict[str, Any]) -> list[dict[str, Any]]:
     text = _source_text(source)
     rows: list[dict[str, Any]] = []
     for sentence in _split_sentences(text):
-        if not _PROMISE_CUE_RE.search(sentence):
+        if not _contains_bounded_phrase(sentence, _PROMISE_CUES):
             continue
         tags = _action_tags(sentence)
         if not tags:
@@ -234,61 +308,80 @@ def _related_sources(
     *,
     source_links: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    related: list[dict[str, Any]] = []
+    """Find sources related to a promise.
+
+    Identifies related sources based on:
+    - Shared UID
+    - Explicit source links
+    - Shared title tokens (2+ matches)
+    - Same actor ID
+
+    Only returns sources dated at or after the promise date.
+    Adds _relation_basis and _relation_strength to each related source.
+    """
     promise_source_id = str(promise.get("source_id") or "")
     promise_uid = str(promise.get("uid") or "")
     promise_actor_id = str(promise.get("actor_id") or "")
     promise_date = str(promise.get("date") or "")
     promise_date_key = _parse_ordering_datetime(promise_date)
     promise_title_tokens = _title_tokens(promise.get("title"))
-    linked_source_ids = {
-        str(link.get("to_source_id") or "")
-        for link in source_links
-        if str(link.get("from_source_id") or "") == promise_source_id and str(link.get("to_source_id") or "")
-    }
-    linked_source_ids.update(
-        {
-            str(link.get("from_source_id") or "")
-            for link in source_links
-            if str(link.get("to_source_id") or "") == promise_source_id and str(link.get("from_source_id") or "")
-        }
-    )
+    linked_source_ids = _linked_source_ids(promise_source_id, source_links)
+    related: list[dict[str, Any]] = []
     for source in sources:
-        if str(source.get("source_id") or "") == promise_source_id:
-            continue
-        source_type = str(source.get("source_type") or "")
-        if source_type not in _SUMMARY_SOURCE_TYPES and source_type not in {"time_record"}:
-            continue
-        source_date = _source_date(source)
-        source_date_key = _parse_ordering_datetime(source_date)
-        if promise_date_key is not None and source_date_key is not None and source_date_key < promise_date_key:
-            continue
-        relation_basis = ""
-        relation_strength = 0
-        if promise_uid and str(source.get("uid") or "") == promise_uid:
-            relation_basis = "shared_uid"
-            relation_strength = 3
-        elif str(source.get("source_id") or "") in linked_source_ids:
-            relation_basis = "explicit_source_link"
-            relation_strength = 3
-        elif promise_title_tokens and len(promise_title_tokens & _title_tokens(source.get("title"))) >= 2:
-            relation_basis = "shared_title_tokens"
-            relation_strength = 2
-        elif promise_actor_id and str(source.get("actor_id") or "") == promise_actor_id:
-            relation_basis = "same_actor_id"
-            relation_strength = 1
-        if relation_basis:
-            related.append(
-                {
-                    **source,
-                    "_relation_basis": relation_basis,
-                    "_relation_strength": relation_strength,
-                }
-            )
+        relation = _related_source(
+            source, promise_source_id, promise_uid, promise_actor_id, promise_date_key, promise_title_tokens, linked_source_ids
+        )
+        if relation:
+            related.append(relation)
     return related
 
 
+def _linked_source_ids(promise_source_id: str, links: list[dict[str, Any]]) -> set[str]:
+    linked: set[str] = set()
+    for link in links:
+        from_id = str(link.get("from_source_id") or "")
+        to_id = str(link.get("to_source_id") or "")
+        if from_id == promise_source_id and to_id:
+            linked.add(to_id)
+        if to_id == promise_source_id and from_id:
+            linked.add(from_id)
+    return linked
+
+
+def _related_source(source, promise_source_id, promise_uid, promise_actor_id, promise_date_key, promise_title_tokens, linked_ids):
+    if str(source.get("source_id") or "") == promise_source_id:
+        return None
+    if str(source.get("source_type") or "") not in {*_SUMMARY_SOURCE_TYPES, "time_record"}:
+        return None
+    source_date_key = _parse_ordering_datetime(_source_date(source))
+    if promise_date_key is not None and source_date_key is not None and source_date_key < promise_date_key:
+        return None
+    basis, strength = _relation_basis(source, promise_uid, promise_actor_id, promise_title_tokens, linked_ids)
+    return {**source, "_relation_basis": basis, "_relation_strength": strength} if basis else None
+
+
+def _relation_basis(source, promise_uid, promise_actor_id, promise_title_tokens, linked_ids):
+    if promise_uid and str(source.get("uid") or "") == promise_uid:
+        return "shared_uid", 3
+    if str(source.get("source_id") or "") in linked_ids:
+        return "explicit_source_link", 3
+    if promise_title_tokens and len(promise_title_tokens & _title_tokens(source.get("title"))) >= 2:
+        return "shared_title_tokens", 2
+    if promise_actor_id and str(source.get("actor_id") or "") == promise_actor_id:
+        return "same_actor_id", 1
+    return "", 0
+
+
 def _matching_action_source(promise: dict[str, Any], related_sources: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Find the best matching action source for a promise.
+
+    Looks for related sources with overlapping action tags and either:
+    - Topic overlap with the promise statement
+    - Explicit source link or shared UID relation
+    - Relation strength >= 3
+
+    Returns the first matching source with topic_overlap added, or None.
+    """
     action_tags = set(_as_list(promise.get("action_tags")))
     promise_topics = _topic_tokens(str(promise.get("statement") or ""))
     for source in related_sources:
@@ -307,6 +400,10 @@ def _matching_action_source(promise: dict[str, Any], related_sources: list[dict[
 
 
 def _significance_for_tags(action_tags: list[str]) -> str:
+    """Determine the likely significance of a set of action tags.
+
+    Returns a human-readable significance string based on the action tag categories.
+    """
     tag_set = set(action_tags)
     if "participation_or_consultation" in tag_set:
         return "May matter for participation, consultation, or prevention-step review."
@@ -329,158 +426,27 @@ def build_promise_contradiction_analysis(
     if not isinstance(case_bundle, dict):
         return None
 
-    sources = [source for source in _as_list(_as_dict(multi_source_case_bundle).get("sources")) if isinstance(source, dict)]
-    source_links = [link for link in _as_list(_as_dict(multi_source_case_bundle).get("source_links")) if isinstance(link, dict)]
+    sources = _dict_rows(_as_dict(multi_source_case_bundle).get("sources"))
+    source_links = _dict_rows(_as_dict(multi_source_case_bundle).get("source_links"))
     promises = [candidate for source in sources for candidate in _promise_candidates(source)]
     promise_action_rows: list[dict[str, Any]] = []
     omission_rows: list[dict[str, Any]] = []
     contradiction_rows: list[dict[str, Any]] = []
 
-    for index, promise in enumerate(promises, start=1):
-        related_sources = _related_sources(promise, sources, source_links=source_links)
-        matched_source = _matching_action_source(promise, related_sources)
-        if matched_source is not None:
-            later_text = _source_text(matched_source)
-            contradiction_detected = bool(_NEGATION_RE.search(later_text)) and bool(
-                _as_list(matched_source.get("_topic_overlap"))
-                or str(matched_source.get("_relation_basis") or "") in {"explicit_source_link", "shared_uid"}
-            )
-            promise_action_rows.append(
-                {
-                    "row_id": f"promise_action:{index}",
-                    "original_statement_or_promise": str(promise.get("statement") or ""),
-                    "later_action": later_text,
-                    "original_source_id": str(promise.get("source_id") or ""),
-                    "later_source_id": str(matched_source.get("source_id") or ""),
-                    "likely_significance": _significance_for_tags(list(_as_list(promise.get("action_tags")))),
-                    "confidence_level": (
-                        "high"
-                        if str(promise.get("source_type") or "") in {"meeting_note", "note_record"}
-                        and bool(matched_source.get("source_weighting"))
-                        else "medium"
-                    ),
-                    "action_alignment": "apparent_contradiction" if contradiction_detected else "possible_follow_up_match",
-                    "supporting_uids": [str(uid) for uid in (promise.get("uid"), matched_source.get("uid")) if _compact(uid)],
-                    "supporting_locators": [
-                        locator
-                        for locator in (_source_locator_payload(promise), _source_locator_payload(matched_source))
-                        if locator
-                    ],
-                }
-            )
-            if contradiction_detected:
-                original_locator = _source_locator_payload(promise)
-                later_locator = _source_locator_payload(matched_source)
-                contradiction_rows.append(
-                    {
-                        "row_id": f"contradiction:promise_action:{index}",
-                        "original_statement_or_promise": str(promise.get("statement") or ""),
-                        "later_action": later_text,
-                        "original_source_id": str(promise.get("source_id") or ""),
-                        "later_source_id": str(matched_source.get("source_id") or ""),
-                        "likely_significance": _significance_for_tags(list(_as_list(promise.get("action_tags")))),
-                        "confidence_level": "medium",
-                        "contradiction_kind": "promise_vs_later_action",
-                        "supporting_uids": [str(uid) for uid in (promise.get("uid"), matched_source.get("uid")) if _compact(uid)],
-                        "source_locator_pair": {
-                            "original": original_locator,
-                            "later": later_locator,
-                        },
-                        "supporting_locators": [locator for locator in (original_locator, later_locator) if locator],
-                    }
-                )
-        elif related_sources:
-            omission_rows.append(
-                {
-                    "row_id": f"omission:{index}",
-                    "original_statement_or_promise": str(promise.get("statement") or ""),
-                    "later_summary_context": (
-                        "Later related summaries or follow-up records were found, "
-                        "but this promise/action topic was not clearly repeated."
-                    ),
-                    "original_source_id": str(promise.get("source_id") or ""),
-                    "later_source_ids": [
-                        str(source.get("source_id") or "") for source in related_sources[:4] if str(source.get("source_id") or "")
-                    ],
-                    "likely_significance": (
-                        "May matter if a later summary or follow-up omits a promised step that should have remained visible."
-                    ),
-                    "confidence_level": "low",
-                    "omission_type": "later_summary_omits_prior_promise",
-                    "supporting_uids": [
-                        str(uid)
-                        for uid in [promise.get("uid"), *[source.get("uid") for source in related_sources[:3]]]
-                        if _compact(uid)
-                    ],
-                    "supporting_locators": [
-                        locator
-                        for locator in [
-                            _source_locator_payload(promise),
-                            *[_source_locator_payload(source) for source in related_sources[:3]],
-                        ]
-                        if locator
-                    ],
-                }
-            )
+    _append_promise_rows(promises, sources, source_links, promise_action_rows, omission_rows, contradiction_rows)
 
-    chronology_contradictions = [
-        item
-        for item in _as_list(_as_dict(_as_dict(master_chronology).get("summary")).get("sequence_breaks_and_contradictions"))
-        if isinstance(item, dict)
-    ]
-    for index, item in enumerate(chronology_contradictions, start=1):
-        contradiction_rows.append(
-            {
-                "row_id": f"contradiction:chronology:{index}",
-                "original_statement_or_promise": (
-                    f"Recorded source date {item.get('source_recorded_date') or ''} differs from extracted event date "
-                    f"{item.get('event_date') or ''}."
-                ).strip(),
-                "later_action": str(item.get("summary") or ""),
-                "original_source_id": str(item.get("source_id") or ""),
-                "later_source_id": "",
-                "likely_significance": "May matter for chronology reliability or later contradiction review.",
-                "confidence_level": "medium",
-                "contradiction_kind": "source_date_vs_event_date",
-                "supporting_uids": [str(item.get("uid") or "")] if str(item.get("uid") or "") else [],
-                "source_locator_pair": {
-                    "original": _as_dict(item.get("source_locator")),
-                    "later": {},
-                },
-                "supporting_locators": [
-                    locator
-                    for locator in (
-                        _as_dict(item.get("source_locator")),
-                        _as_dict(item.get("event_locator")),
-                    )
-                    if locator
-                ],
-            }
-        )
+    chronology_contradictions = _dict_rows(
+        _as_dict(_as_dict(master_chronology).get("summary")).get("sequence_breaks_and_contradictions")
+    )
+    _append_chronology_contradictions(contradiction_rows, chronology_contradictions)
 
-    contradiction_rows = [
-        row
-        for row in contradiction_rows
-        if len([item for item in _as_list(row.get("supporting_locators")) if isinstance(item, dict) and item]) >= 2
-    ]
-    contradiction_rows.sort(key=lambda row: str(row.get("row_id") or ""))
-    omission_rows.sort(key=lambda row: str(row.get("row_id") or ""))
-    promise_action_rows.sort(key=lambda row: str(row.get("row_id") or ""))
-    usable_sources = [
-        source
-        for source in sources
-        if str(source.get("source_type") or "") in _PROMISE_SOURCE_TYPES and not _is_stitched_thread_export(source)
-    ]
-    has_result_rows = bool(promise_action_rows or omission_rows or contradiction_rows)
-    summary_status = "supported" if has_result_rows else "insufficient_source_material"
-    insufficiency_reason = ""
-    if not has_result_rows:
-        insufficiency_reason = (
-            "No usable meeting-note, note-record, or comparable follow-up source pair survived "
-            "the current record well enough for promise/contradiction analysis."
-            if not usable_sources
-            else "No source-linked promise, omission, or contradiction pair was confirmed on the current record."
-        )
+    contradiction_rows = [row for row in contradiction_rows if _has_locator_pair(row)]
+    for rows in (contradiction_rows, omission_rows, promise_action_rows):
+        rows.sort(key=_row_id)
+    usable_sources = _usable_promise_sources(sources)
+    summary_status, insufficiency_reason = _promise_summary_status(
+        promise_action_rows, omission_rows, contradiction_rows, usable_sources
+    )
     return {
         "version": PROMISE_CONTRADICTION_ANALYSIS_VERSION,
         "summary": {
@@ -490,11 +456,159 @@ def build_promise_contradiction_analysis(
             "status": summary_status,
             "insufficiency_reason": insufficiency_reason,
             "usable_source_count": len(usable_sources),
-            "locator_backed_contradiction_count": sum(
-                1 for row in contradiction_rows if len([item for item in _as_list(row.get("supporting_locators")) if item]) >= 2
-            ),
+            "locator_backed_contradiction_count": sum(1 for row in contradiction_rows if _has_locator_pair(row)),
         },
         "promises_vs_actions": promise_action_rows,
         "omission_rows": omission_rows,
         "contradiction_table": contradiction_rows,
     }
+
+
+def _dict_rows(value: object) -> list[dict[str, Any]]:
+    return [item for item in _as_list(value) if isinstance(item, dict)]
+
+
+def _has_locator_pair(row: dict[str, Any]) -> bool:
+    return len([item for item in _as_list(row.get("supporting_locators")) if isinstance(item, dict) and item]) >= 2
+
+
+def _row_id(row: dict[str, Any]) -> str:
+    return str(row.get("row_id") or "")
+
+
+def _append_promise_rows(promises, sources, source_links, action_rows, omission_rows, contradiction_rows):
+    for index, promise in enumerate(promises, start=1):
+        related = _related_sources(promise, sources, source_links=source_links)
+        matched = _matching_action_source(promise, related)
+        if matched is not None:
+            action_row, contradiction_row = _matched_promise_rows(index, promise, matched)
+            action_rows.append(action_row)
+            if contradiction_row:
+                contradiction_rows.append(contradiction_row)
+        elif related:
+            omission_rows.append(_omission_row(index, promise, related))
+
+
+def _matched_promise_rows(index, promise, matched):
+    later_text = _source_text(matched)
+    relation_support = bool(_as_list(matched.get("_topic_overlap"))) or _text(matched, "_relation_basis") in {
+        "explicit_source_link",
+        "shared_uid",
+    }
+    contradiction = _contains_bounded_phrase(later_text, _NEGATION_CUES) and relation_support
+    original_locator, later_locator = _source_locator_payload(promise), _source_locator_payload(matched)
+    shared = {
+        "original_statement_or_promise": _text(promise, "statement"),
+        "later_action": later_text,
+        "original_source_id": _text(promise, "source_id"),
+        "later_source_id": _text(matched, "source_id"),
+        "likely_significance": _significance_for_tags(list(_as_list(promise.get("action_tags")))),
+        "supporting_uids": _nonempty_values((promise.get("uid"), matched.get("uid"))),
+    }
+    action = {
+        **shared,
+        "row_id": f"promise_action:{index}",
+        "confidence_level": _promise_confidence(promise, matched),
+        "action_alignment": "apparent_contradiction" if contradiction else "possible_follow_up_match",
+        "supporting_locators": _nonempty_locators((original_locator, later_locator)),
+    }
+    if not contradiction:
+        return action, None
+    contradiction_row = {
+        **shared,
+        "row_id": f"contradiction:promise_action:{index}",
+        "confidence_level": "medium",
+        "contradiction_kind": "promise_vs_later_action",
+        "source_locator_pair": {"original": original_locator, "later": later_locator},
+        "supporting_locators": _nonempty_locators((original_locator, later_locator)),
+    }
+    return action, contradiction_row
+
+
+def _promise_confidence(promise, matched):
+    return (
+        "high"
+        if str(promise.get("source_type") or "") in {"meeting_note", "note_record"} and bool(matched.get("source_weighting"))
+        else "medium"
+    )
+
+
+def _omission_row(index, promise, related):
+    sources = related[:3]
+    locators = [_source_locator_payload(promise), *[_source_locator_payload(source) for source in sources]]
+    return {
+        "row_id": f"omission:{index}",
+        "original_statement_or_promise": _text(promise, "statement"),
+        "later_summary_context": (
+            "Later related summaries or follow-up records were found, but this promise/action topic was not clearly repeated."
+        ),
+        "original_source_id": _text(promise, "source_id"),
+        "later_source_ids": [source_id for source in related[:4] if (source_id := _text(source, "source_id"))],
+        "likely_significance": (
+            "May matter if a later summary or follow-up omits a promised step that should have remained visible."
+        ),
+        "confidence_level": "low",
+        "omission_type": "later_summary_omits_prior_promise",
+        "supporting_uids": _nonempty_values([promise.get("uid"), *[source.get("uid") for source in sources]]),
+        "supporting_locators": _nonempty_locators(locators),
+    }
+
+
+def _append_chronology_contradictions(rows, items):
+    for index, item in enumerate(items, start=1):
+        original = _as_dict(item.get("source_locator"))
+        later = _as_dict(item.get("event_locator"))
+        uid = str(item.get("uid") or "")
+        rows.append(
+            {
+                "row_id": f"contradiction:chronology:{index}",
+                "original_statement_or_promise": (
+                    f"Recorded source date {item.get('source_recorded_date') or ''} "
+                    f"differs from extracted event date {item.get('event_date') or ''}."
+                ).strip(),
+                "later_action": str(item.get("summary") or ""),
+                "original_source_id": str(item.get("source_id") or ""),
+                "later_source_id": "",
+                "likely_significance": "May matter for chronology reliability or later contradiction review.",
+                "confidence_level": "medium",
+                "contradiction_kind": "source_date_vs_event_date",
+                "supporting_uids": [uid] if uid else [],
+                "source_locator_pair": {"original": original, "later": {}},
+                "supporting_locators": [locator for locator in (original, later) if locator],
+            }
+        )
+
+
+def _usable_promise_sources(sources):
+    return [
+        source
+        for source in sources
+        if str(source.get("source_type") or "") in _PROMISE_SOURCE_TYPES and not _is_stitched_thread_export(source)
+    ]
+
+
+def _promise_summary_status(action_rows, omission_rows, contradiction_rows, usable_sources):
+    if action_rows or omission_rows or contradiction_rows:
+        return "supported", ""
+    if not usable_sources:
+        return (
+            "insufficient_source_material",
+            "No usable meeting-note, note-record, or comparable follow-up source pair survived "
+            "the current record well enough for promise/contradiction analysis.",
+        )
+    return (
+        "insufficient_source_material",
+        "No source-linked promise, omission, or contradiction pair was confirmed on the current record.",
+    )
+
+
+def _text(payload: dict[str, Any], key: str) -> str:
+    return str(payload.get(key) or "")
+
+
+def _nonempty_values(values) -> list[str]:
+    return [str(value) for value in values if _compact(value)]
+
+
+def _nonempty_locators(values) -> list[dict[str, Any]]:
+    return [value for value in values if value]

@@ -4,30 +4,48 @@ from src.controlled_factual_drafting import build_controlled_factual_drafting
 
 
 def test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceiling() -> None:
-    payload = build_controlled_factual_drafting(
+    payload = _fixture_test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceiling_payload()
+
+    assert payload is not None
+    assert payload["drafting_format"] == "controlled_factual_drafting"
+    assert payload["framing_preflight"]["objective_of_draft"]
+    assert payload["framing_preflight"]["allegation_ceiling"]["ceiling_level"] == "concern_only"
+    assert payload["framing_preflight"]["legal_and_factual_risks"][0]["risk_type"] == "unsupported_motive_claim"
+    assert any(
+        "Comparator evidence may support unequal-treatment review" in row["text"]
+        for row in payload["framing_preflight"]["strongest_framing"]
+    )
+    assert any(
+        "Retaliation timing may support further review" in row["text"]
+        for row in payload["framing_preflight"]["strongest_framing"]
+    )
+    assert payload["controlled_draft"]["sections"]["established_facts"]
+    assert payload["controlled_draft"]["sections"]["concerns"]
+    assert payload["controlled_draft"]["sections"]["requests_for_clarification"]
+    assert payload["controlled_draft"]["sections"]["formal_demands"]
+    assert "Established Facts:" in payload["controlled_draft"]["rendered_text"]
+    assert all("case_prompt" not in row["text"].lower() for row in payload["controlled_draft"]["sections"]["established_facts"])
+
+
+def test_build_controlled_factual_drafting_keeps_documentary_anchors_on_concerns() -> None:
+    payload = _fixture_test_build_controlled_factual_drafting_keeps_documentary_anchors_on_concerns_payload()
+
+    assert payload is not None
+    concerns = payload["controlled_draft"]["sections"]["concerns"]
+    assert concerns
+    assert all(row["supporting_source_ids"] == ["email:uid-1"] for row in concerns)
+    assert all(row["supporting_exhibit_ids"] == ["EXH-001"] for row in concerns)
+
+
+def _fixture_test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceiling_payload():
+    return build_controlled_factual_drafting(
         case_bundle={
             "scope": {
                 "target_person": {"name": "Alex Example", "email": "alex@example.com"},
                 "analysis_goal": "lawyer_briefing",
             }
         },
-        findings=[
-            {
-                "finding_id": "finding-1",
-                "finding_label": "Retaliation concern",
-                "finding_scope": "retaliation_analysis",
-                "evidence_strength": {"label": "moderate_indicator"},
-                "confidence_split": {"interpretation_confidence": {"label": "medium"}},
-                "supporting_evidence": [
-                    {
-                        "citation_id": "citation-1",
-                        "message_or_document_id": "uid-1",
-                        "text_attribution": {"authored_quoted_inferred_status": "authored"},
-                    }
-                ],
-                "alternative_explanations": ["Operational urgency remains possible."],
-            }
-        ],
+        findings=_fixture_test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceiling_payload_part_0(),
         matter_evidence_index={
             "rows": [
                 {
@@ -38,22 +56,7 @@ def test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceil
                 }
             ]
         },
-        master_chronology={
-            "entries": [
-                {
-                    "chronology_id": "CHR-001",
-                    "date": "2026-02-03",
-                    "title": "Complaint lodged",
-                    "source_linkage": {"source_ids": ["email:uid-1"]},
-                },
-                {
-                    "chronology_id": "CHR-002",
-                    "date": "2024-01-01",
-                    "title": "case_prompt.md",
-                    "source_linkage": {"source_ids": [], "source_evidence_status": "scope_only"},
-                },
-            ]
-        },
+        master_chronology=_fixture_test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceiling_payload_part_next(),
         lawyer_issue_matrix={
             "rows": [
                 {
@@ -121,29 +124,9 @@ def test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceil
         },
     )
 
-    assert payload is not None
-    assert payload["drafting_format"] == "controlled_factual_drafting"
-    assert payload["framing_preflight"]["objective_of_draft"]
-    assert payload["framing_preflight"]["allegation_ceiling"]["ceiling_level"] == "concern_only"
-    assert payload["framing_preflight"]["legal_and_factual_risks"][0]["risk_type"] == "unsupported_motive_claim"
-    assert any(
-        "Comparator evidence may support unequal-treatment review" in row["text"]
-        for row in payload["framing_preflight"]["strongest_framing"]
-    )
-    assert any(
-        "Retaliation timing may support further review" in row["text"]
-        for row in payload["framing_preflight"]["strongest_framing"]
-    )
-    assert payload["controlled_draft"]["sections"]["established_facts"]
-    assert payload["controlled_draft"]["sections"]["concerns"]
-    assert payload["controlled_draft"]["sections"]["requests_for_clarification"]
-    assert payload["controlled_draft"]["sections"]["formal_demands"]
-    assert "Established Facts:" in payload["controlled_draft"]["rendered_text"]
-    assert all("case_prompt" not in row["text"].lower() for row in payload["controlled_draft"]["sections"]["established_facts"])
 
-
-def test_build_controlled_factual_drafting_keeps_documentary_anchors_on_concerns() -> None:
-    payload = build_controlled_factual_drafting(
+def _fixture_test_build_controlled_factual_drafting_keeps_documentary_anchors_on_concerns_payload():
+    return build_controlled_factual_drafting(
         case_bundle={
             "scope": {
                 "target_person": {"name": "Alex Example", "email": "alex@example.com"},
@@ -221,8 +204,41 @@ def test_build_controlled_factual_drafting_keeps_documentary_anchors_on_concerns
         promise_contradiction_analysis={"contradiction_table": []},
     )
 
-    assert payload is not None
-    concerns = payload["controlled_draft"]["sections"]["concerns"]
-    assert concerns
-    assert all(row["supporting_source_ids"] == ["email:uid-1"] for row in concerns)
-    assert all(row["supporting_exhibit_ids"] == ["EXH-001"] for row in concerns)
+
+def _fixture_test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceiling_payload_part_0():
+    return [
+        {
+            "finding_id": "finding-1",
+            "finding_label": "Retaliation concern",
+            "finding_scope": "retaliation_analysis",
+            "evidence_strength": {"label": "moderate_indicator"},
+            "confidence_split": {"interpretation_confidence": {"label": "medium"}},
+            "supporting_evidence": [
+                {
+                    "citation_id": "citation-1",
+                    "message_or_document_id": "uid-1",
+                    "text_attribution": {"authored_quoted_inferred_status": "authored"},
+                }
+            ],
+            "alternative_explanations": ["Operational urgency remains possible."],
+        }
+    ]
+
+
+def _fixture_test_build_controlled_factual_drafting_applies_preflight_and_allegation_ceiling_payload_part_next():
+    return {
+        "entries": [
+            {
+                "chronology_id": "CHR-001",
+                "date": "2026-02-03",
+                "title": "Complaint lodged",
+                "source_linkage": {"source_ids": ["email:uid-1"]},
+            },
+            {
+                "chronology_id": "CHR-002",
+                "date": "2024-01-01",
+                "title": "case_prompt.md",
+                "source_linkage": {"source_ids": [], "source_evidence_status": "scope_only"},
+            },
+        ]
+    }

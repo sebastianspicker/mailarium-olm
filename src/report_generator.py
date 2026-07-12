@@ -104,50 +104,39 @@ class ReportGenerator:
             The rendered HTML string.
         """
         self.last_warnings = []
+        render_payload, privacy_guardrails = self._report_render_payload(title, privacy_mode)
+        html = self._render_html(title, render_payload, privacy_guardrails)
+        if output_path:
+            self._write_report(output_path, html)
+        return html
 
+    def _report_render_payload(self, title: str, privacy_mode: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        overview = self._gather_overview()
+        payload, guardrails = apply_privacy_guardrails(
+            {
+                "title": title,
+                "overview": overview,
+                "top_senders": self._gather_top_senders(),
+                "folders": self._gather_folders(),
+                "monthly_volume": self._gather_monthly_volume(),
+                "top_entities": self._gather_top_entities(),
+                "response_times": self._gather_response_times(),
+            },
+            privacy_mode=privacy_mode,
+        )
+        return (payload if isinstance(payload, dict) else {}), guardrails
+
+    def _render_html(self, title: str, render_payload: dict[str, Any], privacy_guardrails: dict[str, Any]) -> str:
         try:
             from jinja2 import Environment, FileSystemLoader
         except ImportError as exc:
             raise ReportGenerationError("Jinja2 is required for report generation. Run: pip install jinja2") from exc
 
-        overview = self._gather_overview()
-        top_senders = self._gather_top_senders()
-        folders = self._gather_folders()
-        monthly_volume = self._gather_monthly_volume()
-        top_entities = self._gather_top_entities()
-        response_times = self._gather_response_times()
-        render_payload, privacy_guardrails = apply_privacy_guardrails(
-            {
-                "title": title,
-                "overview": overview,
-                "top_senders": top_senders,
-                "folders": folders,
-                "monthly_volume": monthly_volume,
-                "top_entities": top_entities,
-                "response_times": response_times,
-            },
-            privacy_mode=privacy_mode,
-        )
-        render_payload = render_payload if isinstance(render_payload, dict) else {}
-
-        # Template uses these as denominators for CSS width percentages
-        top_senders_render = [item for item in render_payload.get("top_senders", []) if isinstance(item, dict)]
-        folders_render = [
-            (str(item[0]), item[1])
-            for item in render_payload.get("folders", [])
-            if isinstance(item, (list, tuple)) and len(item) == 2 and isinstance(item[1], int)
-        ]
-        monthly_volume_render = [item for item in render_payload.get("monthly_volume", []) if isinstance(item, dict)]
-        top_entities_render = render_payload.get("top_entities") if isinstance(render_payload.get("top_entities"), list) else []
-        response_times_render = (
-            render_payload.get("response_times") if isinstance(render_payload.get("response_times"), list) else []
-        )
-        top_senders_max = max((s["message_count"] for s in top_senders_render if isinstance(s, dict)), default=1)
-        folders_max = max((c for _, c in folders_render if isinstance(c, int)), default=1)
-        monthly_volume_max = max(
-            (r["count"] for r in monthly_volume_render if isinstance(r, dict) and isinstance(r.get("count"), int)),
-            default=1,
-        )
+        top_senders_render = _dict_rows(render_payload, "top_senders")
+        folders_render = _folder_rows(render_payload)
+        monthly_volume_render = _dict_rows(render_payload, "monthly_volume")
+        top_entities_render = _list_value(render_payload, "top_entities")
+        response_times_render = _list_value(render_payload, "response_times")
 
         try:
             env = Environment(
@@ -158,27 +147,48 @@ class ReportGenerator:
             html = template.render(
                 title=render_payload.get("title") or title,
                 generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
-                overview=render_payload.get("overview") or overview,
+                overview=render_payload.get("overview") or {},
                 top_senders=top_senders_render,
-                top_senders_max=top_senders_max,
+                top_senders_max=_dict_numeric_max(top_senders_render, "message_count"),
                 folders=folders_render,
-                folders_max=folders_max,
+                folders_max=max((count for _name, count in folders_render), default=1),
                 monthly_volume=monthly_volume_render,
-                monthly_volume_max=monthly_volume_max,
+                monthly_volume_max=_dict_numeric_max(monthly_volume_render, "count"),
                 top_entities=top_entities_render,
                 response_times=response_times_render,
                 privacy_guardrails=privacy_guardrails,
             )
         except Exception as exc:  # pylint: disable=broad-exception-caught
             raise ReportGenerationError(f"Archive report rendering failed: {type(exc).__name__}: {exc}") from exc
-
-        if output_path:
-            try:
-                output = validate_new_output_path(output_path)
-                output.parent.mkdir(parents=True, exist_ok=True)
-                output.write_text(html, encoding="utf-8")
-                logger.info("Report written to %s", output)
-            except (OSError, ValueError) as exc:
-                raise ReportGenerationError(f"Could not write archive report to {output_path}: {exc}") from exc
-
         return html
+
+    @staticmethod
+    def _write_report(output_path: str, html: str) -> None:
+        try:
+            output = validate_new_output_path(output_path)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(html, encoding="utf-8")
+            logger.info("Report written to %s", output)
+        except (OSError, ValueError) as exc:
+            raise ReportGenerationError(f"Could not write archive report to {output_path}: {exc}") from exc
+
+
+def _dict_rows(payload: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    return [item for item in payload.get(key, []) if isinstance(item, dict)]
+
+
+def _folder_rows(payload: dict[str, Any]) -> list[tuple[str, int]]:
+    return [
+        (str(item[0]), item[1])
+        for item in payload.get("folders", [])
+        if isinstance(item, list | tuple) and len(item) == 2 and isinstance(item[1], int)
+    ]
+
+
+def _list_value(payload: dict[str, Any], key: str) -> list[Any]:
+    value = payload.get(key)
+    return value if isinstance(value, list) else []
+
+
+def _dict_numeric_max(rows: list[dict[str, Any]], key: str) -> int:
+    return max((int(row[key]) for row in rows if isinstance(row.get(key), int)), default=1)

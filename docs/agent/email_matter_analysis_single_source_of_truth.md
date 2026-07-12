@@ -11,8 +11,8 @@ Canonical path:
 
 Deprecated operator docs moved to:
 
-- `docs/agent/deprecated/Plan.md`
-- `docs/agent/deprecated/email_matter_investigation_runbook.md`
+- `docs/archive/2026-05-16-remediation-closure/agent-deprecated/deprecated/Plan.md`
+- `docs/archive/2026-05-16-remediation-closure/agent-deprecated/deprecated/email_matter_investigation_runbook.md`
 
 ## Goal
 
@@ -325,8 +325,8 @@ Tracked operator docs:
 
 Deprecated operator docs:
 
-- `docs/agent/deprecated/Plan.md`
-- `docs/agent/deprecated/email_matter_investigation_runbook.md`
+- `docs/archive/2026-05-16-remediation-closure/agent-deprecated/deprecated/Plan.md`
+- `docs/archive/2026-05-16-remediation-closure/agent-deprecated/deprecated/email_matter_investigation_runbook.md`
 
 Local-only matter inputs:
 

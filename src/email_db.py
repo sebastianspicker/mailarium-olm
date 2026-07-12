@@ -7,7 +7,9 @@ import json
 import logging
 import sqlite3
 import threading
+from contextlib import suppress
 from pathlib import Path
+from typing import Any
 
 from .attachment_identity import (
     ATTACHMENT_TEXT_NORMALIZATION_VERSION,
@@ -110,6 +112,158 @@ VALUES ({_sql_in_placeholders(_EMAIL_INSERT_COLUMNS_VALIDATED)})"""
 _EMAIL_INSERT_OR_IGNORE_SQL = _EMAIL_INSERT_SQL.replace("INSERT INTO", "INSERT OR IGNORE INTO", 1)
 
 
+def _attachment_key(att: dict[str, Any]) -> tuple[str, str, int, str, int]:
+    return (
+        str(att.get("name") or ""),
+        str(att.get("mime_type") or ""),
+        int(att.get("size") or 0),
+        str(att.get("content_id") or ""),
+        int(att.get("is_inline") or 0),
+    )
+
+
+def _attachment_existing_indexes(
+    attachments: list[dict[str, Any]],
+) -> tuple[dict[tuple[str, str, int, str, int], dict[str, Any]], dict[str, dict[str, Any]]]:
+    by_key = {_attachment_key(att): att for att in attachments}
+    by_id = {attachment_id: att for att in attachments if (attachment_id := str(att.get("attachment_id") or ""))}
+    return by_key, by_id
+
+
+def _attachment_value(att: dict[str, Any], existing: dict[str, Any], key: str, default: Any = "") -> Any:
+    return att.get(key) or existing.get(key, default)
+
+
+def _attachment_ocr_used(att: dict[str, Any], existing: dict[str, Any]) -> bool:
+    value = att.get("ocr_used")
+    return bool(value if value is not None else existing.get("ocr_used", False))
+
+
+def _attachment_persistence_rows(
+    email_uid: str, att: dict[str, Any], existing: dict[str, Any]
+) -> tuple[tuple[object, ...], list[tuple]]:
+    attachment_id, content_sha256 = ensure_attachment_identity(att)
+    extracted_text = str(_attachment_value(att, existing, "extracted_text"))
+    normalized_text = str(_attachment_value(att, existing, "normalized_text"))
+    if extracted_text and not normalized_text:
+        normalized_text = normalize_attachment_search_text(extracted_text)
+    normalization_version = int(_attachment_value(att, existing, "text_normalization_version", 0))
+    if normalized_text and normalization_version <= 0:
+        normalization_version = ATTACHMENT_TEXT_NORMALIZATION_VERSION
+    text_locator = _attachment_value(att, existing, "text_locator", {})
+    ocr_used = _attachment_ocr_used(att, existing)
+    row = (
+        email_uid,
+        att.get("name", ""),
+        attachment_id,
+        att.get("mime_type", ""),
+        att.get("size", 0),
+        content_sha256,
+        att.get("content_id", ""),
+        int(att.get("is_inline", False)),
+        _attachment_value(att, existing, "extraction_state"),
+        _attachment_value(att, existing, "evidence_strength"),
+        int(ocr_used),
+        _attachment_value(att, existing, "ocr_engine"),
+        _attachment_value(att, existing, "ocr_lang"),
+        float(_attachment_value(att, existing, "ocr_confidence", 0.0)),
+        _attachment_value(att, existing, "failure_reason"),
+        _attachment_value(att, existing, "text_preview"),
+        extracted_text,
+        normalized_text,
+        normalization_version,
+        int(_attachment_value(att, existing, "locator_version", 1)),
+        _attachment_value(att, existing, "text_source_path"),
+        json.dumps(text_locator, ensure_ascii=False),
+    )
+    surfaces = attachment_surface_rows_for_attachment(
+        email_uid=email_uid,
+        attachment_name=str(att.get("name", "") or ""),
+        attachment_id=attachment_id,
+        extracted_text=extracted_text,
+        normalized_text=normalized_text,
+        text_locator=text_locator,
+        extraction_state=str(_attachment_value(att, existing, "extraction_state")),
+        evidence_strength=str(_attachment_value(att, existing, "evidence_strength")),
+        ocr_used=ocr_used,
+        ocr_confidence=float(_attachment_value(att, existing, "ocr_confidence", 0.0)),
+        surfaces=_attachment_value(att, existing, "surfaces", None),
+    )
+    return row, surfaces
+
+
+def _replace_v7_categories(cur: sqlite3.Cursor, email: Email) -> None:
+    cur.execute("DELETE FROM email_categories WHERE email_uid = ?", (email.uid,))
+    categories = getattr(email, "categories", []) or []
+    if categories:
+        cur.executemany(
+            "INSERT OR IGNORE INTO email_categories(email_uid, category) VALUES(?,?)",
+            [(email.uid, category) for category in categories],
+        )
+
+
+def _replace_v7_attachments(db: object, cur: sqlite3.Cursor, email: Email) -> None:
+    existing_attachments = db.attachments_for_email(email.uid)  # type: ignore[attr-defined]
+    existing_by_key, existing_by_id = _attachment_existing_indexes(existing_attachments)
+    cur.execute("DELETE FROM attachment_surfaces WHERE email_uid = ?", (email.uid,))
+    cur.execute("DELETE FROM attachments WHERE email_uid = ?", (email.uid,))
+    attachments = getattr(email, "attachments", []) or []
+    if not attachments:
+        return
+    attachment_rows: list[tuple[object, ...]] = []
+    surface_rows: list[tuple] = []
+    for attachment in attachments:
+        attachment_id, _content_sha256 = ensure_attachment_identity(attachment)
+        existing = existing_by_key.get(_attachment_key(attachment)) or existing_by_id.get(attachment_id, {})
+        row, surfaces = _attachment_persistence_rows(email.uid, attachment, existing)
+        attachment_rows.append(row)
+        surface_rows.extend(surfaces)
+    _insert_v7_attachments(cur, attachment_rows, surface_rows)
+
+
+def _insert_v7_attachments(cur: sqlite3.Cursor, attachment_rows: list[tuple[object, ...]], surface_rows: list[tuple]) -> None:
+    cur.executemany(
+        "INSERT INTO attachments(email_uid, name, attachment_id, mime_type, size, content_sha256, content_id, "
+        "is_inline, extraction_state, evidence_strength, ocr_used, ocr_engine, ocr_lang, ocr_confidence, "
+        "failure_reason, text_preview, extracted_text, normalized_text, text_normalization_version, locator_version, "
+        "text_source_path, text_locator_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        attachment_rows,
+    )
+    if surface_rows:
+        cur.executemany(
+            "INSERT OR REPLACE INTO attachment_surfaces("
+            "surface_id, attachment_id, email_uid, attachment_name, surface_kind, origin_kind, text, normalized_text, "
+            "alignment_map_json, language, language_confidence, ocr_confidence, surface_hash, locator_json, quality_json"
+            ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            surface_rows,
+        )
+
+
+def _update_v7_email_row(cur: sqlite3.Cursor, email: Email) -> bool:
+    cur.execute(
+        """UPDATE emails
+           SET categories = ?, thread_topic = ?, inference_classification = ?,
+               is_calendar_message = ?, references_json = ?, meeting_data_json = ?,
+               exchange_extracted_links_json = ?, exchange_extracted_emails_json = ?,
+               exchange_extracted_contacts_json = ?, exchange_extracted_meetings_json = ?
+         WHERE uid = ?""",
+        (
+            json.dumps(getattr(email, "categories", []) or []),
+            getattr(email, "thread_topic", "") or "",
+            getattr(email, "inference_classification", "") or "",
+            int(getattr(email, "is_calendar_message", False)),
+            json.dumps(getattr(email, "references", []) or []),
+            json.dumps(getattr(email, "meeting_data", {}) or {}, ensure_ascii=False),
+            json.dumps(getattr(email, "exchange_extracted_links", []) or [], ensure_ascii=False),
+            json.dumps(getattr(email, "exchange_extracted_emails", []) or [], ensure_ascii=False),
+            json.dumps(getattr(email, "exchange_extracted_contacts", []) or [], ensure_ascii=False),
+            json.dumps(getattr(email, "exchange_extracted_meetings", []) or [], ensure_ascii=False),
+            email.uid,
+        ),
+    )
+    return cur.rowcount > 0
+
+
 class EmailDatabase(  # pylint: disable=too-many-ancestors
     CustodyMixin,
     EvidenceMixin,
@@ -169,10 +323,8 @@ class EmailDatabase(  # pylint: disable=too-many-ancestors
 
     def __del__(self) -> None:
         """Best-effort close to avoid leaked SQLite handles during teardown."""
-        try:
+        with suppress(OSError, sqlite3.Error):
             self.close()
-        except (OSError, sqlite3.Error):
-            pass
 
     # ------------------------------------------------------------------
     # Sparse vector storage
@@ -527,145 +679,11 @@ class EmailDatabase(  # pylint: disable=too-many-ancestors
         (email_categories, attachments). Returns True if updated.
         Pass ``commit=False`` to defer the commit.
         """
-        categories_json = json.dumps(getattr(email, "categories", []) or [])
-        references_json = json.dumps(getattr(email, "references", []) or [])
-
         cur = self.conn.cursor()
-        cur.execute(
-            """UPDATE emails
-               SET categories = ?, thread_topic = ?, inference_classification = ?,
-                   is_calendar_message = ?, references_json = ?, meeting_data_json = ?,
-                   exchange_extracted_links_json = ?, exchange_extracted_emails_json = ?,
-                   exchange_extracted_contacts_json = ?, exchange_extracted_meetings_json = ?
-             WHERE uid = ?""",
-            (
-                categories_json,
-                getattr(email, "thread_topic", "") or "",
-                getattr(email, "inference_classification", "") or "",
-                int(getattr(email, "is_calendar_message", False)),
-                references_json,
-                json.dumps(getattr(email, "meeting_data", {}) or {}, ensure_ascii=False),
-                json.dumps(getattr(email, "exchange_extracted_links", []) or [], ensure_ascii=False),
-                json.dumps(getattr(email, "exchange_extracted_emails", []) or [], ensure_ascii=False),
-                json.dumps(getattr(email, "exchange_extracted_contacts", []) or [], ensure_ascii=False),
-                json.dumps(getattr(email, "exchange_extracted_meetings", []) or [], ensure_ascii=False),
-                email.uid,
-            ),
-        )
-        if cur.rowcount == 0:
+        if not _update_v7_email_row(cur, email):
             return False
-
-        # Replace categories so removed categories are no longer query-visible.
-        cur.execute("DELETE FROM email_categories WHERE email_uid = ?", (email.uid,))
-        cats = getattr(email, "categories", []) or []
-        if cats:
-            cur.executemany(
-                "INSERT OR IGNORE INTO email_categories(email_uid, category) VALUES(?,?)",
-                [(email.uid, cat) for cat in cats],
-            )
-
-        # Rebuild attachments while preserving previously extracted evidence fields when a metadata-only reparse
-        # does not carry replacement text/OCR state.
-        existing_attachments = self.attachments_for_email(email.uid)
-        existing_by_key = {
-            (
-                str(att.get("name") or ""),
-                str(att.get("mime_type") or ""),
-                int(att.get("size") or 0),
-                str(att.get("content_id") or ""),
-                int(att.get("is_inline") or 0),
-            ): att
-            for att in existing_attachments
-        }
-        existing_by_attachment_id = {
-            str(att.get("attachment_id") or ""): att for att in existing_attachments if str(att.get("attachment_id") or "")
-        }
-        cur.execute("DELETE FROM attachment_surfaces WHERE email_uid = ?", (email.uid,))
-        cur.execute("DELETE FROM attachments WHERE email_uid = ?", (email.uid,))
-        atts = getattr(email, "attachments", []) or []
-        if atts:
-            attachment_rows: list[tuple[object, ...]] = []
-            attachment_surface_rows: list[tuple] = []
-            for att in atts:
-                key = (
-                    str(att.get("name") or ""),
-                    str(att.get("mime_type") or ""),
-                    int(att.get("size") or 0),
-                    str(att.get("content_id") or ""),
-                    int(att.get("is_inline", False)),
-                )
-                attachment_id, content_sha256 = ensure_attachment_identity(att)
-                existing = existing_by_key.get(key) or existing_by_attachment_id.get(attachment_id, {})
-                extracted_text = str(att.get("extracted_text") or existing.get("extracted_text") or "")
-                normalized_text = str(att.get("normalized_text") or existing.get("normalized_text") or "")
-                if extracted_text and not normalized_text:
-                    normalized_text = normalize_attachment_search_text(extracted_text)
-                text_normalization_version = int(
-                    att.get("text_normalization_version") or existing.get("text_normalization_version") or 0
-                )
-                if normalized_text and text_normalization_version <= 0:
-                    text_normalization_version = ATTACHMENT_TEXT_NORMALIZATION_VERSION
-                text_locator = att.get("text_locator") or existing.get("text_locator", {})
-                surfaces = att.get("surfaces") or existing.get("surfaces")
-                attachment_rows.append(
-                    (
-                        email.uid,
-                        att.get("name", ""),
-                        attachment_id,
-                        att.get("mime_type", ""),
-                        att.get("size", 0),
-                        content_sha256,
-                        att.get("content_id", ""),
-                        int(att.get("is_inline", False)),
-                        att.get("extraction_state") or existing.get("extraction_state", ""),
-                        att.get("evidence_strength") or existing.get("evidence_strength", ""),
-                        int(bool(att.get("ocr_used") if att.get("ocr_used") is not None else existing.get("ocr_used", False))),
-                        att.get("ocr_engine") or existing.get("ocr_engine", ""),
-                        att.get("ocr_lang") or existing.get("ocr_lang", ""),
-                        float(att.get("ocr_confidence") or existing.get("ocr_confidence") or 0.0),
-                        att.get("failure_reason") or existing.get("failure_reason", ""),
-                        att.get("text_preview") or existing.get("text_preview", ""),
-                        extracted_text,
-                        normalized_text,
-                        text_normalization_version,
-                        int(att.get("locator_version") or existing.get("locator_version") or 1),
-                        att.get("text_source_path") or existing.get("text_source_path", ""),
-                        json.dumps(text_locator, ensure_ascii=False),
-                    )
-                )
-                attachment_surface_rows.extend(
-                    attachment_surface_rows_for_attachment(
-                        email_uid=email.uid,
-                        attachment_name=str(att.get("name", "") or ""),
-                        attachment_id=attachment_id,
-                        extracted_text=extracted_text,
-                        normalized_text=normalized_text,
-                        text_locator=text_locator,
-                        extraction_state=str(att.get("extraction_state") or existing.get("extraction_state", "")),
-                        evidence_strength=str(att.get("evidence_strength") or existing.get("evidence_strength", "")),
-                        ocr_used=bool(
-                            att.get("ocr_used") if att.get("ocr_used") is not None else existing.get("ocr_used", False)
-                        ),
-                        ocr_confidence=float(att.get("ocr_confidence") or existing.get("ocr_confidence") or 0.0),
-                        surfaces=surfaces,
-                    )
-                )
-            cur.executemany(
-                "INSERT INTO attachments(email_uid, name, attachment_id, mime_type, size, content_sha256, content_id, "
-                "is_inline, extraction_state, evidence_strength, ocr_used, ocr_engine, ocr_lang, ocr_confidence, "
-                "failure_reason, text_preview, extracted_text, normalized_text, text_normalization_version, locator_version, "
-                "text_source_path, text_locator_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                attachment_rows,
-            )
-            if attachment_surface_rows:
-                cur.executemany(
-                    "INSERT OR REPLACE INTO attachment_surfaces("
-                    "surface_id, attachment_id, email_uid, attachment_name, surface_kind, origin_kind, text, normalized_text, "
-                    "alignment_map_json, language, language_confidence, ocr_confidence, surface_hash, locator_json, quality_json"
-                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    attachment_surface_rows,
-                )
-
+        _replace_v7_categories(cur, email)
+        _replace_v7_attachments(self, cur, email)
         if commit:
             self.conn.commit()
         return True

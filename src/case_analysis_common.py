@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._utils import as_dict as _utils_as_dict
+from ._utils import as_list as _utils_as_list
+
 CASE_ANALYSIS_VERSION = "1"
 
 
@@ -25,12 +28,12 @@ def warning(
 
 def as_dict(value: Any) -> dict[str, Any]:
     """Return a dict or an empty dict for untyped payload access."""
-    return value if isinstance(value, dict) else {}
+    return _utils_as_dict(value)
 
 
 def as_list(value: Any) -> list[Any]:
     """Return a list or an empty list for untyped payload access."""
-    return value if isinstance(value, list) else []
+    return _utils_as_list(value)
 
 
 def merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

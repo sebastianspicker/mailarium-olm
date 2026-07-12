@@ -13,25 +13,11 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from ._utils import _as_dict, _as_list
 from .formatting import write_html_or_pdf
+from .sanitization import csv_safe_cell
 
-_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _csv_safe(value: Any) -> str:
-    text = str(value) if value is not None else ""
-    if text and text[0] in _CSV_FORMULA_PREFIXES:
-        return f"'{text}"
-    return text
 
 
 def _json_text(payload: Any) -> str:
@@ -44,14 +30,8 @@ def _rendered_at() -> str:
 
 def _downgrade_markers(payload: dict[str, Any]) -> list[str]:
     markers: list[str] = []
-    for marker in _as_list(_as_dict(payload.get("case_scope_quality")).get("downgrade_reasons")):
-        text = str(marker).strip()
-        if text and text not in markers:
-            markers.append(text)
-    for marker in _as_list(_as_dict(payload.get("analysis_limits")).get("notes")):
-        text = str(marker).strip()
-        if text and text not in markers:
-            markers.append(text)
+    _append_unique_markers(markers, _as_list(_as_dict(payload.get("case_scope_quality")).get("downgrade_reasons")))
+    _append_unique_markers(markers, _as_list(_as_dict(payload.get("analysis_limits")).get("notes")))
     completeness_status = str(_as_dict(payload.get("matter_ingestion_report")).get("completeness_status") or "")
     if completeness_status and completeness_status != "complete":
         markers.append(f"matter_ingestion:{completeness_status}")
@@ -59,6 +39,13 @@ def _downgrade_markers(payload: dict[str, Any]) -> list[str]:
     if coverage_status and coverage_status != "complete":
         markers.append(f"coverage:{coverage_status}")
     return markers
+
+
+def _append_unique_markers(markers: list[str], values: list[Any]) -> None:
+    for marker in values:
+        text = str(marker).strip()
+        if text and text not in markers:
+            markers.append(text)
 
 
 def _export_metadata(payload: dict[str, Any]) -> dict[str, Any]:
@@ -88,13 +75,25 @@ def _export_metadata(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _counsel_export_readiness(export_metadata: dict[str, Any]) -> dict[str, Any]:
-    blockers: list[str] = []
     review_state = str(export_metadata.get("snapshot_review_state") or "")
     persisted_snapshot_present = any(
         str(export_metadata.get(field) or "").strip() for field in ("snapshot_id", "workspace_id", "matter_id")
     )
     required_review_states = ["human_verified", "export_approved"]
     recommended_internal_targets = ["dashboard", "exhibit_register"]
+    policy_state, next_step = _review_policy(review_state, persisted_snapshot_present)
+    blockers = _readiness_blockers(export_metadata, review_state)
+    return {
+        "ready": not blockers,
+        "blockers": blockers,
+        "policy_state": policy_state,
+        "required_review_states": required_review_states,
+        "recommended_internal_targets": recommended_internal_targets,
+        "next_step": next_step,
+    }
+
+
+def _review_policy(review_state: str, persisted_snapshot_present: bool) -> tuple[str, str]:
     if review_state in {"machine_extracted", "draft_only"}:
         policy_state = "internal_only"
         next_step = (
@@ -127,6 +126,11 @@ def _counsel_export_readiness(export_metadata: dict[str, Any]) -> dict[str, Any]
             "Persist and review the snapshot before counsel-facing export. Until then, use dashboard or exhibit_register "
             "for internal handoff."
         )
+    return policy_state, next_step
+
+
+def _readiness_blockers(export_metadata: dict[str, Any], review_state: str) -> list[str]:
+    blockers: list[str] = []
     if review_state not in {"human_verified", "export_approved"}:
         blockers.append(f"snapshot_review_state:{review_state or 'missing'}")
     completeness_status = str(export_metadata.get("completeness_status") or "")
@@ -135,14 +139,7 @@ def _counsel_export_readiness(export_metadata: dict[str, Any]) -> dict[str, Any]
     coverage_status = str(export_metadata.get("coverage_status") or "")
     if coverage_status != "complete":
         blockers.append(f"coverage_status:{coverage_status or 'missing'}")
-    return {
-        "ready": not blockers,
-        "blockers": blockers,
-        "policy_state": policy_state,
-        "required_review_states": required_review_states,
-        "recommended_internal_targets": recommended_internal_targets,
-        "next_step": next_step,
-    }
+    return blockers
 
 
 def _memo_lines(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -178,13 +175,45 @@ def _conflict_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return [row for row in _as_list(registry.get("conflicts")) if isinstance(row, dict)]
 
 
+def _joined(values: object, separator: str = ", ") -> str:
+    return separator.join(str(item) for item in _as_list(values) if item)
+
+
+def _exhibit_csv_row(row: dict[str, Any], metadata: dict[str, Any]) -> list[str]:
+    reliability = _as_dict(row.get("exhibit_reliability"))
+    next_steps = _as_dict(reliability.get("next_step_logic"))
+    values = (
+        row.get("exhibit_id"),
+        row.get("date"),
+        row.get("document_type"),
+        row.get("sender_or_author"),
+        _joined(row.get("recipients")),
+        row.get("short_description"),
+        _joined(row.get("main_issue_tags")),
+        row.get("why_it_matters"),
+        reliability.get("strength"),
+        next_steps.get("readiness"),
+        row.get("source_id"),
+        row.get("source_conflict_status"),
+        _joined(row.get("source_conflict_ids")),
+        _joined(row.get("supporting_citation_ids")),
+        _joined(row.get("follow_up_needed"), "; "),
+        metadata.get("snapshot_id"),
+        metadata.get("snapshot_review_state"),
+        metadata.get("coverage_status"),
+        _joined(metadata.get("downgrade_markers")),
+    )
+    return [csv_safe_cell(value) for value in values]
+
+
 class LegalSupportExporter:
     """Write durable legal-support artifacts from the shared case-analysis payload."""
 
     def __init__(self) -> None:
         self._env = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), autoescape=True)
 
-    def counsel_export_status(self, *, payload: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def counsel_export_status(*, payload: dict[str, Any]) -> dict[str, Any]:
         """Return counsel-export readiness plus export metadata for one payload."""
         export_metadata = _export_metadata(payload)
         export_metadata["counsel_export_readiness"] = _counsel_export_readiness(export_metadata)
@@ -214,103 +243,16 @@ class LegalSupportExporter:
         export_metadata = _as_dict(export_status.get("export_metadata"))
 
         if target == "counsel_handoff":
-            if not bool(export_status.get("ready")):
-                blockers = ", ".join(str(item) for item in _as_list(export_status.get("blockers")) if item)
-                raise ValueError(f"Counsel-facing export blocked until readiness issues are resolved: {blockers}")
-            html = self._render_counsel_handoff_html(payload, export_metadata=export_metadata)
-            result = write_html_or_pdf(html, str(output), fmt)
-            return {
-                "workflow": "legal_support_export",
-                "delivery_target": target,
-                "delivery_format": result.get("format") or fmt,
-                "output_path": str(result.get("output_path") or output),
-                "analysis_query": str(payload.get("analysis_query") or ""),
-                "note": result.get("note"),
-                "export_metadata": export_metadata,
-            }
+            return self._export_counsel_handoff(payload, output, fmt, target, export_status, export_metadata)
 
         if target == "exhibit_register":
-            if fmt == "json":
-                text = _json_text(
-                    {
-                        "workflow": "legal_support_export",
-                        "delivery_target": target,
-                        "analysis_query": str(payload.get("analysis_query") or ""),
-                        "export_metadata": export_metadata,
-                        "matter_evidence_index": payload.get("matter_evidence_index"),
-                    }
-                )
-                output.write_text(text, encoding="utf-8")
-                row_count = int(_as_dict(payload.get("matter_evidence_index")).get("row_count") or 0)
-                return {
-                    "workflow": "legal_support_export",
-                    "delivery_target": target,
-                    "delivery_format": "json",
-                    "output_path": str(output),
-                    "row_count": row_count,
-                    "spreadsheet_ready": False,
-                    "export_metadata": export_metadata,
-                }
-            csv_text = self._exhibit_register_csv(payload, export_metadata=export_metadata)
-            output.write_text(csv_text, encoding="utf-8")
-            row_count = int(_as_dict(payload.get("matter_evidence_index")).get("row_count") or 0)
-            return {
-                "workflow": "legal_support_export",
-                "delivery_target": target,
-                "delivery_format": "csv",
-                "output_path": str(output),
-                "row_count": row_count,
-                "spreadsheet_ready": True,
-                "export_metadata": export_metadata,
-            }
+            return self._export_exhibit_register(payload, output, fmt, target, export_metadata)
 
         if target == "dashboard":
-            if fmt == "csv":
-                csv_text = self._dashboard_csv(payload, export_metadata=export_metadata)
-                output.write_text(csv_text, encoding="utf-8")
-                card_count = sum(len(items) for items in _dashboard_cards(payload).values())
-                return {
-                    "workflow": "legal_support_export",
-                    "delivery_target": target,
-                    "delivery_format": "csv",
-                    "output_path": str(output),
-                    "card_count": card_count,
-                    "spreadsheet_ready": True,
-                    "export_metadata": export_metadata,
-                }
-            dashboard_payload = {
-                "workflow": "legal_support_export",
-                "delivery_target": target,
-                "analysis_query": str(payload.get("analysis_query") or ""),
-                "export_metadata": export_metadata,
-                "case_dashboard": payload.get("case_dashboard"),
-            }
-            output.write_text(_json_text(dashboard_payload), encoding="utf-8")
-            card_count = sum(len(items) for items in _dashboard_cards(payload).values())
-            return {
-                "workflow": "legal_support_export",
-                "delivery_target": target,
-                "delivery_format": "json",
-                "output_path": str(output),
-                "card_count": card_count,
-                "spreadsheet_ready": False,
-                "export_metadata": export_metadata,
-            }
+            return self._export_dashboard(payload, output, fmt, target, export_metadata)
 
         if target == "counsel_handoff_bundle":
-            if not bool(export_status.get("ready")):
-                blockers = ", ".join(str(item) for item in _as_list(export_status.get("blockers")) if item)
-                raise ValueError(f"Counsel-facing export blocked until readiness issues are resolved: {blockers}")
-            manifest = self._write_bundle(payload, output, export_metadata=export_metadata)
-            return {
-                "workflow": "legal_support_export",
-                "delivery_target": target,
-                "delivery_format": "bundle",
-                "output_path": str(output),
-                "artifact_count": len(_as_list(manifest.get("artifacts"))),
-                "manifest": manifest,
-                "export_metadata": export_metadata,
-            }
+            return self._export_bundle(payload, output, target, export_status, export_metadata)
 
         raise ValueError(f"Unsupported delivery_target: {target}")
 
@@ -338,7 +280,8 @@ class LegalSupportExporter:
             ][:6],
         )
 
-    def _exhibit_register_csv(self, payload: dict[str, Any], *, export_metadata: dict[str, Any]) -> str:
+    @staticmethod
+    def _exhibit_register_csv(payload: dict[str, Any], *, export_metadata: dict[str, Any]) -> str:
         rows = _exhibit_rows(payload)
         output = io.StringIO()
         writer = csv.writer(output)
@@ -366,34 +309,11 @@ class LegalSupportExporter:
             ]
         )
         for row in rows:
-            reliability = _as_dict(row.get("exhibit_reliability"))
-            next_steps = _as_dict(reliability.get("next_step_logic"))
-            writer.writerow(
-                [
-                    _csv_safe(row.get("exhibit_id")),
-                    _csv_safe(row.get("date")),
-                    _csv_safe(row.get("document_type")),
-                    _csv_safe(row.get("sender_or_author")),
-                    _csv_safe(", ".join(str(item) for item in _as_list(row.get("recipients")) if item)),
-                    _csv_safe(row.get("short_description")),
-                    _csv_safe(", ".join(str(item) for item in _as_list(row.get("main_issue_tags")) if item)),
-                    _csv_safe(row.get("why_it_matters")),
-                    _csv_safe(reliability.get("strength")),
-                    _csv_safe(next_steps.get("readiness")),
-                    _csv_safe(row.get("source_id")),
-                    _csv_safe(row.get("source_conflict_status")),
-                    _csv_safe(", ".join(str(item) for item in _as_list(row.get("source_conflict_ids")) if item)),
-                    _csv_safe(", ".join(str(item) for item in _as_list(row.get("supporting_citation_ids")) if item)),
-                    _csv_safe("; ".join(str(item) for item in _as_list(row.get("follow_up_needed")) if item)),
-                    _csv_safe(export_metadata.get("snapshot_id")),
-                    _csv_safe(export_metadata.get("snapshot_review_state")),
-                    _csv_safe(export_metadata.get("coverage_status")),
-                    _csv_safe(", ".join(str(item) for item in _as_list(export_metadata.get("downgrade_markers")) if item)),
-                ]
-            )
+            writer.writerow(_exhibit_csv_row(row, export_metadata))
         return output.getvalue()
 
-    def _dashboard_csv(self, payload: dict[str, Any], *, export_metadata: dict[str, Any]) -> str:
+    @staticmethod
+    def _dashboard_csv(payload: dict[str, Any], *, export_metadata: dict[str, Any]) -> str:
         cards = _dashboard_cards(payload)
         output = io.StringIO()
         writer = csv.writer(output)
@@ -419,22 +339,24 @@ class LegalSupportExporter:
                 citation_ids = [str(value) for value in _as_list(item.get("supporting_citation_ids")) if str(value).strip()]
                 writer.writerow(
                     [
-                        _csv_safe(group_name),
-                        _csv_safe(item.get("entry_id")),
-                        _csv_safe(item.get("title")),
-                        _csv_safe(item.get("summary")),
-                        _csv_safe(", ".join(linked_ids[:6])),
-                        _csv_safe(", ".join(citation_ids[:6])),
-                        _csv_safe(export_metadata.get("snapshot_id")),
-                        _csv_safe(export_metadata.get("snapshot_review_state")),
-                        _csv_safe(export_metadata.get("coverage_status")),
-                        _csv_safe(", ".join(str(item) for item in _as_list(export_metadata.get("downgrade_markers")) if item)),
+                        csv_safe_cell(group_name),
+                        csv_safe_cell(item.get("entry_id")),
+                        csv_safe_cell(item.get("title")),
+                        csv_safe_cell(item.get("summary")),
+                        csv_safe_cell(", ".join(linked_ids[:6])),
+                        csv_safe_cell(", ".join(citation_ids[:6])),
+                        csv_safe_cell(export_metadata.get("snapshot_id")),
+                        csv_safe_cell(export_metadata.get("snapshot_review_state")),
+                        csv_safe_cell(export_metadata.get("coverage_status")),
+                        csv_safe_cell(
+                            ", ".join(str(item) for item in _as_list(export_metadata.get("downgrade_markers")) if item)
+                        ),
                     ]
                 )
         return output.getvalue()
 
+    @staticmethod
     def _bundle_manifest(
-        self,
         payload: dict[str, Any],
         artifacts: list[dict[str, Any]],
         *,
@@ -482,3 +404,102 @@ class LegalSupportExporter:
             archive.writestr("lawyer_issue_matrix.json", _json_text(issue_payload))
             archive.writestr("investigation_report.json", _json_text(report_payload))
         return manifest
+
+    def _export_counsel_handoff(self, payload, output, fmt, target, export_status, export_metadata):
+        if not bool(export_status.get("ready")):
+            blockers = ", ".join(str(item) for item in _as_list(export_status.get("blockers")) if item)
+            raise ValueError(f"Counsel-facing export blocked until readiness issues are resolved: {blockers}")
+        html = self._render_counsel_handoff_html(payload, export_metadata=export_metadata)
+        result = write_html_or_pdf(html, str(output), fmt)
+        return {
+            "workflow": "legal_support_export",
+            "delivery_target": target,
+            "delivery_format": result.get("format") or fmt,
+            "output_path": str(result.get("output_path") or output),
+            "analysis_query": str(payload.get("analysis_query") or ""),
+            "note": result.get("note"),
+            "export_metadata": export_metadata,
+        }
+
+    def _export_exhibit_register(self, payload, output, fmt, target, export_metadata):
+        if fmt == "json":
+            text = _json_text(
+                {
+                    "workflow": "legal_support_export",
+                    "delivery_target": target,
+                    "analysis_query": str(payload.get("analysis_query") or ""),
+                    "export_metadata": export_metadata,
+                    "matter_evidence_index": payload.get("matter_evidence_index"),
+                }
+            )
+            output.write_text(text, encoding="utf-8")
+            row_count = int(_as_dict(payload.get("matter_evidence_index")).get("row_count") or 0)
+            return {
+                "workflow": "legal_support_export",
+                "delivery_target": target,
+                "delivery_format": "json",
+                "output_path": str(output),
+                "row_count": row_count,
+                "spreadsheet_ready": False,
+                "export_metadata": export_metadata,
+            }
+        csv_text = self._exhibit_register_csv(payload, export_metadata=export_metadata)
+        output.write_text(csv_text, encoding="utf-8")
+        row_count = int(_as_dict(payload.get("matter_evidence_index")).get("row_count") or 0)
+        return {
+            "workflow": "legal_support_export",
+            "delivery_target": target,
+            "delivery_format": "csv",
+            "output_path": str(output),
+            "row_count": row_count,
+            "spreadsheet_ready": True,
+            "export_metadata": export_metadata,
+        }
+
+    def _export_dashboard(self, payload, output, fmt, target, export_metadata):
+        if fmt == "csv":
+            csv_text = self._dashboard_csv(payload, export_metadata=export_metadata)
+            output.write_text(csv_text, encoding="utf-8")
+            card_count = sum(len(items) for items in _dashboard_cards(payload).values())
+            return {
+                "workflow": "legal_support_export",
+                "delivery_target": target,
+                "delivery_format": "csv",
+                "output_path": str(output),
+                "card_count": card_count,
+                "spreadsheet_ready": True,
+                "export_metadata": export_metadata,
+            }
+        dashboard_payload = {
+            "workflow": "legal_support_export",
+            "delivery_target": target,
+            "analysis_query": str(payload.get("analysis_query") or ""),
+            "export_metadata": export_metadata,
+            "case_dashboard": payload.get("case_dashboard"),
+        }
+        output.write_text(_json_text(dashboard_payload), encoding="utf-8")
+        card_count = sum(len(items) for items in _dashboard_cards(payload).values())
+        return {
+            "workflow": "legal_support_export",
+            "delivery_target": target,
+            "delivery_format": "json",
+            "output_path": str(output),
+            "card_count": card_count,
+            "spreadsheet_ready": False,
+            "export_metadata": export_metadata,
+        }
+
+    def _export_bundle(self, payload, output, target, export_status, export_metadata):
+        if not bool(export_status.get("ready")):
+            blockers = ", ".join(str(item) for item in _as_list(export_status.get("blockers")) if item)
+            raise ValueError(f"Counsel-facing export blocked until readiness issues are resolved: {blockers}")
+        manifest = self._write_bundle(payload, output, export_metadata=export_metadata)
+        return {
+            "workflow": "legal_support_export",
+            "delivery_target": target,
+            "delivery_format": "bundle",
+            "output_path": str(output),
+            "artifact_count": len(_as_list(manifest.get("artifacts"))),
+            "manifest": manifest,
+            "export_metadata": export_metadata,
+        }

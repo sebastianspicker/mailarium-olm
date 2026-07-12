@@ -222,6 +222,23 @@ def test_export_exhibit_register_csv(tmp_path: Path) -> None:
     assert rows[0]["coverage_status"] == "partial"
 
 
+def test_legal_support_csv_surfaces_neutralize_formula_values() -> None:
+    payload = _payload()
+    malicious = "=1+1"
+    exhibit = cast(dict[str, Any], cast(dict[str, Any], payload["matter_evidence_index"])["rows"][0])
+    exhibit.update({"exhibit_id": malicious, "short_description": malicious, "why_it_matters": malicious})
+    cards = cast(dict[str, Any], cast(dict[str, Any], payload["case_dashboard"])["cards"])
+    card = cast(dict[str, Any], cards["main_claims_or_issues"][0])
+    card.update({"entry_id": malicious, "title": malicious, "summary": malicious})
+    metadata = {"snapshot_id": malicious, "snapshot_review_state": malicious, "coverage_status": malicious}
+
+    exhibit_rows = list(csv.reader(LegalSupportExporter._exhibit_register_csv(payload, export_metadata=metadata).splitlines()))
+    dashboard_rows = list(csv.reader(LegalSupportExporter._dashboard_csv(payload, export_metadata=metadata).splitlines()))
+
+    assert all(not cell.startswith("=") for cell in exhibit_rows[1])
+    assert all(not cell.startswith("=") for cell in dashboard_rows[1])
+
+
 def test_export_dashboard_json(tmp_path: Path) -> None:
     output = tmp_path / "dashboard.json"
     result = LegalSupportExporter().export_file(

@@ -1,13 +1,8 @@
-# ruff: noqa: F401
 import json
-import sqlite3
 
 import pytest
-from pydantic import ValidationError
 
-from src.config import get_settings
-
-from .helpers.mcp_tool_fakes import _BasicRetriever, _make_result, _patch_search_deps
+from .helpers.mcp_tool_fakes import _BasicRetriever, _make_result
 
 
 @pytest.mark.asyncio

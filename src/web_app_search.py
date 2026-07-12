@@ -6,26 +6,39 @@ from __future__ import annotations
 import csv
 import io
 import json
+from dataclasses import dataclass
 from html import escape as html_escape
 from typing import Any, cast
 
 
-def render_search_page_impl(
-    *,
-    st_module: Any,
-    retriever: Any,
-    sort_options: dict[str, str],
-    page_size: int,
-    render_results_fn: Any,
-    render_results_summary_fn: Any,
-    build_csv_export_fn: Any,
-    build_active_filter_labels_fn: Any,
-    build_export_payload_fn: Any,
-    sort_search_results_fn: Any,
-    validate_date_window_fn: Any,
-    as_optional_str_fn: Any,
-    as_optional_float_fn: Any,
-) -> None:
+@dataclass(frozen=True, slots=True)
+class _SearchPageDeps:
+    sort_options: dict[str, str]
+    page_size: int
+    render_results_fn: Any
+    render_results_summary_fn: Any
+    build_csv_export_fn: Any
+    build_active_filter_labels_fn: Any
+    build_export_payload_fn: Any
+    sort_search_results_fn: Any
+    validate_date_window_fn: Any
+    as_optional_str_fn: Any
+    as_optional_float_fn: Any
+
+    @classmethod
+    def bind(cls, options: dict[str, Any]) -> _SearchPageDeps:
+        expected = set(cls.__dataclass_fields__)
+        unknown = sorted(set(options) - expected)
+        missing = sorted(expected - set(options))
+        if unknown:
+            raise TypeError(f"render_search_page_impl() got unexpected option(s): {', '.join(unknown)}")
+        if missing:
+            raise TypeError(f"render_search_page_impl() missing required option(s): {', '.join(missing)}")
+        return cls(**options)
+
+
+def render_search_page_impl(*, st_module: Any, retriever: Any, **options: Any) -> None:
+    """Render the search page implementation with filters and results display."""
     if retriever.collection.count() == 0:
         st_module.warning("No emails indexed yet.")
         st_module.info(
@@ -42,6 +55,28 @@ def render_search_page_impl(
     st_module.session_state.setdefault("web_page", 0)
     st_module.session_state.setdefault("web_thread_id", None)
 
+    deps = _SearchPageDeps.bind(options)
+    values = _render_search_form(st_module, deps.sort_options)
+    _handle_search_submission(st_module, retriever, deps, values)
+    results = st_module.session_state.get("web_results", [])
+    if not results:
+        last_query = st_module.session_state.get("web_query", "")
+        if last_query:
+            st_module.warning(
+                f'No results found for "{last_query}". '
+                "Try broadening your search terms, removing filters, "
+                "or enabling hybrid search mode for better keyword coverage."
+            )
+        else:
+            st_module.info("Enter a search query above and click Search to browse indexed emails with advanced filters.")
+        return
+
+    results, sort_value, filters, page, page_results, total_pages = _prepare_search_results(st_module, deps, results)
+    _render_search_thread(st_module, retriever)
+    _render_search_footer(st_module, retriever, deps, results, sort_value, filters, page, page_results, total_pages)
+
+
+def _render_search_form(st_module: Any, sort_options: dict[str, str]) -> dict[str, Any]:
     with st_module.form("search_form", clear_on_submit=False):
         query = st_module.text_input(
             "Search Query",
@@ -101,80 +136,90 @@ def render_search_page_impl(
 
         search_clicked = st_module.form_submit_button("Search", type="primary", use_container_width=True)
 
-    if search_clicked:
-        if not query.strip():
-            st_module.warning("Please enter a query.")
-        else:
-            valid_date_from = str(date_from_val) if date_from_val else None
-            valid_date_to = str(date_to_val) if date_to_val else None
-            try:
-                validate_date_window_fn(valid_date_from, valid_date_to)
-            except ValueError:
-                st_module.error("Date From cannot be later than Date To.")
-            else:
-                min_score_value = round(float(min_score), 2) if min_score > 0.0 else None
-                has_att_value = True if has_attachments else None
-                priority_value = int(priority) if priority and priority > 0 else None
-                email_type_value = email_type_label if email_type_label != "Any" else None
-                filters = {
-                    "sender": sender or None,
-                    "to": to_filter or None,
-                    "subject": subject or None,
-                    "folder": folder or None,
-                    "cc": cc or None,
-                    "bcc": bcc or None,
-                    "has_attachments": has_att_value,
-                    "priority": priority_value,
-                    "email_type": email_type_value,
-                    "date_from": valid_date_from,
-                    "date_to": valid_date_to,
-                    "min_score": min_score_value,
-                    "hybrid": use_hybrid,
-                    "rerank": use_rerank,
-                    "expand_query": use_expand,
-                }
+    return {
+        "query": query,
+        "top_k": top_k,
+        "sort_label": sort_label,
+        "min_score": min_score,
+        "email_type_label": email_type_label,
+        "sender": sender,
+        "to_filter": to_filter,
+        "subject": subject,
+        "folder": folder,
+        "cc": cc,
+        "bcc": bcc,
+        "date_from_val": date_from_val,
+        "date_to_val": date_to_val,
+        "priority": priority,
+        "has_attachments": has_attachments,
+        "use_hybrid": use_hybrid,
+        "use_rerank": use_rerank,
+        "use_expand": use_expand,
+        "search_clicked": search_clicked,
+    }
 
-                results = retriever.search_filtered(
-                    query=query,
-                    top_k=int(top_k),
-                    sender=filters["sender"],
-                    to=filters["to"],
-                    subject=filters["subject"],
-                    folder=filters["folder"],
-                    cc=filters["cc"],
-                    bcc=filters["bcc"],
-                    has_attachments=filters["has_attachments"],
-                    priority=filters["priority"],
-                    email_type=filters["email_type"],
-                    date_from=filters["date_from"],
-                    date_to=filters["date_to"],
-                    min_score=filters["min_score"],
-                    hybrid=filters["hybrid"],
-                    rerank=filters["rerank"],
-                    expand_query=filters["expand_query"],
-                )
-                sort_value = sort_options[sort_label]
-                sorted_results = sort_search_results_fn(results, sort_value)
 
-                st_module.session_state["web_results"] = sorted_results
-                st_module.session_state["web_query"] = query
-                st_module.session_state["web_filters"] = filters
-                st_module.session_state["web_sort"] = sort_value
-                st_module.session_state["web_page"] = 0
-
-    results = st_module.session_state.get("web_results", [])
-    if not results:
-        last_query = st_module.session_state.get("web_query", "")
-        if last_query:
-            st_module.warning(
-                f'No results found for "{last_query}". '
-                "Try broadening your search terms, removing filters, "
-                "or enabling hybrid search mode for better keyword coverage."
-            )
-        else:
-            st_module.info("Enter a search query above and click Search to browse indexed emails with advanced filters.")
+def _handle_search_submission(st_module: Any, retriever: Any, deps: Any, values: dict[str, Any]) -> None:
+    if not values["search_clicked"]:
         return
+    query = values["query"]
+    if not query.strip():
+        st_module.warning("Please enter a query.")
+        return
+    dates = _validated_search_dates(st_module, deps.validate_date_window_fn, values)
+    if dates is None:
+        return
+    filters = _build_search_filters(values, *dates)
+    results = retriever.search_filtered(query=query, top_k=int(values["top_k"]), **filters)
+    sort_value = deps.sort_options[values["sort_label"]]
+    st_module.session_state["web_results"] = deps.sort_search_results_fn(results, sort_value)
+    st_module.session_state["web_query"] = query
+    st_module.session_state["web_filters"] = filters
+    st_module.session_state["web_sort"] = sort_value
+    st_module.session_state["web_page"] = 0
 
+
+def _validated_search_dates(st, validator, values) -> tuple[str | None, str | None] | None:
+    date_from = str(values["date_from_val"]) if values["date_from_val"] else None
+    date_to = str(values["date_to_val"]) if values["date_to_val"] else None
+    try:
+        validator(date_from, date_to)
+    except ValueError:
+        st.error("Date From cannot be later than Date To.")
+        return None
+    return date_from, date_to
+
+
+def _build_search_filters(values, date_from: str | None, date_to: str | None) -> dict[str, Any]:
+    minimum = values["min_score"]
+    priority = values["priority"]
+    email_type = values["email_type_label"]
+    return {
+        "sender": values["sender"] or None,
+        "to": values["to_filter"] or None,
+        "subject": values["subject"] or None,
+        "folder": values["folder"] or None,
+        "cc": values["cc"] or None,
+        "bcc": values["bcc"] or None,
+        "has_attachments": True if values["has_attachments"] else None,
+        "priority": int(priority) if priority and priority > 0 else None,
+        "email_type": email_type if email_type != "Any" else None,
+        "date_from": date_from,
+        "date_to": date_to,
+        "min_score": round(float(minimum), 2) if minimum > 0.0 else None,
+        "hybrid": values["use_hybrid"],
+        "rerank": values["use_rerank"],
+        "expand_query": values["use_expand"],
+    }
+
+
+def _prepare_search_results(st_module: Any, deps: Any, results: list[Any]) -> tuple[Any, ...]:
+    sort_options = deps.sort_options
+    as_optional_str_fn = deps.as_optional_str_fn
+    as_optional_float_fn = deps.as_optional_float_fn
+    build_active_filter_labels_fn = deps.build_active_filter_labels_fn
+    render_results_summary_fn = deps.render_results_summary_fn
+    page_size = deps.page_size
     sort_value = st_module.session_state.get("web_sort", "relevance")
     sort_label = next((label for label, value in sort_options.items() if value == sort_value), "Relevance")
     filters = cast(dict[str, Any], st_module.session_state.get("web_filters", {}))
@@ -198,7 +243,7 @@ def render_search_page_impl(
         cc=cc_filter,
         bcc=bcc_filter,
         has_attachments=has_att_filter if isinstance(has_att_filter, bool) else None,
-        priority=int(priority_filter) if isinstance(priority_filter, (int, float)) else None,
+        priority=int(priority_filter) if isinstance(priority_filter, int | float) else None,
         email_type=email_type_filter,
         date_from=date_from_filter,
         date_to=date_to_filter,
@@ -221,57 +266,20 @@ def render_search_page_impl(
     page = max(0, min(int(st_module.session_state.get("web_page", 0)), total_pages - 1))
     page_results = results[page * page_size : (page + 1) * page_size]
 
+    return results, sort_value, filters, page, page_results, total_pages
+
+
+def _render_search_thread(st_module: Any, retriever: Any) -> None:
     thread_id = st_module.session_state.get("web_thread_id")
     if thread_id:
         st_module.markdown("### Conversation Thread")
         st_module.caption("Canonical conversation view. Inferred thread groups remain available through CLI/MCP workflows.")
         thread_results = retriever.search_by_thread(thread_id)
         if thread_results:
-            participants = list(
-                dict.fromkeys((tr.metadata.get("sender_name") or tr.metadata.get("sender_email", "?")) for tr in thread_results)
-            )
-            dates = [str(tr.metadata.get("date", ""))[:10] for tr in thread_results if tr.metadata.get("date")]
-            thread_summary = (
-                f"<div style='padding:0.6rem 1rem;background:#eef2f7;border-radius:8px;"
-                f"font-size:0.82rem;color:#475569;margin-bottom:0.75rem;'>"
-                f"<strong>{len(thread_results)} messages</strong> &middot; "
-                f"<strong>{len(participants)} participants</strong>"
-            )
-            if dates:
-                thread_summary += f" &middot; {min(dates)} to {max(dates)}"
-            thread_summary += (
-                f"<br/><span style='color:#94a3b8;'>Participants: "
-                f"{html_escape(', '.join(participants[:5]))}"
-                + (f" (+{len(participants) - 5})" if len(participants) > 5 else "")
-                + "</span></div>"
-            )
-            st_module.markdown(thread_summary, unsafe_allow_html=True)
+            st_module.markdown(_thread_summary_html(thread_results), unsafe_allow_html=True)
 
             for idx, tr in enumerate(thread_results, 1):
-                tm = tr.metadata
-                sender_val = tm.get("sender_name") or tm.get("sender_email", "?")
-                date_val = str(tm.get("date", "?"))[:10]
-                subj_val = tm.get("subject", "?")
-                email_type = tm.get("email_type", "original")
-                type_indicator = ""
-                type_style = "font-size:0.72rem;font-weight:600;margin-left:0.4rem;"
-                if email_type == "reply":
-                    type_indicator = f"<span style='color:#5b21b6;{type_style}'>REPLY</span>"
-                elif email_type == "forward":
-                    type_indicator = f"<span style='color:#9d174d;{type_style}'>FWD</span>"
-                body_text = tr.text[:800] if len(tr.text) > 800 else tr.text
-                border_color = "#2563eb" if idx % 2 == 1 else "#7c3aed"
-                st_module.markdown(
-                    f"<div class='thread-email' style='border-left-color:{border_color};'>"
-                    f"<div class='thread-email-header'>"
-                    f"<strong>{idx}. {html_escape(str(sender_val))}</strong>{type_indicator}"
-                    f" &middot; {html_escape(str(date_val))}"
-                    f"<br/><span style='color:#64748b;font-size:0.78rem;'>{html_escape(str(subj_val))}</span>"
-                    f"</div>"
-                    f"<div class='thread-email-body'>{html_escape(body_text)}</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
+                st_module.markdown(_thread_email_html(idx, tr), unsafe_allow_html=True)
         else:
             st_module.info("No emails found for this thread.")
         if st_module.button("Close Thread View", type="secondary"):
@@ -279,6 +287,60 @@ def render_search_page_impl(
             st_module.rerun()
         st_module.divider()
 
+
+def _thread_summary_html(results: list[Any]) -> str:
+    participants = list(dict.fromkeys(_thread_sender(result) for result in results))
+    dates = [str(result.metadata.get("date", ""))[:10] for result in results if result.metadata.get("date")]
+    date_range = f" &middot; {min(dates)} to {max(dates)}" if dates else ""
+    overflow = f" (+{len(participants) - 5})" if len(participants) > 5 else ""
+    return (
+        "<div style='padding:0.6rem 1rem;background:#eef2f7;border-radius:8px;"
+        "font-size:0.82rem;color:#475569;margin-bottom:0.75rem;'>"
+        f"<strong>{len(results)} messages</strong> &middot; <strong>{len(participants)} participants</strong>"
+        f"{date_range}<br/><span style='color:#94a3b8;'>Participants: "
+        f"{html_escape(', '.join(participants[:5]))}{overflow}</span></div>"
+    )
+
+
+def _thread_sender(result: Any) -> str:
+    return str(result.metadata.get("sender_name") or result.metadata.get("sender_email", "?"))
+
+
+def _thread_email_html(index: int, result: Any) -> str:
+    metadata = result.metadata
+    email_type = metadata.get("email_type", "original")
+    indicators = {"reply": ("#5b21b6", "REPLY"), "forward": ("#9d174d", "FWD")}
+    indicator = indicators.get(email_type)
+    badge = (
+        f"<span style='color:{indicator[0]};font-size:0.72rem;font-weight:600;margin-left:0.4rem;'>{indicator[1]}</span>"
+        if indicator
+        else ""
+    )
+    body = result.text[:800] if len(result.text) > 800 else result.text
+    border = "#2563eb" if index % 2 == 1 else "#7c3aed"
+    return (
+        f"<div class='thread-email' style='border-left-color:{border};'><div class='thread-email-header'>"
+        f"<strong>{index}. {html_escape(_thread_sender(result))}</strong>{badge} &middot; "
+        f"{html_escape(str(metadata.get('date', '?'))[:10])}<br/>"
+        f"<span style='color:#64748b;font-size:0.78rem;'>{html_escape(str(metadata.get('subject', '?')))}</span>"
+        f"</div><div class='thread-email-body'>{html_escape(body)}</div></div>"
+    )
+
+
+def _render_search_footer(
+    st_module: Any,
+    retriever: Any,
+    deps: Any,
+    results: list[Any],
+    sort_value: str,
+    filters: dict[str, Any],
+    page: int,
+    page_results: list[Any],
+    total_pages: int,
+) -> None:
+    render_results_fn = deps.render_results_fn
+    build_export_payload_fn = deps.build_export_payload_fn
+    build_csv_export_fn = deps.build_csv_export_fn
     preview_chars = st_module.slider("Preview Length", min_value=200, max_value=4000, value=1200, step=100)
     render_results_fn(page_results, preview_chars=preview_chars, retriever=retriever)
 
@@ -330,12 +392,14 @@ _CSV_FORMULA_CHARS = ("=", "+", "-", "@", "\t", "\r")
 
 
 def _csv_safe_cell(value: str) -> str:
+    """Make a cell value safe for CSV export by prefixing with quote if it starts with formula characters."""
     if value and value[0] in _CSV_FORMULA_CHARS:
         return f"'{value}"
     return value
 
 
 def _build_csv_export(results: list[Any]) -> str:
+    """Build a CSV string from search results for export."""
     output = io.StringIO()
     fieldnames = ["date", "sender", "subject", "folder", "score", "text_preview"]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -357,15 +421,17 @@ def _build_csv_export(results: list[Any]) -> str:
 
 
 def _as_optional_str(value: Any) -> str | None:
+    """Convert a value to string if it's already a string, otherwise return None."""
     if isinstance(value, str):
         return value
     return None
 
 
 def _as_optional_float(value: Any) -> float | None:
+    """Convert a value to float if it's numeric and finite, otherwise return None."""
     import math
 
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         float_value = float(value)
         if math.isnan(float_value) or math.isinf(float_value):
             return None

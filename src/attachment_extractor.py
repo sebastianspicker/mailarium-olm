@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess  # nosec B404
@@ -37,10 +38,13 @@ from .attachment_extractor_text import (
 from .attachment_identity import DEFAULT_ATTACHMENT_OCR_LANG
 from .image_embedder import _IMAGE_EXTENSIONS
 
+logger = logging.getLogger(__name__)
+
 _image_embedder = None  # pylint: disable=invalid-name
 
 
 def _run_ocr_process(command: list[str], *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+    """Run an OCR subprocess command with safety checks."""
     executable = Path(command[0]).name if command else ""
     if executable not in {"tesseract", "pdftoppm"}:
         raise ValueError(f"Unsupported OCR executable: {executable!r}")
@@ -54,6 +58,7 @@ def _run_ocr_process(command: list[str], *, timeout_seconds: int) -> subprocess.
 
 
 def _get_image_embedder():
+    """Get or create the singleton image embedder instance."""
     global _image_embedder  # pylint: disable=global-statement
     if _image_embedder is None:
         from .image_embedder import ImageEmbedder
@@ -63,6 +68,16 @@ def _get_image_embedder():
 
 
 def extract_image_embedding(filename: str, content: bytes) -> list[float] | None:
+    """Extract an embedding vector from an image attachment.
+
+    Args:
+        filename: The name of the attachment file.
+        content: The raw bytes of the attachment.
+
+    Returns:
+        A list of float values representing the image embedding, or None if
+        extraction fails or the file is not an image.
+    """
     if not is_image_attachment(filename) or not content:
         return None
     try:
@@ -75,27 +90,85 @@ def extract_image_embedding(filename: str, content: bytes) -> list[float] | None
 
 
 def _extract_pdf(content: bytes, failure_recorder=None) -> str | None:
+    """Extract text from a PDF attachment.
+
+    Args:
+        content: The raw bytes of the PDF file.
+        failure_recorder: Optional callable to record extraction failures.
+
+    Returns:
+        The extracted text as a string, or None if extraction fails.
+    """
     return _optional_extract(content, "PyPDF2", "PdfReader", _pdf_extractor, "PDF", failure_recorder=failure_recorder)
 
 
 def _extract_docx(content: bytes, failure_recorder=None) -> str | None:
+    """Extract text from a DOCX attachment.
+
+    Args:
+        content: The raw bytes of the DOCX file.
+        failure_recorder: Optional callable to record extraction failures.
+
+    Returns:
+        The extracted text as a string, or None if extraction fails.
+    """
     return _optional_extract(content, "docx", "Document", _docx_extractor, "DOCX", failure_recorder=failure_recorder)
 
 
 def _extract_xlsx(content: bytes, failure_recorder=None) -> str | None:
+    """Extract text from an XLSX attachment.
+
+    Args:
+        content: The raw bytes of the XLSX file.
+        failure_recorder: Optional callable to record extraction failures.
+
+    Returns:
+        The extracted text as a string, or None if extraction fails.
+    """
     return _optional_extract(content, "openpyxl", "load_workbook", _xlsx_extractor, "XLSX", failure_recorder=failure_recorder)
 
 
 def _extract_pptx(content: bytes, failure_recorder=None) -> str | None:
+    """Extract text from a PPTX attachment.
+
+    Args:
+        content: The raw bytes of the PPTX file.
+        failure_recorder: Optional callable to record extraction failures.
+
+    Returns:
+        The extracted text as a string, or None if extraction fails.
+    """
     return _optional_extract(content, "pptx", "Presentation", _pptx_extractor, "PPTX", failure_recorder=failure_recorder)
 
 
 def extract_text(filename: str, content: bytes, *, mime_type: str | None = None) -> str | None:
+    """Extract text from an attachment file.
+
+    Args:
+        filename: The name of the attachment file.
+        content: The raw bytes of the attachment.
+        mime_type: Optional MIME type of the attachment.
+
+    Returns:
+        The extracted text as a string, or None if extraction fails.
+    """
     text, _failure_reason = extract_text_with_reason(filename, content, mime_type=mime_type)
     return text
 
 
 def extract_text_with_reason(filename: str, content: bytes, *, mime_type: str | None = None) -> tuple[str | None, str | None]:
+    """Extract text from an attachment file with failure reason.
+
+    Args:
+        filename: The name of the attachment file.
+        content: The raw bytes of the attachment.
+        mime_type: Optional MIME type of the attachment.
+
+    Returns:
+        A tuple of (extracted_text, failure_reason) where extracted_text is the
+        text content or None, and failure_reason is a string describing the
+        failure or None if successful.
+    """
     failure_reason: str | None = None
 
     def record_failure(reason: str) -> None:
@@ -107,14 +180,16 @@ def extract_text_with_reason(filename: str, content: bytes, *, mime_type: str | 
         filename,
         content,
         mime_type=mime_type,
-        plain_text_extractor=_extract_plain_text,
-        html_extractor=_extract_html,
-        pdf_extractor=lambda data: _extract_pdf(data, failure_recorder=record_failure),
-        docx_extractor=lambda data: _extract_docx(data, failure_recorder=record_failure),
-        xlsx_extractor=lambda data: _extract_xlsx(data, failure_recorder=record_failure),
-        ods_extractor=_extract_ods,
-        legacy_office_extractor=lambda data, label: _extract_legacy_binary_office(data, format_label=label),
-        pptx_extractor=lambda data: _extract_pptx(data, failure_recorder=record_failure),
+        extractors={
+            "plain": _extract_plain_text,
+            "html": _extract_html,
+            "pdf": lambda data: _extract_pdf(data, failure_recorder=record_failure),
+            "docx": lambda data: _extract_docx(data, failure_recorder=record_failure),
+            "xlsx": lambda data: _extract_xlsx(data, failure_recorder=record_failure),
+            "ods": _extract_ods,
+            "legacy_office": lambda data, label: _extract_legacy_binary_office(data, format_label=label),
+            "pptx": lambda data: _extract_pptx(data, failure_recorder=record_failure),
+        },
     )
     return text, failure_reason
 
@@ -145,47 +220,77 @@ def attachment_ocr_available_for(filename: str, *, mime_type: str | None = None)
 
 
 def attachment_supports_ocr(filename: str, *, mime_type: str | None = None) -> bool:
+    """Check if an attachment format supports OCR extraction.
+
+    Args:
+        filename: The name of the attachment file.
+        mime_type: Optional MIME type of the attachment.
+
+    Returns:
+        True if the attachment format supports OCR (PDF or image formats),
+        False otherwise.
+    """
     ext = _dispatch_extension(filename, mime_type)
     return bool(ext == ".pdf" or is_image_attachment(filename))
+
+
+def _write_temporary_attachment(content: bytes, *, suffix: str) -> str:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(content)
+        return temp_file.name
+
+
+def _safe_unlink(path: str, *, message: str) -> None:
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        logger.debug(message, exc_info=True)
+
+
+def _ocr_psm() -> str:
+    value = str(os.environ.get("ATTACHMENT_OCR_PSM", "6")).strip()
+    return "6" if not value or not value.isdigit() else str(max(0, min(13, int(value))))
+
+
+def _ocr_language() -> str:
+    language = str(os.environ.get("ATTACHMENT_OCR_LANG", DEFAULT_ATTACHMENT_OCR_LANG) or "").strip()
+    return DEFAULT_ATTACHMENT_OCR_LANG if not language or " " in language else language
+
+
+def _pdf_ocr_max_pages() -> int:
+    try:
+        return max(1, min(50, int(str(os.environ.get("ATTACHMENT_PDF_OCR_MAX_PAGES", "5")).strip())))
+    except (ValueError, TypeError):
+        return 5
+
+
+def _ocr_image_file(tesseract_path: str, image_path: str, *, timeout_seconds: int) -> str | None:
+    command = [tesseract_path, image_path, "stdout", "--psm", _ocr_psm()]
+    if language := _ocr_language():
+        command.extend(["-l", language])
+    result = _run_ocr_process(command, timeout_seconds=timeout_seconds)
+    if result.returncode != 0:
+        return None
+    return _truncate(str(result.stdout or "").strip()) or None
 
 
 def extract_image_text_ocr(filename: str, content: bytes, *, timeout_seconds: int = 30) -> str | None:
     """Best-effort OCR for image attachments using the local Tesseract binary."""
     if not is_image_attachment(filename) or not content or not image_ocr_available():
         return None
-    suffix = Path(filename).suffix or ".img"
-    temp_path = ""
     tesseract_path = shutil.which("tesseract")
     if not tesseract_path:
         return None
+    temp_path = ""
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            temp_file.write(content)
-            temp_path = temp_file.name
-        psm_value = str(os.environ.get("ATTACHMENT_OCR_PSM", "6")).strip()
-        if not psm_value or not psm_value.isdigit():
-            psm_value = "6"
-        else:
-            psm_value = str(max(0, min(13, int(psm_value))))
-        command = [tesseract_path, temp_path, "stdout", "--psm", psm_value]
-        language_hint = str(os.environ.get("ATTACHMENT_OCR_LANG", DEFAULT_ATTACHMENT_OCR_LANG) or "").strip()
-        if not language_hint or " " in language_hint:
-            language_hint = DEFAULT_ATTACHMENT_OCR_LANG
-        if language_hint:
-            command.extend(["-l", language_hint])
-        result = _run_ocr_process(command, timeout_seconds=timeout_seconds)
-        if result.returncode != 0:
-            return None
-        text = _truncate(str(result.stdout or "").strip())
-        return text or None
+        temp_path = _write_temporary_attachment(content, suffix=Path(filename).suffix or ".img")
+        return _ocr_image_file(tesseract_path, temp_path, timeout_seconds=timeout_seconds)
     except (OSError, subprocess.SubprocessError):
         return None
     finally:
-        if temp_path:
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                pass
+        _safe_unlink(temp_path, message="Failed to unlink temp file")
 
 
 def extract_pdf_text_ocr(filename: str, content: bytes, *, timeout_seconds: int = 90) -> str | None:
@@ -196,21 +301,13 @@ def extract_pdf_text_ocr(filename: str, content: bytes, *, timeout_seconds: int 
     temp_dir = ""
     try:
         temp_dir = tempfile.mkdtemp(prefix="pdf-ocr-")
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-            temp_file.write(content)
-            temp_pdf = temp_file.name
+        temp_pdf = _write_temporary_attachment(content, suffix=".pdf")
         output_prefix = str(Path(temp_dir) / "page")
         pdftoppm_path = shutil.which("pdftoppm")
         if not pdftoppm_path:
             return None
-        max_pages_str = str(os.environ.get("ATTACHMENT_PDF_OCR_MAX_PAGES", "5")).strip()
-        try:
-            max_pages_val = max(1, min(50, int(max_pages_str)))
-        except (ValueError, TypeError):
-            max_pages_val = 5
-        max_pages = max(1, max_pages_val)
         render = _run_ocr_process(
-            [pdftoppm_path, "-f", "1", "-l", str(max_pages), "-png", temp_pdf, output_prefix],
+            [pdftoppm_path, "-f", "1", "-l", str(_pdf_ocr_max_pages()), "-png", temp_pdf, output_prefix],
             timeout_seconds=timeout_seconds,
         )
         if render.returncode != 0:
@@ -227,11 +324,7 @@ def extract_pdf_text_ocr(filename: str, content: bytes, *, timeout_seconds: int 
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
     finally:
-        if temp_pdf:
-            try:
-                os.unlink(temp_pdf)
-            except OSError:
-                pass
+        _safe_unlink(temp_pdf, message="Failed to unlink temp PDF")
         if temp_dir:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

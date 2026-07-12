@@ -1,4 +1,5 @@
 # ruff: noqa: F403
+# flake8: noqa
 # pylint: disable=unused-wildcard-import,wildcard-import
 
 

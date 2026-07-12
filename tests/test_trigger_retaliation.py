@@ -29,72 +29,11 @@ def test_build_retaliation_analysis_reports_before_after_deltas():
     analysis = build_retaliation_analysis(
         case_scope=case_scope,
         case_bundle=case_bundle,
-        candidates=[
-            {
-                "uid": "u1",
-                "date": "2026-02-01T10:00:00",
-                "sender_actor_id": "actor-manager",
-                "reply_pairing": {
-                    "request_expected": True,
-                    "target_authored_request": True,
-                    "response_status": "direct_reply",
-                    "response_delay_hours": 4.0,
-                    "supports_selective_non_response_inference": False,
-                },
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidate_count": 2,
-                        "behavior_candidates": [
-                            {"behavior_id": "escalation"},
-                            {"behavior_id": "deadline_pressure"},
-                        ],
-                    }
-                },
-            },
-            {
-                "uid": "u2",
-                "date": "2026-02-05T10:00:00",
-                "sender_actor_id": "actor-manager",
-                "reply_pairing": {
-                    "request_expected": True,
-                    "target_authored_request": True,
-                    "response_status": "indirect_activity_without_direct_reply",
-                    "response_delay_hours": None,
-                    "supports_selective_non_response_inference": True,
-                },
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidate_count": 2,
-                        "behavior_candidates": [
-                            {"behavior_id": "escalation"},
-                            {"behavior_id": "public_correction"},
-                        ],
-                    }
-                },
-            },
-            {
-                "uid": "u3",
-                "date": "2026-02-06T10:00:00",
-                "sender_actor_id": "actor-manager",
-                "reply_pairing": {
-                    "request_expected": True,
-                    "target_authored_request": True,
-                    "response_status": "no_reply_observed",
-                    "response_delay_hours": None,
-                    "supports_selective_non_response_inference": False,
-                },
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidate_count": 1,
-                        "behavior_candidates": [
-                            {"behavior_id": "escalation"},
-                        ],
-                    }
-                },
-            },
-        ],
+        candidates=_fixture_test_build_retaliation_analysis_reports_before_after_deltas_part(),
     )
 
+    assert analysis is not None
+    assert analysis is not None
     event = analysis["trigger_events"][0]
 
     assert analysis["version"] == "1"
@@ -293,6 +232,7 @@ def test_build_retaliation_analysis_surfaces_restructuring_and_incident_confound
         ],
     )
 
+    assert analysis is not None
     event = analysis["trigger_events"][0]
     signals = set(event["assessment"]["confounder_signals"])
     assert "organizational_restructuring_context_after_trigger" in signals
@@ -461,3 +401,70 @@ def test_build_retaliation_analysis_merges_source_backed_candidates_and_points()
         row.get("source_id") == "note:project-removal"
         for row in analysis["retaliation_timeline_assessment"]["adverse_action_timeline"]
     )
+
+
+def _fixture_test_build_retaliation_analysis_reports_before_after_deltas_part():
+    return [
+        {
+            "uid": "u1",
+            "date": "2026-02-01T10:00:00",
+            "sender_actor_id": "actor-manager",
+            "reply_pairing": {
+                "request_expected": True,
+                "target_authored_request": True,
+                "response_status": "direct_reply",
+                "response_delay_hours": 4.0,
+                "supports_selective_non_response_inference": False,
+            },
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidate_count": 2,
+                    "behavior_candidates": [
+                        {"behavior_id": "escalation"},
+                        {"behavior_id": "deadline_pressure"},
+                    ],
+                }
+            },
+        },
+        {
+            "uid": "u2",
+            "date": "2026-02-05T10:00:00",
+            "sender_actor_id": "actor-manager",
+            "reply_pairing": {
+                "request_expected": True,
+                "target_authored_request": True,
+                "response_status": "indirect_activity_without_direct_reply",
+                "response_delay_hours": None,
+                "supports_selective_non_response_inference": True,
+            },
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidate_count": 2,
+                    "behavior_candidates": [
+                        {"behavior_id": "escalation"},
+                        {"behavior_id": "public_correction"},
+                    ],
+                }
+            },
+        },
+        {
+            "uid": "u3",
+            "date": "2026-02-06T10:00:00",
+            "sender_actor_id": "actor-manager",
+            "reply_pairing": {
+                "request_expected": True,
+                "target_authored_request": True,
+                "response_status": "no_reply_observed",
+                "response_delay_hours": None,
+                "supports_selective_non_response_inference": False,
+            },
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidate_count": 1,
+                    "behavior_candidates": [
+                        {"behavior_id": "escalation"},
+                    ],
+                }
+            },
+        },
+    ]

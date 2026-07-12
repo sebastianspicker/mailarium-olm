@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any, Literal, TypedDict
 
+from ._utils import _as_dict, _compact
+
 CASE_PATTERN_VERSION = "1"
 _EVENT_BEHAVIOR_MAP: dict[str, str] = {
     "deadline_pressure": "deadline_pressure",
@@ -74,7 +76,7 @@ def _ordered_unique(values: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
     for value in values:
-        normalized = str(value or "").strip()
+        normalized = _compact(value)
         if not normalized or normalized in seen:
             continue
         seen.add(normalized)
@@ -92,6 +94,7 @@ def _confidence_score(confidence: str) -> int:
 
 
 def _event_rows(candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return non-quoted, non-forwarded event records from candidate."""
     rows = [item for item in candidate.get("event_records", []) if isinstance(item, dict)]
     if not rows:
         return []
@@ -99,6 +102,7 @@ def _event_rows(candidate: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _event_behavior_ids(candidate: dict[str, Any]) -> set[str]:
+    """Extract behavior IDs from event rows in candidate using event-to-behavior mapping."""
     derived: set[str] = set()
     for row in _event_rows(candidate):
         event_kind = str(row.get("event_kind") or "")
@@ -109,13 +113,27 @@ def _event_behavior_ids(candidate: dict[str, Any]) -> set[str]:
 
 
 def _event_kind_ids(candidate: dict[str, Any]) -> list[str]:
+    """Return ordered unique event kind IDs from candidate event rows."""
     return _ordered_unique(
         [str(row.get("event_kind") or "") for row in _event_rows(candidate) if str(row.get("event_kind") or "")]
     )
 
 
 def _event_confidence_score(candidate: dict[str, Any]) -> int:
+    """Return the maximum confidence score from event rows in candidate."""
     return max([_confidence_score(str(row.get("confidence") or "")) for row in _event_rows(candidate)] or [0])
+
+
+def _authored_findings(candidate: dict[str, Any]) -> dict[str, Any]:
+    return _as_dict(_as_dict(candidate.get("message_findings")).get("authored_text"))
+
+
+def _behavior_ids(candidate: dict[str, Any]) -> set[str]:
+    return {
+        str(item.get("behavior_id") or "")
+        for item in _authored_findings(candidate).get("behavior_candidates", [])
+        if isinstance(item, dict)
+    }
 
 
 def _primary_recurrence(
@@ -129,31 +147,39 @@ def _primary_recurrence(
     dated_rows: list[dict[str, Any]],
 ) -> tuple[RecurrenceLabel, list[RecurrenceLabel]]:
     """Return a conservative recurrence classification with supporting flags."""
-    flags: list[RecurrenceLabel] = []
     if message_count == 1:
-        return "isolated", flags
-    if target_actor_id and target_linked_count >= 2 and len(_ordered_unique(sender_actor_ids)) == 1 and message_count >= 2:
-        flags.append("targeted")
-    if actor_count >= 2 and thread_count >= 2 and message_count >= 3:
-        flags.append("possibly_coordinated")
+        return "isolated", []
+    flags = _recurrence_flags(message_count, actor_count, thread_count, target_actor_id, target_linked_count, sender_actor_ids)
     confidence_trend = [
         _confidence_score(str(row.get("confidence") or ""))
         for row in sorted(dated_rows, key=lambda row: _date_key(str(row.get("date") or "")))
     ]
     if message_count >= 4 and actor_count >= 2 and thread_count >= 2:
         primary: RecurrenceLabel = "systematic"
-    elif (
-        message_count >= 3
-        and confidence_trend
-        and confidence_trend[-1] >= confidence_trend[0]
-        and any(
-            str(row.get("behavior_id") or "") in {"escalation", "deadline_pressure", "public_correction"} for row in dated_rows
-        )
-    ):
+    elif _is_escalating(message_count, confidence_trend, dated_rows):
         primary = "escalating"
     else:
         primary = "repeated"
     return primary, flags
+
+
+def _is_escalating(message_count: int, confidence_trend: list[int], dated_rows: list[dict[str, Any]]) -> bool:
+    escalation_ids = {"escalation", "deadline_pressure", "public_correction"}
+    return (
+        message_count >= 3
+        and bool(confidence_trend)
+        and confidence_trend[-1] >= confidence_trend[0]
+        and any(str(row.get("behavior_id") or "") in escalation_ids for row in dated_rows)
+    )
+
+
+def _recurrence_flags(message_count, actor_count, thread_count, target_actor_id, linked_count, sender_ids):
+    flags: list[RecurrenceLabel] = []
+    if target_actor_id and linked_count >= 2 and len(_ordered_unique(sender_ids)) == 1 and message_count >= 2:
+        flags.append("targeted")
+    if actor_count >= 2 and thread_count >= 2 and message_count >= 3:
+        flags.append("possibly_coordinated")
+    return flags
 
 
 def _pattern_summary(
@@ -164,10 +190,10 @@ def _pattern_summary(
     target_actor_id: str,
 ) -> PatternSummary:
     """Build one conservative pattern summary from clustered message rows."""
-    ordered_rows = sorted(rows, key=lambda row: (_date_key(str(row.get("date") or "")), str(row.get("uid") or "")))
-    message_uids = _ordered_unique([str(row.get("uid") or "") for row in ordered_rows])
-    actor_ids = _ordered_unique([str(row.get("sender_actor_id") or "") for row in ordered_rows])
-    thread_group_ids = _ordered_unique([str(row.get("thread_group_id") or "") for row in ordered_rows])
+    ordered_rows = _ordered_pattern_rows(rows)
+    message_uids = _row_values(ordered_rows, "uid")
+    actor_ids = _row_values(ordered_rows, "sender_actor_id")
+    thread_group_ids = _row_values(ordered_rows, "thread_group_id")
     primary_recurrence, recurrence_flags = _primary_recurrence(
         message_count=len(message_uids),
         actor_count=len(actor_ids),
@@ -185,17 +211,29 @@ def _pattern_summary(
         "message_uids": message_uids,
         "actor_ids": actor_ids,
         "thread_group_ids": thread_group_ids,
-        "first_date": str(ordered_rows[0].get("date") or "") if ordered_rows else "",
-        "last_date": str(ordered_rows[-1].get("date") or "") if ordered_rows else "",
+        "first_date": _boundary_date(ordered_rows, 0),
+        "last_date": _boundary_date(ordered_rows, -1),
         "primary_recurrence": primary_recurrence,
         "recurrence_flags": recurrence_flags,
     }
 
 
+def _ordered_pattern_rows(rows):
+    return sorted(rows, key=lambda row: (_date_key(str(row.get("date") or "")), str(row.get("uid") or "")))
+
+
+def _row_values(rows, key):
+    return _ordered_unique([str(row.get(key) or "") for row in rows])
+
+
+def _boundary_date(rows, index):
+    return str(rows[index].get("date") or "") if rows else ""
+
+
 def _communication_classes(candidate: dict[str, Any]) -> list[str]:
     """Return applied communication classes for one candidate."""
-    findings = _as_dict(candidate.get("message_findings")).get("authored_text")
-    if not isinstance(findings, dict):
+    findings = _authored_findings(candidate)
+    if not findings:
         return []
     classification = findings.get("communication_classification")
     if isinstance(classification, dict):
@@ -205,9 +243,7 @@ def _communication_classes(candidate: dict[str, Any]) -> list[str]:
         primary = str(classification.get("primary_class") or "").strip()
         if primary:
             return [primary]
-    behavior_ids = {
-        str(item.get("behavior_id") or "") for item in findings.get("behavior_candidates", []) if isinstance(item, dict)
-    }
+    behavior_ids = _behavior_ids(candidate)
     classes: list[str] = []
     if behavior_ids & {"exclusion", "withholding", "selective_non_response"}:
         classes.append("exclusionary")
@@ -218,11 +254,6 @@ def _communication_classes(candidate: dict[str, Any]) -> list[str]:
     if not classes:
         classes.append("neutral")
     return _ordered_unique(classes)
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    """Return a dict or an empty dict."""
-    return value if isinstance(value, dict) else {}
 
 
 def _recipient_signature(candidate: dict[str, Any]) -> str:
@@ -247,10 +278,8 @@ def _candidate_has_target_linkage(candidate: dict[str, Any], *, target_actor_id:
     reply_pairing = _as_dict(candidate.get("reply_pairing"))
     if bool(reply_pairing.get("target_authored_request")):
         return True
-    authored = _as_dict(_as_dict(candidate.get("message_findings")).get("authored_text"))
-    behavior_ids = {
-        str(item.get("behavior_id") or "") for item in authored.get("behavior_candidates", []) if isinstance(item, dict)
-    }
+    authored = _authored_findings(candidate)
+    behavior_ids = _behavior_ids(candidate)
     if behavior_ids & {"exclusion", "withholding"}:
         return True
     process_signals = {
@@ -261,24 +290,7 @@ def _candidate_has_target_linkage(candidate: dict[str, Any], *, target_actor_id:
 
 def _recurring_phrases(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return recurring wording items from per-message review fields."""
-    phrase_rows: defaultdict[str, list[dict[str, str]]] = defaultdict(list)
-    first_seen_order: dict[str, int] = {}
-    for candidate in candidates:
-        uid = str(candidate.get("uid") or "")
-        findings = _as_dict(_as_dict(candidate.get("message_findings")).get("authored_text"))
-        for item in findings.get("relevant_wording", []) or []:
-            if not isinstance(item, dict):
-                continue
-            phrase = str(item.get("text") or "").strip().lower()
-            if not phrase:
-                continue
-            first_seen_order.setdefault(phrase, len(first_seen_order))
-            phrase_rows[phrase].append(
-                {
-                    "uid": uid,
-                    "date": str(candidate.get("date") or ""),
-                }
-            )
+    phrase_rows, first_seen_order = _phrase_occurrences(candidates)
     recurring: list[dict[str, Any]] = []
     for phrase, rows in phrase_rows.items():
         message_uids = _ordered_unique([row["uid"] for row in rows if row.get("uid")])
@@ -301,44 +313,50 @@ def _recurring_phrases(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]
     return recurring[:10]
 
 
+def _phrase_occurrences(candidates):
+    phrase_rows = defaultdict(list)
+    first_seen_order = {}
+    for candidate in candidates:
+        for item in _authored_findings(candidate).get("relevant_wording", []) or []:
+            if not isinstance(item, dict) or not (phrase := str(item.get("text") or "").strip().lower()):
+                continue
+            first_seen_order.setdefault(phrase, len(first_seen_order))
+            phrase_rows[phrase].append({"uid": str(candidate.get("uid") or ""), "date": str(candidate.get("date") or "")})
+    return phrase_rows, first_seen_order
+
+
 def _escalation_points(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return message-level escalation points for the corpus review."""
     items: list[dict[str, Any]] = []
     for candidate in sorted(candidates, key=lambda item: (_date_key(str(item.get("date") or "")), str(item.get("uid") or ""))):
-        findings = _as_dict(_as_dict(candidate.get("message_findings")).get("authored_text"))
-        behavior_ids = {
-            str(item.get("behavior_id") or "") for item in findings.get("behavior_candidates", []) if isinstance(item, dict)
-        }
-        event_behavior_ids = _event_behavior_ids(candidate)
-        combined_behavior_ids = behavior_ids | event_behavior_ids
-        triggers = [
-            behavior_id
-            for behavior_id in ("escalation", "deadline_pressure", "public_correction", "selective_accountability")
-            if behavior_id in combined_behavior_ids
-        ]
-        if not triggers:
-            continue
-        language_confidence = _confidence_score(str(candidate.get("detected_language_confidence") or ""))
-        event_confidence = _event_confidence_score(candidate)
-        confidence_floor = max(language_confidence, event_confidence)
-        strength = "strong" if len(triggers) >= 2 and confidence_floor >= 2 else "moderate" if confidence_floor >= 2 else "weak"
-        event_kind_ids = _event_kind_ids(candidate)
-        items.append(
-            {
-                "uid": str(candidate.get("uid") or ""),
-                "date": str(candidate.get("date") or ""),
-                "sender_actor_id": str(candidate.get("sender_actor_id") or ""),
-                "triggers": triggers,
-                "event_trigger_ids": event_kind_ids,
-                "event_trigger_count": len(event_kind_ids),
-                "strength": strength,
-                "why_it_matters": (
-                    "The message contains explicit pressure, escalation, or control cues"
-                    + (" corroborated by extracted event signals." if event_kind_ids else ".")
-                ),
-            }
-        )
+        if item := _escalation_item(candidate):
+            items.append(item)
     return items[:10]
+
+
+def _escalation_item(candidate):
+    ids = _behavior_ids(candidate) | _event_behavior_ids(candidate)
+    triggers = [
+        item for item in ("escalation", "deadline_pressure", "public_correction", "selective_accountability") if item in ids
+    ]
+    if not triggers:
+        return None
+    confidence = max(
+        _confidence_score(str(candidate.get("detected_language_confidence") or "")), _event_confidence_score(candidate)
+    )
+    strength = "strong" if len(triggers) >= 2 and confidence >= 2 else "moderate" if confidence >= 2 else "weak"
+    event_ids = _event_kind_ids(candidate)
+    return {
+        "uid": str(candidate.get("uid") or ""),
+        "date": str(candidate.get("date") or ""),
+        "sender_actor_id": str(candidate.get("sender_actor_id") or ""),
+        "triggers": triggers,
+        "event_trigger_ids": event_ids,
+        "event_trigger_count": len(event_ids),
+        "strength": strength,
+        "why_it_matters": "The message contains explicit pressure, escalation, or control cues"
+        + (" corroborated by extracted event signals." if event_ids else "."),
+    }
 
 
 def _double_standards(candidates: list[dict[str, Any]], *, target_actor_id: str) -> list[dict[str, Any]]:
@@ -350,28 +368,10 @@ def _double_standards(candidates: list[dict[str, Any]], *, target_actor_id: str)
             by_sender[sender_actor_id].append(candidate)
     items: list[dict[str, Any]] = []
     for sender_actor_id, sender_candidates in sorted(by_sender.items()):
-        target_messages: list[str] = []
-        comparator_messages: list[str] = []
-        for candidate in sender_candidates:
-            findings = _as_dict(_as_dict(candidate.get("message_findings")).get("authored_text"))
-            behavior_ids = {
-                str(item.get("behavior_id") or "") for item in findings.get("behavior_candidates", []) if isinstance(item, dict)
-            }
-            if not behavior_ids & {"selective_accountability", "public_correction", "deadline_pressure"}:
-                continue
-            if not _candidate_has_target_linkage(candidate, target_actor_id=target_actor_id):
-                continue
-            target_messages.append(str(candidate.get("uid") or ""))
+        target_messages = _target_pressure_messages(sender_candidates, target_actor_id)
         if not target_messages:
             continue
-        for candidate in sender_candidates:
-            findings = _as_dict(_as_dict(candidate.get("message_findings")).get("authored_text"))
-            behavior_ids = {
-                str(item.get("behavior_id") or "") for item in findings.get("behavior_candidates", []) if isinstance(item, dict)
-            }
-            if behavior_ids:
-                continue
-            comparator_messages.append(str(candidate.get("uid") or ""))
+        comparator_messages = [str(candidate.get("uid") or "") for candidate in sender_candidates if not _behavior_ids(candidate)]
         if not comparator_messages:
             continue
         items.append(
@@ -387,11 +387,20 @@ def _double_standards(candidates: list[dict[str, Any]], *, target_actor_id: str)
     return items[:5]
 
 
+def _target_pressure_messages(candidates, target_actor_id):
+    pressure_ids = {"selective_accountability", "public_correction", "deadline_pressure"}
+    return [
+        str(candidate.get("uid") or "")
+        for candidate in candidates
+        if _behavior_ids(candidate) & pressure_ids and _candidate_has_target_linkage(candidate, target_actor_id=target_actor_id)
+    ]
+
+
 def _procedural_irregularities(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return omission or process irregularity items from per-message review fields."""
     items: list[dict[str, Any]] = []
     for candidate in candidates:
-        findings = _as_dict(_as_dict(candidate.get("message_findings")).get("authored_text"))
+        findings = _authored_findings(candidate)
         signals = [
             str(item.get("signal") or "")
             for item in findings.get("omissions_or_process_signals", [])
@@ -420,43 +429,46 @@ def _response_timing_shifts(candidates: list[dict[str, Any]]) -> list[dict[str, 
     ]
     items: list[dict[str, Any]] = []
     for before, after in pairwise(requests):
-        before_pairing = _as_dict(before.get("reply_pairing"))
-        after_pairing = _as_dict(after.get("reply_pairing"))
-        before_thread = str(before.get("thread_group_id") or "")
-        after_thread = str(after.get("thread_group_id") or "")
-        before_signature = _recipient_signature(before)
-        after_signature = _recipient_signature(after)
-        comparable = False
-        comparability_basis = ""
-        if before_thread and before_thread == after_thread:
-            comparable = True
-            comparability_basis = "same_thread_group"
-        elif before_signature and before_signature == after_signature:
-            comparable = True
-            comparability_basis = "same_visible_recipient_signature"
-        if not comparable:
-            continue
-        before_status = str(before_pairing.get("response_status") or "")
-        after_status = str(after_pairing.get("response_status") or "")
-        before_delay = float(before_pairing.get("response_delay_hours") or 0)
-        after_delay = float(after_pairing.get("response_delay_hours") or 0)
-        worsened = (before_status == "direct_reply" and after_status != "direct_reply") or (
-            after_delay > max(before_delay * 2, before_delay + 24)
-        )
-        if not worsened:
-            continue
-        items.append(
-            {
-                "from_uid": str(before.get("uid") or ""),
-                "to_uid": str(after.get("uid") or ""),
-                "before_status": before_status,
-                "after_status": after_status,
-                "shift_label": "worsened_response",
-                "comparability_basis": comparability_basis,
-                "why_it_matters": "Later target-authored requests received weaker or slower response handling.",
-            }
-        )
+        if item := _response_timing_item(before, after):
+            items.append(item)
     return items[:5]
+
+
+def _response_timing_item(before, after):
+    basis = _comparability_basis(before, after)
+    if not basis:
+        return None
+    before_pairing, after_pairing = _as_dict(before.get("reply_pairing")), _as_dict(after.get("reply_pairing"))
+    before_status, after_status = (
+        str(before_pairing.get("response_status") or ""),
+        str(after_pairing.get("response_status") or ""),
+    )
+    before_delay, after_delay = (
+        float(before_pairing.get("response_delay_hours") or 0),
+        float(after_pairing.get("response_delay_hours") or 0),
+    )
+    if not (
+        (before_status == "direct_reply" and after_status != "direct_reply")
+        or after_delay > max(before_delay * 2, before_delay + 24)
+    ):
+        return None
+    return {
+        "from_uid": str(before.get("uid") or ""),
+        "to_uid": str(after.get("uid") or ""),
+        "before_status": before_status,
+        "after_status": after_status,
+        "shift_label": "worsened_response",
+        "comparability_basis": basis,
+        "why_it_matters": "Later target-authored requests received weaker or slower response handling.",
+    }
+
+
+def _comparability_basis(before, after):
+    before_thread, after_thread = str(before.get("thread_group_id") or ""), str(after.get("thread_group_id") or "")
+    if before_thread and before_thread == after_thread:
+        return "same_thread_group"
+    before_signature, after_signature = _recipient_signature(before), _recipient_signature(after)
+    return "same_visible_recipient_signature" if before_signature and before_signature == after_signature else ""
 
 
 def _cc_behavior_changes(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -470,13 +482,7 @@ def _cc_behavior_changes(candidates: list[dict[str, Any]]) -> list[dict[str, Any
     for sender_actor_id, sender_candidates in sorted(by_sender.items()):
         ordered = sorted(sender_candidates, key=lambda item: (_date_key(str(item.get("date") or "")), str(item.get("uid") or "")))
         for before, after in pairwise(ordered):
-            before_summary = _as_dict(before.get("recipients_summary"))
-            after_summary = _as_dict(after.get("recipients_summary"))
-            change_types: list[str] = []
-            if _recipient_signature(before) != _recipient_signature(after):
-                change_types.append("visible_recipient_signature_changed")
-            if int(after_summary.get("cc_count") or 0) > int(before_summary.get("cc_count") or 0):
-                change_types.append("cc_count_increase")
+            change_types = _recipient_change_types(before, after)
             if change_types:
                 items.append(
                     {
@@ -490,89 +496,87 @@ def _cc_behavior_changes(candidates: list[dict[str, Any]]) -> list[dict[str, Any
     return items[:10]
 
 
+def _recipient_change_types(before, after):
+    changes = []
+    if _recipient_signature(before) != _recipient_signature(after):
+        changes.append("visible_recipient_signature_changed")
+    before_summary, after_summary = _as_dict(before.get("recipients_summary")), _as_dict(after.get("recipients_summary"))
+    if int(after_summary.get("cc_count") or 0) > int(before_summary.get("cc_count") or 0):
+        changes.append("cc_count_increase")
+    return changes
+
+
 def _coordination_windows(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return short windows with multiple actors using pressure cues."""
-    pressure_candidates: list[dict[str, Any]] = []
-    for candidate in candidates:
-        findings = _as_dict(_as_dict(candidate.get("message_findings")).get("authored_text"))
-        behavior_ids = {
-            str(item.get("behavior_id") or "") for item in findings.get("behavior_candidates", []) if isinstance(item, dict)
-        }
-        behavior_ids = behavior_ids | _event_behavior_ids(candidate)
-        if not behavior_ids & {"escalation", "deadline_pressure", "selective_accountability"}:
-            continue
-        parsed = _parse_datetime(str(candidate.get("date") or ""))
-        if parsed is None:
-            continue
-        pressure_candidates.append(
-            {
-                **candidate,
-                "_parsed_date": parsed,
-                "_behavior_ids": sorted(behavior_ids),
-                "_event_kind_ids": _event_kind_ids(candidate),
-            }
-        )
+    pressure_candidates = [row for candidate in candidates if (row := _pressure_candidate(candidate))]
     items: list[dict[str, Any]] = []
     for anchor in pressure_candidates:
-        anchor_dt = _as_dict(anchor).get("_parsed_date")
-        if not isinstance(anchor_dt, datetime):
-            continue
-        window_rows = []
-        for row in pressure_candidates:
-            row_dt = _as_dict(row).get("_parsed_date")
-            if not isinstance(row_dt, datetime):
-                continue
-            if 0 <= (row_dt - anchor_dt).total_seconds() <= 172800:
-                window_rows.append(row)
-        actor_ids = sorted(
-            _ordered_unique([str(row.get("sender_actor_id") or "") for row in window_rows if row.get("sender_actor_id")])
-        )
-        if len(actor_ids) < 2:
-            continue
-        shared_thread_ids = {
-            thread_id
-            for thread_id, count in Counter(
-                str(row.get("thread_group_id") or "") for row in window_rows if row.get("thread_group_id")
-            ).items()
-            if thread_id and count >= 2
-        }
-        shared_recipient_signatures = {
-            signature
-            for signature, count in Counter(_recipient_signature(row) for row in window_rows if _recipient_signature(row)).items()
-            if signature and count >= 2
-        }
-        shared_context_types: list[str] = []
-        if shared_thread_ids:
-            shared_context_types.append("shared_thread_group")
-        if shared_recipient_signatures:
-            shared_context_types.append("shared_visible_recipient_signature")
-        if not shared_context_types:
-            continue
-        items.append(
-            {
-                "window_start": str(anchor.get("date") or ""),
-                "window_end": str(window_rows[-1].get("date") or ""),
-                "actor_ids": actor_ids,
-                "message_uids": _ordered_unique([str(row.get("uid") or "") for row in window_rows if row.get("uid")]),
-                "shared_behavior_ids": _ordered_unique(
-                    [behavior_id for row in window_rows for behavior_id in row.get("_behavior_ids", [])]
-                ),
-                "shared_event_ids": _ordered_unique(
-                    [event_id for row in window_rows for event_id in row.get("_event_kind_ids", [])]
-                ),
-                "shared_context_types": shared_context_types,
-                "strength": "moderate" if len(actor_ids) >= 3 else "weak",
-            }
-        )
-    unique_items: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+        if item := _coordination_window_item(anchor, pressure_candidates):
+            items.append(item)
+    return _unique_coordination_windows(items)[:5]
+
+
+def _pressure_candidate(candidate):
+    behavior_ids = _behavior_ids(candidate) | _event_behavior_ids(candidate)
+    parsed = _parse_datetime(str(candidate.get("date") or ""))
+    if not behavior_ids & {"escalation", "deadline_pressure", "selective_accountability"} or parsed is None:
+        return None
+    return {
+        **candidate,
+        "_parsed_date": parsed,
+        "_behavior_ids": sorted(behavior_ids),
+        "_event_kind_ids": _event_kind_ids(candidate),
+    }
+
+
+def _coordination_window_item(anchor, candidates):
+    anchor_dt = anchor["_parsed_date"]
+    rows = _window_rows(candidates, anchor_dt)
+    actor_ids = sorted(_row_values(rows, "sender_actor_id"))
+    if len(actor_ids) < 2:
+        return None
+    contexts = _shared_context_types(rows)
+    if not contexts:
+        return None
+    return {
+        "window_start": str(anchor.get("date") or ""),
+        "window_end": str(rows[-1].get("date") or ""),
+        "actor_ids": actor_ids,
+        "message_uids": _row_values(rows, "uid"),
+        "shared_behavior_ids": _nested_row_values(rows, "_behavior_ids"),
+        "shared_event_ids": _nested_row_values(rows, "_event_kind_ids"),
+        "shared_context_types": contexts,
+        "strength": "moderate" if len(actor_ids) >= 3 else "weak",
+    }
+
+
+def _window_rows(candidates, anchor_dt):
+    return [row for row in candidates if 0 <= (row["_parsed_date"] - anchor_dt).total_seconds() <= 172800]
+
+
+def _shared_context_types(rows):
+    thread_counts = Counter(str(row.get("thread_group_id") or "") for row in rows if row.get("thread_group_id"))
+    signature_counts = Counter(_recipient_signature(row) for row in rows if _recipient_signature(row))
+    contexts = []
+    if any(key and count >= 2 for key, count in thread_counts.items()):
+        contexts.append("shared_thread_group")
+    if any(key and count >= 2 for key, count in signature_counts.items()):
+        contexts.append("shared_visible_recipient_signature")
+    return contexts
+
+
+def _nested_row_values(rows, key):
+    return _ordered_unique([item for row in rows for item in row.get(key, [])])
+
+
+def _unique_coordination_windows(items):
+    unique, seen = [], set()
     for item in items:
         key = (str(item.get("window_start") or ""), "|".join(item.get("actor_ids", [])))
-        if key in seen:
-            continue
-        seen.add(key)
-        unique_items.append(item)
-    return unique_items[:5]
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
 
 
 def _corpus_behavioral_review(candidates: list[dict[str, Any]], *, target_actor_id: str) -> dict[str, Any]:
@@ -602,96 +606,13 @@ def build_case_patterns(
     target_actor_id: str = "",
 ) -> dict[str, Any]:
     """Aggregate BA6 message findings into conservative case-level pattern summaries."""
-    behavior_rows: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
-    taxonomy_rows: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
-    thread_rows: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
-    directional_rows: defaultdict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
-    all_rows: list[dict[str, Any]] = []
+    behavior_rows, taxonomy_rows, thread_rows, directional_rows, all_rows = _cluster_rows(candidates, target_actor_id)
 
-    for candidate in candidates:
-        message_findings = candidate.get("message_findings")
-        if not isinstance(message_findings, dict):
-            continue
-        sender_actor_id = str(candidate.get("sender_actor_id") or "")
-        thread_group_id = str(candidate.get("thread_group_id") or "")
-        date = str(candidate.get("date") or "")
-        uid = str(candidate.get("uid") or "")
-        authored = message_findings.get("authored_text")
-        if isinstance(authored, dict):
-            for behavior_candidate in authored.get("behavior_candidates", []):
-                if not isinstance(behavior_candidate, dict):
-                    continue
-                row = {
-                    "uid": uid,
-                    "date": date,
-                    "sender_actor_id": sender_actor_id,
-                    "thread_group_id": thread_group_id,
-                    "behavior_id": str(behavior_candidate.get("behavior_id") or ""),
-                    "confidence": str(behavior_candidate.get("confidence") or ""),
-                    "target_linked": _candidate_has_target_linkage(candidate, target_actor_id=target_actor_id),
-                }
-                behavior_id = str(row.get("behavior_id") or "")
-                all_rows.append(row)
-                behavior_rows[behavior_id].append(row)
-                for taxonomy_id in behavior_candidate.get("taxonomy_ids", []):
-                    taxonomy_rows[str(taxonomy_id)].append(row)
-                if thread_group_id:
-                    thread_rows[thread_group_id].append(row)
-                if sender_actor_id and bool(row.get("target_linked")):
-                    directional_rows[(sender_actor_id, target_actor_id)].append(row)
-
-        for behavior_id in sorted(_event_behavior_ids(candidate)):
-            row = {
-                "uid": uid,
-                "date": date,
-                "sender_actor_id": sender_actor_id,
-                "thread_group_id": thread_group_id,
-                "behavior_id": behavior_id,
-                "confidence": "medium" if _event_confidence_score(candidate) >= 2 else "low",
-                "target_linked": _candidate_has_target_linkage(candidate, target_actor_id=target_actor_id),
-            }
-            all_rows.append(row)
-            behavior_rows[behavior_id].append(row)
-            if thread_group_id:
-                thread_rows[thread_group_id].append(row)
-            if sender_actor_id and bool(row.get("target_linked")):
-                directional_rows[(sender_actor_id, target_actor_id)].append(row)
-
-    behavior_summaries = [
-        _pattern_summary(cluster_type="behavior", key=key, rows=rows, target_actor_id=target_actor_id)
-        for key, rows in sorted(behavior_rows.items())
-    ]
-    taxonomy_summaries = [
-        _pattern_summary(cluster_type="taxonomy", key=key, rows=rows, target_actor_id=target_actor_id)
-        for key, rows in sorted(taxonomy_rows.items())
-    ]
-    thread_summaries = [
-        _pattern_summary(cluster_type="thread", key=key, rows=rows, target_actor_id=target_actor_id)
-        for key, rows in sorted(thread_rows.items())
-    ]
-    directional_summaries = []
-    for (sender_actor_id, resolved_target_actor_id), rows in sorted(directional_rows.items()):
-        behavior_counts = Counter(str(row.get("behavior_id") or "") for row in rows)
-        directional_summaries.append(
-            {
-                "sender_actor_id": sender_actor_id,
-                "target_actor_id": resolved_target_actor_id,
-                "message_count": len(_ordered_unique([str(row.get("uid") or "") for row in rows])),
-                "behavior_counts": dict(sorted(behavior_counts.items())),
-                "message_uids": _ordered_unique([str(row.get("uid") or "") for row in rows]),
-            }
-        )
-
-    cluster_index = [
-        {
-            "uid": str(row.get("uid") or ""),
-            "behavior_id": str(row.get("behavior_id") or ""),
-            "sender_actor_id": str(row.get("sender_actor_id") or ""),
-            "thread_group_id": str(row.get("thread_group_id") or ""),
-            "date": str(row.get("date") or ""),
-        }
-        for row in sorted(all_rows, key=lambda row: (_date_key(str(row.get("date") or "")), str(row.get("uid") or "")))
-    ]
+    behavior_summaries = _cluster_summaries("behavior", behavior_rows, target_actor_id)
+    taxonomy_summaries = _cluster_summaries("taxonomy", taxonomy_rows, target_actor_id)
+    thread_summaries = _cluster_summaries("thread", thread_rows, target_actor_id)
+    directional_summaries = _directional_summaries(directional_rows)
+    cluster_index = _cluster_index(all_rows)
     recurrence_counts = Counter(summary["primary_recurrence"] for summary in [*behavior_summaries, *taxonomy_summaries])
 
     return {
@@ -710,3 +631,123 @@ def build_case_patterns(
         "cluster_index": cluster_index,
         "corpus_behavioral_review": _corpus_behavioral_review(candidates, target_actor_id=target_actor_id),
     }
+
+
+def _cluster_summaries(cluster_type, grouped_rows, target_actor_id):
+    return [
+        _pattern_summary(cluster_type=cluster_type, key=key, rows=rows, target_actor_id=target_actor_id)
+        for key, rows in sorted(grouped_rows.items())
+    ]
+
+
+def _directional_summaries(grouped_rows):
+    summaries = []
+    for (sender_id, target_id), rows in sorted(grouped_rows.items()):
+        message_uids = _row_values(rows, "uid")
+        counts = Counter(str(row.get("behavior_id") or "") for row in rows)
+        summaries.append(
+            {
+                "sender_actor_id": sender_id,
+                "target_actor_id": target_id,
+                "message_count": len(message_uids),
+                "behavior_counts": dict(sorted(counts.items())),
+                "message_uids": message_uids,
+            }
+        )
+    return summaries
+
+
+def _cluster_index(rows):
+    return [
+        {key: str(row.get(key) or "") for key in ("uid", "behavior_id", "sender_actor_id", "thread_group_id", "date")}
+        for row in _ordered_pattern_rows(rows)
+    ]
+
+
+def _cluster_rows(candidates, target_actor_id):
+    behavior_rows, taxonomy_rows, thread_rows, directional_rows = (
+        defaultdict(list),
+        defaultdict(list),
+        defaultdict(list),
+        defaultdict(list),
+    )
+    all_rows = []
+    for candidate in candidates:
+        _add_candidate_cluster_rows(
+            candidate, target_actor_id, behavior_rows, taxonomy_rows, thread_rows, directional_rows, all_rows
+        )
+    return behavior_rows, taxonomy_rows, thread_rows, directional_rows, all_rows
+
+
+def _add_candidate_cluster_rows(
+    candidate, target_actor_id, behavior_rows, taxonomy_rows, thread_rows, directional_rows, all_rows
+):
+    findings = candidate.get("message_findings")
+    if not isinstance(findings, dict):
+        return
+    common = {
+        "uid": str(candidate.get("uid") or ""),
+        "date": str(candidate.get("date") or ""),
+        "sender_actor_id": str(candidate.get("sender_actor_id") or ""),
+        "thread_group_id": str(candidate.get("thread_group_id") or ""),
+        "target_linked": _candidate_has_target_linkage(candidate, target_actor_id=target_actor_id),
+    }
+    _add_authored_cluster_rows(
+        findings.get("authored_text"),
+        common,
+        target_actor_id,
+        behavior_rows,
+        taxonomy_rows,
+        thread_rows,
+        directional_rows,
+        all_rows,
+    )
+    _add_event_cluster_rows(
+        candidate, common, target_actor_id, behavior_rows, taxonomy_rows, thread_rows, directional_rows, all_rows
+    )
+
+
+def _add_authored_cluster_rows(
+    authored, common, target_id, behavior_rows, taxonomy_rows, thread_rows, directional_rows, all_rows
+):
+    if not isinstance(authored, dict):
+        return
+    for item in authored.get("behavior_candidates", []):
+        if isinstance(item, dict):
+            row = {**common, "behavior_id": str(item.get("behavior_id") or ""), "confidence": str(item.get("confidence") or "")}
+            _store_cluster_row(
+                row,
+                item.get("taxonomy_ids", []),
+                target_id,
+                behavior_rows,
+                taxonomy_rows,
+                thread_rows,
+                directional_rows,
+                all_rows,
+            )
+
+
+def _add_event_cluster_rows(candidate, common, target_id, behavior_rows, taxonomy_rows, thread_rows, directional_rows, all_rows):
+    confidence = "medium" if _event_confidence_score(candidate) >= 2 else "low"
+    for behavior_id in sorted(_event_behavior_ids(candidate)):
+        _store_cluster_row(
+            {**common, "behavior_id": behavior_id, "confidence": confidence},
+            [],
+            target_id,
+            behavior_rows,
+            taxonomy_rows,
+            thread_rows,
+            directional_rows,
+            all_rows,
+        )
+
+
+def _store_cluster_row(row, taxonomy_ids, target_actor_id, behavior_rows, taxonomy_rows, thread_rows, directional_rows, all_rows):
+    all_rows.append(row)
+    behavior_rows[row["behavior_id"]].append(row)
+    for taxonomy_id in taxonomy_ids:
+        taxonomy_rows[str(taxonomy_id)].append(row)
+    if row["thread_group_id"]:
+        thread_rows[row["thread_group_id"]].append(row)
+    if row["sender_actor_id"] and row["target_linked"]:
+        directional_rows[(row["sender_actor_id"], target_actor_id)].append(row)

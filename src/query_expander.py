@@ -270,6 +270,45 @@ def _query_trigger_matches(text: str, trigger: str) -> bool:
     return bool(re.search(r"(?<!\w)" + re.escape(normalized_trigger) + r"(?!\w)", text))
 
 
+def _append_new_terms(added: list[str], terms: list[str], query_lower: str, limit: int, *, min_length: int = 0) -> None:
+    """Append distinct terms that do not merely repeat the user's query."""
+    for term in terms:
+        if len(added) >= limit:
+            return
+        if len(term) >= min_length and term not in added and not re.search(r"\b" + re.escape(term.lower()) + r"\b", query_lower):
+            added.append(term)
+
+
+def _profile_lanes(base_query: str, profile: dict[str, Any], n_terms: int) -> list[str]:
+    """Build legal-support lanes while keeping each intent independently searchable."""
+    lanes: list[str] = []
+    intent_terms = profile.get("intent_suggested_terms") or {}
+    if isinstance(intent_terms, dict):
+        for intent_id in profile.get("intents") or []:
+            terms = [str(term).strip() for term in intent_terms.get(intent_id, []) if str(term).strip()]
+            if terms:
+                lanes.append(f"{base_query} {' '.join(terms[:n_terms])}".strip())
+    shared_terms = [str(term).strip() for term in profile.get("shared_wave_terms") or [] if str(term).strip()]
+    if shared_terms:
+        lanes.append(f"{base_query} {' '.join(shared_terms[:n_terms])}".strip())
+    return lanes
+
+
+def _distinct_lanes(lanes: list[str], max_lanes: int) -> list[str]:
+    """Return compact, case-insensitively distinct lanes in deterministic order."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for lane in lanes:
+        compact = " ".join(str(lane or "").split()).strip()
+        lowered = compact.casefold()
+        if compact and lowered not in seen:
+            seen.add(lowered)
+            normalized.append(compact)
+            if len(normalized) >= max_lanes:
+                break
+    return normalized
+
+
 def legal_support_query_profile(query: str | None) -> dict[str, Any]:
     """Return deterministic legal-support intent flags for one query."""
     text = " ".join(str(query or "").lower().split())
@@ -367,28 +406,13 @@ class QueryExpander:
             query_lower = query.lower()
             added: list[str] = []
             profile = legal_support_query_profile(query)
-            for term in profile["suggested_terms"]:
-                if len(added) >= n_terms:
-                    break
-                if re.search(r"\b" + re.escape(term.lower()) + r"\b", query_lower):
-                    continue
-                added.append(term)
+            _append_new_terms(added, profile["suggested_terms"], query_lower, n_terms)
 
             sim_result = self._compute_similarities(query)
             if sim_result is None:
                 return f"{query} {' '.join(added)}".strip() if added else query
             _similarities, top_indices = sim_result
-            for idx in top_indices:
-                if len(added) >= n_terms:
-                    break
-                term = self._vocabulary[idx]
-                if re.search(r"\b" + re.escape(term.lower()) + r"\b", query_lower):
-                    continue
-                if len(term) < 3:
-                    continue
-                if term in added:
-                    continue
-                added.append(term)
+            _append_new_terms(added, [self._vocabulary[idx] for idx in top_indices], query_lower, n_terms, min_length=3)
 
             if not added:
                 return query
@@ -415,15 +439,7 @@ class QueryExpander:
             lanes.append(ascii_lane)
 
         profile = legal_support_query_profile(base_query)
-        intent_suggested_terms = profile.get("intent_suggested_terms") or {}
-        if isinstance(intent_suggested_terms, dict):
-            for intent_id in profile.get("intents") or []:
-                intent_terms = [str(term).strip() for term in intent_suggested_terms.get(intent_id, []) if str(term).strip()]
-                if intent_terms:
-                    lanes.append(f"{base_query} {' '.join(intent_terms[: min(n_terms, len(intent_terms))])}".strip())
-        shared_wave_terms = [str(term).strip() for term in profile.get("shared_wave_terms") or [] if str(term).strip()]
-        if shared_wave_terms:
-            lanes.append(f"{base_query} {' '.join(shared_wave_terms[: min(n_terms, len(shared_wave_terms))])}".strip())
+        lanes.extend(_profile_lanes(base_query, profile, max(0, n_terms)))
         lanes.extend(_compound_variant_lanes(base_query))
 
         try:
@@ -434,18 +450,7 @@ class QueryExpander:
         except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Query lane expansion failed", exc_info=True)
 
-        normalized: list[str] = []
-        seen: set[str] = set()
-        for lane in lanes:
-            compact = " ".join(str(lane or "").split()).strip()
-            lowered = compact.casefold()
-            if not compact or lowered in seen:
-                continue
-            seen.add(lowered)
-            normalized.append(compact)
-            if len(normalized) >= max_lanes:
-                break
-        return normalized
+        return _distinct_lanes(lanes, max_lanes)
 
     def get_related_terms(self, query: str, n_terms: int = 5) -> list[tuple[str, float]]:
         """Get related terms with their similarity scores.

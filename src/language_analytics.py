@@ -15,10 +15,27 @@ _ENTITY_TEXT_MAX_CHARS = max(2_000, int(os.environ.get("ENTITY_TEXT_MAX_CHARS", 
 
 
 def _normalized_text(value: Any) -> str:
+    """Normalize a value to a compact string.
+
+    Args:
+        value: The value to normalize.
+
+    Returns:
+        The value converted to string with whitespace collapsed and stripped.
+    """
     return " ".join(str(value or "").split()).strip()
 
 
 def _mapping_value(row: Mapping[str, Any], key: str) -> Any:
+    """Safely get a value from a mapping, returning empty string on error.
+
+    Args:
+        row: The mapping to query.
+        key: The key to look up.
+
+    Returns:
+        The value at the key, or empty string if the key is missing or an error occurs.
+    """
     try:
         return row[key]
     except (KeyError, IndexError, TypeError):
@@ -26,6 +43,15 @@ def _mapping_value(row: Mapping[str, Any], key: str) -> Any:
 
 
 def _attachment_text_from_attachments(attachments: Any) -> str:
+    """Extract text from a list of attachments.
+
+    Args:
+        attachments: A list of attachment dictionaries or other objects.
+
+    Returns:
+        A newline-joined string of text from the first valid text field of each
+        attachment, or empty string if no valid text is found.
+    """
     values: list[str] = []
     if not isinstance(attachments, list):
         return ""
@@ -41,22 +67,25 @@ def _attachment_text_from_attachments(attachments: Any) -> str:
 
 
 def _segment_surface_text(segments: Any, *, segment_types: set[str] | None = None) -> tuple[str, str, int | None]:
+    """Extract text from message segments of specified types.
+
+    Args:
+        segments: A list of segment dictionaries or objects.
+        segment_types: Optional set of segment types to filter by.
+
+    Returns:
+        A tuple of (combined_text, source_surface, first_ordinal) where:
+        - combined_text: Newline-joined text from matching segments.
+        - source_surface: The source surface identifier from the first valid segment.
+        - first_ordinal: The ordinal of the first valid segment, or None.
+    """
     if not isinstance(segments, list):
         return "", "", None
     parts: list[str] = []
     source_surface = ""
     first_ordinal: int | None = None
     for index, segment in enumerate(segments):
-        if isinstance(segment, Mapping):
-            segment_type = str(segment.get("segment_type") or "").strip()
-            segment_text = segment.get("text")
-            segment_source_surface = segment.get("source_surface")
-            segment_ordinal_raw = segment.get("ordinal")
-        else:
-            segment_type = str(getattr(segment, "segment_type", "") or "").strip()
-            segment_text = getattr(segment, "text", "")
-            segment_source_surface = getattr(segment, "source_surface", "")
-            segment_ordinal_raw = getattr(segment, "ordinal", index)
+        segment_type, segment_text, segment_source_surface, segment_ordinal_raw = _segment_fields(segment, index)
         if segment_types is not None and segment_type not in segment_types:
             continue
         text = _normalized_text(segment_text)
@@ -65,15 +94,41 @@ def _segment_surface_text(segments: Any, *, segment_types: set[str] | None = Non
         if not source_surface:
             source_surface = _normalized_text(segment_source_surface) or "body_text"
         if first_ordinal is None:
-            try:
-                first_ordinal = int(segment_ordinal_raw or index)
-            except (TypeError, ValueError):
-                first_ordinal = index
+            first_ordinal = _ordinal_or_default(segment_ordinal_raw, index)
         parts.append(text)
     return "\n".join(parts), source_surface, first_ordinal
 
 
+def _segment_fields(segment: Any, index: int) -> tuple[str, Any, Any, Any]:
+    getter = segment.get if isinstance(segment, Mapping) else lambda key, default="": getattr(segment, key, default)
+    return str(getter("segment_type") or "").strip(), getter("text"), getter("source_surface"), getter("ordinal", index)
+
+
+def _ordinal_or_default(value: Any, default: int) -> int:
+    try:
+        return int(value or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _optional_ordinal(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _surface_hash(text: str) -> str:
+    """Generate a SHA-256 hash for text surface identification.
+
+    Args:
+        text: The text to hash.
+
+    Returns:
+        A hexadecimal SHA-256 hash string of the text.
+    """
     return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
 
 
@@ -87,24 +142,32 @@ def _best_available_text(
     raw_body_text: Any,
     attachment_text: Any = "",
 ) -> tuple[str, str]:
+    """Select the best available text from multiple sources.
+
+    Args:
+        subject: The email subject text.
+        forensic_body_text: The forensic body text.
+        forensic_body_source: The source identifier for forensic body text.
+        normalized_body_text: The normalized/clean body text.
+        normalized_body_source: The source identifier for normalized body text.
+        raw_body_text: The raw body text.
+        attachment_text: Text extracted from attachments.
+
+    Returns:
+        A tuple of (selected_text, source_identifier) with the best available text
+        and its source. If subject text is available and the body text is short
+        (< 8 words), the subject is prepended to the body text.
+    """
     subject_text = _normalized_text(subject)
-    forensic_text = _normalized_text(forensic_body_text)
-    if forensic_text:
-        if subject_text and len(forensic_text.split()) < 8:
-            return f"{subject_text}\n{forensic_text}", _normalized_text(forensic_body_source) or "subject_plus_forensic_body_text"
-        return forensic_text, _normalized_text(forensic_body_source) or "forensic_body_text"
-
-    normalized_text = _normalized_text(normalized_body_text)
-    if normalized_text:
-        if subject_text and len(normalized_text.split()) < 8:
-            return f"{subject_text}\n{normalized_text}", _normalized_text(normalized_body_source) or "subject_plus_body_text"
-        return normalized_text, _normalized_text(normalized_body_source) or "body_text"
-
-    raw_text = _normalized_text(raw_body_text)
-    if raw_text:
-        if subject_text and len(raw_text.split()) < 8:
-            return f"{subject_text}\n{raw_text}", "subject_plus_raw_body_text"
-        return raw_text, "raw_body_text"
+    candidates = (
+        (forensic_body_text, forensic_body_source, "forensic_body_text", "subject_plus_forensic_body_text"),
+        (normalized_body_text, normalized_body_source, "body_text", "subject_plus_body_text"),
+        (raw_body_text, "raw_body_text", "raw_body_text", "subject_plus_raw_body_text"),
+    )
+    for body, source, default_source, subject_source in candidates:
+        selected = _body_text_candidate(subject_text, body, source, default_source, subject_source)
+        if selected:
+            return selected
 
     attachment_preview = _normalized_text(attachment_text)
     if subject_text and attachment_preview:
@@ -115,6 +178,15 @@ def _best_available_text(
         return attachment_preview, "attachment_text"
 
     return "", ""
+
+
+def _body_text_candidate(subject, body, source, default_source, subject_source) -> tuple[str, str] | None:
+    text = _normalized_text(body)
+    if not text:
+        return None
+    if subject and len(text.split()) < 8:
+        return f"{subject}\n{text}", _normalized_text(source) or subject_source
+    return text, _normalized_text(source) or default_source
 
 
 def select_analytics_text_from_email(email: Any) -> tuple[str, str]:
@@ -160,6 +232,21 @@ def _best_entity_text(
     raw_body_text: Any,
     attachment_text: Any = "",
 ) -> tuple[str, str]:
+    """Select and combine the best text sources for entity extraction.
+
+    Args:
+        subject: The email subject text.
+        forensic_body_text: The forensic body text.
+        normalized_body_text: The normalized/clean body text.
+        raw_body_text: The raw body text.
+        attachment_text: Text extracted from attachments.
+
+    Returns:
+        A tuple of (combined_text, source_tags) where:
+        - combined_text: Newline-joined text from all valid, unique sources.
+        - source_tags: A plus-joined string of source identifiers.
+        The combined text is truncated if it exceeds _ENTITY_TEXT_MAX_CHARS.
+    """
     parts: list[str] = []
     source_tags: list[str] = []
     seen: set[str] = set()
@@ -238,6 +325,17 @@ def _build_surface_language_rows(
     uid: str,
     candidates: tuple[tuple[str, str, str, int | None], ...],
 ) -> list[tuple[Any, ...]]:
+    """Build language analytics rows for multiple text surfaces.
+
+    Args:
+        uid: The unique identifier for the email/row.
+        candidates: Tuple of (surface_scope, text, source_surface, ordinal) tuples
+            for each text surface to analyze.
+
+    Returns:
+        List of tuples containing language analytics data for each valid candidate,
+        including language, confidence, reason, token count, and surface hash.
+    """
     rows: list[tuple[Any, ...]] = []
     for surface_scope, text, source_surface, ordinal in candidates:
         normalized_text = _normalized_text(text)
@@ -300,36 +398,20 @@ def build_surface_language_rows_from_row(row: Mapping[str, Any]) -> list[tuple[A
         return []
 
     authored_segment_text = _normalized_text(_mapping_value(row, "authored_segment_text"))
-    authored_segment_ordinal_raw = _mapping_value(row, "authored_segment_ordinal")
-    try:
-        authored_segment_ordinal = int(authored_segment_ordinal_raw) if authored_segment_ordinal_raw is not None else None
-    except (TypeError, ValueError):
-        authored_segment_ordinal = None
+    authored_segment_ordinal = _optional_ordinal(_mapping_value(row, "authored_segment_ordinal"))
 
     authored_text = authored_segment_text or _normalized_text(
         _mapping_value(row, "forensic_body_text") or _mapping_value(row, "body_text") or _mapping_value(row, "raw_body_text")
     )
 
     quoted_segment_text = _normalized_text(_mapping_value(row, "quoted_segment_text"))
-    quoted_segment_ordinal_raw = _mapping_value(row, "quoted_segment_ordinal")
-    try:
-        quoted_segment_ordinal = int(quoted_segment_ordinal_raw) if quoted_segment_ordinal_raw is not None else None
-    except (TypeError, ValueError):
-        quoted_segment_ordinal = None
+    quoted_segment_ordinal = _optional_ordinal(_mapping_value(row, "quoted_segment_ordinal"))
 
     header_segment_text = _normalized_text(_mapping_value(row, "forwarded_header_text"))
-    header_segment_ordinal_raw = _mapping_value(row, "forwarded_header_ordinal")
-    try:
-        header_segment_ordinal = int(header_segment_ordinal_raw) if header_segment_ordinal_raw is not None else None
-    except (TypeError, ValueError):
-        header_segment_ordinal = None
+    header_segment_ordinal = _optional_ordinal(_mapping_value(row, "forwarded_header_ordinal"))
 
     segment_text = _normalized_text(_mapping_value(row, "segment_text"))
-    segment_ordinal_raw = _mapping_value(row, "segment_ordinal")
-    try:
-        segment_ordinal = int(segment_ordinal_raw) if segment_ordinal_raw is not None else None
-    except (TypeError, ValueError):
-        segment_ordinal = None
+    segment_ordinal = _optional_ordinal(_mapping_value(row, "segment_ordinal"))
 
     attachment_text = _normalized_text(_mapping_value(row, "attachment_text"))
     candidates = (

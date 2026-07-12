@@ -1,11 +1,10 @@
-# ruff: noqa: F401, I001
+# ruff: noqa: I001
 import queue
 import threading
 import time
 
-import pytest
 
-from src.ingest import _SENTINEL, _EmbedPipeline, main, parse_args
+from src.ingest import _SENTINEL, _EmbedPipeline
 
 from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
 

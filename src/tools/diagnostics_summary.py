@@ -61,6 +61,16 @@ def inferred_thread_prevalence_candidates_impl(repo_root: Callable[[], Path]) ->
 
 
 def load_eval_report_impl(path: Path, *, repo_root: Callable[[], Path]) -> tuple[str, dict[str, Any]] | None:
+    """Load an AQ eval report from a JSON file.
+
+    Args:
+        path: Path to the eval report JSON file.
+        repo_root: Callable returning the repository root Path.
+
+    Returns:
+        A tuple of (source_report, report_dict), or None if the file
+        could not be loaded or has no valid summary.
+    """
     try:
         raw = path.read_text(encoding="utf-8")
         report = json.loads(raw)
@@ -78,6 +88,16 @@ def load_eval_report_impl(path: Path, *, repo_root: Callable[[], Path]) -> tuple
 
 
 def load_remediation_report_impl(path: Path, *, repo_root: Callable[[], Path]) -> tuple[str, dict[str, Any]] | None:
+    """Load an AQ remediation report from a JSON file.
+
+    Args:
+        path: Path to the remediation report JSON file.
+        repo_root: Callable returning the repository root Path.
+
+    Returns:
+        A tuple of (source_report, report_dict), or None if the file
+        could not be loaded or is not a valid dict.
+    """
     try:
         raw = path.read_text(encoding="utf-8")
         report = json.loads(raw)
@@ -94,6 +114,18 @@ def load_remediation_report_impl(path: Path, *, repo_root: Callable[[], Path]) -
 
 
 def load_inferred_thread_prevalence_impl(path: Path, *, repo_root: Callable[[], Path]) -> tuple[str, dict[str, Any]] | None:
+    """Load an inferred-thread prevalence report from a JSON file.
+
+    Only returns reports with artifact_type "natural_inferred_thread_prevalence".
+
+    Args:
+        path: Path to the prevalence report JSON file.
+        repo_root: Callable returning the repository root Path.
+
+    Returns:
+        A tuple of (source_report, report_dict), or None if the file
+        could not be loaded, is not a dict, or has the wrong artifact_type.
+    """
     try:
         raw = path.read_text(encoding="utf-8")
         report = json.loads(raw)
@@ -155,206 +187,188 @@ def answer_task_readiness_summary_impl(
     scored_metric_rate: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
     """Return operator-visible answer-task readiness metrics from saved AQ eval reports."""
-    loaded_reports = [
-        loaded for path in qa_eval_report_candidates() if path.exists() for loaded in [load_eval_report(path)] if loaded
-    ]
-    if not loaded_reports:
+    reports = _load_candidate_reports(qa_eval_report_candidates, load_eval_report)
+    if not reports:
         return {}
-
-    source_report, report = loaded_reports[0]
+    source_report, report = reports[0]
     summary = report.get("summary")
     if not isinstance(summary, dict):
         return {}
-    quote_summary = summary
-    quote_source_report = source_report
-    thread_summary = summary
-    thread_source_report = source_report
-    attachment_ocr_summary = summary
-    attachment_ocr_source_report = source_report
-    long_thread_summary = summary
-    long_thread_source_report = source_report
-    investigation_summary = summary
-    investigation_source_report = source_report
-    investigation_corpus_readiness = report.get("investigation_corpus_readiness")
-    behavioral_summary = summary
-    behavioral_source_report = source_report
-    for candidate_source_report, candidate_report in loaded_reports:
+    selected = _select_specialized_summaries(reports, prefer_specialized_summary)
+    info = _build_answer_summary(source_report, report, summary, selected, scored_metric_rate)
+    _add_remediation_summary(info, qa_eval_remediation_candidates, load_remediation_report)
+    _add_prevalence_summary(info, inferred_thread_prevalence_candidates, load_inferred_thread_prevalence)
+    _add_investigation_readiness(info, selected["investigation"])
+    return info
+
+
+def _load_candidate_reports(candidates, loader) -> list[tuple[str, dict[str, Any]]]:
+    return [loaded for path in candidates() if path.exists() for loaded in [loader(path)] if loaded]
+
+
+def _select_specialized_summaries(reports, prefer) -> dict[str, tuple[str, dict[str, Any], dict[str, Any]]]:
+    metrics = {
+        "quote": "quote_attribution_precision",
+        "thread": "thread_group_id_match",
+        "attachment_ocr": "attachment_ocr_text_evidence_success",
+        "long_thread": "long_thread_answer_present",
+        "investigation": "case_bundle_present",
+        "behavioral": "behavior_tag_coverage",
+    }
+    source, first_report = reports[0]
+    first_summary = first_report["summary"]
+    selected = dict.fromkeys(metrics, (source, first_summary, first_report))
+    for candidate_source, candidate_report in reports:
         candidate_summary = candidate_report.get("summary")
         if not isinstance(candidate_summary, dict):
             continue
-        quote_scorable = int((candidate_summary.get("quote_attribution_precision") or {}).get("scorable") or 0)
-        if prefer_specialized_summary(
-            current_scorable=int((quote_summary.get("quote_attribution_precision") or {}).get("scorable") or 0),
-            current_source_report=quote_source_report,
-            candidate_scorable=quote_scorable,
-            candidate_source_report=candidate_source_report,
-        ):
-            quote_summary = candidate_summary
-            quote_source_report = candidate_source_report
-        thread_scorable = int((candidate_summary.get("thread_group_id_match") or {}).get("scorable") or 0)
-        if prefer_specialized_summary(
-            current_scorable=int((thread_summary.get("thread_group_id_match") or {}).get("scorable") or 0),
-            current_source_report=thread_source_report,
-            candidate_scorable=thread_scorable,
-            candidate_source_report=candidate_source_report,
-        ):
-            thread_summary = candidate_summary
-            thread_source_report = candidate_source_report
-        attachment_ocr_scorable = int((candidate_summary.get("attachment_ocr_text_evidence_success") or {}).get("scorable") or 0)
-        if prefer_specialized_summary(
-            current_scorable=int((attachment_ocr_summary.get("attachment_ocr_text_evidence_success") or {}).get("scorable") or 0),
-            current_source_report=attachment_ocr_source_report,
-            candidate_scorable=attachment_ocr_scorable,
-            candidate_source_report=candidate_source_report,
-        ):
-            attachment_ocr_summary = candidate_summary
-            attachment_ocr_source_report = candidate_source_report
-        long_thread_scorable = int((candidate_summary.get("long_thread_answer_present") or {}).get("scorable") or 0)
-        if prefer_specialized_summary(
-            current_scorable=int((long_thread_summary.get("long_thread_answer_present") or {}).get("scorable") or 0),
-            current_source_report=long_thread_source_report,
-            candidate_scorable=long_thread_scorable,
-            candidate_source_report=candidate_source_report,
-        ):
-            long_thread_summary = candidate_summary
-            long_thread_source_report = candidate_source_report
-        investigation_scorable = int((candidate_summary.get("case_bundle_present") or {}).get("scorable") or 0)
-        if prefer_specialized_summary(
-            current_scorable=int((investigation_summary.get("case_bundle_present") or {}).get("scorable") or 0),
-            current_source_report=investigation_source_report,
-            candidate_scorable=investigation_scorable,
-            candidate_source_report=candidate_source_report,
-        ):
-            investigation_summary = candidate_summary
-            investigation_source_report = candidate_source_report
-            investigation_corpus_readiness = candidate_report.get("investigation_corpus_readiness")
-        behavioral_scorable = int((candidate_summary.get("behavior_tag_coverage") or {}).get("scorable") or 0)
-        if prefer_specialized_summary(
-            current_scorable=int((behavioral_summary.get("behavior_tag_coverage") or {}).get("scorable") or 0),
-            current_source_report=behavioral_source_report,
-            candidate_scorable=behavioral_scorable,
-            candidate_source_report=candidate_source_report,
-        ):
-            behavioral_summary = candidate_summary
-            behavioral_source_report = candidate_source_report
+        for name, metric in metrics.items():
+            current_source, current_summary, _ = selected[name]
+            if prefer(
+                current_scorable=_metric_scorable(current_summary, metric),
+                current_source_report=current_source,
+                candidate_scorable=_metric_scorable(candidate_summary, metric),
+                candidate_source_report=candidate_source,
+            ):
+                selected[name] = (candidate_source, candidate_summary, candidate_report)
+    return selected
+
+
+def _metric_scorable(summary: dict[str, Any], metric: str) -> int:
+    return int((summary.get(metric) or {}).get("scorable") or 0)
+
+
+def _build_answer_summary(source, report, summary, selected, rate_metric) -> dict[str, Any]:
     info = {
-        "source_report": source_report,
+        "source_report": source,
         "total_cases": int(summary.get("total_cases") or report.get("total_cases") or 0),
         "bucket_counts": dict(summary.get("bucket_counts") or {}),
-        "top_1_correctness": scored_metric_rate(dict(summary.get("top_1_correctness") or {})),
-        "support_uid_hit_top_3": scored_metric_rate(dict(summary.get("support_uid_hit_top_3") or {})),
+        "top_1_correctness": rate_metric(dict(summary.get("top_1_correctness") or {})),
+        "support_uid_hit_top_3": rate_metric(dict(summary.get("support_uid_hit_top_3") or {})),
         "evidence_precision": dict(summary.get("evidence_precision") or {}),
-        "attachment_answer_success": scored_metric_rate(dict(summary.get("attachment_answer_success") or {})),
-        "attachment_text_evidence_success": scored_metric_rate(dict(summary.get("attachment_text_evidence_success") or {})),
+        "attachment_answer_success": rate_metric(dict(summary.get("attachment_answer_success") or {})),
+        "attachment_text_evidence_success": rate_metric(dict(summary.get("attachment_text_evidence_success") or {})),
+        "confidence_calibration_match": rate_metric(dict(summary.get("confidence_calibration_match") or {})),
+        "weak_evidence_explained": rate_metric(dict(summary.get("weak_evidence_explained") or {})),
+    }
+    info.update(_specialized_answer_metrics(selected, rate_metric))
+    return info
+
+
+def _specialized_answer_metrics(selected, rate_metric) -> dict[str, Any]:
+    attachment_source, attachment, _ = selected["attachment_ocr"]
+    thread_source, thread, _ = selected["thread"]
+    long_source, long_thread, _ = selected["long_thread"]
+    investigation_source, investigation, _ = selected["investigation"]
+    behavior_source, behavior, _ = selected["behavioral"]
+    quote_source, quote, _ = selected["quote"]
+    return {
         "attachment_ocr_text_evidence_success": {
-            "source_report": attachment_ocr_source_report,
-            **scored_metric_rate(dict(attachment_ocr_summary.get("attachment_ocr_text_evidence_success") or {})),
+            "source_report": attachment_source,
+            **rate_metric(dict(attachment.get("attachment_ocr_text_evidence_success") or {})),
         },
-        "confidence_calibration_match": scored_metric_rate(dict(summary.get("confidence_calibration_match") or {})),
-        "weak_evidence_explained": scored_metric_rate(dict(summary.get("weak_evidence_explained") or {})),
-        "thread_group_id_match": {
-            "source_report": thread_source_report,
-            **scored_metric_rate(dict(thread_summary.get("thread_group_id_match") or {})),
-        },
+        "thread_group_id_match": {"source_report": thread_source, **rate_metric(dict(thread.get("thread_group_id_match") or {}))},
         "thread_group_source_match": {
-            "source_report": thread_source_report,
-            **scored_metric_rate(dict(thread_summary.get("thread_group_source_match") or {})),
+            "source_report": thread_source,
+            **rate_metric(dict(thread.get("thread_group_source_match") or {})),
         },
         "long_thread_answer_present": {
-            "source_report": long_thread_source_report,
-            **scored_metric_rate(dict(long_thread_summary.get("long_thread_answer_present") or {})),
+            "source_report": long_source,
+            **rate_metric(dict(long_thread.get("long_thread_answer_present") or {})),
         },
         "long_thread_structure_preserved": {
-            "source_report": long_thread_source_report,
-            **scored_metric_rate(dict(long_thread_summary.get("long_thread_structure_preserved") or {})),
+            "source_report": long_source,
+            **rate_metric(dict(long_thread.get("long_thread_structure_preserved") or {})),
         },
-        "investigation_case_analysis": {
-            "source_report": investigation_source_report,
-            "case_bundle_present": scored_metric_rate(dict(investigation_summary.get("case_bundle_present") or {})),
-            "investigation_blocks_present": scored_metric_rate(
-                dict(investigation_summary.get("investigation_blocks_present") or {})
-            ),
-            "case_bundle_support_uid_hit": scored_metric_rate(
-                dict(investigation_summary.get("case_bundle_support_uid_hit") or {})
-            ),
-            "case_bundle_support_uid_recall": dict(investigation_summary.get("case_bundle_support_uid_recall") or {}),
-            "multi_source_source_types_match": scored_metric_rate(
-                dict(investigation_summary.get("multi_source_source_types_match") or {})
-            ),
-        },
-        "behavioral_analysis_benchmark": {
-            "available": int((behavioral_summary.get("behavior_tag_coverage") or {}).get("scorable") or 0) > 0,
-            "source_report": behavioral_source_report,
-            "chronology_uid_hit": scored_metric_rate(dict(behavioral_summary.get("chronology_uid_hit") or {})),
-            "chronology_uid_recall": dict(behavioral_summary.get("chronology_uid_recall") or {}),
-            "behavior_tag_coverage": dict(behavioral_summary.get("behavior_tag_coverage") or {}),
-            "behavior_tag_precision": dict(behavioral_summary.get("behavior_tag_precision") or {}),
-            "counter_indicator_quality": dict(behavioral_summary.get("counter_indicator_quality") or {}),
-            "overclaim_guard_match": scored_metric_rate(dict(behavioral_summary.get("overclaim_guard_match") or {})),
-            "report_completeness": scored_metric_rate(dict(behavioral_summary.get("report_completeness") or {})),
-        },
-        "quote_attribution_precision": {
-            "available": int((quote_summary.get("quote_attribution_precision") or {}).get("scorable") or 0) > 0,
-            "source_report": quote_source_report,
-            **dict(quote_summary.get("quote_attribution_precision") or {}),
-        },
-        "quote_attribution_coverage": {
-            "available": int((quote_summary.get("quote_attribution_coverage") or {}).get("scorable") or 0) > 0,
-            "source_report": quote_source_report,
-            **dict(quote_summary.get("quote_attribution_coverage") or {}),
-        },
+        "investigation_case_analysis": _investigation_metrics(investigation_source, investigation, rate_metric),
+        "behavioral_analysis_benchmark": _behavioral_metrics(behavior_source, behavior, rate_metric),
+        "quote_attribution_precision": _quote_metric(quote_source, quote, "quote_attribution_precision"),
+        "quote_attribution_coverage": _quote_metric(quote_source, quote, "quote_attribution_coverage"),
     }
-    loaded_remediation = [
-        loaded
-        for path in qa_eval_remediation_candidates()
-        if path.exists()
-        for loaded in [load_remediation_report(path)]
-        if loaded
-    ]
-    if loaded_remediation:
-        remediation_source, remediation = loaded_remediation[0]
-        ranked = remediation.get("failure_taxonomy", {}).get("ranked_categories", [])
+
+
+def _investigation_metrics(source, summary, rate_metric) -> dict[str, Any]:
+    return {
+        "source_report": source,
+        "case_bundle_present": rate_metric(dict(summary.get("case_bundle_present") or {})),
+        "investigation_blocks_present": rate_metric(dict(summary.get("investigation_blocks_present") or {})),
+        "case_bundle_support_uid_hit": rate_metric(dict(summary.get("case_bundle_support_uid_hit") or {})),
+        "case_bundle_support_uid_recall": dict(summary.get("case_bundle_support_uid_recall") or {}),
+        "multi_source_source_types_match": rate_metric(dict(summary.get("multi_source_source_types_match") or {})),
+    }
+
+
+def _behavioral_metrics(source, summary, rate_metric) -> dict[str, Any]:
+    return {
+        "available": _metric_scorable(summary, "behavior_tag_coverage") > 0,
+        "source_report": source,
+        "chronology_uid_hit": rate_metric(dict(summary.get("chronology_uid_hit") or {})),
+        "chronology_uid_recall": dict(summary.get("chronology_uid_recall") or {}),
+        "behavior_tag_coverage": dict(summary.get("behavior_tag_coverage") or {}),
+        "behavior_tag_precision": dict(summary.get("behavior_tag_precision") or {}),
+        "counter_indicator_quality": dict(summary.get("counter_indicator_quality") or {}),
+        "overclaim_guard_match": rate_metric(dict(summary.get("overclaim_guard_match") or {})),
+        "report_completeness": rate_metric(dict(summary.get("report_completeness") or {})),
+    }
+
+
+def _quote_metric(source, summary, metric) -> dict[str, Any]:
+    return {"available": _metric_scorable(summary, metric) > 0, "source_report": source, **dict(summary.get(metric) or {})}
+
+
+def _add_remediation_summary(info, candidates, loader) -> None:
+    reports = _load_candidate_reports(candidates, loader)
+    if reports:
+        source, report = reports[0]
         info["remediation_summary"] = {
-            "source_report": remediation_source,
-            "ranked_categories": ranked,
-            "immediate_next_targets": remediation.get("immediate_next_targets", []),
+            "source_report": source,
+            "ranked_categories": report.get("failure_taxonomy", {}).get("ranked_categories", []),
+            "immediate_next_targets": report.get("immediate_next_targets", []),
         }
-    loaded_prevalence = [
-        loaded
-        for path in inferred_thread_prevalence_candidates()
-        if path.exists()
-        for loaded in [load_inferred_thread_prevalence(path)]
-        if loaded
-    ]
-    if loaded_prevalence:
-        prevalence_source, prevalence = loaded_prevalence[0]
-        info["natural_inferred_thread_prevalence"] = {
-            "source_report": prevalence_source,
-            "sample_email_count": int(prevalence.get("sample_email_count") or 0),
-            "emails_with_inferred_thread_id": int(prevalence.get("emails_with_inferred_thread_id") or 0),
-            "emails_with_inferred_parent_uid": int(prevalence.get("emails_with_inferred_parent_uid") or 0),
-            "inferred_only_email_count": int(prevalence.get("inferred_only_email_count") or 0),
-            "distinct_inferred_thread_ids": int(prevalence.get("distinct_inferred_thread_ids") or 0),
-            "inferred_thread_id_rate": float(prevalence.get("inferred_thread_id_rate") or 0.0),
-            "inferred_parent_uid_rate": float(prevalence.get("inferred_parent_uid_rate") or 0.0),
-            "inferred_only_email_rate": float(prevalence.get("inferred_only_email_rate") or 0.0),
-            "decision": str(prevalence.get("decision") or ""),
-            "recommendation": str(prevalence.get("recommendation") or ""),
-        }
-    if isinstance(investigation_corpus_readiness, dict):
-        info["investigation_corpus_readiness"] = {
-            "source_report": investigation_source_report,
-            "live_backend": investigation_corpus_readiness.get("live_backend"),
-            "case_scope_case_count": int(investigation_corpus_readiness.get("case_scope_case_count") or 0),
-            "expected_case_bundle_uid_count": int(investigation_corpus_readiness.get("expected_case_bundle_uid_count") or 0),
-            "total_emails": int(investigation_corpus_readiness.get("total_emails") or 0),
-            "emails_with_segments_count": int(investigation_corpus_readiness.get("emails_with_segments_count") or 0),
-            "attachment_email_count": int(investigation_corpus_readiness.get("attachment_email_count") or 0),
-            "corpus_populated": bool(investigation_corpus_readiness.get("corpus_populated")),
-            "supports_case_analysis": bool(investigation_corpus_readiness.get("supports_case_analysis")),
-            "known_blockers": [str(item) for item in investigation_corpus_readiness.get("known_blockers", [])],
-        }
-    return info
+
+
+def _add_prevalence_summary(info, candidates, loader) -> None:
+    reports = _load_candidate_reports(candidates, loader)
+    if not reports:
+        return
+    source, report = reports[0]
+    int_fields = (
+        "sample_email_count",
+        "emails_with_inferred_thread_id",
+        "emails_with_inferred_parent_uid",
+        "inferred_only_email_count",
+        "distinct_inferred_thread_ids",
+    )
+    float_fields = ("inferred_thread_id_rate", "inferred_parent_uid_rate", "inferred_only_email_rate")
+    payload = {
+        "source_report": source,
+        **{field: int(report.get(field) or 0) for field in int_fields},
+        **{field: float(report.get(field) or 0.0) for field in float_fields},
+    }
+    payload.update({field: str(report.get(field) or "") for field in ("decision", "recommendation")})
+    info["natural_inferred_thread_prevalence"] = payload
+
+
+def _add_investigation_readiness(info, selection) -> None:
+    source, _, report = selection
+    readiness = report.get("investigation_corpus_readiness")
+    if not isinstance(readiness, dict):
+        return
+    int_fields = (
+        "case_scope_case_count",
+        "expected_case_bundle_uid_count",
+        "total_emails",
+        "emails_with_segments_count",
+        "attachment_email_count",
+    )
+    info["investigation_corpus_readiness"] = {
+        "source_report": source,
+        "live_backend": readiness.get("live_backend"),
+        **{field: int(readiness.get(field) or 0) for field in int_fields},
+        "corpus_populated": bool(readiness.get("corpus_populated")),
+        "supports_case_analysis": bool(readiness.get("supports_case_analysis")),
+        "known_blockers": [str(item) for item in readiness.get("known_blockers", [])],
+    }
 
 
 def qa_readiness_summary_impl(
@@ -436,18 +450,7 @@ def qa_readiness_summary_impl(
         if "inferred_parent_uid" in columns
         else 0
     )
-    top_body_empty_reasons = [
-        {"label": label, "count": count}
-        for label, count in count_rows(
-            db,
-            """SELECT body_empty_reason AS label, COUNT(*) AS count
-               FROM emails
-               WHERE body_empty_reason IS NOT NULL AND body_empty_reason != ''
-               GROUP BY body_empty_reason
-               ORDER BY count DESC, label ASC
-               LIMIT 5""",
-        ).items()
-    ]
+    top_body_empty_reasons = _top_body_empty_reasons(db, count_rows)
 
     return {
         "total_emails": total_emails,
@@ -470,3 +473,13 @@ def qa_readiness_summary_impl(
         "inferred_thread_link_rate": rate(inferred_thread_linked_count, total_emails),
         "top_body_empty_reasons": top_body_empty_reasons,
     }
+
+
+def _top_body_empty_reasons(db, count_rows) -> list[dict[str, Any]]:
+    rows = count_rows(
+        db,
+        """SELECT body_empty_reason AS label, COUNT(*) AS count
+           FROM emails WHERE body_empty_reason IS NOT NULL AND body_empty_reason != ''
+           GROUP BY body_empty_reason ORDER BY count DESC, label ASC LIMIT 5""",
+    )
+    return [{"label": label, "count": count} for label, count in rows.items()]

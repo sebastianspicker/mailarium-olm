@@ -11,6 +11,12 @@ if TYPE_CHECKING:
 
 
 def run_generate_report_impl(get_email_db: Callable[[], EmailDatabase], output_path: str) -> None:
+    """Generate a comprehensive report from the email database.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        output_path: Path where the report will be saved.
+    """
     db = get_email_db()
     from .report_generator import ReportGenerationError, ReportGenerator
 
@@ -37,6 +43,14 @@ def run_export_thread_impl(
     fmt: str,
     output_path: str | None,
 ) -> None:
+    """Export a conversation thread to the specified format.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        conversation_id: The conversation/thread identifier to export.
+        fmt: Output format (e.g., 'json', 'html', 'text').
+        output_path: Optional path for the output file. If None, a default path is generated.
+    """
     db = get_email_db()
     from .email_exporter import EmailExporter
 
@@ -70,6 +84,14 @@ def run_export_email_impl(
     fmt: str,
     output_path: str | None,
 ) -> None:
+    """Export a single email to the specified format.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        uid: The unique identifier of the email to export.
+        fmt: Output format (e.g., 'json', 'html', 'text').
+        output_path: Optional path for the output file. If None, a default path is generated.
+    """
     db = get_email_db()
     from .email_exporter import EmailExporter
 
@@ -86,6 +108,12 @@ def run_export_email_impl(
 
 
 def run_export_network_impl(get_email_db: Callable[[], EmailDatabase], output_path: str) -> None:
+    """Export the communication network as a GraphML file.
+
+    Args:
+        get_email_db: Callable that returns the EmailDatabase instance.
+        output_path: Path where the GraphML file will be saved.
+    """
     db = get_email_db()
     from .network_analysis import CommunicationNetwork
 

@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ._utils import _compact
 from .attachment_extractor import attachment_format_profile, extraction_quality_profile
 
 _FORMAL_DOCUMENT_EXTENSIONS = {".doc", ".docx", ".md", ".odt", ".pdf", ".rtf", ".txt"}
@@ -54,7 +55,7 @@ _PARTICIPATION_RECORD_KEYWORDS = (
     "anhörung",
 )
 _ISO_DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
-_DATE_RANGE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\s*(?:to|through|until|bis|–|-)\s*(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE)
+_DATE_RANGE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\s*(?:to|through|until|bis|-)\s*(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE)
 _SHEET_NAME_RE = re.compile(r"\[Sheet:\s*([^\]]+)\]")
 _MONTH_LABEL_RE = re.compile(
     r"(?i)\b("
@@ -66,10 +67,6 @@ _ICAL_FIELD_RE = re.compile(
     r"(?im)^(SUMMARY|DTSTART|DTEND|LOCATION|ORGANIZER|ATTENDEE|STATUS|METHOD|SEQUENCE|UID|RECURRENCE-ID|DESCRIPTION)[^:\n]*:(.+)$"
 )
 _ICAL_DATETIME_RE = re.compile(r"\b(20\d{2})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?)?")
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
 
 
 def _normalized_text(value: Any) -> str:
@@ -107,6 +104,23 @@ def attachment_source_type_hint(
     snippet: str = "",
     text: str = "",
 ) -> str:
+    """Classify an attachment's source type from its metadata and content.
+
+    Uses keyword matching on normalized filename, title, snippet, and text
+    to categorize the attachment as time_record, participation_record,
+    note_record, formal_document, or generic attachment.
+
+    Args:
+        filename: The attachment filename.
+        mime_type: The attachment MIME type.
+        title: Optional attachment title. Defaults to "".
+        snippet: Optional content snippet. Defaults to "".
+        text: Optional extracted text (first 4000 chars used). Defaults to "".
+
+    Returns:
+        A source type string: "time_record", "participation_record",
+        "note_record", "formal_document", or "attachment".
+    """
     classification_text = " ".join(
         part
         for part in (
@@ -137,6 +151,25 @@ def attachment_review_recommendation(
     format_profile: dict[str, Any],
     extraction_quality: dict[str, Any],
 ) -> str:
+    """Produce a human-readable review recommendation for an attachment.
+
+    Evaluates extraction state, evidence strength, OCR usage, source type,
+    format profile, and extraction quality to generate context-specific
+    guidance for manual review.
+
+    Args:
+        extraction_state: The extraction state (e.g., "text_extracted", "ocr_failed").
+        evidence_strength: The evidence strength classification.
+        ocr_used: Whether OCR was used during extraction.
+        source_type: The classified source type (e.g., "formal_document").
+        format_profile: Format metadata dict with keys like format_label,
+            handling_mode, and support_level.
+        extraction_quality: Quality metadata dict, optionally including
+            manual_review_required flag.
+
+    Returns:
+        A human-readable recommendation string for manual review.
+    """
     format_label = str(format_profile.get("format_label") or "source").strip()
     handling_mode = str(format_profile.get("handling_mode") or "").strip()
     support_level = str(format_profile.get("support_level") or "").strip()
@@ -145,24 +178,9 @@ def attachment_review_recommendation(
             f"{format_label} is not currently supported for reliable extraction; keep it as a visible reference "
             "and review the original file directly."
         )
-    if evidence_strength == "strong_text" and extraction_state == "text_extracted":
-        if handling_mode == "flattened_tabular_text":
-            return f"{format_label} text is usable, but sheet structure and formulas were flattened during extraction."
-        if handling_mode == "calendar_text_flattened":
-            return (
-                f"{format_label} text is usable, but richer calendar structure was flattened and should be checked "
-                "against the original file when timing detail matters."
-            )
-        if source_type == "note_record":
-            return "Extracted note text can support chronology, summary comparison, and follow-up directly."
-        if source_type == "time_record":
-            return "Extracted time-record text can support chronology and attendance follow-up directly."
-        if source_type == "participation_record":
-            return "Extracted participation-record text can support process and consultation follow-up directly."
-        if source_type == "formal_document":
-            return "Native extracted document text can support chronology and exhibit follow-up directly."
-        return "Extracted attachment text can support downstream follow-up directly."
-    if evidence_strength == "strong_text" and ocr_used:
+    if _is_native_extraction(evidence_strength, extraction_state):
+        return _native_text_recommendation(format_label, handling_mode, source_type)
+    if _is_ocr_extraction(evidence_strength, ocr_used):
         return "OCR-recovered text is usable, but the original page image should be checked before relying on fine wording."
     if extraction_state in {"ocr_failed", "ocr_failure", "binary_only", "image_embedding_only", "extraction_failed"}:
         return "Treat this source as a weak documentary reference until the original file is reviewed manually."
@@ -171,19 +189,69 @@ def attachment_review_recommendation(
     return "Review the original file before treating this source as strong documentary proof."
 
 
+def _is_native_extraction(evidence_strength: str, extraction_state: str) -> bool:
+    return evidence_strength == "strong_text" and extraction_state == "text_extracted"
+
+
+def _is_ocr_extraction(evidence_strength: str, ocr_used: bool) -> bool:
+    return evidence_strength == "strong_text" and ocr_used
+
+
+def _native_text_recommendation(format_label: str, handling_mode: str, source_type: str) -> str:
+    by_handling_mode = {
+        "flattened_tabular_text": (
+            f"{format_label} text is usable, but sheet structure and formulas were flattened during extraction."
+        ),
+        "calendar_text_flattened": (
+            f"{format_label} text is usable, but richer calendar structure was flattened and should be checked "
+            "against the original file when timing detail matters."
+        ),
+    }
+    by_source_type = {
+        "note_record": "Extracted note text can support chronology, summary comparison, and follow-up directly.",
+        "time_record": "Extracted time-record text can support chronology and attendance follow-up directly.",
+        "participation_record": "Extracted participation-record text can support process and consultation follow-up directly.",
+        "formal_document": "Native extracted document text can support chronology and exhibit follow-up directly.",
+    }
+    return by_handling_mode.get(handling_mode) or by_source_type.get(
+        source_type, "Extracted attachment text can support downstream follow-up directly."
+    )
+
+
 def documentary_support_for_attachment(
     attachment: dict[str, Any],
     *,
     source_type: str,
     snippet: str = "",
 ) -> dict[str, Any]:
-    filename = _attachment_filename(attachment)
-    mime_type = str(attachment.get("mime_type") or "")
-    extraction_state = str(attachment.get("extraction_state") or "")
-    evidence_strength = str(attachment.get("evidence_strength") or "")
-    ocr_used = bool(attachment.get("ocr_used"))
-    text_preview = _compact(attachment.get("text_preview") or _attachment_text(attachment, snippet=snippet))
-    text_available = bool(_compact(attachment.get("extracted_text")) or text_preview or _compact(snippet))
+    """Build a documentary support summary for an attachment.
+
+    Retrieves or computes format profile, extraction quality, and review
+    recommendation for the given attachment, returning a structured
+    dictionary with all documentary metadata.
+
+    Args:
+        attachment: The attachment dictionary with keys like mime_type,
+            extraction_state, evidence_strength, ocr_used, text_preview,
+            extracted_text, format_profile, extraction_quality, and
+            review_recommendation.
+        source_type: The classified source type string.
+        snippet: Optional content snippet. Defaults to "".
+
+    Returns:
+        A dict with keys: filename, mime_type, text_available,
+        evidence_strength, extraction_state, ocr_used, failure_reason,
+        text_preview, format_profile, extraction_quality, and
+        review_recommendation.
+    """
+    fields = _documentary_fields(attachment, snippet)
+    filename = fields["filename"]
+    mime_type = fields["mime_type"]
+    extraction_state = fields["extraction_state"]
+    evidence_strength = fields["evidence_strength"]
+    ocr_used = fields["ocr_used"]
+    text_preview = fields["text_preview"]
+    text_available = fields["text_available"]
     format_profile = dict(attachment.get("format_profile") or {})
     if not format_profile:
         format_profile = attachment_format_profile(
@@ -227,6 +295,19 @@ def documentary_support_for_attachment(
     }
 
 
+def _documentary_fields(attachment: dict[str, Any], snippet: str) -> dict[str, Any]:
+    text_preview = _compact(attachment.get("text_preview") or _attachment_text(attachment, snippet=snippet))
+    return {
+        "filename": _attachment_filename(attachment),
+        "mime_type": str(attachment.get("mime_type") or ""),
+        "extraction_state": str(attachment.get("extraction_state") or ""),
+        "evidence_strength": str(attachment.get("evidence_strength") or ""),
+        "ocr_used": bool(attachment.get("ocr_used")),
+        "text_preview": text_preview,
+        "text_available": bool(_compact(attachment.get("extracted_text")) or text_preview or _compact(snippet)),
+    }
+
+
 def _chronology_text(*, title: str, snippet: str, text_preview: str, extracted_text: str) -> str:
     return "\n".join(part for part in (title, snippet, text_preview, extracted_text[:4000]) if part)
 
@@ -258,6 +339,23 @@ def spreadsheet_semantics_for_attachment(
     title: str = "",
     snippet: str = "",
 ) -> dict[str, Any] | None:
+    """Analyze spreadsheet semantics for an attachment.
+
+    Extracts date signals, sheet names, month labels, and record type
+    from spreadsheet attachments. Returns None if the attachment is not
+    a spreadsheet.
+
+    Args:
+        attachment: The attachment dictionary.
+        title: Optional attachment title. Defaults to "".
+        snippet: Optional content snippet. Defaults to "".
+
+    Returns:
+        A dict with spreadsheet semantics (record_type, sheet_names,
+        sheet_count, explicit_dates, date_range, month_labels,
+        date_signal_strength, structure_signal), or None if not a
+        spreadsheet.
+    """
     documentary_support = documentary_support_for_attachment(
         attachment,
         source_type="time_record",
@@ -266,24 +364,12 @@ def spreadsheet_semantics_for_attachment(
     format_profile = dict(documentary_support.get("format_profile") or {})
     if str(format_profile.get("format_family") or "") != "spreadsheet":
         return None
-    chronology_text = _chronology_text(
-        title=title,
-        snippet=snippet,
-        text_preview=str(documentary_support.get("text_preview") or ""),
-        extracted_text=str(attachment.get("extracted_text") or ""),
-    )
+    chronology_text = _attachment_chronology_text(attachment, documentary_support, title, snippet)
     explicit_dates = [match.group(1) for match in _ISO_DATE_RE.finditer(chronology_text)]
     date_range = _date_range_from_text(chronology_text)
     month_labels = sorted({match.group(1).lower() for match in _MONTH_LABEL_RE.finditer(chronology_text)})
     sheet_names = [match.group(1).strip() for match in _SHEET_NAME_RE.finditer(chronology_text) if match.group(1).strip()]
-    lower_text = chronology_text.lower()
-    record_type = "generic_time_record"
-    if any(token in lower_text for token in ("time system", "nova time")):
-        record_type = "time system_export"
-    elif "attendance" in lower_text:
-        record_type = "attendance_export"
-    elif any(token in lower_text for token in ("arbeitszeit", "timesheet", "time sheet", "zeiterfassung")):
-        record_type = "time_tracking_export"
+    record_type = _spreadsheet_record_type(chronology_text)
     return {
         "record_type": record_type,
         "sheet_names": sheet_names,
@@ -296,12 +382,50 @@ def spreadsheet_semantics_for_attachment(
     }
 
 
+def _attachment_chronology_text(attachment: dict[str, Any], support: dict[str, Any], title: str, snippet: str) -> str:
+    return _chronology_text(
+        title=title,
+        snippet=snippet,
+        text_preview=str(support.get("text_preview") or ""),
+        extracted_text=str(attachment.get("extracted_text") or ""),
+    )
+
+
+def _spreadsheet_record_type(text: str) -> str:
+    lower_text = text.lower()
+    if any(token in lower_text for token in ("time system", "nova time")):
+        return "time system_export"
+    if "attendance" in lower_text:
+        return "attendance_export"
+    if any(token in lower_text for token in ("arbeitszeit", "timesheet", "time sheet", "zeiterfassung")):
+        return "time_tracking_export"
+    return "generic_time_record"
+
+
 def calendar_semantics_for_attachment(
     attachment: dict[str, Any],
     *,
     title: str = "",
     snippet: str = "",
 ) -> dict[str, Any] | None:
+    """Analyze calendar/iCal semantics for an attachment.
+
+    Parses iCalendar fields (DTSTART, DTEND, ATTENDEE, ORGANIZER, STATUS,
+    etc.) from the attachment text and extracts structured calendar metadata.
+    Returns None if the attachment is not a calendar.
+
+    Args:
+        attachment: The attachment dictionary.
+        title: Optional attachment title. Defaults to "".
+        snippet: Optional content snippet. Defaults to "".
+
+    Returns:
+        A dict with calendar semantics (calendar_summary, dtstart, dtend,
+        location, organizer, attendees, attendee_count, status, method,
+        sequence, uid, recurrence_id, description_preview, schedule_signal,
+        cancellation_signal, update_signal, field_count), or None if not a
+        calendar.
+    """
     documentary_support = documentary_support_for_attachment(
         attachment,
         source_type="attachment",
@@ -310,58 +434,63 @@ def calendar_semantics_for_attachment(
     format_profile = dict(documentary_support.get("format_profile") or {})
     if str(format_profile.get("format_family") or "") != "calendar":
         return None
-    chronology_text = _chronology_text(
-        title=title,
-        snippet=snippet,
-        text_preview=str(documentary_support.get("text_preview") or ""),
-        extracted_text=str(attachment.get("extracted_text") or ""),
-    )
+    chronology_text = _attachment_chronology_text(attachment, documentary_support, title, snippet)
+    return _calendar_semantics_payload(_ical_field_map(chronology_text), chronology_text)
+
+
+def _ical_field_map(text: str) -> dict[str, list[str]]:
     field_map: dict[str, list[str]] = {}
-    for match in _ICAL_FIELD_RE.finditer(chronology_text):
-        key = match.group(1).upper()
-        value = _compact(match.group(2))
+    for match in _ICAL_FIELD_RE.finditer(text):
+        key, value = match.group(1).upper(), _compact(match.group(2))
         field_map.setdefault(key, [])
         if value and value not in field_map[key]:
             field_map[key].append(value)
+    return field_map
+
+
+def _ical_first(field_map: dict[str, list[str]], key: str) -> str:
+    return field_map.get(key, [""])[0]
+
+
+def _calendar_semantics_payload(field_map: dict[str, list[str]], text: str) -> dict[str, Any]:
+    status, method, sequence = (_ical_first(field_map, key) for key in ("STATUS", "METHOD", "SEQUENCE"))
+    recurrence_id = _ical_to_iso(_ical_first(field_map, "RECURRENCE-ID"))
+    cancellation, update = _calendar_signals(status, method, sequence, recurrence_id, text)
     attendees = list(dict.fromkeys(field_map.get("ATTENDEE", [])))
-    dtstart = _ical_to_iso(field_map.get("DTSTART", [""])[0]) if field_map.get("DTSTART") else ""
-    dtend = _ical_to_iso(field_map.get("DTEND", [""])[0]) if field_map.get("DTEND") else ""
-    status = field_map.get("STATUS", [""])[0] if field_map.get("STATUS") else ""
-    method = field_map.get("METHOD", [""])[0] if field_map.get("METHOD") else ""
-    sequence = field_map.get("SEQUENCE", [""])[0] if field_map.get("SEQUENCE") else ""
-    recurrence_id = _ical_to_iso(field_map.get("RECURRENCE-ID", [""])[0]) if field_map.get("RECURRENCE-ID") else ""
-    description = field_map.get("DESCRIPTION", [""])[0] if field_map.get("DESCRIPTION") else ""
-    normalized_text = chronology_text.lower()
-    cancellation_signal = bool(
-        str(status).upper() == "CANCELLED"
-        or str(method).upper() == "CANCEL"
-        or any(token in normalized_text for token in ("abgesagt", "storniert", "cancelled", "canceled"))
-    )
-    update_signal = bool(
-        recurrence_id
-        or (sequence.isdigit() and int(sequence) > 0)
-        or any(token in normalized_text for token in ("aktualisiert", "update", "geaendert", "geändert"))
-    )
-    schedule_signal = "cancellation" if cancellation_signal else "update" if update_signal else "invite"
     return {
-        "calendar_summary": field_map.get("SUMMARY", [""])[0] if field_map.get("SUMMARY") else "",
-        "dtstart": dtstart,
-        "dtend": dtend,
-        "location": field_map.get("LOCATION", [""])[0] if field_map.get("LOCATION") else "",
-        "organizer": field_map.get("ORGANIZER", [""])[0] if field_map.get("ORGANIZER") else "",
+        "calendar_summary": _ical_first(field_map, "SUMMARY"),
+        "dtstart": _ical_to_iso(_ical_first(field_map, "DTSTART")),
+        "dtend": _ical_to_iso(_ical_first(field_map, "DTEND")),
+        "location": _ical_first(field_map, "LOCATION"),
+        "organizer": _ical_first(field_map, "ORGANIZER"),
         "attendees": attendees,
         "attendee_count": len(attendees),
         "status": status,
         "method": method,
         "sequence": sequence,
-        "uid": field_map.get("UID", [""])[0] if field_map.get("UID") else "",
+        "uid": _ical_first(field_map, "UID"),
         "recurrence_id": recurrence_id,
-        "description_preview": _compact(description)[:240],
-        "schedule_signal": schedule_signal,
-        "cancellation_signal": cancellation_signal,
-        "update_signal": update_signal,
+        "description_preview": _compact(_ical_first(field_map, "DESCRIPTION"))[:240],
+        "schedule_signal": "cancellation" if cancellation else "update" if update else "invite",
+        "cancellation_signal": cancellation,
+        "update_signal": update,
         "field_count": sum(len(values) for values in field_map.values()),
     }
+
+
+def _calendar_signals(status: str, method: str, sequence: str, recurrence_id: str, text: str) -> tuple[bool, bool]:
+    normalized = text.lower()
+    cancellation = (
+        status.upper() == "CANCELLED"
+        or method.upper() == "CANCEL"
+        or any(token in normalized for token in ("abgesagt", "storniert", "cancelled", "canceled"))
+    )
+    update = bool(
+        recurrence_id
+        or (sequence.isdigit() and int(sequence) > 0)
+        or any(token in normalized for token in ("aktualisiert", "update", "geaendert", "geändert"))
+    )
+    return cancellation, update
 
 
 def weak_format_semantics_for_attachment(
@@ -370,6 +499,22 @@ def weak_format_semantics_for_attachment(
     title: str = "",
     snippet: str = "",
 ) -> dict[str, Any] | None:
+    """Analyze weak-format recovery semantics for an attachment.
+
+    Determines the recovery mode for attachments that could not be fully
+    extracted (e.g., flattened tabular text, flattened calendar text,
+    OCR-not-available images, unsupported formats). Returns None if the
+    attachment does not fall into a weak-format recovery category.
+
+    Args:
+        attachment: The attachment dictionary.
+        title: Optional attachment title. Defaults to "".
+        snippet: Optional content snippet. Defaults to "".
+
+    Returns:
+        A dict with recovery_mode, original_format_family, and
+        support_level, or None if strong extraction is available.
+    """
     documentary_support = documentary_support_for_attachment(
         attachment,
         source_type=attachment_source_type_hint(
@@ -419,6 +564,23 @@ def enrich_attachment_record(
     title: str = "",
     snippet: str = "",
 ) -> dict[str, Any]:
+    """Enrich an attachment record with derived semantics.
+
+    Computes source type, documentary support, and format-specific
+    semantics (spreadsheet, calendar, or weak format) and merges them
+    into a single enriched attachment dictionary.
+
+    Args:
+        attachment: The attachment dictionary to enrich.
+        title: Optional attachment title. Defaults to "".
+        snippet: Optional content snippet. Defaults to "".
+
+    Returns:
+        An enriched copy of the attachment dict with added keys:
+        source_type, documentary_support, and optionally
+        spreadsheet_semantics, calendar_semantics, or
+        weak_format_semantics.
+    """
     enriched = dict(attachment)
     filename = _attachment_filename(enriched)
     mime_type = str(enriched.get("mime_type") or "")

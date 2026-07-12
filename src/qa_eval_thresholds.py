@@ -5,12 +5,27 @@ from __future__ import annotations
 
 from typing import Any
 
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+from src._utils import _as_dict
 
 
 def infer_threshold_profile(report: dict[str, Any]) -> str:
+    """Infer the threshold profile from a QA evaluation report.
+
+    Determines the appropriate threshold profile based on the questions path
+    and live backend specified in the report.
+
+    Args:
+        report: QA evaluation report dictionary.
+
+    Returns:
+        Profile name string. One of:
+            - behavioral_analysis
+            - behavioral_analysis_german
+            - legal_support
+            - live_expanded_embedding
+            - live_expanded
+            - default
+    """
     questions_path = str(report.get("questions_path") or "")
     live_backend = str(report.get("live_backend") or "")
     if questions_path.endswith("qa_eval_questions.behavioral_analysis.captured.json"):
@@ -27,6 +42,21 @@ def infer_threshold_profile(report: dict[str, Any]) -> str:
 
 
 def _check_minimum(summary: dict[str, Any], metric: str, field: str, minimum: float) -> dict[str, Any] | None:
+    """Check if a metric field meets a minimum threshold.
+
+    Args:
+        summary: Summary dictionary containing metric data.
+        metric: Metric name to check.
+        field: Field name within the metric to check.
+        minimum: Minimum acceptable value.
+
+    Returns:
+        None if the check passes, otherwise a dictionary with:
+            - metric: The metric name
+            - field: The field name
+            - expected: Dictionary with "min" key
+            - actual: The actual value found
+    """
     value = _metric_value(summary, metric, field)
     if value is None:
         return None
@@ -41,6 +71,21 @@ def _check_minimum(summary: dict[str, Any], metric: str, field: str, minimum: fl
 
 
 def _check_maximum(summary: dict[str, Any], metric: str, field: str, maximum: float) -> dict[str, Any] | None:
+    """Check if a metric field meets a maximum threshold.
+
+    Args:
+        summary: Summary dictionary containing metric data.
+        metric: Metric name to check.
+        field: Field name within the metric to check.
+        maximum: Maximum acceptable value.
+
+    Returns:
+        None if the check passes, otherwise a dictionary with:
+            - metric: The metric name
+            - field: The field name
+            - expected: Dictionary with "max" key
+            - actual: The actual value found
+    """
     value = _metric_value(summary, metric, field)
     if value is None:
         return None
@@ -55,6 +100,20 @@ def _check_maximum(summary: dict[str, Any], metric: str, field: str, maximum: fl
 
 
 def _check_pass_all_when_scorable(summary: dict[str, Any], metric: str) -> dict[str, Any] | None:
+    """Check if all scorable items for a metric passed.
+
+    Args:
+        summary: Summary dictionary containing metric data.
+        metric: Metric name to check.
+
+    Returns:
+        None if all scorable items passed or there are no scorable items,
+        otherwise a dictionary with:
+            - metric: The metric name
+            - field: "passed"
+            - expected: Dictionary with "equals_scorable" key
+            - actual: The actual passed count
+    """
     metric_summary = _as_dict(summary.get(metric))
     scorable = int(metric_summary.get("scorable") or 0)
     if scorable <= 0:
@@ -71,6 +130,21 @@ def _check_pass_all_when_scorable(summary: dict[str, Any], metric: str) -> dict[
 
 
 def _check_average_when_scorable(summary: dict[str, Any], metric: str, minimum: float) -> dict[str, Any] | None:
+    """Check if the average of scorable items meets a minimum threshold.
+
+    Args:
+        summary: Summary dictionary containing metric data.
+        metric: Metric name to check.
+        minimum: Minimum acceptable average value.
+
+    Returns:
+        None if the check passes or there are no scorable items,
+        otherwise a dictionary with:
+            - metric: The metric name
+            - field: "average"
+            - expected: Dictionary with "min" key
+            - actual: The actual average value
+    """
     metric_summary = _as_dict(summary.get(metric))
     scorable = int(metric_summary.get("scorable") or 0)
     if scorable <= 0:
@@ -87,6 +161,19 @@ def _check_average_when_scorable(summary: dict[str, Any], metric: str, minimum: 
 
 
 def _metric_value(summary: dict[str, Any], metric: str, field: str) -> float | None:
+    """Extract a numeric metric value from a summary dictionary.
+
+    Handles special field types like "passed_ratio" and "average_when_scorable"
+    which require computation from multiple fields.
+
+    Args:
+        summary: Summary dictionary containing metric data.
+        metric: Metric name to extract.
+        field: Field name or special type within the metric.
+
+    Returns:
+        Float value if found and computable, otherwise None.
+    """
     metric_summary = _as_dict(summary.get(metric))
     if not metric_summary:
         return None
@@ -114,6 +201,23 @@ def _check_delta_when_baseline_present(
     field: str,
     min_delta: float,
 ) -> dict[str, Any] | None:
+    """Check if a metric field has improved by at least min_delta from baseline.
+
+    Args:
+        summary: Current summary dictionary containing metric data.
+        baseline_summary: Baseline summary dictionary for comparison.
+        metric: Metric name to check.
+        field: Field name within the metric to check.
+        min_delta: Minimum required improvement (current - baseline).
+
+    Returns:
+        None if the check passes, otherwise a dictionary with:
+            - metric: The metric name
+            - field: The field name
+            - expected: Dictionary with baseline, min_delta, and min_current
+            - actual: The actual current value
+            - delta: The observed delta (current - baseline)
+    """
     current_value = _metric_value(summary, metric, field)
     baseline_value = _metric_value(baseline_summary, metric, field)
     if current_value is None or baseline_value is None:
@@ -135,6 +239,17 @@ def _check_delta_when_baseline_present(
 
 
 def _derived_metric_average(results: list[dict[str, Any]], metric: str) -> dict[str, Any]:
+    """Compute the average of a metric across a list of results.
+
+    Args:
+        results: List of result dictionaries.
+        metric: Metric key to extract from each result.
+
+    Returns:
+        Dictionary with:
+            - scorable: Number of results with the metric
+            - average: Average value of the metric, rounded to 12 decimal places
+    """
     values = [float(result[metric]) for result in results if isinstance(result, dict) and result.get(metric) is not None]
     if not values:
         return {"scorable": 0, "average": 0.0}
@@ -142,6 +257,16 @@ def _derived_metric_average(results: list[dict[str, Any]], metric: str) -> dict[
 
 
 def _derive_behavioral_analysis_german_metrics(report: dict[str, Any]) -> dict[str, Any]:
+    """Derive additional metrics specific to behavioral analysis German profile.
+
+    Computes averages for slice_a metrics from the report results.
+
+    Args:
+        report: QA evaluation report dictionary with results.
+
+    Returns:
+        Dictionary of derived metric averages for behavioral analysis German.
+    """
     results = [item for item in (report.get("results") or []) if isinstance(item, dict)]
     return {
         "slice_a_exact_verified_quote_rate": _derived_metric_average(results, "slice_a_exact_verified_quote_rate"),
@@ -157,28 +282,7 @@ def _derive_behavioral_analysis_german_metrics(report: dict[str, Any]) -> dict[s
     }
 
 
-def evaluate_report_thresholds(report: dict[str, Any], *, profile: str | None = None) -> dict[str, Any]:
-    summary = _as_dict(report.get("summary"))
-    baseline_summary = _as_dict(report.get("baseline_summary"))
-    failure_taxonomy = _as_dict(report.get("failure_taxonomy"))
-    resolved_profile = profile or infer_threshold_profile(report)
-    source_mode = str(report.get("source_mode") or "")
-    source_counts = _as_dict(report.get("source_counts"))
-    metric_summary = dict(summary)
-    if resolved_profile == "behavioral_analysis_german":
-        metric_summary.update(_derive_behavioral_analysis_german_metrics(report))
-
-    if source_mode == "mixed":
-        return {
-            "profile": resolved_profile,
-            "status": "informational",
-            "failure_count": 0,
-            "failures": [],
-            "reason": "source_mode_mixed_comparison_only",
-        }
-
-    failures: list[dict[str, Any]] = []
-
+def _threshold_checks_by_profile() -> dict[str, list[dict[str, Any]]]:
     behavioral_analysis_checks = [
         {"type": "minimum", "metric": "support_uid_hit", "field": "passed", "value": 5},
         {"type": "minimum", "metric": "support_source_id_hit", "field": "scorable", "value": 6},
@@ -241,59 +345,53 @@ def evaluate_report_thresholds(report: dict[str, Any], *, profile: str | None = 
         "default": [],
     }
 
-    for check in checks_by_profile.get(resolved_profile, []):
-        failure = None
-        if check["type"] == "minimum":
-            failure = _check_minimum(metric_summary, str(check["metric"]), str(check["field"]), float(check["value"]))
-        elif check["type"] == "maximum":
-            failure = _check_maximum(metric_summary, str(check["metric"]), str(check["field"]), float(check["value"]))
-        elif check["type"] == "pass_all_when_scorable":
-            failure = _check_pass_all_when_scorable(metric_summary, str(check["metric"]))
-        elif check["type"] == "average_when_scorable":
-            failure = _check_average_when_scorable(metric_summary, str(check["metric"]), float(check["value"]))
-        elif check["type"] == "delta_when_baseline_present":
-            failure = _check_delta_when_baseline_present(
-                metric_summary,
-                baseline_summary,
-                metric=str(check["metric"]),
-                field=str(check["field"]),
-                min_delta=float(check["value"]),
-            )
-        if failure is not None:
-            failures.append(failure)
+    return checks_by_profile
 
-    if source_mode == "captured_only":
-        observed_live = int(source_counts.get("live") or 0)
-        if observed_live > 0:
-            failures.append(
-                {
-                    "metric": "source_counts",
-                    "field": "live",
-                    "expected": {"equals": 0},
-                    "actual": observed_live,
-                }
-            )
-    elif source_mode == "live_only":
-        observed_captured = int(source_counts.get("captured") or 0)
-        if observed_captured > 0:
-            failures.append(
-                {
-                    "metric": "source_counts",
-                    "field": "captured",
-                    "expected": {"equals": 0},
-                    "actual": observed_captured,
-                }
-            )
 
-    if resolved_profile == "legal_support" and int(failure_taxonomy.get("total_flagged_cases") or 0) > 0:
-        failures.append(
-            {
-                "metric": "failure_taxonomy",
-                "field": "total_flagged_cases",
-                "expected": {"max": 0},
-                "actual": int(failure_taxonomy.get("total_flagged_cases") or 0),
-            }
-        )
+def evaluate_report_thresholds(report: dict[str, Any], *, profile: str | None = None) -> dict[str, Any]:
+    """Evaluate a QA report against threshold profiles.
+
+    Checks report metrics against profile-specific thresholds to determine
+    pass/fail status. Supports multiple profiles with different threshold
+    requirements.
+
+    Args:
+        report: QA evaluation report dictionary.
+        profile: Optional profile name override. If None, inferred from report.
+
+    Returns:
+        Dictionary containing:
+            - profile: The resolved profile name
+            - status: "pass" if all checks passed, otherwise "fail"
+            - failure_count: Number of failed checks
+            - failures: List of failure dictionaries with details
+            - reason: Optional reason string (e.g., for informational status)
+    """
+    summary = _as_dict(report.get("summary"))
+    baseline_summary = _as_dict(report.get("baseline_summary"))
+    failure_taxonomy = _as_dict(report.get("failure_taxonomy"))
+    resolved_profile = profile or infer_threshold_profile(report)
+    source_mode = str(report.get("source_mode") or "")
+    source_counts = _as_dict(report.get("source_counts"))
+    metric_summary = dict(summary)
+    if resolved_profile == "behavioral_analysis_german":
+        metric_summary.update(_derive_behavioral_analysis_german_metrics(report))
+
+    if source_mode == "mixed":
+        return {
+            "profile": resolved_profile,
+            "status": "informational",
+            "failure_count": 0,
+            "failures": [],
+            "reason": "source_mode_mixed_comparison_only",
+        }
+
+    checks_by_profile = _threshold_checks_by_profile()
+    failures = _evaluate_threshold_checks(checks_by_profile.get(resolved_profile, []), metric_summary, baseline_summary)
+    failures.extend(_source_count_failures(source_mode, source_counts))
+    legal_failure = _legal_taxonomy_failure(resolved_profile, failure_taxonomy)
+    if legal_failure:
+        failures.append(legal_failure)
 
     return {
         "profile": resolved_profile,
@@ -301,3 +399,48 @@ def evaluate_report_thresholds(report: dict[str, Any], *, profile: str | None = 
         "failure_count": len(failures),
         "failures": failures,
     }
+
+
+def _evaluate_threshold_checks(checks, metric_summary, baseline_summary) -> list[dict[str, Any]]:
+    dispatch = {
+        "minimum": lambda c: _check_minimum(metric_summary, str(c["metric"]), str(c["field"]), float(c["value"])),
+        "maximum": lambda c: _check_maximum(metric_summary, str(c["metric"]), str(c["field"]), float(c["value"])),
+        "pass_all_when_scorable": lambda c: _check_pass_all_when_scorable(metric_summary, str(c["metric"])),
+        "average_when_scorable": lambda c: _check_average_when_scorable(metric_summary, str(c["metric"]), float(c["value"])),
+        "delta_when_baseline_present": lambda c: _check_delta_when_baseline_present(
+            metric_summary,
+            baseline_summary,
+            metric=str(c["metric"]),
+            field=str(c["field"]),
+            min_delta=float(c["value"]),
+        ),
+    }
+    failures = []
+    for check in checks:
+        handler = dispatch.get(check["type"])
+        failure = handler(check) if handler else None
+        if failure is not None:
+            failures.append(failure)
+    return failures
+
+
+def _source_count_failures(source_mode: str, source_counts: dict[str, Any]) -> list[dict[str, Any]]:
+    if source_mode == "captured_only":
+        return _unexpected_source_count(source_counts, "live")
+    if source_mode == "live_only":
+        return _unexpected_source_count(source_counts, "captured")
+    return []
+
+
+def _unexpected_source_count(source_counts: dict[str, Any], field: str) -> list[dict[str, Any]]:
+    observed = int(source_counts.get(field) or 0)
+    if observed <= 0:
+        return []
+    return [{"metric": "source_counts", "field": field, "expected": {"equals": 0}, "actual": observed}]
+
+
+def _legal_taxonomy_failure(profile: str, taxonomy: dict[str, Any]) -> dict[str, Any] | None:
+    flagged = int(taxonomy.get("total_flagged_cases") or 0)
+    if profile != "legal_support" or flagged <= 0:
+        return None
+    return {"metric": "failure_taxonomy", "field": "total_flagged_cases", "expected": {"max": 0}, "actual": flagged}

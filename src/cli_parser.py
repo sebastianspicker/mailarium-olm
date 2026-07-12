@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -13,6 +14,17 @@ from .validation import parse_iso_date, positive_int, score_float
 
 
 def _parse_iso_date(value: str) -> str:
+    """Parse and validate an ISO date string.
+
+    Args:
+        value: Date string to parse.
+
+    Returns:
+        Validated ISO date string.
+
+    Raises:
+        argparse.ArgumentTypeError: If the date format is invalid.
+    """
     try:
         return parse_iso_date(value)
     except ValueError as exc:
@@ -20,6 +32,17 @@ def _parse_iso_date(value: str) -> str:
 
 
 def _positive_int_arg(value: str) -> int:
+    """Parse and validate a positive integer argument.
+
+    Args:
+        value: String to parse as a positive integer.
+
+    Returns:
+        Parsed positive integer.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is not a positive integer.
+    """
     try:
         return positive_int(value)
     except ValueError as exc:
@@ -27,6 +50,17 @@ def _positive_int_arg(value: str) -> int:
 
 
 def _top_k_int(value: str) -> int:
+    """Parse and validate the top-k parameter.
+
+    Args:
+        value: String to parse as top-k value.
+
+    Returns:
+        Validated top-k integer (1-1000).
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is not a positive integer or exceeds 1000.
+    """
     parsed = _positive_int_arg(value)
     if parsed > 1000:
         raise argparse.ArgumentTypeError("Value must be <= 1000.")
@@ -34,6 +68,17 @@ def _top_k_int(value: str) -> int:
 
 
 def _browse_page_size_arg(value: str) -> int:
+    """Parse and validate the browse page size argument.
+
+    Args:
+        value: String to parse as page size.
+
+    Returns:
+        Validated page size integer (1-50).
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is not a positive integer or exceeds 50.
+    """
     parsed = _positive_int_arg(value)
     if parsed > 50:
         raise argparse.ArgumentTypeError("Value must be <= 50.")
@@ -41,6 +86,17 @@ def _browse_page_size_arg(value: str) -> int:
 
 
 def _score_float(value: str) -> float:
+    """Parse and validate a score float argument.
+
+    Args:
+        value: String to parse as a score float.
+
+    Returns:
+        Validated score float value.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value cannot be parsed as a valid score.
+    """
     try:
         return score_float(value)
     except (ValueError, TypeError) as exc:
@@ -48,6 +104,18 @@ def _score_float(value: str) -> float:
 
 
 def _case_gather_evidence_limit_arg(value: str, *, field_name: str) -> int:
+    """Parse and validate a case gather evidence limit argument.
+
+    Args:
+        value: String to parse as an integer limit.
+        field_name: Name of the field in CaseGatherEvidenceLimitsInput model.
+
+    Returns:
+        Validated limit integer.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is invalid or exceeds model constraints.
+    """
     try:
         parsed = int(value)
     except ValueError as exc:
@@ -62,10 +130,26 @@ def _case_gather_evidence_limit_arg(value: str, *, field_name: str) -> int:
 
 
 def _harvest_limit_arg(value: str) -> int:
+    """Parse and validate the harvest limit per wave argument.
+
+    Args:
+        value: String to parse as harvest limit.
+
+    Returns:
+        Validated harvest limit integer.
+    """
     return _case_gather_evidence_limit_arg(value, field_name="harvest_limit_per_wave")
 
 
 def _promote_limit_arg(value: str) -> int:
+    """Parse and validate the promote limit per wave argument.
+
+    Args:
+        value: String to parse as promote limit.
+
+    Returns:
+        Validated promote limit integer.
+    """
     return _case_gather_evidence_limit_arg(value, field_name="promote_limit_per_wave")
 
 
@@ -139,6 +223,16 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="subcommand")
 
+    _add_search_browse_export_subcommands(subparsers)
+    _add_case_subcommands(subparsers)
+    _add_evidence_subcommands(subparsers)
+    _add_analytics_subcommands(subparsers)
+    _add_training_admin_topic_subcommands(subparsers)
+
+    return parser
+
+
+def _add_search_browse_export_subcommands(subparsers: Any) -> None:
     search_parser = subparsers.add_parser(
         "search",
         help="Search emails with filters.",
@@ -205,6 +299,8 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
         help="Output file path (default: private/exports/network.graphml).",
     )
 
+
+def _add_case_subcommands(subparsers: Any) -> None:
     case_parser = subparsers.add_parser(
         "case",
         help="Exploratory and exhaustive workplace case workflows.",
@@ -227,6 +323,14 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
     _add_common_flags(case_parser)
     case_sub = case_parser.add_subparsers(dest="case_action")
 
+    _add_case_primary_actions(case_sub)
+    _add_case_gather_actions(case_sub)
+    _add_case_full_pack_action(case_sub)
+    _add_case_counsel_actions(case_sub)
+    _add_case_review_actions(case_sub)
+
+
+def _add_case_primary_actions(case_sub: Any) -> None:
     case_analyze = case_sub.add_parser(
         "analyze",
         help="Run a local non-authoritative exploratory analysis from a structured case JSON file.",
@@ -284,6 +388,8 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
         help="Include the full per-wave payloads in the JSON output instead of only the wave summaries.",
     )
 
+
+def _add_case_gather_actions(case_sub: Any) -> None:
     case_gather_evidence = case_sub.add_parser(
         "gather-evidence",
         help="Execute all waves and persist harvested evidence candidates.",
@@ -351,6 +457,8 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
         help="Narrative output language for the prompt-preflight payload.",
     )
 
+
+def _add_case_full_pack_action(case_sub: Any) -> None:
     case_full_pack = case_sub.add_parser(
         "full-pack",
         help="Compile a local non-authoritative full-pack draft from a matter prompt and materials directory.",
@@ -431,6 +539,8 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
     )
     case_full_pack.set_defaults(assume_date_to_today=True)
 
+
+def _add_case_counsel_actions(case_sub: Any) -> None:
     case_counsel_pack = case_sub.add_parser(
         "counsel-pack",
         help="Build a local non-authoritative counsel pack from a case scope file and materials directory.",
@@ -510,6 +620,8 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
         help="Optional path to the active open-tasks companion, relative to the results root or absolute.",
     )
 
+
+def _add_case_review_actions(case_sub: Any) -> None:
     case_archive_results = case_sub.add_parser(
         "archive-results",
         help="Archive superseded local result files under private/tests/results/_archive/.",
@@ -595,6 +707,8 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
     )
     case_review_snapshot.add_argument("--reviewer", default="human", help="Reviewer label for the snapshot transition.")
 
+
+def _add_evidence_subcommands(subparsers: Any) -> None:
     evidence_parser = subparsers.add_parser(
         "evidence",
         help="Evidence management, custody, and dossier.",
@@ -627,6 +741,8 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
     ev_prov = evidence_sub.add_parser("provenance", help="View email provenance.")
     ev_prov.add_argument("uid", help="Email UID.")
 
+
+def _add_analytics_subcommands(subparsers: Any) -> None:
     analytics_parser = subparsers.add_parser(
         "analytics",
         help="Statistics, contacts, volume, entities.",
@@ -665,6 +781,8 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
     analytics_sub.add_parser("heatmap", help="Show activity heatmap (hour × day-of-week).")
     analytics_sub.add_parser("response-times", help="Show average response times per replier.")
 
+
+def _add_training_admin_topic_subcommands(subparsers: Any) -> None:
     training_parser = subparsers.add_parser(
         "training",
         help="Training data and fine-tuning.",
@@ -727,5 +845,3 @@ def _build_subcommand_parser() -> argparse.ArgumentParser:
         dest="skip_clusters",
         help="Skip KMeans clustering, run topic modeling only.",
     )
-
-    return parser

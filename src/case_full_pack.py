@@ -6,6 +6,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from ._utils import _as_dict, _as_list
 from .case_analysis import build_case_analysis_payload
 from .case_material_intake import build_case_material_preflight
 from .case_operator_intake import build_manifest_from_materials_dir, matter_manifest_has_mixed_artifacts
@@ -21,14 +22,6 @@ from .mcp_models import (
 )
 
 FULL_PACK_VERSION = "1"
-
-
-def _as_dict(value: object) -> dict[str, object]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: object) -> list[object]:
-    return value if isinstance(value, list) else []
 
 
 def _deep_merge(base: dict[str, object], override: dict[str, object]) -> dict[str, object]:
@@ -68,19 +61,17 @@ def _derive_source_scope(
     has_mixed_support = has_chat_entries or has_chat_exports or matter_manifest_has_mixed_artifacts(manifest)
     override_scope = str(compiled_input.get("source_scope") or "").strip()
     if explicit_override and override_scope:
-        if override_scope == "mixed_case_file" and not has_mixed_support:
-            return "emails_and_attachments"
-        return override_scope
+        return _supported_source_scope(override_scope, has_mixed_support)
     if has_mixed_support:
         return "mixed_case_file"
-    if override_scope == "mixed_case_file":
-        return "emails_and_attachments"
     if override_scope:
-        return override_scope
+        return _supported_source_scope(override_scope, False)
     recommended_scope = str(preflight.get("recommended_source_scope") or "emails_and_attachments")
-    if recommended_scope == "mixed_case_file":
-        return "emails_and_attachments"
-    return recommended_scope
+    return _supported_source_scope(recommended_scope, False)
+
+
+def _supported_source_scope(scope: str, has_mixed_support: bool) -> str:
+    return "emails_and_attachments" if scope == "mixed_case_file" and not has_mixed_support else scope
 
 
 def _conditional_blockers(case_scope: dict[str, object]) -> list[dict[str, str]]:
@@ -186,98 +177,51 @@ def _repair_candidates(
     candidate_structures: dict[str, Any],
     draft_case_scope: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    draft = _draft_repair_candidate(field, draft_case_scope)
+    if draft:
+        return draft
+    source_key = {
+        "case_scope.target_person": "target_person_candidates",
+        "case_scope.date_from": "date_from_candidates",
+        "case_scope.date_to": "date_to_candidates",
+        "case_scope.trigger_events": "trigger_event_candidates",
+        "case_scope.alleged_adverse_actions": "adverse_action_candidates",
+        "case_scope.comparator_actors": "comparator_candidates",
+    }.get(field)
+    if not source_key:
+        return []
+    return [
+        _repair_candidate_projection(item, field)
+        for item in candidate_structures.get(source_key, [])
+        if _repair_candidate_allowed(field, item)
+    ]
+
+
+def _draft_repair_candidate(field: str, scope: dict[str, Any]) -> list[dict[str, Any]]:
+    scope_key = field.removeprefix("case_scope.")
+    value: Any = _as_dict(scope.get(scope_key)) if scope_key == "target_person" else str(scope.get(scope_key) or "").strip()
+    if not value or (scope_key == "target_person" and not value.get("name")):
+        return []
+    candidate = {"candidate_id": f"draft_case_scope.{scope_key}", "confidence": "medium", "candidate_value": value}
+    if scope_key == "target_person":
+        candidate["source"] = "draft_case_scope.target_person"
+    return [candidate]
+
+
+def _repair_candidate_allowed(field: str, item: dict[str, Any]) -> bool:
     if field == "case_scope.target_person":
-        target_person = _as_dict(draft_case_scope.get("target_person"))
-        if str(target_person.get("name") or "").strip():
-            return [
-                {
-                    "candidate_id": "draft_case_scope.target_person",
-                    "confidence": "medium",
-                    "candidate_value": target_person,
-                    "source": "draft_case_scope.target_person",
-                }
-            ]
-        return [
-            {
-                "candidate_id": item["candidate_id"],
-                "confidence": item["confidence"],
-                "candidate_value": item["candidate_value"],
-                "source_span": item.get("source_span"),
-                "source_artifact": item.get("source_artifact"),
-                "warning": item["warning"],
-            }
-            for item in candidate_structures.get("target_person_candidates", [])
-            if _as_dict(item.get("candidate_value")).get("name")
-        ]
-    if field == "case_scope.date_from":
-        value = str(draft_case_scope.get("date_from") or "").strip()
-        if value:
-            return [{"candidate_id": "draft_case_scope.date_from", "confidence": "medium", "candidate_value": value}]
-        return [
-            {
-                "candidate_id": item["candidate_id"],
-                "confidence": item["confidence"],
-                "candidate_value": item["candidate_value"],
-                "source_span": item.get("source_span"),
-                "source_artifact": item.get("source_artifact"),
-                "warning": item["warning"],
-            }
-            for item in candidate_structures.get("date_from_candidates", [])
-            if str(item.get("candidate_value") or "").strip()
-        ]
-    if field == "case_scope.date_to":
-        value = str(draft_case_scope.get("date_to") or "").strip()
-        if value:
-            return [{"candidate_id": "draft_case_scope.date_to", "confidence": "medium", "candidate_value": value}]
-        return [
-            {
-                "candidate_id": item["candidate_id"],
-                "confidence": item["confidence"],
-                "candidate_value": item["candidate_value"],
-                "source_span": item.get("source_span"),
-                "source_artifact": item.get("source_artifact"),
-                "warning": item["warning"],
-            }
-            for item in candidate_structures.get("date_to_candidates", [])
-            if str(item.get("candidate_value") or "").strip()
-        ]
-    if field == "case_scope.trigger_events":
-        return [
-            {
-                "candidate_id": item["candidate_id"],
-                "confidence": item["confidence"],
-                "candidate_value": item["candidate_value"],
-                "source_span": item["source_span"],
-                "warning": item["warning"],
-            }
-            for item in candidate_structures.get("trigger_event_candidates", [])
-            if str(item.get("confidence") or "") in {"medium", "high"}
-        ]
-    if field == "case_scope.alleged_adverse_actions":
-        return [
-            {
-                "candidate_id": item["candidate_id"],
-                "confidence": item["confidence"],
-                "candidate_value": item["candidate_value"],
-                "source_span": item["source_span"],
-                "warning": item["warning"],
-            }
-            for item in candidate_structures.get("adverse_action_candidates", [])
-            if str(item.get("confidence") or "") in {"medium", "high"}
-        ]
-    if field == "case_scope.comparator_actors":
-        return [
-            {
-                "candidate_id": item["candidate_id"],
-                "confidence": item["confidence"],
-                "candidate_value": item["candidate_value"],
-                "source_span": item["source_span"],
-                "warning": item["warning"],
-            }
-            for item in candidate_structures.get("comparator_candidates", [])
-            if str(item.get("confidence") or "") in {"medium", "high"}
-        ]
-    return []
+        return bool(_as_dict(item.get("candidate_value")).get("name"))
+    if field in {"case_scope.date_from", "case_scope.date_to"}:
+        return bool(str(item.get("candidate_value") or "").strip())
+    return str(item.get("confidence") or "") in {"medium", "high"}
+
+
+def _repair_candidate_projection(item: dict[str, Any], field: str) -> dict[str, Any]:
+    keys = ["candidate_id", "confidence", "candidate_value", "source_span"]
+    if field in {"case_scope.target_person", "case_scope.date_from", "case_scope.date_to"}:
+        keys.append("source_artifact")
+    keys.append("warning")
+    return {key: item.get(key) for key in keys}
 
 
 def _minimal_override_example(*, field: str, candidate_values: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -289,25 +233,13 @@ def _minimal_override_example(*, field: str, candidate_values: list[dict[str, An
         "case_scope.alleged_adverse_actions": {"action_type": None, "date": None},
         "case_scope.comparator_actors": {"name": None},
     }
-    if field == "case_scope.target_person":
-        value = candidate_values[0]["candidate_value"] if candidate_values else required_value_by_field[field]
-        return {"case_scope": {"target_person": value}}
-    if field == "case_scope.date_from":
-        value = candidate_values[0]["candidate_value"] if candidate_values else required_value_by_field[field]
-        return {"case_scope": {"date_from": value}}
-    if field == "case_scope.date_to":
-        value = candidate_values[0]["candidate_value"] if candidate_values else required_value_by_field[field]
-        return {"case_scope": {"date_to": value}}
-    if field == "case_scope.trigger_events":
-        value = candidate_values[0]["candidate_value"] if candidate_values else required_value_by_field[field]
-        return {"case_scope": {"trigger_events": [value]}}
-    if field == "case_scope.alleged_adverse_actions":
-        value = candidate_values[0]["candidate_value"] if candidate_values else required_value_by_field[field]
-        return {"case_scope": {"alleged_adverse_actions": [value]}}
-    if field == "case_scope.comparator_actors":
-        value = candidate_values[0]["candidate_value"] if candidate_values else required_value_by_field[field]
-        return {"case_scope": {"comparator_actors": [value]}}
-    return None
+    if field not in required_value_by_field:
+        return None
+    key = field.removeprefix("case_scope.")
+    value = candidate_values[0]["candidate_value"] if candidate_values else required_value_by_field[field]
+    if key in {"trigger_events", "alleged_adverse_actions", "comparator_actors"}:
+        value = [value]
+    return {"case_scope": {key: value}}
 
 
 def _required_fields(field: str) -> list[str]:

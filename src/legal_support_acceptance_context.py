@@ -4,157 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._utils import _as_list
 from .legal_support_acceptance_cases import acceptance_case
-
-
-def _as_list(value: object) -> list[object]:
-    return value if isinstance(value, list) else []
 
 
 def _message_candidates(case_id: str) -> list[dict[str, Any]]:
     if case_id == "retaliation_rights_assertion":
-        return [
-            {
-                "uid": "ret-1",
-                "date": "2025-03-01T09:00:00",
-                "sender_name": "employee",
-                "sender_email": "employee@example.test",
-                "subject": "Complaint to HR",
-                "snippet": "I request SBV participation and review of the accommodation denial.",
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidates": [{"behavior_id": "rights_assertion", "label": "Rights assertion"}],
-                        "counter_indicators": [],
-                        "tone_summary": "Formal assertion of rights.",
-                        "relevant_wording": [{"text": "I request SBV participation.", "source_scope": "authored_text"}],
-                        "omissions_or_process_signals": [],
-                    }
-                },
-            },
-            {
-                "uid": "ret-2",
-                "date": "2025-03-05T15:10:00",
-                "sender_name": "manager",
-                "sender_email": "manager@example.test",
-                "subject": "Project reassignment",
-                "snippet": "Effective immediately, the claimant is removed from the TD-heavy project and reporting will tighten.",
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidates": [{"behavior_id": "control_shift", "label": "Control shift"}],
-                        "counter_indicators": ["Management cites restructuring."],
-                        "tone_summary": "Directive and restrictive.",
-                        "relevant_wording": [
-                            {"text": "effective immediately", "source_scope": "authored_text"},
-                            {"text": "reporting will tighten", "source_scope": "authored_text"},
-                        ],
-                        "omissions_or_process_signals": [
-                            {"signal": "sbv_not_cced", "summary": "SBV not included despite protected-context complaint."}
-                        ],
-                    }
-                },
-            },
-        ]
+        return _retaliation_message_candidates()
     if case_id == "comparator_unequal_treatment":
-        return [
-            {
-                "uid": "cmp-1",
-                "date": "2025-02-10T08:30:00",
-                "sender_name": "manager",
-                "sender_email": "manager@example.test",
-                "subject": "Mobile work request",
-                "snippet": "Claimant must submit extra documentation before mobile work is reconsidered.",
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidates": [{"behavior_id": "selective_formality", "label": "Selective formality"}],
-                        "counter_indicators": ["Manager cites consistency."],
-                        "tone_summary": "Controlling and procedural.",
-                        "relevant_wording": [{"text": "extra documentation", "source_scope": "authored_text"}],
-                        "omissions_or_process_signals": [],
-                    }
-                },
-            },
-            {
-                "uid": "cmp-2",
-                "date": "2025-02-11T11:15:00",
-                "sender_name": "manager",
-                "sender_email": "manager@example.test",
-                "subject": "Pat mobile work approved",
-                "snippet": "Pat Vergleich may continue mobile work without further paperwork.",
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidates": [{"behavior_id": "comparator_flexibility", "label": "Comparator flexibility"}],
-                        "counter_indicators": [],
-                        "tone_summary": "Routine and permissive.",
-                        "relevant_wording": [{"text": "without further paperwork", "source_scope": "authored_text"}],
-                        "omissions_or_process_signals": [],
-                    }
-                },
-            },
-        ]
+        return _comparator_message_candidates()
     if case_id == "eingruppierung_task_withdrawal":
-        return [
-            {
-                "uid": "ing-1",
-                "date": "2025-04-02T09:00:00",
-                "sender_name": "manager",
-                "sender_email": "manager@example.test",
-                "subject": "Task redistribution",
-                "snippet": (
-                    "The claimant will no longer perform the TD-heavy coordination tasks listed in the Tätigkeitsdarstellung."
-                ),
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidates": [{"behavior_id": "task_withdrawal", "label": "Task withdrawal"}],
-                        "counter_indicators": ["Management cites project reprioritization."],
-                        "tone_summary": "Directive and explanatory.",
-                        "relevant_wording": [{"text": "will no longer perform", "source_scope": "authored_text"}],
-                        "omissions_or_process_signals": [],
-                    }
-                },
-            }
-        ]
+        return _eingruppierung_message_candidates()
     if case_id == "chronology_contradiction":
-        return [
-            {
-                "uid": "chr-1",
-                "date": "2025-03-14T14:00:00",
-                "sender_name": "manager",
-                "sender_email": "manager@example.test",
-                "subject": "Meeting follow-up",
-                "snippet": "We will circulate the written summary and include SBV before any decision is implemented.",
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidates": [{"behavior_id": "promise", "label": "Promise"}],
-                        "counter_indicators": [],
-                        "tone_summary": "Reassuring.",
-                        "relevant_wording": [{"text": "include SBV", "source_scope": "authored_text"}],
-                        "omissions_or_process_signals": [],
-                    }
-                },
-            },
-            {
-                "uid": "chr-2",
-                "date": "2025-03-18T16:00:00",
-                "sender_name": "manager",
-                "sender_email": "manager@example.test",
-                "subject": "Implementation without summary",
-                "snippet": "The process will proceed now; a written summary is not necessary.",
-                "message_findings": {
-                    "authored_text": {
-                        "behavior_candidates": [{"behavior_id": "contradiction", "label": "Contradiction"}],
-                        "counter_indicators": ["Manager cites urgency."],
-                        "tone_summary": "Defensive and compressed.",
-                        "relevant_wording": [{"text": "not necessary", "source_scope": "authored_text"}],
-                        "omissions_or_process_signals": [
-                            {
-                                "signal": "summary_missing",
-                                "summary": "Promised written summary omitted.",
-                            }
-                        ],
-                    }
-                },
-            },
-        ]
+        return _chronology_message_candidates()
     return [
         {
             "uid": "dis-1",
@@ -368,76 +230,13 @@ def _actor_graph(case_id: str) -> dict[str, Any]:
 
 def _issue_framework_rows(case_id: str) -> list[dict[str, Any]]:
     if case_id == "retaliation_rights_assertion":
-        return [
-            {
-                "issue_track": "retaliation_after_protected_event",
-                "status": "supported_by_current_record",
-                "support_reason": "Protected complaint was followed by project withdrawal and tighter controls within days.",
-                "why_not_yet_supported": [],
-                "normal_alternative_explanations": ["Restructuring context still appears in the same period."],
-                "missing_document_checklist": ["Formal restructuring records"],
-                "supporting_finding_ids": ["finding-retaliation-timing"],
-                "supporting_citation_ids": ["ret:1"],
-                "supporting_uids": ["ret-2"],
-            }
-        ]
+        return _retaliation_issue_rows()
     if case_id == "comparator_unequal_treatment":
-        return [
-            {
-                "issue_track": "disability_disadvantage",
-                "status": "supported_by_current_record",
-                "support_reason": (
-                    "Comparator messages show stricter mobile-work formality for the claimant than for Pat Vergleich."
-                ),
-                "why_not_yet_supported": [],
-                "normal_alternative_explanations": ["Role equivalence should still be confirmed."],
-                "missing_document_checklist": ["Comparator role description"],
-                "supporting_finding_ids": ["finding-comparator-delta"],
-                "supporting_citation_ids": ["cmp:1"],
-                "supporting_uids": ["cmp-1", "cmp-2"],
-            },
-            {
-                "issue_track": "participation_duty_gap",
-                "status": "partially_supported",
-                "support_reason": "Process notes suggest different participation formality around the claimant's request.",
-                "why_not_yet_supported": ["Full PR/SBV mailing lists are not yet in the record."],
-                "normal_alternative_explanations": ["Routine process variation remains possible."],
-                "missing_document_checklist": ["Full PR/SBV email trail"],
-                "supporting_finding_ids": ["finding-comparator-delta"],
-                "supporting_citation_ids": ["cmp:1"],
-                "supporting_uids": ["cmp-1"],
-            },
-        ]
+        return _comparator_issue_rows()
     if case_id == "eingruppierung_task_withdrawal":
-        return [
-            {
-                "issue_track": "eingruppierung_dispute",
-                "status": "supported_by_current_record",
-                "support_reason": (
-                    "Task-withdrawal emails and notes indicate a gap between actual work and the recorded TD baseline."
-                ),
-                "why_not_yet_supported": [],
-                "normal_alternative_explanations": ["Ordinary reprioritization is still possible."],
-                "missing_document_checklist": ["Signed updated job evaluation"],
-                "supporting_finding_ids": ["finding-eingruppierung"],
-                "supporting_citation_ids": ["ing:1"],
-                "supporting_uids": ["ing-1"],
-            }
-        ]
+        return _eingruppierung_issue_rows()
     if case_id == "chronology_contradiction":
-        return [
-            {
-                "issue_track": "participation_duty_gap",
-                "status": "partially_supported",
-                "support_reason": "Meeting and follow-up records diverge on promised SBV inclusion before implementation.",
-                "why_not_yet_supported": ["No later written summary confirming SBV inclusion was recovered."],
-                "normal_alternative_explanations": ["Urgency may explain the missing written summary."],
-                "missing_document_checklist": ["Written meeting summary", "SBV invitation record"],
-                "supporting_finding_ids": ["finding-contradiction"],
-                "supporting_citation_ids": ["chr:1"],
-                "supporting_uids": ["chr-1", "chr-2"],
-            }
-        ]
+        return _chronology_issue_rows()
     return [
         {
             "issue_track": "disability_disadvantage",
@@ -483,32 +282,8 @@ def build_fixture_answer_context(case_id: str) -> dict[str, Any]:
     overrides = case.intake_overrides["case_scope"]
     candidates = _message_candidates(case_id)
     findings = _findings(case_id)
-    timeline_events = [
-        {
-            "uid": candidate["uid"],
-            "date": candidate["date"],
-            "subject": candidate["subject"],
-            "conversation_id": f"{case_id}-conv",
-        }
-        for candidate in candidates
-    ]
-    bundle_sources = [
-        {
-            "source_id": f"email:{candidate['uid']}",
-            "source_type": "email",
-            "document_kind": "email_body",
-            "uid": candidate["uid"],
-            "actor_id": "actor-manager" if candidate["sender_email"] != "employee@example.test" else "actor-claimant",
-            "title": candidate["subject"],
-            "date": candidate["date"],
-            "snippet": candidate["snippet"],
-            "source_reliability": {"level": "high", "basis": "authored_email_body"},
-            "source_weighting": {"text_available": True, "can_corroborate_or_contradict": True},
-            "chronology_anchor": {"date": str(candidate["date"]).split("T", 1)[0]},
-            "provenance": {"evidence_handle": f"email:{candidate['uid']}"},
-        }
-        for candidate in candidates
-    ]
+    timeline_events = [_fixture_timeline_event(candidate, case_id) for candidate in candidates]
+    bundle_sources = [_fixture_bundle_source(candidate) for candidate in candidates]
     return {
         "search": {
             "top_k": 8,
@@ -583,3 +358,260 @@ def build_fixture_answer_context(case_id: str) -> dict[str, Any]:
         },
         "candidates": candidates,
     }
+
+
+def _fixture_timeline_event(candidate: dict[str, Any], case_id: str) -> dict[str, Any]:
+    return {
+        "uid": candidate["uid"],
+        "date": candidate["date"],
+        "subject": candidate["subject"],
+        "conversation_id": f"{case_id}-conv",
+    }
+
+
+def _fixture_bundle_source(candidate: dict[str, Any]) -> dict[str, Any]:
+    actor_id = "actor-manager" if candidate["sender_email"] != "employee@example.test" else "actor-claimant"
+    return {
+        "source_id": f"email:{candidate['uid']}",
+        "source_type": "email",
+        "document_kind": "email_body",
+        "uid": candidate["uid"],
+        "actor_id": actor_id,
+        "title": candidate["subject"],
+        "date": candidate["date"],
+        "snippet": candidate["snippet"],
+        "source_reliability": {"level": "high", "basis": "authored_email_body"},
+        "source_weighting": {"text_available": True, "can_corroborate_or_contradict": True},
+        "chronology_anchor": {"date": str(candidate["date"]).split("T", 1)[0]},
+        "provenance": {"evidence_handle": f"email:{candidate['uid']}"},
+    }
+
+
+def _retaliation_message_candidates() -> list[dict[str, Any]]:
+    return [
+        {
+            "uid": "ret-1",
+            "date": "2025-03-01T09:00:00",
+            "sender_name": "employee",
+            "sender_email": "employee@example.test",
+            "subject": "Complaint to HR",
+            "snippet": "I request SBV participation and review of the accommodation denial.",
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidates": [{"behavior_id": "rights_assertion", "label": "Rights assertion"}],
+                    "counter_indicators": [],
+                    "tone_summary": "Formal assertion of rights.",
+                    "relevant_wording": [{"text": "I request SBV participation.", "source_scope": "authored_text"}],
+                    "omissions_or_process_signals": [],
+                }
+            },
+        },
+        {
+            "uid": "ret-2",
+            "date": "2025-03-05T15:10:00",
+            "sender_name": "manager",
+            "sender_email": "manager@example.test",
+            "subject": "Project reassignment",
+            "snippet": "Effective immediately, the claimant is removed from the TD-heavy project and reporting will tighten.",
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidates": [{"behavior_id": "control_shift", "label": "Control shift"}],
+                    "counter_indicators": ["Management cites restructuring."],
+                    "tone_summary": "Directive and restrictive.",
+                    "relevant_wording": [
+                        {"text": "effective immediately", "source_scope": "authored_text"},
+                        {"text": "reporting will tighten", "source_scope": "authored_text"},
+                    ],
+                    "omissions_or_process_signals": [
+                        {"signal": "sbv_not_cced", "summary": "SBV not included despite protected-context complaint."}
+                    ],
+                }
+            },
+        },
+    ]
+
+
+def _comparator_message_candidates() -> list[dict[str, Any]]:
+    return [
+        {
+            "uid": "cmp-1",
+            "date": "2025-02-10T08:30:00",
+            "sender_name": "manager",
+            "sender_email": "manager@example.test",
+            "subject": "Mobile work request",
+            "snippet": "Claimant must submit extra documentation before mobile work is reconsidered.",
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidates": [{"behavior_id": "selective_formality", "label": "Selective formality"}],
+                    "counter_indicators": ["Manager cites consistency."],
+                    "tone_summary": "Controlling and procedural.",
+                    "relevant_wording": [{"text": "extra documentation", "source_scope": "authored_text"}],
+                    "omissions_or_process_signals": [],
+                }
+            },
+        },
+        {
+            "uid": "cmp-2",
+            "date": "2025-02-11T11:15:00",
+            "sender_name": "manager",
+            "sender_email": "manager@example.test",
+            "subject": "Pat mobile work approved",
+            "snippet": "Pat Vergleich may continue mobile work without further paperwork.",
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidates": [{"behavior_id": "comparator_flexibility", "label": "Comparator flexibility"}],
+                    "counter_indicators": [],
+                    "tone_summary": "Routine and permissive.",
+                    "relevant_wording": [{"text": "without further paperwork", "source_scope": "authored_text"}],
+                    "omissions_or_process_signals": [],
+                }
+            },
+        },
+    ]
+
+
+def _eingruppierung_message_candidates() -> list[dict[str, Any]]:
+    return [
+        {
+            "uid": "ing-1",
+            "date": "2025-04-02T09:00:00",
+            "sender_name": "manager",
+            "sender_email": "manager@example.test",
+            "subject": "Task redistribution",
+            "snippet": (
+                "The claimant will no longer perform the TD-heavy coordination tasks listed in the Tätigkeitsdarstellung."
+            ),
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidates": [{"behavior_id": "task_withdrawal", "label": "Task withdrawal"}],
+                    "counter_indicators": ["Management cites project reprioritization."],
+                    "tone_summary": "Directive and explanatory.",
+                    "relevant_wording": [{"text": "will no longer perform", "source_scope": "authored_text"}],
+                    "omissions_or_process_signals": [],
+                }
+            },
+        }
+    ]
+
+
+def _chronology_message_candidates() -> list[dict[str, Any]]:
+    return [
+        {
+            "uid": "chr-1",
+            "date": "2025-03-14T14:00:00",
+            "sender_name": "manager",
+            "sender_email": "manager@example.test",
+            "subject": "Meeting follow-up",
+            "snippet": "We will circulate the written summary and include SBV before any decision is implemented.",
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidates": [{"behavior_id": "promise", "label": "Promise"}],
+                    "counter_indicators": [],
+                    "tone_summary": "Reassuring.",
+                    "relevant_wording": [{"text": "include SBV", "source_scope": "authored_text"}],
+                    "omissions_or_process_signals": [],
+                }
+            },
+        },
+        {
+            "uid": "chr-2",
+            "date": "2025-03-18T16:00:00",
+            "sender_name": "manager",
+            "sender_email": "manager@example.test",
+            "subject": "Implementation without summary",
+            "snippet": "The process will proceed now; a written summary is not necessary.",
+            "message_findings": {
+                "authored_text": {
+                    "behavior_candidates": [{"behavior_id": "contradiction", "label": "Contradiction"}],
+                    "counter_indicators": ["Manager cites urgency."],
+                    "tone_summary": "Defensive and compressed.",
+                    "relevant_wording": [{"text": "not necessary", "source_scope": "authored_text"}],
+                    "omissions_or_process_signals": [
+                        {
+                            "signal": "summary_missing",
+                            "summary": "Promised written summary omitted.",
+                        }
+                    ],
+                }
+            },
+        },
+    ]
+
+
+def _retaliation_issue_rows() -> list[dict[str, Any]]:
+    return [
+        {
+            "issue_track": "retaliation_after_protected_event",
+            "status": "supported_by_current_record",
+            "support_reason": "Protected complaint was followed by project withdrawal and tighter controls within days.",
+            "why_not_yet_supported": [],
+            "normal_alternative_explanations": ["Restructuring context still appears in the same period."],
+            "missing_document_checklist": ["Formal restructuring records"],
+            "supporting_finding_ids": ["finding-retaliation-timing"],
+            "supporting_citation_ids": ["ret:1"],
+            "supporting_uids": ["ret-2"],
+        }
+    ]
+
+
+def _comparator_issue_rows() -> list[dict[str, Any]]:
+    return [
+        {
+            "issue_track": "disability_disadvantage",
+            "status": "supported_by_current_record",
+            "support_reason": (
+                "Comparator messages show stricter mobile-work formality for the claimant than for Pat Vergleich."
+            ),
+            "why_not_yet_supported": [],
+            "normal_alternative_explanations": ["Role equivalence should still be confirmed."],
+            "missing_document_checklist": ["Comparator role description"],
+            "supporting_finding_ids": ["finding-comparator-delta"],
+            "supporting_citation_ids": ["cmp:1"],
+            "supporting_uids": ["cmp-1", "cmp-2"],
+        },
+        {
+            "issue_track": "participation_duty_gap",
+            "status": "partially_supported",
+            "support_reason": "Process notes suggest different participation formality around the claimant's request.",
+            "why_not_yet_supported": ["Full PR/SBV mailing lists are not yet in the record."],
+            "normal_alternative_explanations": ["Routine process variation remains possible."],
+            "missing_document_checklist": ["Full PR/SBV email trail"],
+            "supporting_finding_ids": ["finding-comparator-delta"],
+            "supporting_citation_ids": ["cmp:1"],
+            "supporting_uids": ["cmp-1"],
+        },
+    ]
+
+
+def _eingruppierung_issue_rows() -> list[dict[str, Any]]:
+    return [
+        {
+            "issue_track": "eingruppierung_dispute",
+            "status": "supported_by_current_record",
+            "support_reason": (
+                "Task-withdrawal emails and notes indicate a gap between actual work and the recorded TD baseline."
+            ),
+            "why_not_yet_supported": [],
+            "normal_alternative_explanations": ["Ordinary reprioritization is still possible."],
+            "missing_document_checklist": ["Signed updated job evaluation"],
+            "supporting_finding_ids": ["finding-eingruppierung"],
+            "supporting_citation_ids": ["ing:1"],
+            "supporting_uids": ["ing-1"],
+        }
+    ]
+
+
+def _chronology_issue_rows() -> list[dict[str, Any]]:
+    return [
+        {
+            "issue_track": "participation_duty_gap",
+            "status": "partially_supported",
+            "support_reason": "Meeting and follow-up records diverge on promised SBV inclusion before implementation.",
+            "why_not_yet_supported": ["No later written summary confirming SBV inclusion was recovered."],
+            "normal_alternative_explanations": ["Urgency may explain the missing written summary."],
+            "missing_document_checklist": ["Written meeting summary", "SBV invitation record"],
+            "supporting_finding_ids": ["finding-contradiction"],
+            "supporting_citation_ids": ["chr:1"],
+            "supporting_uids": ["chr-1", "chr-2"],
+        }
+    ]

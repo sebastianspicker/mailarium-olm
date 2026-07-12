@@ -1,11 +1,8 @@
-# ruff: noqa: F401,F811,I001
-import queue
-import threading
-import time
+# ruff: noqa: I001
 
 import pytest
 
-from src.ingest import _SENTINEL, _EmbedPipeline, main, parse_args
+from src.ingest import _EmbedPipeline
 
 from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
 
@@ -112,7 +109,6 @@ def test_image_embedder_unavailable_marks_not_requested(monkeypatch, tmp_path):
 
 def test_embed_pipeline_error_propagation():
     """Errors in the consumer thread should be re-raised by finish()."""
-    from src.ingest import _EmbedPipeline
 
     class _BrokenEmbedder:
         def add_chunks(self, chunks, **_kw):
@@ -133,7 +129,6 @@ def test_embed_pipeline_error_propagation():
 
 def test_embed_pipeline_empty_batch():
     """Submitting empty lists should not crash."""
-    from src.ingest import _EmbedPipeline
 
     pipeline = _EmbedPipeline(
         embedder=None,

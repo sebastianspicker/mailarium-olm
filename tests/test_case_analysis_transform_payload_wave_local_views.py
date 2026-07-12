@@ -1,4 +1,5 @@
 # ruff: noqa: F401, F403
+# flake8: noqa
 from __future__ import annotations
 
 # pylint: disable=unused-wildcard-import,wildcard-import
@@ -21,148 +22,7 @@ def test_transform_case_analysis_payload_adds_wave_local_views() -> None:
     payload = _case_payload()
     payload["wave_id"] = "wave_8"
     params = EmailCaseAnalysisInput.model_validate(payload)
-    answer_payload = {
-        "search": {},
-        "case_bundle": {"bundle_id": "case-123"},
-        "multi_source_case_bundle": {
-            "summary": {"missing_source_types": []},
-            "sources": [],
-            "source_links": [],
-            "source_type_profiles": [],
-        },
-        "matter_ingestion_report": {
-            "version": "1",
-            "review_mode": "retrieval_only",
-            "completeness_status": "partial",
-            "summary": {"total_supplied_artifacts": 0},
-            "artifacts": [],
-        },
-        "power_context": {},
-        "case_patterns": {},
-        "retaliation_analysis": {},
-        "comparative_treatment": {},
-        "communication_graph": {},
-        "actor_identity_graph": {"actors": []},
-        "finding_evidence_index": {
-            "findings": [
-                {
-                    "finding_id": "finding-time system",
-                    "finding_label": "time system discrepancy",
-                    "supporting_uids": ["uid-1"],
-                    "supporting_evidence": [{"message_or_document_id": "uid-1", "citation_id": "CIT-1"}],
-                },
-                {
-                    "finding_id": "finding-bem",
-                    "finding_label": "BEM invite",
-                    "supporting_uids": ["uid-2"],
-                    "supporting_evidence": [{"message_or_document_id": "uid-2", "citation_id": "CIT-2"}],
-                },
-            ]
-        },
-        "matter_evidence_index": {
-            "rows": [
-                {
-                    "exhibit_id": "EXH-001",
-                    "source_id": "email:uid-1",
-                    "short_description": "Rebooking note",
-                    "supporting_finding_ids": ["finding-time system"],
-                    "supporting_citation_ids": ["CIT-1"],
-                    "supporting_uids": ["uid-1"],
-                    "quoted_evidence": {"original_text": "Bitte umbuchen."},
-                },
-                {
-                    "exhibit_id": "EXH-002",
-                    "source_id": "email:uid-2",
-                    "short_description": "BEM invite",
-                    "supporting_finding_ids": ["finding-bem"],
-                    "supporting_citation_ids": ["CIT-2"],
-                    "supporting_uids": ["uid-2"],
-                    "quoted_evidence": {"original_text": "BEM Einladung."},
-                },
-            ]
-        },
-        "master_chronology": {
-            "entries": [
-                {
-                    "chronology_id": "CHR-001",
-                    "date": "2025-02-01",
-                    "title": "Rebooking instruction",
-                    "source_linkage": {
-                        "source_ids": ["email:uid-1"],
-                        "supporting_uids": ["uid-1"],
-                        "supporting_citation_ids": ["CIT-1"],
-                    },
-                },
-                {
-                    "chronology_id": "CHR-002",
-                    "date": "2025-02-02",
-                    "title": "BEM invite",
-                    "source_linkage": {
-                        "source_ids": ["email:uid-2"],
-                        "supporting_uids": ["uid-2"],
-                        "supporting_citation_ids": ["CIT-2"],
-                    },
-                },
-            ]
-        },
-        "lawyer_issue_matrix": {
-            "rows": [
-                {
-                    "issue_id": "attendance_control",
-                    "title": "Attendance control",
-                    "supporting_finding_ids": ["finding-time system"],
-                    "supporting_source_ids": ["email:uid-1"],
-                    "supporting_uids": ["uid-1"],
-                    "strongest_documents": [{"source_id": "email:uid-1", "exhibit_id": "EXH-001"}],
-                },
-                {
-                    "issue_id": "bem_process",
-                    "title": "BEM process",
-                    "supporting_finding_ids": ["finding-bem"],
-                    "supporting_source_ids": ["email:uid-2"],
-                    "supporting_uids": ["uid-2"],
-                    "strongest_documents": [{"source_id": "email:uid-2", "exhibit_id": "EXH-002"}],
-                },
-            ]
-        },
-        "document_request_checklist": {
-            "groups": [
-                {
-                    "group_id": "attendance_records",
-                    "title": "Attendance records",
-                    "supporting_finding_ids": ["finding-time system"],
-                    "supporting_source_ids": ["email:uid-1"],
-                    "supporting_uids": ["uid-1"],
-                    "items": [{"request": "time system export", "supporting_uids": ["uid-1"]}],
-                },
-                {
-                    "group_id": "bem_records",
-                    "title": "BEM records",
-                    "supporting_finding_ids": ["finding-bem"],
-                    "supporting_source_ids": ["email:uid-2"],
-                    "supporting_uids": ["uid-2"],
-                    "items": [{"request": "BEM invite", "supporting_uids": ["uid-2"]}],
-                },
-            ]
-        },
-        "promise_contradiction_analysis": {
-            "promises_vs_actions": [
-                {"source_id": "email:uid-1", "supporting_uids": ["uid-1"], "summary": "Rebooking required."},
-                {"source_id": "email:uid-2", "supporting_uids": ["uid-2"], "summary": "BEM invite sent."},
-            ],
-            "omission_rows": [],
-            "contradiction_table": [],
-        },
-        "archive_harvest": {"evidence_bank": [{"uid": "uid-1"}]},
-        "evidence_table": {"row_count": 0},
-        "behavioral_strength_rubric": {"version": "1"},
-        "investigation_report": {"summary": {"section_count": 0}, "sections": {}},
-        "timeline": [
-            {"date": "2025-02-01", "summary": "time system Umbuchung wurde angeordnet."},
-            {"date": "2025-02-02", "summary": "BEM Einladung wurde versandt."},
-        ],
-        "candidates": [],
-    }
+    answer_payload = _fixture_test_transform_case_analysis_payload_adds_wave_local_views_answer_payload()
 
     transformed = transform_case_analysis_payload(answer_payload, params)
 
@@ -173,7 +33,134 @@ def test_transform_case_analysis_payload_adds_wave_local_views() -> None:
 def test_wave_local_views_ignore_unlinked_rows_even_when_text_matches_wave_terms() -> None:
     from src.wave_local_views import build_wave_local_views
 
+    payload = _fixture_test_wave_local_views_ignore_unlinked_rows_even_when_text_matches_wave_terms_payload()
+
+    wave_local = build_wave_local_views(payload, wave_id="wave_8")
+
+    assert wave_local["surface_counts"]["lawyer_issue_matrix"] == 1
+    assert wave_local["lawyer_issue_matrix"]["rows"][0]["issue_id"] == "linked_issue"
+    assert wave_local["surface_counts"]["master_chronology"] == 1
+    assert wave_local["master_chronology"]["entries"][0]["chronology_id"] == "CHR-001"
+
+
+def test_wave_local_views_differ_by_linked_archive_context() -> None:
+    from src.wave_local_views import build_wave_local_views
+
+    shared_payload = _fixture_test_wave_local_views_differ_by_linked_archive_context_shared_payload()
+
+    wave_1_payload = {**shared_payload, "archive_harvest": {"evidence_bank": [{"uid": "uid-wave-1"}]}}
+    wave_8_payload = {**shared_payload, "archive_harvest": {"evidence_bank": [{"uid": "uid-wave-8"}]}}
+
+    wave_1 = build_wave_local_views(wave_1_payload, wave_id="wave_1")
+    wave_8 = build_wave_local_views(wave_8_payload, wave_id="wave_8")
+
+    assert wave_1["lawyer_issue_matrix"]["rows"][0]["issue_id"] == "wave_1_issue"
+    assert wave_8["lawyer_issue_matrix"]["rows"][0]["issue_id"] == "wave_8_issue"
+
+
+def test_wave_local_views_seed_context_from_archive_source_ids() -> None:
+    from src.wave_local_views import build_wave_local_views
+
     payload = {
+        "archive_harvest": {"evidence_bank": [{"source_id": "meeting:uid-1:meeting_data"}]},
+        "finding_evidence_index": {"findings": []},
+        "matter_evidence_index": {
+            "rows": [
+                {
+                    "exhibit_id": "EXH-1",
+                    "source_id": "meeting:uid-1:meeting_data",
+                    "supporting_source_ids": ["meeting:uid-1:meeting_data"],
+                }
+            ]
+        },
+        "master_chronology": {"entries": []},
+        "lawyer_issue_matrix": {"rows": []},
+        "document_request_checklist": {"groups": []},
+        "promise_contradiction_analysis": {"promises_vs_actions": [], "omission_rows": [], "contradiction_table": []},
+    }
+
+    wave_local = build_wave_local_views(payload, wave_id="wave_1")
+
+    assert wave_local["surface_counts"]["matter_evidence_index"] == 1
+    assert wave_local["matter_evidence_index"]["rows"][0]["source_id"] == "meeting:uid-1:meeting_data"
+
+
+def test_wave_local_views_preserve_real_promise_contradiction_rows() -> None:
+    from src.promise_contradiction_analysis import build_promise_contradiction_analysis
+    from src.wave_local_views import build_wave_local_views
+
+    promise_analysis = _fixture_test_wave_local_views_preserve_real_promise_contradiction_rows_promise_analysis()
+
+    assert promise_analysis is not None
+    assert promise_analysis["contradiction_table"]
+
+    wave_local = build_wave_local_views(
+        {
+            "archive_harvest": {"evidence_bank": [{"uid": "uid-1", "source_id": "meeting:1"}]},
+            "finding_evidence_index": {"findings": []},
+            "matter_evidence_index": {"rows": []},
+            "master_chronology": {"entries": []},
+            "lawyer_issue_matrix": {"rows": []},
+            "document_request_checklist": {"groups": []},
+            "promise_contradiction_analysis": promise_analysis,
+        },
+        wave_id="wave_1",
+    )
+
+    assert wave_local["surface_counts"]["contradiction_rows"] == len(promise_analysis["contradiction_table"])
+    assert wave_local["promise_contradiction_analysis"]["contradiction_table"][0]["row_id"].startswith("contradiction:")
+
+
+def test_message_appendix_rows_are_sorted_by_date_then_uid() -> None:
+    params = EmailCaseAnalysisInput.model_validate(_case_payload())
+    transformed = transform_case_analysis_payload(
+        {
+            "finding_evidence_index": {"findings": []},
+            "candidates": [
+                {
+                    "uid": "uid-b",
+                    "date": "2025-03-15T10:00:00",
+                    "sender_name": "Sender B",
+                    "sender_email": "b@example.org",
+                    "subject": "Second",
+                    "snippet": "Second snippet",
+                    "language_rhetoric": {"authored_text": {"signal_count": 0, "signals": []}},
+                    "message_findings": {"authored_text": {"behavior_candidates": [], "counter_indicators": []}},
+                },
+                {
+                    "uid": "uid-a",
+                    "date": "2025-03-15T10:00:00",
+                    "sender_name": "Sender A",
+                    "sender_email": "a@example.org",
+                    "subject": "First",
+                    "snippet": "First snippet",
+                    "language_rhetoric": {"authored_text": {"signal_count": 0, "signals": []}},
+                    "message_findings": {"authored_text": {"behavior_candidates": [], "counter_indicators": []}},
+                },
+                {
+                    "uid": "uid-c",
+                    "date": "2025-03-16T10:00:00",
+                    "sender_name": "Sender C",
+                    "sender_email": "c@example.org",
+                    "subject": "Third",
+                    "snippet": "Third snippet",
+                    "language_rhetoric": {"authored_text": {"signal_count": 0, "signals": []}},
+                    "message_findings": {"authored_text": {"behavior_candidates": [], "counter_indicators": []}},
+                },
+            ],
+        },
+        params,
+    )
+    rows = transformed["message_appendix"]["rows"]
+    assert [row["uid"] for row in rows] == ["uid-a", "uid-b", "uid-c"]
+
+
+def _fixture_test_transform_case_analysis_payload_adds_wave_local_views_answer_payload():
+    return _fixture_test_transform_case_analysis_payload_adds_wave_local_views_answer_payload_part_0()
+
+
+def _fixture_test_wave_local_views_ignore_unlinked_rows_even_when_text_matches_wave_terms_payload():
+    return {
         "archive_harvest": {"evidence_bank": [{"uid": "uid-linked"}]},
         "finding_evidence_index": {
             "findings": [
@@ -247,18 +234,9 @@ def test_wave_local_views_ignore_unlinked_rows_even_when_text_matches_wave_terms
         "promise_contradiction_analysis": {"promises_vs_actions": [], "omission_rows": [], "contradiction_table": []},
     }
 
-    wave_local = build_wave_local_views(payload, wave_id="wave_8")
 
-    assert wave_local["surface_counts"]["lawyer_issue_matrix"] == 1
-    assert wave_local["lawyer_issue_matrix"]["rows"][0]["issue_id"] == "linked_issue"
-    assert wave_local["surface_counts"]["master_chronology"] == 1
-    assert wave_local["master_chronology"]["entries"][0]["chronology_id"] == "CHR-001"
-
-
-def test_wave_local_views_differ_by_linked_archive_context() -> None:
-    from src.wave_local_views import build_wave_local_views
-
-    shared_payload = {
+def _fixture_test_wave_local_views_differ_by_linked_archive_context_shared_payload():
+    return {
         "finding_evidence_index": {
             "findings": [
                 {
@@ -310,48 +288,11 @@ def test_wave_local_views_differ_by_linked_archive_context() -> None:
         "promise_contradiction_analysis": {"promises_vs_actions": [], "omission_rows": [], "contradiction_table": []},
     }
 
-    wave_1_payload = {**shared_payload, "archive_harvest": {"evidence_bank": [{"uid": "uid-wave-1"}]}}
-    wave_8_payload = {**shared_payload, "archive_harvest": {"evidence_bank": [{"uid": "uid-wave-8"}]}}
 
-    wave_1 = build_wave_local_views(wave_1_payload, wave_id="wave_1")
-    wave_8 = build_wave_local_views(wave_8_payload, wave_id="wave_8")
-
-    assert wave_1["lawyer_issue_matrix"]["rows"][0]["issue_id"] == "wave_1_issue"
-    assert wave_8["lawyer_issue_matrix"]["rows"][0]["issue_id"] == "wave_8_issue"
-
-
-def test_wave_local_views_seed_context_from_archive_source_ids() -> None:
-    from src.wave_local_views import build_wave_local_views
-
-    payload = {
-        "archive_harvest": {"evidence_bank": [{"source_id": "meeting:uid-1:meeting_data"}]},
-        "finding_evidence_index": {"findings": []},
-        "matter_evidence_index": {
-            "rows": [
-                {
-                    "exhibit_id": "EXH-1",
-                    "source_id": "meeting:uid-1:meeting_data",
-                    "supporting_source_ids": ["meeting:uid-1:meeting_data"],
-                }
-            ]
-        },
-        "master_chronology": {"entries": []},
-        "lawyer_issue_matrix": {"rows": []},
-        "document_request_checklist": {"groups": []},
-        "promise_contradiction_analysis": {"promises_vs_actions": [], "omission_rows": [], "contradiction_table": []},
-    }
-
-    wave_local = build_wave_local_views(payload, wave_id="wave_1")
-
-    assert wave_local["surface_counts"]["matter_evidence_index"] == 1
-    assert wave_local["matter_evidence_index"]["rows"][0]["source_id"] == "meeting:uid-1:meeting_data"
-
-
-def test_wave_local_views_preserve_real_promise_contradiction_rows() -> None:
+def _fixture_test_wave_local_views_preserve_real_promise_contradiction_rows_promise_analysis():
     from src.promise_contradiction_analysis import build_promise_contradiction_analysis
-    from src.wave_local_views import build_wave_local_views
 
-    promise_analysis = build_promise_contradiction_analysis(
+    return build_promise_contradiction_analysis(
         case_bundle={},
         multi_source_case_bundle={
             "sources": [
@@ -379,65 +320,155 @@ def test_wave_local_views_preserve_real_promise_contradiction_rows() -> None:
         master_chronology={},
     )
 
-    assert promise_analysis is not None
-    assert promise_analysis["contradiction_table"]
 
-    wave_local = build_wave_local_views(
-        {
-            "archive_harvest": {"evidence_bank": [{"uid": "uid-1", "source_id": "meeting:1"}]},
-            "finding_evidence_index": {"findings": []},
-            "matter_evidence_index": {"rows": []},
-            "master_chronology": {"entries": []},
-            "lawyer_issue_matrix": {"rows": []},
-            "document_request_checklist": {"groups": []},
-            "promise_contradiction_analysis": promise_analysis,
+def _fixture_test_transform_case_analysis_payload_adds_wave_local_views_answer_payload_part_0():
+    return {
+        "search": {},
+        "case_bundle": {"bundle_id": "case-123"},
+        "multi_source_case_bundle": {
+            "summary": {"missing_source_types": []},
+            "sources": [],
+            "source_links": [],
+            "source_type_profiles": [],
         },
-        wave_id="wave_1",
-    )
-
-    assert wave_local["surface_counts"]["contradiction_rows"] == len(promise_analysis["contradiction_table"])
-    assert wave_local["promise_contradiction_analysis"]["contradiction_table"][0]["row_id"].startswith("contradiction:")
-
-
-def test_message_appendix_rows_are_sorted_by_date_then_uid() -> None:
-    params = EmailCaseAnalysisInput.model_validate(_case_payload())
-    transformed = transform_case_analysis_payload(
-        {
-            "finding_evidence_index": {"findings": []},
-            "candidates": [
+        "matter_ingestion_report": {
+            "version": "1",
+            "review_mode": "retrieval_only",
+            "completeness_status": "partial",
+            "summary": {"total_supplied_artifacts": 0},
+            "artifacts": [],
+        },
+        "power_context": {},
+        "case_patterns": {},
+        "retaliation_analysis": {},
+        "comparative_treatment": {},
+        "communication_graph": {},
+        "actor_identity_graph": {"actors": []},
+        "finding_evidence_index": {
+            "findings": [
                 {
-                    "uid": "uid-b",
-                    "date": "2025-03-15T10:00:00",
-                    "sender_name": "Sender B",
-                    "sender_email": "b@example.org",
-                    "subject": "Second",
-                    "snippet": "Second snippet",
-                    "language_rhetoric": {"authored_text": {"signal_count": 0, "signals": []}},
-                    "message_findings": {"authored_text": {"behavior_candidates": [], "counter_indicators": []}},
+                    "finding_id": "finding-time system",
+                    "finding_label": "time system discrepancy",
+                    "supporting_uids": ["uid-1"],
+                    "supporting_evidence": [{"message_or_document_id": "uid-1", "citation_id": "CIT-1"}],
                 },
                 {
-                    "uid": "uid-a",
-                    "date": "2025-03-15T10:00:00",
-                    "sender_name": "Sender A",
-                    "sender_email": "a@example.org",
-                    "subject": "First",
-                    "snippet": "First snippet",
-                    "language_rhetoric": {"authored_text": {"signal_count": 0, "signals": []}},
-                    "message_findings": {"authored_text": {"behavior_candidates": [], "counter_indicators": []}},
+                    "finding_id": "finding-bem",
+                    "finding_label": "BEM invite",
+                    "supporting_uids": ["uid-2"],
+                    "supporting_evidence": [{"message_or_document_id": "uid-2", "citation_id": "CIT-2"}],
+                },
+            ]
+        },
+        "matter_evidence_index": _fixture_test_transform_case_analysis_payload_adds_wave_local_views_answer_payload_part_0_part_final(),
+        "master_chronology": _fixture_test_transform_case_analysis_payload_adds_wave_local_views_answer_payload_part_0_part_next(),
+        "lawyer_issue_matrix": {
+            "rows": [
+                {
+                    "issue_id": "attendance_control",
+                    "title": "Attendance control",
+                    "supporting_finding_ids": ["finding-time system"],
+                    "supporting_source_ids": ["email:uid-1"],
+                    "supporting_uids": ["uid-1"],
+                    "strongest_documents": [{"source_id": "email:uid-1", "exhibit_id": "EXH-001"}],
                 },
                 {
-                    "uid": "uid-c",
-                    "date": "2025-03-16T10:00:00",
-                    "sender_name": "Sender C",
-                    "sender_email": "c@example.org",
-                    "subject": "Third",
-                    "snippet": "Third snippet",
-                    "language_rhetoric": {"authored_text": {"signal_count": 0, "signals": []}},
-                    "message_findings": {"authored_text": {"behavior_candidates": [], "counter_indicators": []}},
+                    "issue_id": "bem_process",
+                    "title": "BEM process",
+                    "supporting_finding_ids": ["finding-bem"],
+                    "supporting_source_ids": ["email:uid-2"],
+                    "supporting_uids": ["uid-2"],
+                    "strongest_documents": [{"source_id": "email:uid-2", "exhibit_id": "EXH-002"}],
                 },
+            ]
+        },
+        "document_request_checklist": {
+            "groups": [
+                {
+                    "group_id": "attendance_records",
+                    "title": "Attendance records",
+                    "supporting_finding_ids": ["finding-time system"],
+                    "supporting_source_ids": ["email:uid-1"],
+                    "supporting_uids": ["uid-1"],
+                    "items": [{"request": "time system export", "supporting_uids": ["uid-1"]}],
+                },
+                {
+                    "group_id": "bem_records",
+                    "title": "BEM records",
+                    "supporting_finding_ids": ["finding-bem"],
+                    "supporting_source_ids": ["email:uid-2"],
+                    "supporting_uids": ["uid-2"],
+                    "items": [{"request": "BEM invite", "supporting_uids": ["uid-2"]}],
+                },
+            ]
+        },
+        "promise_contradiction_analysis": {
+            "promises_vs_actions": [
+                {"source_id": "email:uid-1", "supporting_uids": ["uid-1"], "summary": "Rebooking required."},
+                {"source_id": "email:uid-2", "supporting_uids": ["uid-2"], "summary": "BEM invite sent."},
             ],
+            "omission_rows": [],
+            "contradiction_table": [],
         },
-        params,
-    )
-    rows = transformed["message_appendix"]["rows"]
-    assert [row["uid"] for row in rows] == ["uid-a", "uid-b", "uid-c"]
+        "archive_harvest": {"evidence_bank": [{"uid": "uid-1"}]},
+        "evidence_table": {"row_count": 0},
+        "behavioral_strength_rubric": {"version": "1"},
+        "investigation_report": {"summary": {"section_count": 0}, "sections": {}},
+        "timeline": [
+            {"date": "2025-02-01", "summary": "time system Umbuchung wurde angeordnet."},
+            {"date": "2025-02-02", "summary": "BEM Einladung wurde versandt."},
+        ],
+        "candidates": [],
+    }
+
+
+def _fixture_test_transform_case_analysis_payload_adds_wave_local_views_answer_payload_part_0_part_next():
+    return {
+        "entries": [
+            {
+                "chronology_id": "CHR-001",
+                "date": "2025-02-01",
+                "title": "Rebooking instruction",
+                "source_linkage": {
+                    "source_ids": ["email:uid-1"],
+                    "supporting_uids": ["uid-1"],
+                    "supporting_citation_ids": ["CIT-1"],
+                },
+            },
+            {
+                "chronology_id": "CHR-002",
+                "date": "2025-02-02",
+                "title": "BEM invite",
+                "source_linkage": {
+                    "source_ids": ["email:uid-2"],
+                    "supporting_uids": ["uid-2"],
+                    "supporting_citation_ids": ["CIT-2"],
+                },
+            },
+        ]
+    }
+
+
+def _fixture_test_transform_case_analysis_payload_adds_wave_local_views_answer_payload_part_0_part_final():
+    return {
+        "rows": [
+            {
+                "exhibit_id": "EXH-001",
+                "source_id": "email:uid-1",
+                "short_description": "Rebooking note",
+                "supporting_finding_ids": ["finding-time system"],
+                "supporting_citation_ids": ["CIT-1"],
+                "supporting_uids": ["uid-1"],
+                "quoted_evidence": {"original_text": "Bitte umbuchen."},
+            },
+            {
+                "exhibit_id": "EXH-002",
+                "source_id": "email:uid-2",
+                "short_description": "BEM invite",
+                "supporting_finding_ids": ["finding-bem"],
+                "supporting_citation_ids": ["CIT-2"],
+                "supporting_uids": ["uid-2"],
+                "quoted_evidence": {"original_text": "BEM Einladung."},
+            },
+        ]
+    }

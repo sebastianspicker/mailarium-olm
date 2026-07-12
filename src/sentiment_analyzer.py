@@ -151,10 +151,7 @@ def analyze(text: str) -> SentimentResult:
                 negative_count += 1
 
     total = positive_count + negative_count
-    if total == 0:
-        score = 0.0
-    else:
-        score = (positive_count - negative_count) / total
+    score = 0.0 if total == 0 else (positive_count - negative_count) / total
 
     # Bucket into sentiment labels
     if score > 0.1:

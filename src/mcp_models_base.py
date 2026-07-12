@@ -29,22 +29,13 @@ def _resolve_local_path(v: str | None, *, field_name: str = "path") -> Path | No
     return normalize_local_path(v, field_name=field_name)
 
 
-def _validate_local_path(v: str | None, *, field_name: str = "path") -> str | None:
-    """Reject null bytes and path traversal for local paths."""
-    _resolve_local_path(v, field_name=field_name)
-    return v
-
-
 def _validate_local_read_path(v: str | None, *, field_name: str = "path") -> str | None:
-    """Reject local read paths outside configured allowlisted roots."""
-    if v is None:
-        return None
-    validate_local_read_path(v, field_name=field_name)
-    return v
+    """Validate local read path or return None. Wraps repo_paths.validate_local_read_path for Pydantic."""
+    return None if v is None else str(validate_local_read_path(v, field_name=field_name))
 
 
 def _validate_readable_file_path(v: str | None, *, field_name: str = "path") -> str | None:
-    """Validate a readable local file path."""
+    """Validate readable file path or return None."""
     if v is None:
         return None
     resolved = validate_local_read_path(v, field_name=field_name)
@@ -52,11 +43,11 @@ def _validate_readable_file_path(v: str | None, *, field_name: str = "path") -> 
         raise ValueError(f"{field_name} must resolve to an existing file")
     if not os.access(resolved, os.R_OK):
         raise ValueError(f"{field_name} must be readable")
-    return v
+    return str(resolved)
 
 
 def _validate_readable_dir_path(v: str | None, *, field_name: str = "path") -> str | None:
-    """Validate a readable local directory path."""
+    """Validate readable directory path or return None."""
     if v is None:
         return None
     resolved = validate_local_read_path(v, field_name=field_name)
@@ -64,23 +55,17 @@ def _validate_readable_dir_path(v: str | None, *, field_name: str = "path") -> s
         raise ValueError(f"{field_name} must resolve to an existing directory")
     if not os.access(resolved, os.R_OK):
         raise ValueError(f"{field_name} must be readable")
-    return v
+    return str(resolved)
 
 
 def _validate_runtime_path(v: str | None, *, field_name: str = "path") -> str | None:
-    """Validate runtime override paths with local-path safety checks."""
-    if v is None:
-        return None
-    validate_runtime_path(v, field_name=field_name)
-    return v
+    """Validate runtime path or return None. Wraps repo_paths.validate_runtime_path for Pydantic."""
+    return None if v is None else str(validate_runtime_path(v, field_name=field_name))
 
 
 def _validate_output_path(v: str | None) -> str | None:
-    """Validate output paths against allowlisted writable roots."""
-    if v is None:
-        return None
-    validate_output_path(v, field_name="Output path")
-    return v
+    """Validate output path or return None. Wraps repo_paths.validate_output_path for Pydantic."""
+    return None if v is None else str(validate_output_path(v, field_name="Output path"))
 
 
 def _coerce_json_object_input(value: object) -> object:

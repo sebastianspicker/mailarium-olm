@@ -19,7 +19,7 @@ You export your mailbox from Outlook for Mac once, index it locally, and then us
 
 Typical questions and tasks:
 
-- *"Find emails about the Q3 budget from finance@example.test"*
+- *"Find emails about the Q3 budget from `finance@example.test`"*
 - *"Summarize the thread about the server migration"*
 - *"Show me my top contacts and communication patterns"*
 - *"Export the conversation about the contract renewal as a PDF"*
@@ -66,9 +66,15 @@ Key properties:
 
 ## Current Local Checkout State
 
-This branch currently contains a broad local refactor and quality-policy update.
-The public interfaces below reflect the current local checkout, but they should
-not be treated as release-ready until the documented verification gates pass.
+This checkout is based on the completed whole-corpus local remediation branch.
+The latest full local verification on 2026-07-12 passed 3,402 tests with 4
+skipped and 92.64% coverage. Local Codacy analysis completed with no analyzer
+errors: Lizard, Prospector, Markdown, Ruff, PyLint, Bandit, Checkov, Spectral,
+and ShellCheck were clean; 66 Semgrep findings and 2 no-fix Trivy findings were
+retained only after exact invariant-backed local review.
+
+This is local evidence, not a release, push, pull request, Codacy Cloud result,
+or statement about the remote repository.
 
 Locally visible state:
 

@@ -279,7 +279,7 @@ class TestDataTypeContracts:
     def test_uid_is_string(self):
         email = _make_email()
         assert isinstance(email.uid, str)
-        assert len(email.uid) == 32  # md5 hexdigest
+        assert len(email.uid) == 64  # SHA-256 hexdigest
 
     def test_uid_stored_as_string(self):
         db = EmailDatabase(":memory:")

@@ -78,41 +78,43 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-    qa_eval_names = (
-        {name for name in requested if name in {scenario.name for scenario in CAPTURED_EVAL_SCENARIOS}} if requested else None
+    qa_eval_names, golden_names = _selected_scenario_names(
+        requested, CAPTURED_EVAL_SCENARIOS, LEGAL_SUPPORT_GOLDEN_SCENARIOS, FULL_PACK_GOLDEN_ALIAS
     )
-    golden_names = (
-        {
-            name
-            for name in requested
-            if name == FULL_PACK_GOLDEN_ALIAS or name in {scenario.name for scenario in LEGAL_SUPPORT_GOLDEN_SCENARIOS}
-        }
-        if requested
-        else None
+    outcomes = _refresh_outcomes(
+        requested=requested,
+        qa_names=qa_eval_names,
+        golden_names=golden_names,
+        docs_agent_dir=docs_agent_dir,
+        check_only=args.check,
+        refresh_qa=refresh_captured_eval_reports,
+        refresh_goldens=refresh_legal_support_goldens,
     )
-
-    outcomes = []
-    if requested is None or qa_eval_names:
-        outcomes.extend(
-            refresh_captured_eval_reports(
-                docs_agent_dir=docs_agent_dir,
-                scenario_names=qa_eval_names,
-                check_only=args.check,
-            )
-        )
-    if requested is None or golden_names:
-        outcomes.extend(
-            refresh_legal_support_goldens(
-                docs_agent_dir=docs_agent_dir,
-                scenario_names=golden_names,
-                check_only=args.check,
-            )
-        )
     print(json.dumps(outcomes, indent=2))
 
     if args.check and any(item["status"] == "updated" for item in outcomes):
         return 1
     return 0
+
+
+def _selected_scenario_names(requested, qa_scenarios, golden_scenarios, full_pack_alias):
+    if requested is None:
+        return None, None
+    qa_available = {scenario.name for scenario in qa_scenarios}
+    golden_available = {scenario.name for scenario in golden_scenarios}
+    return (
+        {name for name in requested if name in qa_available},
+        {name for name in requested if name == full_pack_alias or name in golden_available},
+    )
+
+
+def _refresh_outcomes(*, requested, qa_names, golden_names, docs_agent_dir, check_only, refresh_qa, refresh_goldens):
+    outcomes = []
+    if requested is None or qa_names:
+        outcomes.extend(refresh_qa(docs_agent_dir=docs_agent_dir, scenario_names=qa_names, check_only=check_only))
+    if requested is None or golden_names:
+        outcomes.extend(refresh_goldens(docs_agent_dir=docs_agent_dir, scenario_names=golden_names, check_only=check_only))
+    return outcomes
 
 
 if __name__ == "__main__":

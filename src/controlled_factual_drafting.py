@@ -1,10 +1,9 @@
 """Controlled factual drafting with framing preflight and allegation ceilings."""
 # pylint: disable=too-many-arguments,too-many-branches,too-many-locals,too-many-statements
 
-from __future__ import annotations
-
 from typing import Any
 
+from ._utils import _as_dict, _as_list, _compact, _first_nonempty
 from .behavioral_interpretation_policy import (
     guarded_statement_for_finding,
     interpretation_policy_payload,
@@ -19,18 +18,6 @@ _GENERIC_DRAFTING_TEXTS = {
 }
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
-
-
 def _ordered_unique(values: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -41,14 +28,6 @@ def _ordered_unique(values: list[str]) -> list[str]:
         seen.add(normalized)
         ordered.append(normalized)
     return ordered
-
-
-def _first_nonempty(*values: Any) -> str:
-    for value in values:
-        text = _compact(value)
-        if text:
-            return text
-    return ""
 
 
 def _draft_item(
@@ -65,11 +44,15 @@ def _draft_item(
         "item_id": item_id,
         "text": _compact(text),
         "claim_level": str(claim_level or ""),
-        "supporting_exhibit_ids": [str(item) for item in exhibit_ids or [] if _compact(item)],
-        "supporting_chronology_ids": [str(item) for item in chronology_ids or [] if _compact(item)],
-        "supporting_issue_ids": [str(item) for item in issue_ids or [] if _compact(item)],
-        "supporting_source_ids": [str(item) for item in source_ids or [] if _compact(item)],
+        "supporting_exhibit_ids": _clean_ids(exhibit_ids),
+        "supporting_chronology_ids": _clean_ids(chronology_ids),
+        "supporting_issue_ids": _clean_ids(issue_ids),
+        "supporting_source_ids": _clean_ids(source_ids),
     }
+
+
+def _clean_ids(values: list[str] | None) -> list[str]:
+    return [str(item) for item in values or [] if _compact(item)]
 
 
 def _ceiling_level(findings: list[dict[str, Any]]) -> tuple[str, list[str]]:
@@ -149,47 +132,54 @@ def _anchor_maps(
     evidence_rows: list[dict[str, Any]],
     chronology_entries: list[dict[str, Any]],
 ) -> dict[str, dict[str, list[str]]]:
-    source_ids_by_uid: dict[str, list[str]] = {}
-    exhibit_ids_by_uid: dict[str, list[str]] = {}
-    chronology_ids_by_uid: dict[str, list[str]] = {}
-    exhibit_ids_by_source_id: dict[str, list[str]] = {}
-    chronology_ids_by_source_id: dict[str, list[str]] = {}
-    source_ids_by_uid_guess: dict[str, list[str]] = {}
-    exhibit_ids_by_uid_guess: dict[str, list[str]] = {}
-    for row in evidence_rows:
-        source_id = _compact(row.get("source_id"))
-        exhibit_id = _compact(row.get("exhibit_id"))
-        if source_id and exhibit_id:
-            exhibit_ids_by_source_id.setdefault(source_id, []).append(exhibit_id)
-        if source_id:
-            guessed_uid_tokens = [token for token in source_id.split(":") if token.startswith("uid") or "@" in token]
-            for token in guessed_uid_tokens:
-                source_ids_by_uid_guess.setdefault(token, []).append(source_id)
-                if exhibit_id:
-                    exhibit_ids_by_uid_guess.setdefault(token, []).append(exhibit_id)
-        for uid in [str(item) for item in _as_list(row.get("supporting_uids")) if _compact(item)]:
-            if source_id:
-                source_ids_by_uid.setdefault(uid, []).append(source_id)
-            if exhibit_id:
-                exhibit_ids_by_uid.setdefault(uid, []).append(exhibit_id)
-    for row in chronology_entries:
-        chronology_id = _compact(row.get("chronology_id"))
-        uid = _compact(row.get("uid"))
-        if chronology_id and uid:
-            chronology_ids_by_uid.setdefault(uid, []).append(chronology_id)
-        source_ids = [str(item) for item in _as_list(_as_dict(row.get("source_linkage")).get("source_ids")) if _compact(item)]
-        for source_id in source_ids:
-            if chronology_id:
-                chronology_ids_by_source_id.setdefault(source_id, []).append(chronology_id)
-    return {
-        "source_ids_by_uid": {key: _ordered_unique(value) for key, value in source_ids_by_uid.items()},
-        "source_ids_by_uid_guess": {key: _ordered_unique(value) for key, value in source_ids_by_uid_guess.items()},
-        "exhibit_ids_by_uid": {key: _ordered_unique(value) for key, value in exhibit_ids_by_uid.items()},
-        "exhibit_ids_by_uid_guess": {key: _ordered_unique(value) for key, value in exhibit_ids_by_uid_guess.items()},
-        "chronology_ids_by_uid": {key: _ordered_unique(value) for key, value in chronology_ids_by_uid.items()},
-        "exhibit_ids_by_source_id": {key: _ordered_unique(value) for key, value in exhibit_ids_by_source_id.items()},
-        "chronology_ids_by_source_id": {key: _ordered_unique(value) for key, value in chronology_ids_by_source_id.items()},
+    maps: dict[str, dict[str, list[str]]] = {
+        key: {}
+        for key in (
+            "source_ids_by_uid",
+            "exhibit_ids_by_uid",
+            "chronology_ids_by_uid",
+            "exhibit_ids_by_source_id",
+            "chronology_ids_by_source_id",
+            "source_ids_by_uid_guess",
+            "exhibit_ids_by_uid_guess",
+        )
     }
+    _index_evidence_anchors(evidence_rows, maps)
+    _index_chronology_anchors(chronology_entries, maps)
+    return {key: {item_key: _ordered_unique(value) for item_key, value in mapping.items()} for key, mapping in maps.items()}
+
+
+def _index_evidence_anchors(rows, maps):
+    for row in rows:
+        source_id, exhibit_id = _compact(row.get("source_id")), _compact(row.get("exhibit_id"))
+        if source_id and exhibit_id:
+            maps["exhibit_ids_by_source_id"].setdefault(source_id, []).append(exhibit_id)
+        if source_id:
+            _index_guessed_uids(source_id, exhibit_id, maps)
+        for uid in _clean_ids(_as_list(row.get("supporting_uids"))):
+            if source_id:
+                maps["source_ids_by_uid"].setdefault(uid, []).append(source_id)
+            if exhibit_id:
+                maps["exhibit_ids_by_uid"].setdefault(uid, []).append(exhibit_id)
+
+
+def _index_guessed_uids(source_id, exhibit_id, maps):
+    for token in source_id.split(":"):
+        if not (token.startswith("uid") or "@" in token):
+            continue
+        maps["source_ids_by_uid_guess"].setdefault(token, []).append(source_id)
+        if exhibit_id:
+            maps["exhibit_ids_by_uid_guess"].setdefault(token, []).append(exhibit_id)
+
+
+def _index_chronology_anchors(rows, maps):
+    for row in rows:
+        chronology_id, uid = _compact(row.get("chronology_id")), _compact(row.get("uid"))
+        if chronology_id and uid:
+            maps["chronology_ids_by_uid"].setdefault(uid, []).append(chronology_id)
+        for source_id in _clean_ids(_as_list(_as_dict(row.get("source_linkage")).get("source_ids"))):
+            if chronology_id:
+                maps["chronology_ids_by_source_id"].setdefault(source_id, []).append(chronology_id)
 
 
 def _anchors_from_sources_and_uids(
@@ -241,18 +231,16 @@ def build_controlled_factual_drafting(
     if not isinstance(case_bundle, dict):
         return None
 
-    findings_list = [item for item in (findings or []) if isinstance(item, dict)]
-    evidence_rows = [row for row in _as_list(_as_dict(matter_evidence_index).get("rows")) if isinstance(row, dict)]
-    chronology_entries = [row for row in _as_list(_as_dict(master_chronology).get("entries")) if isinstance(row, dict)]
-    issue_rows = [row for row in _as_list(_as_dict(lawyer_issue_matrix).get("rows")) if isinstance(row, dict)]
+    findings_list = _dict_rows(findings)
+    evidence_rows = _dict_rows(_as_dict(matter_evidence_index).get("rows"))
+    chronology_entries = _dict_rows(_as_dict(master_chronology).get("entries"))
+    issue_rows = _dict_rows(_as_dict(lawyer_issue_matrix).get("rows"))
     comparator_points = shared_comparator_points(_as_dict(comparative_treatment))
     retaliation_points = shared_retaliation_points(retaliation_timeline_assessment=_as_dict(retaliation_timeline_assessment))
-    weakness_rows = [row for row in _as_list(_as_dict(skeptical_employer_review).get("weaknesses")) if isinstance(row, dict)]
-    request_groups = [row for row in _as_list(_as_dict(document_request_checklist).get("groups")) if isinstance(row, dict)]
-    contradiction_rows = [
-        row for row in _as_list(_as_dict(promise_contradiction_analysis).get("contradiction_table")) if isinstance(row, dict)
-    ]
-    if not (findings_list or evidence_rows or chronology_entries or issue_rows or request_groups):
+    weakness_rows = _dict_rows(_as_dict(skeptical_employer_review).get("weaknesses"))
+    request_groups = _dict_rows(_as_dict(document_request_checklist).get("groups"))
+    contradiction_rows = _dict_rows(_as_dict(promise_contradiction_analysis).get("contradiction_table"))
+    if not _has_drafting_input(findings_list, evidence_rows, chronology_entries, issue_rows, request_groups):
         return None
 
     anchor_maps = _anchor_maps(evidence_rows=evidence_rows, chronology_entries=chronology_entries)
@@ -262,245 +250,19 @@ def build_controlled_factual_drafting(
     target_person = _as_dict(scope.get("target_person"))
     target_label = _first_nonempty(target_person.get("name"), target_person.get("email"), "the employee")
 
-    strongest_framing = []
-    for finding in findings_list[:3]:
-        statement, claim_level, policy_reason, ambiguity_disclosures, alternatives = guarded_statement_for_finding(finding)
-        supporting_evidence = [item for item in _as_list(finding.get("supporting_evidence")) if isinstance(item, dict)]
-        source_ids = [
-            str(item)
-            for evidence in supporting_evidence
-            for item in (
-                evidence.get("source_id"),
-                evidence.get("evidence_handle"),
-            )
-            if _compact(item)
-        ]
-        uids = [
-            str(evidence.get("message_or_document_id") or "")
-            for evidence in supporting_evidence
-            if _compact(evidence.get("message_or_document_id"))
-        ]
-        anchors = _anchors_from_sources_and_uids(source_ids=source_ids, uids=uids, anchor_maps=anchor_maps)
-        strongest_framing.append(
-            {
-                "finding_id": str(finding.get("finding_id") or ""),
-                "text": statement,
-                "claim_level": claim_level,
-                "policy_reason": policy_reason,
-                "ambiguity_disclosures": ambiguity_disclosures,
-                "alternative_explanations": alternatives,
-                "supporting_source_ids": anchors["source_ids"],
-                "supporting_exhibit_ids": anchors["exhibit_ids"],
-                "supporting_chronology_ids": anchors["chronology_ids"],
-            }
-        )
-    strong_comparator_points = [
-        row for row in comparator_points if str(row.get("comparison_strength") or "") in {"strong", "moderate"}
-    ]
-    if strong_comparator_points:
-        point = strong_comparator_points[0]
-        issue_label = _first_nonempty(point.get("issue_label"), point.get("issue_id"))
-        point_summary = _first_nonempty(point.get("point_summary"))
-        counterargument = _first_nonempty(point.get("counterargument"))
-        strongest_framing.append(
-            {
-                "finding_id": str(point.get("comparator_point_id") or "comparator-point"),
-                "text": (f"Comparator evidence may support unequal-treatment review for {issue_label}: {point_summary}"),
-                "claim_level": "pattern_concern",
-                "policy_reason": (
-                    "Comparator support remains concern-level unless the overall record removes material comparability doubts."
-                ),
-                "ambiguity_disclosures": [counterargument] if counterargument else [],
-                "alternative_explanations": [counterargument] if counterargument else [],
-                **_anchors_from_sources_and_uids(
-                    source_ids=[str(item) for item in _as_list(point.get("supporting_source_ids")) if _compact(item)],
-                    uids=[str(item) for item in _as_list(point.get("evidence_uids")) if _compact(item)],
-                    anchor_maps=anchor_maps,
-                ),
-            }
-        )
-    strong_retaliation_points = [
-        row for row in retaliation_points if str(row.get("support_strength") or "") in {"moderate", "limited"}
-    ]
-    if strong_retaliation_points:
-        point = strong_retaliation_points[0]
-        point_summary = _first_nonempty(point.get("point_summary"))
-        counterargument = _first_nonempty(point.get("counterargument"))
-        strongest_framing.append(
-            {
-                "finding_id": str(point.get("retaliation_point_id") or "retaliation-point"),
-                "text": f"Retaliation timing may support further review: {point_summary}",
-                "claim_level": "pattern_concern",
-                "policy_reason": (
-                    "Retaliation timing remains concern-level unless explicit triggers, sequence, "
-                    "and counterarguments align more strongly."
-                ),
-                "ambiguity_disclosures": [counterargument] if counterargument else [],
-                "alternative_explanations": [counterargument] if counterargument else [],
-                **_anchors_from_sources_and_uids(
-                    source_ids=[str(item) for item in _as_list(point.get("supporting_source_ids")) if _compact(item)],
-                    uids=[str(item) for item in _as_list(point.get("supporting_uids")) if _compact(item)],
-                    anchor_maps=anchor_maps,
-                ),
-            }
-        )
+    strongest_framing = _build_strongest_framing(findings_list, comparator_points, retaliation_points, anchor_maps)
 
-    safest_framing: list[dict[str, Any]] = []
-    for index, row in enumerate(evidence_rows[:3], start=1):
-        text = _first_nonempty(
-            _usable_text(row.get("short_description")),
-            _usable_text(row.get("why_it_matters")),
-        )
-        if not text:
-            continue
-        safest_framing.append(
-            {
-                "framing_id": f"safest:{index}",
-                "text": f"The documented record currently shows: {text}",
-                "basis": "documented_source_or_exhibit",
-                "supporting_exhibit_ids": [str(row.get("exhibit_id") or "")] if str(row.get("exhibit_id") or "") else [],
-            }
-        )
-    if contradiction_rows:
-        row = contradiction_rows[0]
-        safest_framing.append(
-            {
-                "framing_id": "safest:contradiction",
-                "text": (
-                    "The current record contains a contradiction that requires explanation: "
-                    f"{_first_nonempty(row.get('original_statement_or_promise'), row.get('later_action'))}"
-                ),
-                "basis": "documented_record_contradiction",
-                "supporting_source_ids": [
-                    str(item) for item in [row.get("original_source_id"), row.get("later_source_id")] if _compact(item)
-                ],
-            }
-        )
+    safest_framing = _build_safest_framing(evidence_rows, contradiction_rows)
 
-    risks = [
-        {
-            "risk_id": str(row.get("weakness_id") or f"risk:{index}"),
-            "text": _first_nonempty(row.get("critique"), _as_dict(row.get("repair_guidance")).get("how_to_fix")),
-            "risk_type": str(row.get("category") or "drafting_risk"),
-        }
-        for index, row in enumerate(weakness_rows[:4], start=1)
-        if _first_nonempty(row.get("critique"), _as_dict(row.get("repair_guidance")).get("how_to_fix"))
-    ]
+    risks = _drafting_risks(weakness_rows)
 
-    established_facts = [
-        _draft_item(
-            item_id=f"draft:fact:{index}",
-            text=_first_nonempty(
-                (f"On {row.get('date') or ''}, {_usable_text(row.get('title')) or _usable_text(row.get('description'))}"),
-                _usable_text(row.get("description")),
-            ),
-            chronology_ids=[str(row.get("chronology_id") or "")] if str(row.get("chronology_id") or "") else [],
-            source_ids=[str(item) for item in _as_list(_as_dict(row.get("source_linkage")).get("source_ids"))[:2] if item],
-            claim_level="observed_fact",
-        )
-        for index, row in enumerate(chronology_entries[:3], start=1)
-        if _first_nonempty(
-            row.get("date"),
-            _usable_text(row.get("title")),
-            _usable_text(row.get("description")),
-        )
-        and str(_as_dict(row.get("source_linkage")).get("source_evidence_status") or "") not in {"scope_only", "timeline_only"}
-        and _as_list(_as_dict(row.get("source_linkage")).get("source_ids"))
-    ]
-    for index, row in enumerate(evidence_rows[:2], start=10):
-        text = _first_nonempty(_usable_text(row.get("short_description")), _usable_text(row.get("why_it_matters")))
-        if not text:
-            continue
-        established_facts.append(
-            _draft_item(
-                item_id=f"draft:fact:{index}",
-                text=text,
-                exhibit_ids=[str(row.get("exhibit_id") or "")] if str(row.get("exhibit_id") or "") else [],
-                source_ids=[str(row.get("source_id") or "")] if str(row.get("source_id") or "") else [],
-                claim_level="observed_fact",
-            )
-        )
+    established_facts = _established_facts(chronology_entries, evidence_rows)
 
-    concerns = []
-    for index, entry in enumerate(strongest_framing[:3], start=1):
-        if str(entry.get("claim_level") or "") not in {"pattern_concern", "stronger_interpretation"}:
-            continue
-        supporting_source_ids = [str(item) for item in _as_list(entry.get("supporting_source_ids")) if _compact(item)]
-        supporting_exhibit_ids = [str(item) for item in _as_list(entry.get("supporting_exhibit_ids")) if _compact(item)]
-        supporting_chronology_ids = [str(item) for item in _as_list(entry.get("supporting_chronology_ids")) if _compact(item)]
-        if not (supporting_source_ids or supporting_exhibit_ids or supporting_chronology_ids):
-            continue
-        concerns.append(
-            _draft_item(
-                item_id=f"draft:concern:{index}",
-                text=str(entry.get("text") or ""),
-                exhibit_ids=supporting_exhibit_ids,
-                chronology_ids=supporting_chronology_ids,
-                claim_level=str(entry.get("claim_level") or ""),
-                source_ids=supporting_source_ids,
-            )
-        )
+    concerns = _drafting_concerns(strongest_framing)
 
-    requests_for_clarification = []
-    for index, group in enumerate(request_groups[:3], start=1):
-        items = [item for item in _as_list(group.get("items")) if isinstance(item, dict)]
-        request_text = _first_nonempty(
-            _as_dict(items[0]).get("request") if items else "",
-            group.get("title"),
-        )
-        if not request_text:
-            continue
-        requests_for_clarification.append(
-            _draft_item(
-                item_id=f"draft:clarification:{index}",
-                text=f"Please clarify and provide the record for the following point: {request_text}",
-                source_ids=[str(group.get("group_id") or "")] if str(group.get("group_id") or "") else [],
-            )
-        )
-    for index, row in enumerate(contradiction_rows[:2], start=20):
-        contradiction_text = _first_nonempty(row.get("original_statement_or_promise"), row.get("later_action"))
-        if contradiction_text:
-            requests_for_clarification.append(
-                _draft_item(
-                    item_id=f"draft:clarification:{index}",
-                    text=f"Please explain the discrepancy in the current record regarding: {contradiction_text}",
-                    source_ids=[
-                        str(item) for item in [row.get("original_source_id"), row.get("later_source_id")] if _compact(item)
-                    ],
-                )
-            )
+    requests_for_clarification = _clarification_requests(request_groups, contradiction_rows)
 
-    formal_demands: list[dict[str, Any]] = []
-    if request_groups:
-        for index, group in enumerate(request_groups[:2], start=1):
-            group_title = _first_nonempty(group.get("title"), "relevant records")
-            if ceiling_level == "insufficient_for_adversarial_draft":
-                text = f"Please preserve all documents and native records relating to {group_title}."
-            else:
-                text = (
-                    f"Please preserve and provide the existing records relating to {group_title}, "
-                    "including native metadata and related follow-up communications."
-                )
-            formal_demands.append(
-                _draft_item(
-                    item_id=f"draft:demand:{index}",
-                    text=text,
-                    source_ids=[str(group.get("group_id") or "")] if str(group.get("group_id") or "") else [],
-                )
-            )
-    if issue_rows and ceiling_level in {"concern_only", "concern_plus_procedural_requests_only"}:
-        issue = issue_rows[0]
-        issue_title = _first_nonempty(issue.get("title"), issue.get("issue_id"), "the current issue")
-        formal_demands.append(
-            _draft_item(
-                item_id="draft:demand:issue_response",
-                text=(
-                    f"Please provide a reasoned written response addressing the factual basis for {issue_title}, "
-                    "without treating this request as a final legal conclusion."
-                ),
-                issue_ids=[str(issue.get("issue_id") or "")] if str(issue.get("issue_id") or "") else [],
-            )
-        )
+    formal_demands = _formal_demands(request_groups, ceiling_level, issue_rows)
 
     policy = interpretation_policy_payload()
     framing_preflight: dict[str, Any] = {
@@ -551,3 +313,324 @@ def build_controlled_factual_drafting(
         "framing_preflight": framing_preflight,
         "controlled_draft": controlled_draft,
     }
+
+
+def _dict_rows(value: object) -> list[dict[str, Any]]:
+    return [item for item in _as_list(value) if isinstance(item, dict)]
+
+
+def _has_drafting_input(*collections: list[dict[str, Any]]) -> bool:
+    return any(collections)
+
+
+def _build_strongest_framing(
+    findings_list: list[dict[str, Any]],
+    comparator_points: list[dict[str, Any]],
+    retaliation_points: list[dict[str, Any]],
+    anchor_maps: dict[str, dict[str, list[str]]],
+) -> list[dict[str, Any]]:
+    strongest_framing: list[dict[str, Any]] = []
+    _append_finding_framing(strongest_framing, findings_list, anchor_maps)
+    _append_comparator_framing(strongest_framing, comparator_points, anchor_maps)
+    _append_retaliation_framing(strongest_framing, retaliation_points, anchor_maps)
+
+    return strongest_framing
+
+
+def _build_safest_framing(evidence_rows: list[dict[str, Any]], contradiction_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    safest_framing: list[dict[str, Any]] = []
+    for index, row in enumerate(evidence_rows[:3], start=1):
+        text = _first_nonempty(
+            _usable_text(row.get("short_description")),
+            _usable_text(row.get("why_it_matters")),
+        )
+        if not text:
+            continue
+        safest_framing.append(
+            {
+                "framing_id": f"safest:{index}",
+                "text": f"The documented record currently shows: {text}",
+                "basis": "documented_source_or_exhibit",
+                "supporting_exhibit_ids": [str(row.get("exhibit_id") or "")] if str(row.get("exhibit_id") or "") else [],
+            }
+        )
+    if contradiction_rows:
+        row = contradiction_rows[0]
+        safest_framing.append(
+            {
+                "framing_id": "safest:contradiction",
+                "text": (
+                    "The current record contains a contradiction that requires explanation: "
+                    f"{_first_nonempty(row.get('original_statement_or_promise'), row.get('later_action'))}"
+                ),
+                "basis": "documented_record_contradiction",
+                "supporting_source_ids": [
+                    str(item) for item in [row.get("original_source_id"), row.get("later_source_id")] if _compact(item)
+                ],
+            }
+        )
+
+    return safest_framing
+
+
+def _drafting_risks(weakness_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    risks = [
+        {
+            "risk_id": str(row.get("weakness_id") or f"risk:{index}"),
+            "text": _first_nonempty(row.get("critique"), _as_dict(row.get("repair_guidance")).get("how_to_fix")),
+            "risk_type": str(row.get("category") or "drafting_risk"),
+        }
+        for index, row in enumerate(weakness_rows[:4], start=1)
+        if _first_nonempty(row.get("critique"), _as_dict(row.get("repair_guidance")).get("how_to_fix"))
+    ]
+
+    return risks
+
+
+def _established_facts(chronology_entries: list[dict[str, Any]], evidence_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    established_facts: list[dict[str, Any]] = []
+    for index, row in enumerate(chronology_entries[:3], start=1):
+        fact = _chronology_fact(index, row)
+        if fact:
+            established_facts.append(fact)
+    for index, row in enumerate(evidence_rows[:2], start=10):
+        fact = _evidence_fact(index, row)
+        if fact:
+            established_facts.append(fact)
+    return established_facts
+
+
+def _chronology_fact(index: int, row: dict[str, Any]) -> dict[str, Any] | None:
+    linkage = _as_dict(row.get("source_linkage"))
+    evidence_status = str(linkage.get("source_evidence_status") or "")
+    if evidence_status in {"scope_only", "timeline_only"} or not _as_list(linkage.get("source_ids")):
+        return None
+    if not _first_nonempty(row.get("date"), _usable_text(row.get("title")), _usable_text(row.get("description"))):
+        return None
+    title = _usable_text(row.get("title")) or _usable_text(row.get("description"))
+    return _draft_item(
+        item_id=f"draft:fact:{index}",
+        text=_first_nonempty(f"On {row.get('date') or ''}, {title}", _usable_text(row.get("description"))),
+        chronology_ids=_clean_ids([str(row.get("chronology_id") or "")]),
+        source_ids=[str(item) for item in _as_list(linkage.get("source_ids"))[:2] if item],
+        claim_level="observed_fact",
+    )
+
+
+def _evidence_fact(index: int, row: dict[str, Any]) -> dict[str, Any] | None:
+    text = _first_nonempty(_usable_text(row.get("short_description")), _usable_text(row.get("why_it_matters")))
+    if not text:
+        return None
+    return _draft_item(
+        item_id=f"draft:fact:{index}",
+        text=text,
+        exhibit_ids=_clean_ids([str(row.get("exhibit_id") or "")]),
+        source_ids=_clean_ids([str(row.get("source_id") or "")]),
+        claim_level="observed_fact",
+    )
+
+
+def _drafting_concerns(strongest_framing: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    concerns: list[dict[str, Any]] = []
+    for index, entry in enumerate(strongest_framing[:3], start=1):
+        concern = _drafting_concern(index, entry)
+        if concern:
+            concerns.append(concern)
+    return concerns
+
+
+def _drafting_concern(index: int, entry: dict[str, Any]) -> dict[str, Any] | None:
+    claim_level = str(entry.get("claim_level") or "")
+    if claim_level not in {"pattern_concern", "stronger_interpretation"}:
+        return None
+    source_ids = _clean_ids(_as_list(entry.get("supporting_source_ids")))
+    exhibit_ids = _clean_ids(_as_list(entry.get("supporting_exhibit_ids")))
+    chronology_ids = _clean_ids(_as_list(entry.get("supporting_chronology_ids")))
+    if not source_ids and not exhibit_ids and not chronology_ids:
+        return None
+    return _draft_item(
+        item_id=f"draft:concern:{index}",
+        text=str(entry.get("text") or ""),
+        exhibit_ids=exhibit_ids,
+        chronology_ids=chronology_ids,
+        claim_level=claim_level,
+        source_ids=source_ids,
+    )
+
+
+def _clarification_requests(
+    request_groups: list[dict[str, Any]], contradiction_rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    requests: list[dict[str, Any]] = []
+    for index, group in enumerate(request_groups[:3], start=1):
+        request = _group_clarification(index, group)
+        if request:
+            requests.append(request)
+    for index, row in enumerate(contradiction_rows[:2], start=20):
+        request = _contradiction_clarification(index, row)
+        if request:
+            requests.append(request)
+    return requests
+
+
+def _group_clarification(index: int, group: dict[str, Any]) -> dict[str, Any] | None:
+    items = _dict_rows(group.get("items"))
+    request_text = _first_nonempty(_as_dict(items[0]).get("request") if items else "", group.get("title"))
+    if not request_text:
+        return None
+    return _draft_item(
+        item_id=f"draft:clarification:{index}",
+        text=f"Please clarify and provide the record for the following point: {request_text}",
+        source_ids=_clean_ids([str(group.get("group_id") or "")]),
+    )
+
+
+def _contradiction_clarification(index: int, row: dict[str, Any]) -> dict[str, Any] | None:
+    text = _first_nonempty(row.get("original_statement_or_promise"), row.get("later_action"))
+    if not text:
+        return None
+    return _draft_item(
+        item_id=f"draft:clarification:{index}",
+        text=f"Please explain the discrepancy in the current record regarding: {text}",
+        source_ids=_clean_ids([str(row.get("original_source_id") or ""), str(row.get("later_source_id") or "")]),
+    )
+
+
+def _formal_demands(
+    request_groups: list[dict[str, Any]], ceiling_level: str, issue_rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    formal_demands: list[dict[str, Any]] = []
+    if request_groups:
+        for index, group in enumerate(request_groups[:2], start=1):
+            group_title = _first_nonempty(group.get("title"), "relevant records")
+            if ceiling_level == "insufficient_for_adversarial_draft":
+                text = f"Please preserve all documents and native records relating to {group_title}."
+            else:
+                text = (
+                    f"Please preserve and provide the existing records relating to {group_title}, "
+                    "including native metadata and related follow-up communications."
+                )
+            formal_demands.append(
+                _draft_item(
+                    item_id=f"draft:demand:{index}",
+                    text=text,
+                    source_ids=[str(group.get("group_id") or "")] if str(group.get("group_id") or "") else [],
+                )
+            )
+    if issue_rows and ceiling_level in {"concern_only", "concern_plus_procedural_requests_only"}:
+        issue = issue_rows[0]
+        issue_title = _first_nonempty(issue.get("title"), issue.get("issue_id"), "the current issue")
+        formal_demands.append(
+            _draft_item(
+                item_id="draft:demand:issue_response",
+                text=(
+                    f"Please provide a reasoned written response addressing the factual basis for {issue_title}, "
+                    "without treating this request as a final legal conclusion."
+                ),
+                issue_ids=[str(issue.get("issue_id") or "")] if str(issue.get("issue_id") or "") else [],
+            )
+        )
+
+    return formal_demands
+
+
+def _append_finding_framing(
+    strongest_framing: list[dict[str, Any]],
+    findings_list: list[dict[str, Any]],
+    anchor_maps: dict[str, dict[str, list[str]]],
+) -> None:
+    for finding in findings_list[:3]:
+        statement, claim_level, policy_reason, ambiguity_disclosures, alternatives = guarded_statement_for_finding(finding)
+        supporting_evidence = [item for item in _as_list(finding.get("supporting_evidence")) if isinstance(item, dict)]
+        source_ids = [
+            str(item)
+            for evidence in supporting_evidence
+            for item in (
+                evidence.get("source_id"),
+                evidence.get("evidence_handle"),
+            )
+            if _compact(item)
+        ]
+        uids = [
+            str(evidence.get("message_or_document_id") or "")
+            for evidence in supporting_evidence
+            if _compact(evidence.get("message_or_document_id"))
+        ]
+        anchors = _anchors_from_sources_and_uids(source_ids=source_ids, uids=uids, anchor_maps=anchor_maps)
+        strongest_framing.append(
+            {
+                "finding_id": str(finding.get("finding_id") or ""),
+                "text": statement,
+                "claim_level": claim_level,
+                "policy_reason": policy_reason,
+                "ambiguity_disclosures": ambiguity_disclosures,
+                "alternative_explanations": alternatives,
+                "supporting_source_ids": anchors["source_ids"],
+                "supporting_exhibit_ids": anchors["exhibit_ids"],
+                "supporting_chronology_ids": anchors["chronology_ids"],
+            }
+        )
+
+
+def _append_comparator_framing(
+    strongest_framing: list[dict[str, Any]],
+    comparator_points: list[dict[str, Any]],
+    anchor_maps: dict[str, dict[str, list[str]]],
+) -> None:
+    strong_comparator_points = [
+        row for row in comparator_points if str(row.get("comparison_strength") or "") in {"strong", "moderate"}
+    ]
+    if strong_comparator_points:
+        point = strong_comparator_points[0]
+        issue_label = _first_nonempty(point.get("issue_label"), point.get("issue_id"))
+        point_summary = _first_nonempty(point.get("point_summary"))
+        counterargument = _first_nonempty(point.get("counterargument"))
+        strongest_framing.append(
+            {
+                "finding_id": str(point.get("comparator_point_id") or "comparator-point"),
+                "text": (f"Comparator evidence may support unequal-treatment review for {issue_label}: {point_summary}"),
+                "claim_level": "pattern_concern",
+                "policy_reason": (
+                    "Comparator support remains concern-level unless the overall record removes material comparability doubts."
+                ),
+                "ambiguity_disclosures": [counterargument] if counterargument else [],
+                "alternative_explanations": [counterargument] if counterargument else [],
+                **_anchors_from_sources_and_uids(
+                    source_ids=[str(item) for item in _as_list(point.get("supporting_source_ids")) if _compact(item)],
+                    uids=[str(item) for item in _as_list(point.get("evidence_uids")) if _compact(item)],
+                    anchor_maps=anchor_maps,
+                ),
+            }
+        )
+
+
+def _append_retaliation_framing(
+    strongest_framing: list[dict[str, Any]],
+    retaliation_points: list[dict[str, Any]],
+    anchor_maps: dict[str, dict[str, list[str]]],
+) -> None:
+    strong_retaliation_points = [
+        row for row in retaliation_points if str(row.get("support_strength") or "") in {"moderate", "limited"}
+    ]
+    if strong_retaliation_points:
+        point = strong_retaliation_points[0]
+        point_summary = _first_nonempty(point.get("point_summary"))
+        counterargument = _first_nonempty(point.get("counterargument"))
+        strongest_framing.append(
+            {
+                "finding_id": str(point.get("retaliation_point_id") or "retaliation-point"),
+                "text": f"Retaliation timing may support further review: {point_summary}",
+                "claim_level": "pattern_concern",
+                "policy_reason": (
+                    "Retaliation timing remains concern-level unless explicit triggers, sequence, "
+                    "and counterarguments align more strongly."
+                ),
+                "ambiguity_disclosures": [counterargument] if counterargument else [],
+                "alternative_explanations": [counterargument] if counterargument else [],
+                **_anchors_from_sources_and_uids(
+                    source_ids=[str(item) for item in _as_list(point.get("supporting_source_ids")) if _compact(item)],
+                    uids=[str(item) for item in _as_list(point.get("supporting_uids")) if _compact(item)],
+                    anchor_maps=anchor_maps,
+                ),
+            }
+        )

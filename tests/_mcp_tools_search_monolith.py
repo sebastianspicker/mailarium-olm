@@ -1,3 +1,4 @@
+# flake8: noqa
 """Compatibility collector for split MCP search/runtime cases."""
 # pylint: disable=unused-wildcard-import,wildcard-import
 

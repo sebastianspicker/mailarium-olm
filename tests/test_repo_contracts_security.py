@@ -72,6 +72,10 @@ def test_gitignore_excludes_private_local_matter_workspaces():
     assert ".streamlit/secrets.toml" in gitignore
     assert "data/*.pst" in gitignore
     assert "data/*.mbox" in gitignore
+    assert ".codegraph/" in gitignore
+    assert ".serena/" in gitignore
+    assert "/AUDIT_REPORT_*.md" in gitignore
+    assert "docs/agent/Documentation.md" in gitignore
 
 
 def test_internal_operator_workspace_artifacts_are_not_checked_in():
@@ -101,6 +105,13 @@ def test_internal_operator_workspace_artifacts_are_not_checked_in():
     for relative_path in local_only_paths:
         assert not _is_tracked(relative_path), relative_path
 
+    removed_public_paths = [
+        "docs/agent/Documentation.md",
+        "AUDIT_REPORT_2026-06-26.md",
+    ]
+    for relative_path in removed_public_paths:
+        assert not (REPO_ROOT / relative_path).exists(), relative_path
+
 
 def test_publication_surface_is_synthetic_and_private_artifact_free():
     completed = _run_privacy_scan()
@@ -124,7 +135,6 @@ def test_topology_inventory_targets_a_tracked_audit_surface():
 def test_live_autonomous_execution_docs_exist():
     required_paths = [
         "docs/agent/Plan.md",
-        "docs/agent/Documentation.md",
         "docs/agent/runtime_path_remediation_plan.md",
         "docs/agent/email_matter_analysis_single_source_of_truth.md",
         "docs/agent/question_execution_companion.md",

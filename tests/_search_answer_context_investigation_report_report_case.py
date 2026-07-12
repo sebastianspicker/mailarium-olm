@@ -12,95 +12,82 @@ from src.mcp_models import (
 )
 
 
-@pytest.mark.asyncio
-async def test_email_answer_context_emits_investigation_report(monkeypatch):
+class _InvestigationRetriever:
+    def search_filtered(self, query, top_k=10, **kwargs):
+        return [
+            SimpleNamespace(
+                metadata={
+                    "uid": "uid-case-11",
+                    "subject": "Re: Complaint follow-up",
+                    "sender_email": "manager@example.com",
+                    "sender_name": "Morgan Manager",
+                    "date": "2026-02-12T10:00:00",
+                    "conversation_id": "conv-case-11",
+                },
+                chunk_id="chunk-case-11",
+                text="For the record, you failed to provide the figures by end of day.",
+                score=0.95,
+            )
+        ]
+
+
+class _InvestigationDB:
+    conn = None
+
+    def get_emails_full_batch(self, uids):
+        return {
+            "uid-case-11": {
+                "uid": "uid-case-11",
+                "body_text": "For the record, you failed to provide the figures by end of day.",
+                "normalized_body_source": "body_text",
+                "to": ["Alex Example <alex@example.com>"],
+                "cc": [],
+                "bcc": [],
+                "conversation_id": "conv-case-11",
+            }
+        }
+
+    def get_thread_emails(self, conversation_id):
+        return [{"uid": "uid-case-11", "sender_email": "manager@example.com", "sender_name": "Morgan Manager"}]
+
+
+class _InvestigationDeps:
+    DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
+
+    @staticmethod
+    def get_retriever():
+        return _InvestigationRetriever()
+
+    @staticmethod
+    def get_email_db():
+        return _InvestigationDB()
+
+    @staticmethod
+    async def offload(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    @staticmethod
+    def sanitize(text: str) -> str:
+        return text
+
+    @staticmethod
+    def tool_annotations(title: str):
+        return {"title": title}
+
+    write_tool_annotations = tool_annotations
+    idempotent_write_annotations = tool_annotations
+
+
+async def _investigation_report_payload(monkeypatch) -> dict:
     import src.config as config_mod
     import src.tools.search as search_mod
     import src.tools.search_answer_context as answer_context_mod
 
-    class DummyRetriever:
-        def search_filtered(self, query, top_k=10, **kwargs):
-            return [
-                SimpleNamespace(
-                    metadata={
-                        "uid": "uid-case-11",
-                        "subject": "Re: Complaint follow-up",
-                        "sender_email": "manager@example.com",
-                        "sender_name": "Morgan Manager",
-                        "date": "2026-02-12T10:00:00",
-                        "conversation_id": "conv-case-11",
-                    },
-                    chunk_id="chunk-case-11",
-                    text="For the record, you failed to provide the figures by end of day.",
-                    score=0.95,
-                )
-            ]
-
-    class DummyDB:
-        conn = None
-
-        def get_emails_full_batch(self, uids):
-            return {
-                "uid-case-11": {
-                    "uid": "uid-case-11",
-                    "body_text": "For the record, you failed to provide the figures by end of day.",
-                    "normalized_body_source": "body_text",
-                    "to": ["Alex Example <alex@example.com>"],
-                    "cc": [],
-                    "bcc": [],
-                    "conversation_id": "conv-case-11",
-                }
-            }
-
-        def get_thread_emails(self, conversation_id):
-            return [
-                {
-                    "uid": "uid-case-11",
-                    "sender_email": "manager@example.com",
-                    "sender_name": "Morgan Manager",
-                }
-            ]
-
-    class DummyDeps:
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _InvestigationDeps)
     monkeypatch.setattr(
         config_mod,
         "get_settings",
-        lambda: SimpleNamespace(
-            mcp_max_search_results=10,
-            mcp_max_json_response_chars=200000,
-            mcp_model_profile="test",
-        ),
+        lambda: SimpleNamespace(mcp_max_search_results=10, mcp_max_json_response_chars=200000, mcp_model_profile="test"),
     )
     monkeypatch.setattr(
         answer_context_mod,
@@ -113,7 +100,6 @@ async def test_email_answer_context_emits_investigation_report(monkeypatch):
             }
         ],
     )
-
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(
             question="Prepare an investigation-style report for this case.",
@@ -126,7 +112,12 @@ async def test_email_answer_context_emits_investigation_report(monkeypatch):
             ),
         )
     )
-    data = json.loads(payload)
+    return json.loads(payload)
+
+
+@pytest.mark.asyncio
+async def test_email_answer_context_emits_investigation_report(monkeypatch):
+    data = await _investigation_report_payload(monkeypatch)
 
     report = data["investigation_report"]
     assert report["version"] == "1"

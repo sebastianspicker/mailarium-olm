@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.db_evidence_queries import evidence_stats_impl, evidence_timeline_impl, list_evidence_impl, search_evidence_impl
 from src.email_db import EmailDatabase
 from tests._evidence_cases import make_email, seed_evidence
 
@@ -219,4 +220,33 @@ def test_evidence_timeline_offset_beyond_results():
 
     items = db.evidence_timeline(offset=100)
     assert items == []
+    db.close()
+
+
+def test_dynamic_evidence_queries_bind_all_untrusted_values():
+    db = EmailDatabase(":memory:")
+    seed_evidence(db)
+    sentinel = "x' OR 1=1 --"
+    statements: list[tuple[str, tuple[object, ...]]] = []
+    real_connection = db.conn
+
+    class RecordingConnection:
+        def execute(self, statement, parameters=()):
+            statements.append((statement, tuple(parameters)))
+            return real_connection.execute(statement, parameters)
+
+    class QueryDb:
+        conn = RecordingConnection()
+
+    query_db = QueryDb()
+    assert list_evidence_impl(query_db, category=sentinel, email_uid=sentinel)["total"] == 0
+    assert evidence_stats_impl(query_db, category=sentinel)["total"] == 0
+    assert search_evidence_impl(query_db, query=sentinel, category=sentinel)["total"] == 0
+    assert evidence_timeline_impl(query_db, category=sentinel) == []
+
+    assert statements
+    assert all(sentinel not in statement for statement, _parameters in statements)
+    assert all("?" in statement for statement, _parameters in statements)
+    assert any(sentinel in parameters for _statement, parameters in statements)
+    assert real_connection.execute("SELECT COUNT(*) FROM evidence_items").fetchone()[0] == 4
     db.close()

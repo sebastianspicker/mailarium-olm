@@ -10,8 +10,7 @@ from typing import Any
 
 from .db_schema import _escape_like
 
-_WS_RE = re.compile(r"[\s\xa0]+")
-_HYPHENATED_BREAK_RE = re.compile(r"(?<=\w)[\-‐‑‒–]\s*\n\s*(?=\w)")
+_WS_RE = re.compile(r"\s+")
 _PUNCT_TRANSLATION = str.maketrans(
     {
         "“": '"',
@@ -28,7 +27,6 @@ _PUNCT_TRANSLATION = str.maketrans(
         "…": "...",
     }
 )
-_NON_ALNUM_RE = re.compile(r"[^0-9a-z]+")
 _QUOTE_VERIFICATION_FIELDS = ("forensic_body_text", "body_text", "raw_body_text")
 _GERMAN_TRANSLITERATION = str.maketrans(
     {
@@ -67,13 +65,49 @@ def _normalize_ws(text: str) -> str:
 
 def _normalize_alnum(text: str) -> str:
     """Return an alphanumeric-only fallback for OCR/punctuation drift."""
-    return _NON_ALNUM_RE.sub("", _normalize_ws(text))
+    return "".join(character for character in _normalize_ws(text) if character.isascii() and character.isalnum())
+
+
+def _remove_hyphenated_line_breaks(text: str) -> str:
+    """Join word fragments separated by a hyphen and optional line whitespace."""
+    hyphens = {"-", "‐", "‑", "‒", "–"}
+    output: list[str] = []
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if character not in hyphens:
+            output.append(character)
+            index += 1
+            continue
+        join_target = _hyphen_join_target(text, index, output)
+        if join_target is None:
+            output.append(character)
+            index += 1
+            continue
+        index = join_target
+    return "".join(output)
+
+
+def _hyphen_join_target(text: str, index: int, output: list[str]) -> int | None:
+    if not output or not output[-1].isalnum():
+        return None
+    cursor = index + 1
+    while cursor < len(text) and text[cursor] in " \t":
+        cursor += 1
+    if cursor >= len(text) or text[cursor] not in "\r\n":
+        return None
+    if text[cursor : cursor + 2] == "\r\n":
+        cursor += 1
+    cursor += 1
+    while cursor < len(text) and text[cursor] in " \t":
+        cursor += 1
+    return cursor if cursor < len(text) and text[cursor].isalnum() else None
 
 
 def _normalize_near_exact(text: str) -> str:
     """Return conservative German/OCR-tolerant normalization for near-exact verification."""
     normalized = unicodedata.normalize("NFKC", text).translate(_PUNCT_TRANSLATION)
-    normalized = _HYPHENATED_BREAK_RE.sub("", normalized)
+    normalized = _remove_hyphenated_line_breaks(normalized)
     normalized = normalized.replace("ﬁ", "fi").replace("ﬂ", "fl")
     normalized = normalized.casefold().translate(_GERMAN_TRANSLITERATION)
     normalized = _WS_RE.sub(" ", normalized.strip())
@@ -81,7 +115,7 @@ def _normalize_near_exact(text: str) -> str:
 
 
 def _normalize_near_exact_alnum(text: str) -> str:
-    return _NON_ALNUM_RE.sub("", _normalize_near_exact(text))
+    return "".join(character for character in _normalize_near_exact(text) if character.isascii() and character.isalnum())
 
 
 def _match_state_against_surface(quote: str, surface_text: str) -> str:
@@ -119,86 +153,107 @@ def _surface_rows_for_evidence(
     candidate_kind: str,
     locator: dict[str, Any],
 ) -> list[tuple[str, str]]:
-    surfaces: list[tuple[str, str]] = []
-    conn = db.conn
+    surfaces = [
+        *_body_surfaces_for_evidence(db, email_uid, candidate_kind, locator),
+        *_attachment_surfaces_for_evidence(db, email_uid, candidate_kind, locator),
+        *_segment_surfaces_for_evidence(db, email_uid, candidate_kind, locator),
+    ]
+    return _deduped_evidence_surfaces(surfaces)
 
-    body_row = conn.execute(
+
+def _body_surfaces_for_evidence(db: Any, email_uid: str, candidate_kind: str, locator: dict[str, Any]) -> list[tuple[str, str]]:
+    body_row = db.conn.execute(
         "SELECT forensic_body_text, body_text, raw_body_text, subject FROM emails WHERE uid = ?",
         (email_uid,),
     ).fetchone()
-    if body_row:
-        body_render_source = str(locator.get("body_render_source") or "").strip()
-        if candidate_kind != "attachment":
-            if body_render_source == "forensic_body_text":
-                surfaces.append(("forensic_body_text", str(body_row["forensic_body_text"] or "")))
-            elif body_render_source == "raw_body_text":
-                surfaces.append(("raw_body_text", str(body_row["raw_body_text"] or "")))
-            elif body_render_source == "body_text":
-                surfaces.append(("body_text", str(body_row["body_text"] or "")))
-            else:
-                for field in (*_QUOTE_VERIFICATION_FIELDS, "subject"):
-                    surfaces.append((field, str(body_row[field] or "")))
+    if body_row is None or candidate_kind == "attachment":
+        return []
+    render_source = str(locator.get("body_render_source") or "").strip()
+    if render_source in {*_QUOTE_VERIFICATION_FIELDS}:
+        return [(render_source, str(body_row[render_source] or ""))]
+    return [(field, str(body_row[field] or "")) for field in (*_QUOTE_VERIFICATION_FIELDS, "subject")]
 
-    if candidate_kind == "attachment":
-        rows = conn.execute(
-            """SELECT name, attachment_id, content_sha256, extracted_text, text_preview
-                   FROM attachments
-                  WHERE email_uid = ?""",
-            (email_uid,),
-        ).fetchall()
-        target_attachment_id = str(locator.get("attachment_id") or "").strip().casefold()
-        target_content_sha = str(locator.get("content_sha256") or "").strip().casefold()
-        target_filename = str(locator.get("attachment_filename") or "").strip().casefold()
-        filtered: list[Any] = []
-        for row in rows:
-            attachment_id = str(row["attachment_id"] or "").strip().casefold()
-            content_sha = str(row["content_sha256"] or "").strip().casefold()
-            filename = str(row["name"] or "").strip().casefold()
-            if target_attachment_id and attachment_id and attachment_id != target_attachment_id:
-                continue
-            if target_content_sha and content_sha and content_sha != target_content_sha:
-                continue
-            if target_filename and filename and filename != target_filename:
-                continue
-            filtered.append(row)
-        attachment_rows = filtered if filtered else ([] if (target_attachment_id or target_content_sha) else rows)
-        for row in attachment_rows:
-            text_value = str(row["extracted_text"] or row["text_preview"] or "")
-            if text_value.strip():
-                surfaces.append(("attachment", text_value))
 
-    segment_rows = conn.execute(
+def _attachment_surfaces_for_evidence(
+    db: Any, email_uid: str, candidate_kind: str, locator: dict[str, Any]
+) -> list[tuple[str, str]]:
+    if candidate_kind != "attachment":
+        return []
+    rows = db.conn.execute(
+        """SELECT name, attachment_id, content_sha256, extracted_text, text_preview
+               FROM attachments WHERE email_uid = ?""",
+        (email_uid,),
+    ).fetchall()
+    targets = _attachment_surface_targets(locator)
+    candidates = _attachment_surface_candidates(rows, targets)
+    return _attachment_text_surfaces(candidates)
+
+
+def _attachment_surface_targets(locator: dict[str, Any]) -> dict[str, str]:
+    return {
+        "attachment_id": str(locator.get("attachment_id") or "").strip().casefold(),
+        "content_sha256": str(locator.get("content_sha256") or "").strip().casefold(),
+        "name": str(locator.get("attachment_filename") or "").strip().casefold(),
+    }
+
+
+def _attachment_surface_candidates(rows: list[Any], targets: dict[str, str]) -> list[Any]:
+    filtered = [row for row in rows if _attachment_row_matches(row, targets)]
+    identity_supplied = any((targets["attachment_id"], targets["content_sha256"]))
+    return filtered if filtered else ([] if identity_supplied else rows)
+
+
+def _attachment_text_surfaces(candidates: list[Any]) -> list[tuple[str, str]]:
+    return [
+        ("attachment", str(row["extracted_text"] or row["text_preview"] or ""))
+        for row in candidates
+        if str(row["extracted_text"] or row["text_preview"] or "").strip()
+    ]
+
+
+def _attachment_row_matches(row: Any, targets: dict[str, str]) -> bool:
+    values = {
+        "attachment_id": str(row["attachment_id"] or "").strip().casefold(),
+        "content_sha256": str(row["content_sha256"] or "").strip().casefold(),
+        "name": str(row["name"] or "").strip().casefold(),
+    }
+    return all(not target or not values[key] or values[key] == target for key, target in targets.items())
+
+
+def _segment_surfaces_for_evidence(
+    db: Any, email_uid: str, candidate_kind: str, locator: dict[str, Any]
+) -> list[tuple[str, str]]:
+    if candidate_kind not in {"segment", "body"}:
+        return []
+    rows = db.conn.execute(
         """SELECT segment_type, ordinal, text
                FROM message_segments
               WHERE email_uid = ?
               ORDER BY ordinal ASC""",
         (email_uid,),
     ).fetchall()
-    if segment_rows and candidate_kind in {"segment", "body"}:
-        target_segment_type = str(locator.get("segment_type") or "").strip()
-        target_segment_ordinal_raw = locator.get("segment_ordinal")
-        target_segment_ordinal_text = str(target_segment_ordinal_raw or "").strip()
-        try:
-            target_segment_ordinal = int(target_segment_ordinal_text) if target_segment_ordinal_text else 0
-        except (TypeError, ValueError):
-            target_segment_ordinal = 0
-        filtered_segments: list[Any] = []
-        for row in segment_rows:
-            if target_segment_type and str(row["segment_type"] or "").strip() != target_segment_type:
-                continue
-            if target_segment_ordinal and int(row["ordinal"] or 0) != target_segment_ordinal:
-                continue
-            filtered_segments.append(row)
-        segment_candidates = (
-            filtered_segments
-            if filtered_segments
-            else ([] if (target_segment_type or target_segment_ordinal) and candidate_kind == "segment" else segment_rows)
-        )
-        for row in segment_candidates:
-            text_value = str(row["text"] or "")
-            if text_value.strip():
-                surfaces.append(("segment", text_value))
+    segment_type = str(locator.get("segment_type") or "").strip()
+    segment_ordinal = _safe_int(locator.get("segment_ordinal"))
+    filtered = [row for row in rows if _segment_row_matches(row, segment_type, segment_ordinal)]
+    target_supplied = any((segment_type, segment_ordinal))
+    candidates = filtered if filtered else ([] if target_supplied and candidate_kind == "segment" else rows)
+    return [("segment", str(row["text"] or "")) for row in candidates if str(row["text"] or "").strip()]
 
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(str(value or "0").strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _segment_row_matches(row: Any, segment_type: str, segment_ordinal: int) -> bool:
+    type_matches = not segment_type or str(row["segment_type"] or "").strip() == segment_type
+    ordinal_matches = not segment_ordinal or int(row["ordinal"] or 0) == segment_ordinal
+    return type_matches and ordinal_matches
+
+
+def _deduped_evidence_surfaces(surfaces: list[tuple[str, str]]) -> list[tuple[str, str]]:
     deduped_surfaces: list[tuple[str, str]] = []
     seen_texts: set[tuple[str, str]] = set()
     for surface_name, text_value in surfaces:
@@ -489,15 +544,7 @@ def evidence_candidate_stats_impl(
     phase_id: str | None = None,
 ) -> dict:
     """Return harvested evidence-candidate statistics, optionally scoped to one run."""
-    where_manageres: list[str] = []
-    params: list[Any] = []
-    if run_id:
-        where_manageres.append("run_id = ?")
-        params.append(run_id)
-    if phase_id:
-        where_manageres.append("phase_id = ?")
-        params.append(phase_id)
-    where_sql = (" WHERE " + " AND ".join(where_manageres)) if where_manageres else ""
+    where_sql, params = _candidate_stats_filter(run_id, phase_id)
 
     totals = db.conn.execute(
         "SELECT COUNT(*) AS total, "
@@ -526,14 +573,28 @@ def evidence_candidate_stats_impl(
         params,
     ).fetchall()
     return {
-        "total": int((totals["total"] if totals else 0) or 0),
-        "body_candidates": int((totals["body_total"] if totals else 0) or 0),
-        "attachments": int((totals["attachment_total"] if totals else 0) or 0),
-        "exact_body_candidates": int((totals["exact_body_total"] if totals else 0) or 0),
-        "promoted": int((totals["promoted_total"] if totals else 0) or 0),
+        "total": _stats_count(totals, "total"),
+        "body_candidates": _stats_count(totals, "body_total"),
+        "attachments": _stats_count(totals, "attachment_total"),
+        "exact_body_candidates": _stats_count(totals, "exact_body_total"),
+        "promoted": _stats_count(totals, "promoted_total"),
         "by_wave": [dict(row) for row in wave_rows],
         "by_status": [dict(row) for row in status_rows],
     }
+
+
+def _candidate_stats_filter(run_id: str | None, phase_id: str | None) -> tuple[str, list[Any]]:
+    conditions: list[str] = []
+    params: list[Any] = []
+    for value, condition in ((run_id, "run_id = ?"), (phase_id, "phase_id = ?")):
+        if value:
+            conditions.append(condition)
+            params.append(value)
+    return ((" WHERE " + " AND ".join(conditions)) if conditions else ""), params
+
+
+def _stats_count(row: Any, key: str) -> int:
+    return int(row[key] or 0) if row is not None else 0
 
 
 def search_evidence_impl(

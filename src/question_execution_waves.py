@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -206,10 +207,30 @@ def get_wave_definition(wave_id: str) -> WaveDefinition:
 
 
 def _ascii_variant(text: str) -> str:
+    """Convert German umlaut characters to their ASCII equivalents.
+
+    Args:
+        text: Input string potentially containing umlaut characters.
+
+    Returns:
+        String with umlauts replaced by ASCII equivalents (e.g., ä -> ae, ß -> ss).
+    """
     return text.translate(_UMLAUT_ASCII)
 
 
 def _normalized_unique(values: list[str], *, limit: int | None = None) -> list[str]:
+    """Return a list of unique, normalized string values.
+
+    Normalizes by stripping whitespace, collapsing multiple spaces, and
+    case-folding for deduplication. Preserves original casing in output.
+
+    Args:
+        values: List of string values to normalize and deduplicate.
+        limit: Maximum number of values to return. None means no limit.
+
+    Returns:
+        List of unique, normalized strings in order of first occurrence.
+    """
     normalized: list[str] = []
     seen: set[str] = set()
     for value in values:
@@ -225,6 +246,17 @@ def _normalized_unique(values: list[str], *, limit: int | None = None) -> list[s
 
 
 def _issue_variants(terms: tuple[str, ...]) -> list[str]:
+    """Generate normalized variants of issue terms including ASCII conversions.
+
+    For each term, creates both the original and ASCII-converted variants
+    (for umlauts), then deduplicates and limits results.
+
+    Args:
+        terms: Tuple of issue term strings.
+
+    Returns:
+        List of up to 8 unique term variants.
+    """
     variants: list[str] = []
     for term in terms:
         compact = " ".join(str(term or "").split()).strip()
@@ -238,6 +270,14 @@ def _issue_variants(terms: tuple[str, ...]) -> list[str]:
 
 
 def _english_issue_variants(terms: tuple[str, ...]) -> list[str]:
+    """Generate normalized variants of English fallback terms.
+
+    Args:
+        terms: Tuple of English term strings.
+
+    Returns:
+        List of up to 6 unique, normalized English terms.
+    """
     return _normalized_unique([str(term).strip() for term in terms if str(term).strip()], limit=6)
 
 
@@ -252,6 +292,17 @@ def shared_wave_vocabulary(*, limit: int | None = None) -> list[str]:
 
 
 def _party_identity_terms(party: object) -> list[str]:
+    """Extract identity terms from a party object for search.
+
+    Extracts name, email, and role hint, generating variants including
+    full name, last name, email, email local part, and role hint.
+
+    Args:
+        party: Object with name, email, and role_hint attributes.
+
+    Returns:
+        List of identity term strings for search queries.
+    """
     terms: list[str] = []
     name = str(getattr(party, "name", "") or "").strip()
     email = str(getattr(party, "email", "") or "").strip()
@@ -273,6 +324,17 @@ def _party_identity_terms(party: object) -> list[str]:
 
 
 def _institutional_actor_terms(actor: object) -> list[str]:
+    """Extract identity terms from an institutional actor object for search.
+
+    Extracts label, email, and function, generating variants including
+    email local part with punctuation normalized.
+
+    Args:
+        actor: Object with label, email, and function attributes.
+
+    Returns:
+        List of institutional actor term strings for search queries.
+    """
     terms: list[str] = []
     label = str(getattr(actor, "label", "") or "").strip()
     email = str(getattr(actor, "email", "") or "").strip()
@@ -289,7 +351,24 @@ def _institutional_actor_terms(actor: object) -> list[str]:
     return terms
 
 
+def _actor_group_terms(actors: Sequence[object], *, institutional: bool = False, limit: int = 6) -> list[str]:
+    """Collect stable identity terms for one bounded actor group."""
+    term_builder = _institutional_actor_terms if institutional else _party_identity_terms
+    return _normalized_unique([term for actor in actors[:4] for term in term_builder(actor)], limit=limit)
+
+
 def _actor_identity_term_groups(params: EmailCaseAnalysisInput) -> dict[str, list[str]]:
+    """Group actor identity terms by actor category for search.
+
+    Organizes terms from target person, suspected actors, comparator actors,
+    context people, and institutional actors into categorized groups.
+
+    Args:
+        params: Email case analysis input containing case scope with actors.
+
+    Returns:
+        Dictionary mapping actor categories to lists of normalized identity terms.
+    """
     case_scope = params.case_scope
     role_hints = [
         str(getattr(person, "role_hint", "") or "").strip()
@@ -303,27 +382,26 @@ def _actor_identity_term_groups(params: EmailCaseAnalysisInput) -> dict[str, lis
     ]
     return {
         "target": _normalized_unique(_party_identity_terms(case_scope.target_person), limit=4),
-        "suspected": _normalized_unique(
-            [term for actor in case_scope.suspected_actors[:4] for term in _party_identity_terms(actor)],
-            limit=6,
-        ),
-        "comparator": _normalized_unique(
-            [term for actor in case_scope.comparator_actors[:4] for term in _party_identity_terms(actor)],
-            limit=6,
-        ),
-        "context_people": _normalized_unique(
-            [term for actor in getattr(case_scope, "context_people", [])[:4] for term in _party_identity_terms(actor)],
-            limit=6,
-        ),
-        "institutional": _normalized_unique(
-            [term for actor in getattr(case_scope, "institutional_actors", [])[:4] for term in _institutional_actor_terms(actor)],
-            limit=6,
-        ),
+        "suspected": _actor_group_terms(case_scope.suspected_actors),
+        "comparator": _actor_group_terms(case_scope.comparator_actors),
+        "context_people": _actor_group_terms(getattr(case_scope, "context_people", [])),
+        "institutional": _actor_group_terms(getattr(case_scope, "institutional_actors", []), institutional=True),
         "role_hints": _normalized_unique(role_hints, limit=4),
     }
 
 
 def _actor_identity_terms(params: EmailCaseAnalysisInput) -> list[str]:
+    """Extract all actor identity terms from case analysis parameters.
+
+    Aggregates terms from all actor categories (target, suspected, comparator,
+    context people, institutional, role hints) into a single normalized list.
+
+    Args:
+        params: Email case analysis input containing case scope with actors.
+
+    Returns:
+        List of up to 10 unique, normalized identity terms from all actors.
+    """
     groups = _actor_identity_term_groups(params)
     return _normalized_unique(
         [
@@ -339,6 +417,16 @@ def _actor_identity_terms(params: EmailCaseAnalysisInput) -> list[str]:
 
 
 def _trigger_terms(params: EmailCaseAnalysisInput) -> list[str]:
+    """Extract trigger event terms from case analysis parameters.
+
+    Generates search terms from trigger events including date and type.
+
+    Args:
+        params: Email case analysis input containing case scope with trigger events.
+
+    Returns:
+        List of up to 5 unique, normalized trigger event terms.
+    """
     terms: list[str] = []
     for event in list(params.case_scope.trigger_events)[:5]:
         event_bits = [
@@ -350,6 +438,16 @@ def _trigger_terms(params: EmailCaseAnalysisInput) -> list[str]:
 
 
 def _track_terms(params: EmailCaseAnalysisInput) -> list[str]:
+    """Extract employment issue track terms from case analysis parameters.
+
+    Converts track identifiers to space-separated strings for search.
+
+    Args:
+        params: Email case analysis input containing case scope with tracks.
+
+    Returns:
+        List of up to 6 unique, normalized track terms.
+    """
     return _normalized_unique(
         [str(item).replace("_", " ").strip() for item in params.case_scope.employment_issue_tracks],
         limit=6,
@@ -357,6 +455,17 @@ def _track_terms(params: EmailCaseAnalysisInput) -> list[str]:
 
 
 def _counterevidence_terms(definition: WaveDefinition) -> list[str]:
+    """Generate counterevidence search terms based on wave definition.
+
+    Returns German terms appropriate for finding counterevidence or negative
+    results based on the wave's label and issue terms.
+
+    Args:
+        definition: Wave definition containing label and issue terms.
+
+    Returns:
+        List of German counterevidence terms for search queries.
+    """
     label = definition.label.casefold()
     if "silence" in label or "null-result" in label:
         return ["keine Antwort", "keine Rückmeldung", "ohne Antwort", "ohne Reaktion"]

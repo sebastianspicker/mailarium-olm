@@ -53,7 +53,14 @@ def _find_text(root: etree._Element, tag: str, ns: dict[str, str], default: str 
 
 def _new_xml_parser() -> etree.XMLParser:
     """Create a parser with safe defaults for untrusted XML."""
-    return etree.XMLParser(resolve_entities=False, no_network=True)
+    return etree.XMLParser(
+        resolve_entities=False,
+        no_network=True,
+        load_dtd=False,
+        dtd_validation=False,
+        huge_tree=False,
+        recover=False,
+    )
 
 
 def _read_limited_bytes(stream: IO[bytes], byte_limit: int, chunk_size: int = 64 * 1024) -> bytes:
@@ -139,27 +146,35 @@ def _parse_address_element(element: etree._Element) -> tuple[str, str]:
     Uses fuzzy matching: any attribute or child tag containing ``'name'`` is
     treated as the display name; ``'address'`` as the email address.
     """
+    name, email_addr = _address_from_attributes(element)
+    if email_addr:
+        return name, email_addr
+    child_name, child_email = _address_from_children(element)
+    return name or child_name, child_email
+
+
+def _address_from_attributes(element: etree._Element) -> tuple[str, str]:
     name = ""
     email_addr = ""
-
-    # Strategy 1: check XML attributes (newer OLM format)
     for attr_name, attr_value in element.attrib.items():
         attr_lower = attr_name.lower()
         if "address" in attr_lower and "@" in str(attr_value):
             email_addr = str(attr_value).strip()
         elif "name" in attr_lower and str(attr_value).strip():
             name = str(attr_value).strip()
+    return name, email_addr
 
-    # Strategy 2: check child elements (older OLM format / fallback)
-    if not email_addr:
-        for child in element:
-            child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
-            child_tag_lower = child_tag.lower()
-            if "name" in child_tag_lower and child.text and not name:
-                name = child.text.strip()
-            elif "address" in child_tag_lower and child.text and not email_addr:
-                email_addr = child.text.strip()
 
+def _address_from_children(element: etree._Element) -> tuple[str, str]:
+    name = ""
+    email_addr = ""
+    for child in element:
+        child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        child_tag_lower = child_tag.lower()
+        if "name" in child_tag_lower and child.text and not name:
+            name = child.text.strip()
+        elif "address" in child_tag_lower and child.text and not email_addr:
+            email_addr = child.text.strip()
     return name, email_addr
 
 
@@ -244,10 +259,7 @@ def _extract_attachment_field(
 ) -> str:
     """Extract a field from an attachment element (child element or attribute)."""
     # Strategy 1: child element
-    if ns:
-        el = att.find(f"o:{tag}", ns)
-    else:
-        el = att.find(tag)
+    el = att.find(f"o:{tag}", ns) if ns else att.find(tag)
     if el is not None and el.text:
         return el.text.strip()
 

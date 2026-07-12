@@ -11,6 +11,8 @@ venv/
 .ruff_cache/
 .mypy_cache/
 .cache/
+.codegraph/
+.serena/
 .coverage
 .coverage.*
 coverage.xml
@@ -54,6 +56,7 @@ docs/agent/qa_eval_captured_refresh.md
 docs/agent/codacy_*.md
 docs/agent/*_status_*.md
 docs/agent/*_ledger.md
+docs/agent/REMEDIATION_LEDGER_*.md
 
 # Stale planning and progress artifacts
 /plans/
@@ -63,6 +66,9 @@ docs/agent/*_ledger.md
 /*-ledger.md
 /*-status.md
 /*-audit.md
+/AUDIT_REPORT_*.md
+/REMEDIATION_REPORT_*.md
+/REMEDIATION_LEDGER_*.md
 *.local.md
 
 # Runtime artifacts
@@ -102,6 +108,7 @@ docs/agent/implementation_log/
 docs/agent/plan_history/
 docs/agent/matter_analysis/
 docs/agent/archive/
+docs/agent/Documentation.md
 docs/archive/
 scripts/build_forensic_*.py
 scripts/build_lawyer_*.py

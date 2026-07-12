@@ -3,42 +3,269 @@
 
 from __future__ import annotations
 
-import re
+from collections.abc import Callable, Iterator
 from typing import Any
 
+from ._utils import _compact
 from .case_prompt_context_actors import best_matching_email as _best_matching_email
 
 CASE_PROMPT_PREFLIGHT_VERSION = "1"
 
-_EMAIL_RE = re.compile(r"(?i)\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b")
-_ISO_DATE_RE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
-_DOT_DATE_RE = re.compile(r"\b(\d{2})\.(\d{2})\.(20\d{2})\b")
-_MONTH_YEAR_RE = re.compile(
-    r"(?i)\b("
-    r"january|february|march|april|may|june|july|august|september|october|november|december|"
-    r"januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember"
-    r")\s+(20\d{2})\b"
+
+class _SimpleMatch:
+    def __init__(self, start: int, end: int, groups: tuple[str, ...]) -> None:
+        self._start = start
+        self._end = end
+        self._groups = groups
+
+    def start(self) -> int:
+        return self._start
+
+    def group(self, index: int = 0) -> str:
+        return self._groups[0] if index == 0 else self._groups[index]
+
+
+class _SimplePattern:
+    def __init__(self, finder: Callable[[str], Iterator[_SimpleMatch]]) -> None:
+        self._finder = finder
+
+    def finditer(self, text: str) -> Iterator[_SimpleMatch]:
+        return self._finder(text)
+
+    def search(self, text: str) -> _SimpleMatch | None:
+        return next(self._finder(text), None)
+
+    def match(self, text: str) -> _SimpleMatch | None:
+        match = self.search(text)
+        return match if match is not None and match.start() == 0 else None
+
+
+def _fixed_date_matches(text: str, *, dotted: bool) -> Iterator[_SimpleMatch]:
+    length = 10
+    for index in range(len(text) - length + 1):
+        token = text[index : index + length]
+        if _valid_fixed_date_token(token, dotted=dotted) and _bounded_token(text, index, length):
+            groups = (token, token[:2], token[3:5], token[6:]) if dotted else (token, token)
+            yield _SimpleMatch(index, index + length, groups)
+
+
+def _valid_fixed_date_token(token: str, *, dotted: bool) -> bool:
+    if dotted:
+        return all(
+            (
+                token[:2].isdigit(),
+                token[2] == ".",
+                token[3:5].isdigit(),
+                token[5] == ".",
+                token[6:].startswith("20"),
+                token[6:].isdigit(),
+            )
+        )
+    return all(
+        (
+            token.startswith("20"),
+            token[:4].isdigit(),
+            token[4] == "-",
+            token[5:7].isdigit(),
+            token[7] == "-",
+            token[8:].isdigit(),
+        )
+    )
+
+
+def _bounded_token(text: str, index: int, length: int) -> bool:
+    left_bounded = index == 0 or not text[index - 1].isalnum()
+    right_index = index + length
+    right_bounded = right_index == len(text) or not text[right_index].isalnum()
+    return left_bounded and right_bounded
+
+
+_MONTH_NAMES = frozenset(
+    {
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+        "januar",
+        "februar",
+        "märz",
+        "maerz",
+        "mai",
+        "juni",
+        "juli",
+        "oktober",
+        "dezember",
+    }
 )
-_RANGE_FROM_RE = re.compile(r"(?i)\bfrom\s+([a-zäöüA-ZÄÖÜ]+(?:\s+20\d{2})?|20\d{2}-\d{2}-\d{2}|\d{2}\.\d{2}\.20\d{2})")
-_RANGE_TO_RE = re.compile(
-    r"(?i)\bto\s+([a-zäöüA-ZÄÖÜ]+(?:\s+20\d{2})?|20\d{2}-\d{2}-\d{2}|\d{2}\.\d{2}\.20\d{2}|present|today|now)"
+
+
+def _month_year_matches(text: str) -> Iterator[_SimpleMatch]:
+    lowered = text.casefold()
+    for month in _MONTH_NAMES:
+        start = 0
+        while (index := lowered.find(month, start)) >= 0:
+            match = _month_year_at(text, lowered, month, index)
+            if match is not None:
+                yield match
+            start = index + 1
+
+
+def _month_year_at(text: str, lowered: str, month: str, index: int) -> _SimpleMatch | None:
+    cursor = index + len(month)
+    left_bounded = index == 0 or not lowered[index - 1].isalnum()
+    if not left_bounded or cursor >= len(text) or not text[cursor].isspace():
+        return None
+    while cursor < len(text) and text[cursor].isspace():
+        cursor += 1
+    year = text[cursor : cursor + 4]
+    right_bounded = cursor + 4 == len(text) or not text[cursor + 4].isalnum()
+    if not all((len(year) == 4, year.startswith("20"), year.isdigit(), right_bounded)):
+        return None
+    return _SimpleMatch(index, cursor + 4, (text[index : cursor + 4], text[index : index + len(month)], year))
+
+
+def _email_matches(text: str) -> Iterator[_SimpleMatch]:
+    allowed = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._%+-@")
+    index = 0
+    while index < len(text):
+        if text[index] not in allowed:
+            index += 1
+            continue
+        end = index + 1
+        while end < len(text) and text[end] in allowed:
+            end += 1
+        token = text[index:end]
+        local, marker, domain = token.partition("@")
+        suffix = domain.rpartition(".")[2]
+        if marker and local and "." in domain and len(suffix) >= 2 and suffix.isalpha():
+            yield _SimpleMatch(index, end, (token, token))
+        index = end
+
+
+def _bounded_phrase_matches(text: str, phrases: tuple[str, ...]) -> Iterator[_SimpleMatch]:
+    lowered = text.casefold()
+    for phrase in phrases:
+        start = 0
+        while (index := lowered.find(phrase, start)) >= 0:
+            end = index + len(phrase)
+            if (index == 0 or not (lowered[index - 1].isalnum() or lowered[index - 1] == "_")) and (
+                end == len(text) or not (lowered[end].isalnum() or lowered[end] == "_")
+            ):
+                yield _SimpleMatch(index, end, (text[index:end], text[index:end]))
+            start = index + 1
+
+
+def _range_matches(text: str, marker: str, *, allow_present: bool) -> Iterator[_SimpleMatch]:
+    for marker_match in _bounded_phrase_matches(text, (marker,)):
+        cursor = marker_match._end
+        if cursor >= len(text) or not text[cursor].isspace():
+            continue
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        end = _range_token_end(text, cursor)
+        token = text[cursor:end]
+        if token and (allow_present or token.casefold() not in {"present", "today", "now"}):
+            yield _SimpleMatch(marker_match.start(), end, (text[marker_match.start() : end], token))
+
+
+def _range_token_end(text: str, cursor: int) -> int:
+    end = cursor
+    while end < len(text) and (text[end].isalnum() or text[end] in ".-"):
+        end += 1
+    if end >= len(text) or not text[end].isspace():
+        return end
+    year_start = end
+    while year_start < len(text) and text[year_start].isspace():
+        year_start += 1
+    year = text[year_start : year_start + 4]
+    return year_start + 4 if year.startswith("20") and year.isdigit() else end
+
+
+_EMAIL_RE = _SimplePattern(_email_matches)
+_ISO_DATE_RE = _SimplePattern(lambda text: _fixed_date_matches(text, dotted=False))
+_DOT_DATE_RE = _SimplePattern(lambda text: _fixed_date_matches(text, dotted=True))
+_MONTH_YEAR_RE = _SimplePattern(_month_year_matches)
+_RANGE_FROM_RE = _SimplePattern(lambda text: _range_matches(text, "from", allow_present=False))
+_RANGE_TO_RE = _SimplePattern(lambda text: _range_matches(text, "to", allow_present=True))
+_PRESENT_RE = _SimplePattern(
+    lambda text: _bounded_phrase_matches(
+        text, ("to the present", "to present", "until present", "bis heute", "present", "today", "current")
+    )
 )
-_PRESENT_RE = re.compile(r"(?i)\b(to\s+the\s+present|to\s+present|until\s+present|bis\s+heute|present|today|current)\b")
-_NAME_FRAGMENT = r"[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'’-]*(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'’-]*){0,3}"
-_NAMED_ROLE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+
+
+def _role_matches(text: str, prefixes: tuple[str, ...], *, require_colon: bool) -> Iterator[_SimpleMatch]:
+    for prefix_match in _bounded_phrase_matches(text, prefixes):
+        cursor = prefix_match._end
+        separator_start = cursor
+        while cursor < len(text) and (text[cursor].isspace() or text[cursor] in ":-"):
+            cursor += 1
+        if cursor == separator_start or (require_colon and ":" not in text[separator_start:cursor]):
+            continue
+        name_start = cursor
+        name = _role_name_at(text, cursor)
+        if name:
+            yield _SimpleMatch(
+                prefix_match.start(), name_start + len(name), (text[prefix_match.start() : name_start + len(name)], name)
+            )
+
+
+def _role_name_at(text: str, cursor: int) -> str:
+    words: list[str] = []
+    for _ in range(4):
+        if cursor >= len(text) or not text[cursor].isupper():
+            break
+        end = cursor + 1
+        while end < len(text) and (text[end].isalpha() or text[end] in "'’-"):
+            end += 1
+        words.append(text[cursor:end])
+        cursor = end
+        whitespace_start = cursor
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if cursor == whitespace_start:
+            break
+    return " ".join(words)
+
+
+_NAMED_ROLE_PATTERNS = (
     (
         "target_person",
-        re.compile(rf"(?i:\b(?:claimant|target person|employee|betroffene person|arbeitnehmer(?:in)?)[\s:-]+)({_NAME_FRAGMENT})"),
+        _SimplePattern(
+            lambda text: _role_matches(
+                text,
+                ("claimant", "target person", "employee", "betroffene person", "arbeitnehmer", "arbeitnehmerin"),
+                require_colon=False,
+            )
+        ),
     ),
     (
         "suspected_actor",
-        re.compile(
-            rf"(?i:\b(?:manager|supervisor|line manager|hr contact|hr|decision-maker|vorgesetzte(?:r)?)[\s:-]+)({_NAME_FRAGMENT})"
+        _SimplePattern(
+            lambda text: _role_matches(
+                text,
+                ("manager", "supervisor", "line manager", "hr contact", "hr", "decision-maker", "vorgesetzte", "vorgesetzter"),
+                require_colon=False,
+            )
         ),
     ),
     (
         "comparator_actor",
-        re.compile(rf"(?i:\b(?:comparator|peer|colleague|vergleichsperson|kolleg(?:e|in)):\s*)({_NAME_FRAGMENT})"),
+        _SimplePattern(
+            lambda text: _role_matches(
+                text,
+                ("comparator", "peer", "colleague", "vergleichsperson", "kollege", "kollegin"),
+                require_colon=True,
+            )
+        ),
     ),
 )
 _MONTHS = {
@@ -150,7 +377,24 @@ _INSTRUCTION_ONLY_PREFIXES: tuple[str, ...] = (
     "assess whether the materials support",
     "create a case dashboard",
 )
-_MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*$")
+
+
+def _heading_matches(text: str) -> Iterator[_SimpleMatch]:
+    indent = len(text) - len(text.lstrip(" "))
+    if indent > 3:
+        return
+    cursor = indent
+    while cursor < len(text) and text[cursor] == "#":
+        cursor += 1
+    level = cursor - indent
+    if not 1 <= level <= 6 or cursor >= len(text) or not text[cursor].isspace():
+        return
+    title = text[cursor:].strip()
+    if title:
+        yield _SimpleMatch(0, len(text), (text, "#" * level, title))
+
+
+_MARKDOWN_HEADING_RE = _SimplePattern(_heading_matches)
 _PRESERVED_MATTER_EXCLUDED_SECTION_TITLES = frozenset(
     {
         "scope and objective",
@@ -160,10 +404,6 @@ _PRESERVED_MATTER_EXCLUDED_SECTION_TITLES = frozenset(
         "requested work products",
     }
 )
-
-
-def _compact(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
 
 
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
@@ -292,7 +532,22 @@ def _dot_date_to_iso(day: str, month: str, year: str) -> str:
 
 
 def _extract_dates(prompt_text: str, *, today: str, assume_date_to_today: bool) -> dict[str, Any]:
-    explicit_date_rows = [
+    explicit_dates = _explicit_dates(prompt_text)
+    date_from = explicit_dates[0] if explicit_dates else _range_date(prompt_text, _RANGE_FROM_RE)
+    date_to = explicit_dates[-1] if len(explicit_dates) >= 2 else _range_date(prompt_text, _RANGE_TO_RE)
+    present = _PRESENT_RE.search(prompt_text) is not None
+    if assume_date_to_today and present:
+        date_to = today
+    return {
+        "explicit_dates": explicit_dates,
+        "date_from": date_from,
+        "date_to": date_to,
+        "used_today_for_open_ended_range": bool(date_to == today and present),
+    }
+
+
+def _explicit_dates(prompt_text: str) -> list[str]:
+    rows = [
         *[(match.start(), match.group(1)) for match in _ISO_DATE_RE.finditer(prompt_text)],
         *[
             (match.start(), _dot_date_to_iso(match.group(1), match.group(2), match.group(3)))
@@ -300,48 +555,25 @@ def _extract_dates(prompt_text: str, *, today: str, assume_date_to_today: bool) 
         ],
         *[(match.start(), _month_year_to_iso(match.group(1), match.group(2))) for match in _MONTH_YEAR_RE.finditer(prompt_text)],
     ]
-    explicit_dates = list(dict.fromkeys(value for _, value in sorted(explicit_date_rows)))
-    date_from = explicit_dates[0] if explicit_dates else None
-    date_to = explicit_dates[-1] if len(explicit_dates) >= 2 else None
+    return list(dict.fromkeys(value for _, value in sorted(rows)))
 
-    if date_from is None:
-        range_match = _RANGE_FROM_RE.search(prompt_text)
-        if range_match:
-            token = _compact(range_match.group(1))
-            iso_match = _ISO_DATE_RE.search(token)
-            dot_match = _DOT_DATE_RE.search(token)
-            month_match = _MONTH_YEAR_RE.search(token)
-            if iso_match:
-                date_from = iso_match.group(1)
-            elif dot_match:
-                date_from = _dot_date_to_iso(dot_match.group(1), dot_match.group(2), dot_match.group(3))
-            elif month_match:
-                date_from = _month_year_to_iso(month_match.group(1), month_match.group(2))
 
-    if date_to is None:
-        range_match = _RANGE_TO_RE.search(prompt_text)
-        if range_match:
-            token = _compact(range_match.group(1))
-            iso_match = _ISO_DATE_RE.search(token)
-            dot_match = _DOT_DATE_RE.search(token)
-            month_match = _MONTH_YEAR_RE.search(token)
-            if iso_match:
-                date_to = iso_match.group(1)
-            elif dot_match:
-                date_to = _dot_date_to_iso(dot_match.group(1), dot_match.group(2), dot_match.group(3))
-            elif month_match:
-                date_to = _month_year_to_iso(month_match.group(1), month_match.group(2))
-            elif assume_date_to_today and _PRESENT_RE.search(token):
-                date_to = today
-    elif assume_date_to_today and _PRESENT_RE.search(prompt_text):
-        date_to = today
+def _range_date(prompt_text: str, pattern: _SimplePattern) -> str | None:
+    match = pattern.search(prompt_text)
+    return _date_token_to_iso(_compact(match.group(1))) if match else None
 
-    return {
-        "explicit_dates": explicit_dates,
-        "date_from": date_from,
-        "date_to": date_to,
-        "used_today_for_open_ended_range": bool(date_to == today and _PRESENT_RE.search(prompt_text)),
-    }
+
+def _date_token_to_iso(token: str) -> str | None:
+    iso_match = _ISO_DATE_RE.search(token)
+    if iso_match:
+        return iso_match.group(1)
+    dot_match = _DOT_DATE_RE.search(token)
+    if dot_match:
+        return _dot_date_to_iso(dot_match.group(1), dot_match.group(2), dot_match.group(3))
+    month_match = _MONTH_YEAR_RE.search(token)
+    if month_match:
+        return _month_year_to_iso(month_match.group(1), month_match.group(2))
+    return None
 
 
 def _named_people(prompt_text: str) -> dict[str, list[dict[str, Any]]]:
@@ -712,9 +944,9 @@ def _missing_inputs(
                 "reason": "Comparator-based review is requested, but the prompt does not identify comparators concretely.",
             }
         )
-    if any(track in {"prevention_duty_gap", "participation_duty_gap"} for track in issue_tracks) and not re.search(
-        r"(?i)\b(sbv|personalrat|lpvg|bem|167 sgb ix|178 sgb ix)\b",
-        lowered,
+    if any(track in {"prevention_duty_gap", "participation_duty_gap"} for track in issue_tracks) and not next(
+        _bounded_phrase_matches(lowered, ("sbv", "personalrat", "lpvg", "bem", "167 sgb ix", "178 sgb ix")),
+        None,
     ):
         missing.append(
             {

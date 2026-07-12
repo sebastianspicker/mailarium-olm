@@ -1,4 +1,5 @@
 # ruff: noqa: F401, F403
+# flake8: noqa
 from __future__ import annotations
 
 # pylint: disable=unused-wildcard-import,wildcard-import
@@ -21,30 +22,7 @@ def test_transform_case_analysis_payload_compacts_case_evidence_when_requested()
     payload = _case_payload()
     payload["compact_case_evidence"] = True
     params = EmailCaseAnalysisInput.model_validate(payload)
-    answer_payload = {
-        "finding_evidence_index": {
-            "findings": [
-                {"finding_id": "f-1"},
-                {"finding_id": "f-2"},
-                {"finding_id": "f-3"},
-                {"finding_id": "f-4"},
-            ]
-        },
-        "evidence_table": {"row_count": 8},
-        "candidates": [
-            {
-                "uid": f"uid-{idx}",
-                "date": "2025-03-15T10:00:00",
-                "sender_name": "manager",
-                "sender_email": "manager@example.test",
-                "subject": f"Status {idx}",
-                "snippet": "Please just comply with the updated process.",
-                "language_rhetoric": {"authored_text": {"signal_count": 0, "signals": []}},
-                "message_findings": {"authored_text": {"behavior_candidates": [], "counter_indicators": []}},
-            }
-            for idx in range(1, 8)
-        ],
-    }
+    answer_payload = _fixture_test_transform_case_analysis_payload_compacts_case_evidence_when_requested_answer_payload()
 
     transformed = transform_case_analysis_payload(answer_payload, params)
     assert transformed["finding_evidence_index"]["summary"]["finding_count"] == 4
@@ -78,7 +56,114 @@ def test_transform_case_analysis_payload_preserves_email_source_metadata_in_comp
         }
     ]
     params = EmailCaseAnalysisInput.model_validate(payload)
-    answer_payload = {
+    answer_payload = (
+        _fixture_test_transform_case_analysis_payload_preserves_email_source_metadata_in_compacted_bundle_answer_payload()
+    )
+
+    transformed = transform_case_analysis_payload(answer_payload, params)
+
+    evidence_row = transformed["matter_evidence_index"]["rows"][0]
+    assert evidence_row["date"] == "2025-03-15T10:00:00"
+    assert evidence_row["sender_or_author"] == "manager"
+    assert evidence_row["recipients"] == ["employee@example.test", "sbv@example.org"]
+    assert evidence_row["short_description"] == "Status update: Please comply with the updated process."
+    assert evidence_row["key_quoted_passage"] == "Please comply with the updated process."
+
+
+def test_transform_case_analysis_payload_rebuilds_report_from_final_mixed_source_bundle() -> None:
+    payload = _case_payload()
+    payload["review_mode"] = "exhaustive_matter_review"
+    payload["source_scope"] = "mixed_case_file"
+    payload["matter_manifest"] = {
+        "manifest_id": "matter-report-1",
+        "artifacts": [
+            {
+                "source_id": "manifest:note:1",
+                "source_class": "note_record",
+                "title": "Complaint note",
+                "date": "2025-03-10",
+                "text": "employee raised a formal complaint to HR.",
+            }
+        ],
+    }
+    params = EmailCaseAnalysisInput.model_validate(payload)
+    answer_payload = _fixture_test_transform_case_analysis_payload_rebuilds_report_from_final_mixed_source_bundle_answer_payload()
+
+    transformed = transform_case_analysis_payload(answer_payload, params)
+
+    assert transformed["matter_evidence_index"]["row_count"] == 1
+    assert transformed["matter_evidence_index"]["rows"][0]["source_id"] == "manifest:note:1"
+    assert transformed["investigation_report"]["sections"]["matter_evidence_index"]["status"] == "supported"
+
+
+def test_transform_case_analysis_payload_adds_mixed_scope_warning() -> None:
+    payload = _case_payload()
+    payload["source_scope"] = "mixed_case_file"
+    payload["chat_log_entries"] = [
+        {
+            "source_id": "chat-1",
+            "platform": "Teams",
+            "text": "Please keep this off email for now.",
+        }
+    ]
+    params = EmailCaseAnalysisInput.model_validate(payload)
+    transformed = transform_case_analysis_payload({}, params)
+    assert "mixed_case_file_declared_without_mixed_record_support" not in transformed["case_scope_quality"]["downgrade_reasons"]
+    assert all(
+        item["code"] != "mixed_case_file_declared_without_mixed_record_support"
+        for item in transformed["analysis_limits"]["scope_warnings"]
+    )
+
+
+def test_transform_case_analysis_payload_accepts_manifest_backed_non_email_records() -> None:
+    payload = _case_payload()
+    payload["source_scope"] = "mixed_case_file"
+    payload["matter_manifest"] = {
+        "manifest_id": "matter-1",
+        "artifacts": [
+            {
+                "source_id": "manifest:calendar:1",
+                "source_class": "calendar_export",
+                "title": "Meeting invite",
+                "text": "SUMMARY: BEM review DTSTART:2025-03-10T10:00:00",
+            }
+        ],
+    }
+    params = EmailCaseAnalysisInput.model_validate(payload)
+    transformed = transform_case_analysis_payload({}, params)
+    assert "mixed_case_file_declared_without_mixed_record_support" not in transformed["case_scope_quality"]["downgrade_reasons"]
+    assert "mixed_case_file_declared_but_no_mixed_record_support_was_supplied" not in transformed["analysis_limits"]["notes"]
+
+
+def _fixture_test_transform_case_analysis_payload_compacts_case_evidence_when_requested_answer_payload():
+    return {
+        "finding_evidence_index": {
+            "findings": [
+                {"finding_id": "f-1"},
+                {"finding_id": "f-2"},
+                {"finding_id": "f-3"},
+                {"finding_id": "f-4"},
+            ]
+        },
+        "evidence_table": {"row_count": 8},
+        "candidates": [
+            {
+                "uid": f"uid-{idx}",
+                "date": "2025-03-15T10:00:00",
+                "sender_name": "manager",
+                "sender_email": "manager@example.test",
+                "subject": f"Status {idx}",
+                "snippet": "Please just comply with the updated process.",
+                "language_rhetoric": {"authored_text": {"signal_count": 0, "signals": []}},
+                "message_findings": {"authored_text": {"behavior_candidates": [], "counter_indicators": []}},
+            }
+            for idx in range(1, 8)
+        ],
+    }
+
+
+def _fixture_test_transform_case_analysis_payload_preserves_email_source_metadata_in_compacted_bundle_answer_payload():
+    return {
         "search": {},
         "case_bundle": {
             "scope": {
@@ -150,34 +235,9 @@ def test_transform_case_analysis_payload_preserves_email_source_metadata_in_comp
         ],
     }
 
-    transformed = transform_case_analysis_payload(answer_payload, params)
 
-    evidence_row = transformed["matter_evidence_index"]["rows"][0]
-    assert evidence_row["date"] == "2025-03-15T10:00:00"
-    assert evidence_row["sender_or_author"] == "manager"
-    assert evidence_row["recipients"] == ["employee@example.test", "sbv@example.org"]
-    assert evidence_row["short_description"] == "Status update: Please comply with the updated process."
-    assert evidence_row["key_quoted_passage"] == "Please comply with the updated process."
-
-
-def test_transform_case_analysis_payload_rebuilds_report_from_final_mixed_source_bundle() -> None:
-    payload = _case_payload()
-    payload["review_mode"] = "exhaustive_matter_review"
-    payload["source_scope"] = "mixed_case_file"
-    payload["matter_manifest"] = {
-        "manifest_id": "matter-report-1",
-        "artifacts": [
-            {
-                "source_id": "manifest:note:1",
-                "source_class": "note_record",
-                "title": "Complaint note",
-                "date": "2025-03-10",
-                "text": "employee raised a formal complaint to HR.",
-            }
-        ],
-    }
-    params = EmailCaseAnalysisInput.model_validate(payload)
-    answer_payload = {
+def _fixture_test_transform_case_analysis_payload_rebuilds_report_from_final_mixed_source_bundle_answer_payload():
+    return {
         "search": {},
         "case_bundle": {
             "scope": {
@@ -237,48 +297,3 @@ def test_transform_case_analysis_payload_rebuilds_report_from_final_mixed_source
         },
         "candidates": [],
     }
-
-    transformed = transform_case_analysis_payload(answer_payload, params)
-
-    assert transformed["matter_evidence_index"]["row_count"] == 1
-    assert transformed["matter_evidence_index"]["rows"][0]["source_id"] == "manifest:note:1"
-    assert transformed["investigation_report"]["sections"]["matter_evidence_index"]["status"] == "supported"
-
-
-def test_transform_case_analysis_payload_adds_mixed_scope_warning() -> None:
-    payload = _case_payload()
-    payload["source_scope"] = "mixed_case_file"
-    payload["chat_log_entries"] = [
-        {
-            "source_id": "chat-1",
-            "platform": "Teams",
-            "text": "Please keep this off email for now.",
-        }
-    ]
-    params = EmailCaseAnalysisInput.model_validate(payload)
-    transformed = transform_case_analysis_payload({}, params)
-    assert "mixed_case_file_declared_without_mixed_record_support" not in transformed["case_scope_quality"]["downgrade_reasons"]
-    assert all(
-        item["code"] != "mixed_case_file_declared_without_mixed_record_support"
-        for item in transformed["analysis_limits"]["scope_warnings"]
-    )
-
-
-def test_transform_case_analysis_payload_accepts_manifest_backed_non_email_records() -> None:
-    payload = _case_payload()
-    payload["source_scope"] = "mixed_case_file"
-    payload["matter_manifest"] = {
-        "manifest_id": "matter-1",
-        "artifacts": [
-            {
-                "source_id": "manifest:calendar:1",
-                "source_class": "calendar_export",
-                "title": "Meeting invite",
-                "text": "SUMMARY: BEM review DTSTART:2025-03-10T10:00:00",
-            }
-        ],
-    }
-    params = EmailCaseAnalysisInput.model_validate(payload)
-    transformed = transform_case_analysis_payload({}, params)
-    assert "mixed_case_file_declared_without_mixed_record_support" not in transformed["case_scope_quality"]["downgrade_reasons"]
-    assert "mixed_case_file_declared_but_no_mixed_record_support_was_supplied" not in transformed["analysis_limits"]["notes"]

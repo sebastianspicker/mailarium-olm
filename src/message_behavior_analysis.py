@@ -29,6 +29,19 @@ def inject_reply_pairing_findings(
     *,
     reply_pairing: dict[str, object] | None,
 ) -> MessageBehaviorAnalysis:
+    """Inject reply-pairing findings into a message behavior analysis.
+
+    Args:
+        analysis: The existing message behavior analysis to augment.
+        reply_pairing: Reply pairing metadata containing response status, actor emails,
+            and activity UIDs. Used to detect selective non-response patterns.
+
+    Returns:
+        The analysis enriched with reply-pairing findings, including additional
+        behavior candidates (e.g., selective_non_response), process signals,
+        classification updates, and relevant wording.
+
+    """
     return _inject_reply_pairing_findings(analysis, reply_pairing=reply_pairing)
 
 
@@ -62,6 +75,15 @@ _BLAME_SHIFTING_RE = re.compile(
 
 
 def _signal_ids(rhetoric: MessageRhetoricAnalysis) -> list[str]:
+    """Extract signal IDs from a rhetoric analysis.
+
+    Args:
+        rhetoric: The message rhetoric analysis containing signals.
+
+    Returns:
+        A list of string signal IDs extracted from the rhetoric's signals.
+
+    """
     return [str(signal["signal_id"]) for signal in rhetoric.get("signals", [])]
 
 
@@ -70,47 +92,44 @@ def _relevant_wording(
     rhetoric: MessageRhetoricAnalysis,
     behavior_candidates: list[BehaviorCandidate],
 ) -> list[RelevantWording]:
-    items: list[RelevantWording] = []
-    seen: set[tuple[str, str, str]] = set()
-    for signal in rhetoric.get("signals", []):
-        if not isinstance(signal, dict):
+    """Extract relevant wording snippets from rhetoric signals and behavior evidence.
+
+    Args:
+        rhetoric: The message rhetoric analysis containing signals with evidence.
+        behavior_candidates: List of behavior candidates with their evidence.
+
+    Returns:
+        A list of RelevantWording items (text, source_scope, basis_id) deduplicated
+        and limited to 6 entries, extracted from both signal and behavior evidence.
+
+    """
+    signal_items = _wording_from_rows(
+        rhetoric.get("signals", []), id_key="signal_id", basis_prefix="signal", scope_key="source_text_scope"
+    )
+    behavior_items = _wording_from_rows(
+        behavior_candidates, id_key="behavior_id", basis_prefix="behavior", scope_key="source_scope"
+    )
+    unique: dict[tuple[str, str, str], RelevantWording] = {}
+    for item in [*signal_items, *behavior_items]:
+        unique.setdefault((item["text"], item["source_scope"], item["basis_id"]), item)
+    return list(unique.values())[:6]
+
+
+def _wording_from_rows(rows, *, id_key, basis_prefix, scope_key):
+    items = []
+    for row in rows:
+        if not isinstance(row, dict):
             continue
-        signal_id = str(signal.get("signal_id") or "")
-        for evidence in signal.get("evidence", []) or []:
+        basis_id = f"{basis_prefix}:{row.get(id_key) or ''}"
+        for evidence in row.get("evidence", []) or []:
             if not isinstance(evidence, dict):
                 continue
             text = str(evidence.get("matched_text") or evidence.get("excerpt") or "").strip()
-            source_scope = str(evidence.get("source_text_scope") or "authored_text")
-            key = (text, source_scope, f"signal:{signal_id}")
-            if not text or key in seen:
-                continue
-            seen.add(key)
-            items.append(
-                {
-                    "text": text,
-                    "source_scope": source_scope,  # type: ignore[typeddict-item]
-                    "basis_id": f"signal:{signal_id}",
-                }
-            )
-    for candidate in behavior_candidates:
-        behavior_id = str(candidate.get("behavior_id") or "")
-        for behavior_evidence in candidate.get("evidence", []) or []:
-            if not isinstance(behavior_evidence, dict):
-                continue
-            text = str(behavior_evidence.get("matched_text") or behavior_evidence.get("excerpt") or "").strip()
-            source_scope = str(behavior_evidence.get("source_scope") or "authored_text")
-            key = (text, source_scope, f"behavior:{behavior_id}")
-            if not text or key in seen:
-                continue
-            seen.add(key)
-            items.append(
-                {
-                    "text": text,
-                    "source_scope": source_scope,  # type: ignore[typeddict-item]
-                    "basis_id": f"behavior:{behavior_id}",
-                }
-            )
-    return items[:6]
+            if text:
+                items.append(
+                    {"text": text, "source_scope": str(evidence.get(scope_key) or "authored_text"), "basis_id": basis_id}
+                )
+    return items
 
 
 def _process_signals(
@@ -120,6 +139,20 @@ def _process_signals(
     omission_target_linked: bool,
     target_label: str,
 ) -> list[ProcessSignal]:
+    """Generate process signals from detected signal IDs and behavior candidates.
+
+    Args:
+        signal_ids: List of detected rhetorical signal identifiers.
+        behavior_candidates: List of behavior candidates with their IDs.
+        omission_target_linked: Whether the case target is referenced but omitted.
+        target_label: Label for the case target (used in signal summaries).
+
+    Returns:
+        A list of ProcessSignal items describing institutional pressure, procedural
+        intimidation, deadline pressure, target absence, decision updates, and
+        selective non-response patterns.
+
+    """
     items: list[ProcessSignal] = []
     if "institutional_pressure_framing" in signal_ids:
         items.append(
@@ -168,28 +201,22 @@ def _communication_classification(
     behavior_candidates: list[BehaviorCandidate],
     omission_target_linked: bool,
 ) -> CommunicationClassification:
-    applied: list[CommunicationClass] = []
-    behavior_ids = {str(candidate.get("behavior_id") or "") for candidate in behavior_candidates}
+    """Derive a communication classification from signals and behavior candidates.
 
-    if behavior_ids & {"exclusion", "withholding"} or omission_target_linked:
-        applied.append("exclusionary")
-    if behavior_ids & {"selective_non_response"}:
-        applied.append("retaliatory")
-    if behavior_ids & {"deadline_pressure", "selective_accountability", "escalation"}:
-        applied.append("controlling")
-    if behavior_ids & {"blame_shifting"} or {"strategic_ambiguity", "passive_aggressive_deflection"} & set(signal_ids):
-        applied.append("defensive")
-    if {"dismissiveness", "patronizing_wording", "ridicule"} & set(signal_ids) or behavior_ids & {
-        "public_correction",
-        "undermining",
-    }:
-        applied.append("dismissive")
-    if behavior_ids & {"escalation", "deadline_pressure", "public_correction", "blame_shifting"} or {
-        "implicit_accusation",
-        "institutional_pressure_framing",
-        "procedural_intimidation",
-    } & set(signal_ids):
-        applied.append("tense")
+    Args:
+        signal_ids: List of detected rhetorical signal identifiers.
+        behavior_candidates: List of behavior candidates with their IDs.
+        omission_target_linked: Whether the case target is referenced but omitted.
+
+    Returns:
+        A CommunicationClassification with primary_class, applied_classes,
+        confidence, and rationale. Applied classes are derived from behavior IDs
+        and signal IDs, with higher ranks indicating more severe classifications.
+
+    """
+    behavior_ids = {str(candidate.get("behavior_id") or "") for candidate in behavior_candidates}
+    signal_set = set(signal_ids)
+    applied = _applied_classes(behavior_ids, signal_set, omission_target_linked)
 
     if not applied:
         applied = ["neutral"]
@@ -212,6 +239,229 @@ def _communication_classification(
     }
 
 
+def _applied_classes(behavior_ids, signal_set, omission_target_linked):
+    rules = (
+        ("exclusionary", bool(behavior_ids & {"exclusion", "withholding"}) or omission_target_linked),
+        ("retaliatory", bool(behavior_ids & {"selective_non_response"})),
+        ("controlling", bool(behavior_ids & {"deadline_pressure", "selective_accountability", "escalation"})),
+        (
+            "defensive",
+            bool(behavior_ids & {"blame_shifting"} or {"strategic_ambiguity", "passive_aggressive_deflection"} & signal_set),
+        ),
+        (
+            "dismissive",
+            bool(
+                {"dismissiveness", "patronizing_wording", "ridicule"} & signal_set
+                or behavior_ids & {"public_correction", "undermining"}
+            ),
+        ),
+        (
+            "tense",
+            bool(
+                behavior_ids & {"escalation", "deadline_pressure", "public_correction", "blame_shifting"}
+                or {"implicit_accusation", "institutional_pressure_framing", "procedural_intimidation"} & signal_set
+            ),
+        ),
+    )
+    return [cast(CommunicationClass, label) for label, enabled in rules if enabled]
+
+
+def _append_optional(items, item):
+    if item is not None:
+        items.append(item)
+
+
+def _escalation_behavior(rhetoric, signal_ids):
+    signal_set = set(signal_ids)
+    if "institutional_pressure_framing" in signal_set:
+        derived = [
+            item for item in ("institutional_pressure_framing", "procedural_intimidation", "status_marking") if item in signal_set
+        ]
+        return [
+            _candidate(
+                behavior_id="escalation",
+                label="Escalation",
+                confidence="medium",
+                taxonomy_ids=["escalation_pressure"],
+                rationale=(
+                    "Escalation or formal-process wording suggests a behaviour-level pressure move rather than wording alone."
+                ),
+                evidence=_signal_evidence(rhetoric, signal_id="institutional_pressure_framing"),
+                derived_from_signal_ids=derived,
+                neutral_alternatives=["Routine escalation may be required by policy or time pressure."],
+            )
+        ], set(derived)
+    derived = [item for item in ("procedural_intimidation", "status_marking") if item in signal_set]
+    if not derived:
+        return [], set()
+    return [
+        _candidate(
+            behavior_id="escalation",
+            label="Escalation",
+            confidence="low",
+            taxonomy_ids=["escalation_pressure"],
+            rationale=(
+                "Procedural pressure or hierarchy-marking without a clear substantive basis can still support a "
+                "low-confidence escalation behaviour candidate."
+            ),
+            evidence=_signal_evidence(rhetoric, signal_id=derived[0]),
+            derived_from_signal_ids=derived,
+            neutral_alternatives=["Formal role or documentation language may be routine in the current workflow."],
+        )
+    ], set(derived)
+
+
+def _deadline_behavior(text, text_scope):
+    evidence = _match_evidence(text, pattern=_DEADLINE_RE, source_scope=text_scope)
+    if not evidence:
+        return None
+    return _candidate(
+        behavior_id="deadline_pressure",
+        label="Deadline Pressure",
+        confidence="medium",
+        taxonomy_ids=["escalation_pressure", "unequal_demands"],
+        rationale="Time-pressure wording suggests an action-demanding behavioural cue beyond tone alone.",
+        evidence=evidence,
+        derived_from_signal_ids=[],
+        neutral_alternatives=["The deadline may be operationally justified or genuinely urgent."],
+    )
+
+
+def _public_correction_behavior(rhetoric, signal_ids, recipient_count):
+    public_ids = ("implicit_accusation", "competence_framing", "ridicule", "patronizing_wording")
+    derived = [item for item in public_ids if item in signal_ids]
+    if recipient_count <= 1:
+        return None, [], "No multi-recipient visibility for public-correction inference."
+    if not derived:
+        return None, [], ""
+    return (
+        _candidate(
+            behavior_id="public_correction",
+            label="Public Correction",
+            confidence="medium",
+            taxonomy_ids=["public_criticism"],
+            rationale=(
+                "Corrective, accusatory, or patronizing wording sent to multiple visible recipients can indicate "
+                "a disproportionate public-correction behaviour."
+            ),
+            evidence=_signal_evidence(rhetoric, signal_id=derived[0]),
+            derived_from_signal_ids=derived,
+            neutral_alternatives=["A wider recipient list may be operationally necessary for shared work tracking."],
+        ),
+        derived,
+        "",
+    )
+
+
+def _undermining_behavior(rhetoric, signal_ids):
+    derived = [item for item in ("competence_framing", "ridicule", "patronizing_wording") if item in signal_ids]
+    if not derived:
+        return None, []
+    if "dismissiveness" in signal_ids:
+        derived.append("dismissiveness")
+    return _candidate(
+        behavior_id="undermining",
+        label="Undermining",
+        confidence="medium",
+        taxonomy_ids=["undermining_credibility"],
+        rationale=(
+            "Credibility-, capability-, or patronizing framing can indicate a degrading or credibility-"
+            "undermining behaviour rather than tone alone."
+        ),
+        evidence=_signal_evidence(rhetoric, signal_id=derived[0]),
+        derived_from_signal_ids=derived,
+        neutral_alternatives=[
+            "The wording may reflect a one-off correction or performance concern rather than a broader behavioural pattern."
+        ],
+    ), derived
+
+
+def _blame_behavior(text, text_scope, rhetoric, signal_ids):
+    evidence = _match_evidence(text, pattern=_BLAME_SHIFTING_RE, source_scope=text_scope)
+    derived = [item for item in ("implicit_accusation", "strategic_ambiguity", "selective_accountability") if item in signal_ids]
+    if not evidence and not {"implicit_accusation", "strategic_ambiguity"} <= set(signal_ids):
+        return None, []
+    return _candidate(
+        behavior_id="blame_shifting",
+        label="Blame-shifting",
+        confidence="low" if evidence else "medium",
+        taxonomy_ids=["blame_shifting"],
+        rationale=(
+            "Responsibility-framing that shifts failure or causation onto one person can indicate a "
+            "narrative-framing or blame-shifting behaviour candidate."
+        ),
+        evidence=evidence or _signal_evidence(rhetoric, signal_id=derived[0]),
+        derived_from_signal_ids=derived,
+        neutral_alternatives=[
+            "The record may reflect accurate attribution of responsibility rather than unfair narrative framing."
+        ],
+    ), derived
+
+
+def _selective_accountability_behavior(text, text_scope):
+    evidence = _match_evidence(text, pattern=_SELECTIVE_ACCOUNTABILITY_RE, source_scope=text_scope)
+    if not evidence:
+        return None
+    return _candidate(
+        behavior_id="selective_accountability",
+        label="Selective Accountability",
+        confidence="medium",
+        taxonomy_ids=["unequal_demands", "blame_shifting"],
+        rationale=(
+            "Language assigning sole or exceptional responsibility suggests a selective-accountability behaviour candidate."
+        ),
+        evidence=evidence,
+        derived_from_signal_ids=[],
+        neutral_alternatives=["The actor may genuinely own the task in that specific workflow."],
+    )
+
+
+def _omission_behaviors(text, target, visible_recipients):
+    evidence = _metadata_evidence(
+        excerpt=f"Target {target} absent from visible recipients {visible_recipients}.", matched_text=target
+    )
+    items = [
+        _candidate(
+            behavior_id="exclusion",
+            label="Exclusion",
+            confidence="low",
+            taxonomy_ids=["exclusion"],
+            rationale=(
+                "The case target is referenced in the message context but is absent from visible recipients, "
+                "which can support an exclusion hypothesis."
+            ),
+            evidence=evidence,
+            derived_from_signal_ids=[],
+            neutral_alternatives=["The message may concern the target without requiring them as a recipient."],
+        )
+    ]
+    if _DECISION_UPDATE_RE.search(text or ""):
+        items.append(
+            _candidate(
+                behavior_id="withholding",
+                label="Withholding Information",
+                confidence="low",
+                taxonomy_ids=["withholding_information", "exclusion"],
+                rationale=(
+                    "Decision- or update-framing combined with target absence can suggest a withholding-information "
+                    "behaviour candidate."
+                ),
+                evidence=_metadata_evidence(
+                    excerpt=(
+                        f"Decision/update wording present while target {target} is absent from visible recipients "
+                        f"{visible_recipients}."
+                    ),
+                    matched_text=target,
+                ),
+                derived_from_signal_ids=[],
+                neutral_alternatives=[
+                    "The update may be preparatory and later communicated to the target through another channel."
+                ],
+            )
+        )
+    return items
+
+
 def analyze_message_behavior(
     text: str,
     *,
@@ -222,243 +472,41 @@ def analyze_message_behavior(
     case_target_email: str = "",
     case_target_name: str = "",
 ) -> MessageBehaviorAnalysis:
-    visible_recipient_emails = [str(email).strip().lower() for email in (visible_recipient_emails or []) if email]
+    """Analyze a message for behavioral patterns and communication classification.
+
+    Args:
+        text: The message text to analyze.
+        text_scope: Whether the text is authored or quoted.
+        rhetoric: Pre-computed rhetoric analysis of the message.
+        recipient_count: Number of visible recipients.
+        visible_recipient_emails: List of visible recipient email addresses.
+        case_target_email: Email address of the case target.
+        case_target_name: Name of the case target.
+
+    Returns:
+        A complete MessageBehaviorAnalysis with behavior candidates, signals,
+        classification, and supporting evidence.
+
+    """
+    visible_recipient_emails = _normalized_emails(visible_recipient_emails)
     target_email = case_target_email.strip().lower()
     target_label = target_email or case_target_name or "case target"
     lowered_text = str(text or "").casefold()
     signal_ids = _signal_ids(rhetoric)
-    behavior_candidates: list[BehaviorCandidate] = []
-    consumed_signal_ids: set[str] = set()
-    counter_indicators: list[str] = []
-
-    if "institutional_pressure_framing" in signal_ids:
-        derived_from = ["institutional_pressure_framing"]
-        if "procedural_intimidation" in signal_ids:
-            derived_from.append("procedural_intimidation")
-        if "status_marking" in signal_ids:
-            derived_from.append("status_marking")
-        behavior_candidates.append(
-            _candidate(
-                behavior_id="escalation",
-                label="Escalation",
-                confidence="medium",
-                taxonomy_ids=["escalation_pressure"],
-                rationale=(
-                    "Escalation or formal-process wording suggests a behaviour-level pressure move rather than wording alone."
-                ),
-                evidence=_signal_evidence(rhetoric, signal_id="institutional_pressure_framing"),
-                derived_from_signal_ids=derived_from,
-                neutral_alternatives=["Routine escalation may be required by policy or time pressure."],
-            )
-        )
-        consumed_signal_ids.update(derived_from)
-    elif {"procedural_intimidation", "status_marking"} & set(signal_ids):
-        derived_from = [signal_id for signal_id in ("procedural_intimidation", "status_marking") if signal_id in signal_ids]
-        behavior_candidates.append(
-            _candidate(
-                behavior_id="escalation",
-                label="Escalation",
-                confidence="low",
-                taxonomy_ids=["escalation_pressure"],
-                rationale=(
-                    "Procedural pressure or hierarchy-marking without a clear substantive basis can still support a "
-                    "low-confidence escalation behaviour candidate."
-                ),
-                evidence=_signal_evidence(rhetoric, signal_id=derived_from[0]),
-                derived_from_signal_ids=derived_from,
-                neutral_alternatives=["Formal role or documentation language may be routine in the current workflow."],
-            )
-        )
-        consumed_signal_ids.update(derived_from)
-
-    deadline_evidence = _match_evidence(text, pattern=_DEADLINE_RE, source_scope=text_scope)
-    if deadline_evidence:
-        behavior_candidates.append(
-            _candidate(
-                behavior_id="deadline_pressure",
-                label="Deadline Pressure",
-                confidence="medium",
-                taxonomy_ids=["escalation_pressure", "unequal_demands"],
-                rationale="Time-pressure wording suggests an action-demanding behavioural cue beyond tone alone.",
-                evidence=deadline_evidence,
-                derived_from_signal_ids=[],
-                neutral_alternatives=["The deadline may be operationally justified or genuinely urgent."],
-            )
-        )
-
-    if recipient_count > 1 and (
-        "implicit_accusation" in signal_ids
-        or "competence_framing" in signal_ids
-        or "ridicule" in signal_ids
-        or "patronizing_wording" in signal_ids
-    ):
-        derived_from = [
-            signal_id
-            for signal_id in ("implicit_accusation", "competence_framing", "ridicule", "patronizing_wording")
-            if signal_id in signal_ids
-        ]
-        evidence = (
-            _signal_evidence(rhetoric, signal_id=derived_from[0])
-            if derived_from
-            else _metadata_evidence(
-                excerpt=f"Message has {recipient_count} visible recipients.",
-                matched_text=f"recipient_count={recipient_count}",
-            )
-        )
-        behavior_candidates.append(
-            _candidate(
-                behavior_id="public_correction",
-                label="Public Correction",
-                confidence="medium",
-                taxonomy_ids=["public_criticism"],
-                rationale=(
-                    "Corrective, accusatory, or patronizing wording sent to multiple visible recipients can indicate "
-                    "a disproportionate public-correction behaviour."
-                ),
-                evidence=evidence,
-                derived_from_signal_ids=derived_from,
-                neutral_alternatives=["A wider recipient list may be operationally necessary for shared work tracking."],
-            )
-        )
-        consumed_signal_ids.update(derived_from)
-    elif recipient_count <= 1:
-        counter_indicators.append("No multi-recipient visibility for public-correction inference.")
-
-    if {"competence_framing", "ridicule", "patronizing_wording"} & set(signal_ids):
-        derived_from = [
-            signal_id for signal_id in ("competence_framing", "ridicule", "patronizing_wording") if signal_id in signal_ids
-        ]
-        if "dismissiveness" in signal_ids:
-            derived_from.append("dismissiveness")
-        behavior_candidates.append(
-            _candidate(
-                behavior_id="undermining",
-                label="Undermining",
-                confidence="medium",
-                taxonomy_ids=["undermining_credibility"],
-                rationale=(
-                    "Credibility-, capability-, or patronizing framing can indicate a degrading or credibility-"
-                    "undermining behaviour rather than tone alone."
-                ),
-                evidence=_signal_evidence(rhetoric, signal_id=derived_from[0]),
-                derived_from_signal_ids=derived_from,
-                neutral_alternatives=[
-                    "The wording may reflect a one-off correction or performance concern "
-                    "rather than a broader behavioural pattern."
-                ],
-            )
-        )
-        consumed_signal_ids.update(derived_from)
-
-    blame_shifting_evidence = _match_evidence(text, pattern=_BLAME_SHIFTING_RE, source_scope=text_scope)
-    if blame_shifting_evidence or {"implicit_accusation", "strategic_ambiguity"} <= set(signal_ids):
-        derived_from = [
-            signal_id
-            for signal_id in ("implicit_accusation", "strategic_ambiguity", "selective_accountability")
-            if signal_id in signal_ids
-        ]
-        behavior_candidates.append(
-            _candidate(
-                behavior_id="blame_shifting",
-                label="Blame-shifting",
-                confidence="low" if blame_shifting_evidence else "medium",
-                taxonomy_ids=["blame_shifting"],
-                rationale=(
-                    "Responsibility-framing that shifts failure or causation onto one person can indicate a "
-                    "narrative-framing or blame-shifting behaviour candidate."
-                ),
-                evidence=blame_shifting_evidence or _signal_evidence(rhetoric, signal_id=derived_from[0]),
-                derived_from_signal_ids=derived_from,
-                neutral_alternatives=[
-                    "The record may reflect accurate attribution of responsibility rather than unfair narrative framing."
-                ],
-            )
-        )
-        consumed_signal_ids.update(derived_from)
-
-    selective_accountability_evidence = _match_evidence(
-        text,
-        pattern=_SELECTIVE_ACCOUNTABILITY_RE,
-        source_scope=text_scope,
+    behavior_candidates, consumed_signal_ids, counter_indicators = _collect_behavior_candidates(
+        text, text_scope, rhetoric, signal_ids, recipient_count
     )
-    if selective_accountability_evidence:
-        behavior_candidates.append(
-            _candidate(
-                behavior_id="selective_accountability",
-                label="Selective Accountability",
-                confidence="medium",
-                taxonomy_ids=["unequal_demands", "blame_shifting"],
-                rationale=(
-                    "Language assigning sole or exceptional responsibility suggests "
-                    "a selective-accountability behaviour candidate."
-                ),
-                evidence=selective_accountability_evidence,
-                derived_from_signal_ids=[],
-                neutral_alternatives=["The actor may genuinely own the task in that specific workflow."],
-            )
-        )
 
-    target_named = bool(case_target_name and case_target_name.casefold() in lowered_text)
-    target_excluded = bool(target_email and visible_recipient_emails and target_email not in visible_recipient_emails)
-    target_referenced = bool(target_named or (target_email and target_email in lowered_text))
-    omission_target_linked = bool(text_scope == "authored_text" and target_excluded and target_referenced)
-    if omission_target_linked:
-        behavior_candidates.append(
-            _candidate(
-                behavior_id="exclusion",
-                label="Exclusion",
-                confidence="low",
-                taxonomy_ids=["exclusion"],
-                rationale=(
-                    "The case target is referenced in the message context but is absent from visible recipients, "
-                    "which can support an exclusion hypothesis."
-                ),
-                evidence=_metadata_evidence(
-                    excerpt=(
-                        f"Target {target_email or case_target_name} absent from visible recipients {visible_recipient_emails}."
-                    ),
-                    matched_text=target_email or case_target_name,
-                ),
-                derived_from_signal_ids=[],
-                neutral_alternatives=["The message may concern the target without requiring them as a recipient."],
-            )
-        )
-        if _DECISION_UPDATE_RE.search(text or ""):
-            behavior_candidates.append(
-                _candidate(
-                    behavior_id="withholding",
-                    label="Withholding Information",
-                    confidence="low",
-                    taxonomy_ids=["withholding_information", "exclusion"],
-                    rationale=(
-                        "Decision- or update-framing combined with target absence can "
-                        "suggest a withholding-information behaviour candidate."
-                    ),
-                    evidence=_metadata_evidence(
-                        excerpt=(
-                            f"Decision/update wording present while target {target_email or case_target_name} "
-                            f"is absent from visible recipients {visible_recipient_emails}."
-                        ),
-                        matched_text=target_email or case_target_name,
-                    ),
-                    derived_from_signal_ids=[],
-                    neutral_alternatives=[
-                        "The update may be preparatory and later communicated to the target through another channel."
-                    ],
-                )
-            )
-    elif text_scope == "authored_text" and target_email:
-        counter_indicators.append(
-            "Case target appears in visible recipients, so omission-based exclusion checks stayed negative."
-        )
-    elif text_scope == "authored_text" and not target_email:
-        counter_indicators.append("No case target email available for omission-aware checks.")
-
-    wording_only_signal_ids = [signal_id for signal_id in signal_ids if signal_id not in consumed_signal_ids]
-    if wording_only_signal_ids:
-        counter_indicators.append(
-            "Some rhetorical cues remained wording-only because message-level behavioural support was insufficient."
-        )
+    omission_target_linked = _omission_target_linked(
+        text_scope, target_email, case_target_name, lowered_text, visible_recipient_emails
+    )
+    omission_candidates, omission_counter = _omission_results(
+        omission_target_linked, text_scope, target_email, case_target_name, text, visible_recipient_emails
+    )
+    behavior_candidates.extend(omission_candidates)
+    counter_indicators.extend(omission_counter)
+    wording_only_signal_ids, wording_counter = _wording_status(signal_ids, consumed_signal_ids)
+    counter_indicators.extend(wording_counter)
 
     included_actors = ordered_unique(visible_recipient_emails)
     excluded_actors = [target_email] if omission_target_linked else []
@@ -474,24 +522,99 @@ def analyze_message_behavior(
         behavior_candidates=behavior_candidates,
         omission_target_linked=omission_target_linked,
     )
-
     return normalize_message_behavior_analysis(
-        {
-            "text_scope": text_scope,
-            "behavior_candidate_count": len(behavior_candidates),
-            "behavior_candidates": behavior_candidates,
-            "wording_only_signal_ids": wording_only_signal_ids,
-            "counter_indicators": counter_indicators,
-            "tone_summary": _tone_summary(
-                classification=classification,
-                behavior_candidates=behavior_candidates,
-                signal_ids=signal_ids,
-            ),
-            "relevant_wording": relevant_wording,
-            "omissions_or_process_signals": process_signals,
-            "included_actors": included_actors,
-            "excluded_actors": excluded_actors,
-            "communication_classification": classification,
-        },
+        _analysis_payload(
+            text_scope,
+            behavior_candidates,
+            wording_only_signal_ids,
+            counter_indicators,
+            classification,
+            signal_ids,
+            relevant_wording,
+            process_signals,
+            included_actors,
+            excluded_actors,
+        ),
         text_scope=text_scope,
     )
+
+
+def _collect_behavior_candidates(text, text_scope, rhetoric, signal_ids, recipient_count):
+    candidates, consumed = _escalation_behavior(rhetoric, signal_ids)
+    _append_optional(candidates, _deadline_behavior(text, text_scope))
+    public_candidate, public_consumed, public_counter = _public_correction_behavior(rhetoric, signal_ids, recipient_count)
+    _append_optional(candidates, public_candidate)
+    consumed.update(public_consumed)
+    candidate, more_consumed = _undermining_behavior(rhetoric, signal_ids)
+    _append_optional(candidates, candidate)
+    consumed.update(more_consumed)
+    candidate, more_consumed = _blame_behavior(text, text_scope, rhetoric, signal_ids)
+    _append_optional(candidates, candidate)
+    consumed.update(more_consumed)
+    _append_optional(candidates, _selective_accountability_behavior(text, text_scope))
+    return candidates, consumed, [public_counter] if public_counter else []
+
+
+def _omission_results(linked, text_scope, target_email, target_name, text, visible_emails):
+    if linked:
+        return _omission_behaviors(text, target_email or target_name, visible_emails), []
+    if text_scope != "authored_text":
+        return [], []
+    message = (
+        "Case target appears in visible recipients, so omission-based exclusion checks stayed negative."
+        if target_email
+        else "No case target email available for omission-aware checks."
+    )
+    return [], [message]
+
+
+def _wording_status(signal_ids, consumed):
+    wording_ids = [signal_id for signal_id in signal_ids if signal_id not in consumed]
+    counters = (
+        ["Some rhetorical cues remained wording-only because message-level behavioural support was insufficient."]
+        if wording_ids
+        else []
+    )
+    return wording_ids, counters
+
+
+def _normalized_emails(emails):
+    return [str(email).strip().lower() for email in (emails or []) if email]
+
+
+def _omission_target_linked(text_scope, target_email, target_name, lowered_text, visible_emails):
+    target_named = bool(target_name and target_name.casefold() in lowered_text)
+    target_excluded = bool(target_email and visible_emails and target_email not in visible_emails)
+    target_referenced = bool(target_named or (target_email and target_email in lowered_text))
+    return bool(text_scope == "authored_text" and target_excluded and target_referenced)
+
+
+def _analysis_payload(
+    text_scope,
+    behavior_candidates,
+    wording_ids,
+    counter_indicators,
+    classification,
+    signal_ids,
+    relevant_wording,
+    process_signals,
+    included_actors,
+    excluded_actors,
+):
+    return {
+        "text_scope": text_scope,
+        "behavior_candidate_count": len(behavior_candidates),
+        "behavior_candidates": behavior_candidates,
+        "wording_only_signal_ids": wording_ids,
+        "counter_indicators": counter_indicators,
+        "tone_summary": _tone_summary(
+            classification=classification,
+            behavior_candidates=behavior_candidates,
+            signal_ids=signal_ids,
+        ),
+        "relevant_wording": relevant_wording,
+        "omissions_or_process_signals": process_signals,
+        "included_actors": included_actors,
+        "excluded_actors": excluded_actors,
+        "communication_classification": classification,
+    }

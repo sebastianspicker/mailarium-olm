@@ -8,10 +8,27 @@ from typing import Any
 
 
 def _clean_text(value: Any) -> str:
+    """Normalize and clean text by collapsing whitespace and stripping.
+
+    Args:
+        value: The value to clean, will be converted to string.
+
+    Returns:
+        The cleaned text with normalized whitespace.
+    """
     return " ".join(str(value or "").split()).strip()
 
 
 def _segment_surface_candidates(email: Any) -> list[tuple[str, str, int | None, str]]:
+    """Extract text surface candidates from email segments.
+
+    Args:
+        email: An email object with segments attribute.
+
+    Returns:
+        A list of tuples containing (source_scope, surface_scope, ordinal, text)
+        for each segment that contains text.
+    """
     rows: list[tuple[str, str, int | None, str]] = []
     for index, segment in enumerate(getattr(email, "segments", None) or []):
         segment_type = str(getattr(segment, "segment_type", "") or "")
@@ -33,6 +50,15 @@ def _segment_surface_candidates(email: Any) -> list[tuple[str, str, int | None, 
 
 
 def _attachment_surface_candidates(email: Any) -> list[tuple[str, str, int | None, str]]:
+    """Extract text surface candidates from email attachments.
+
+    Args:
+        email: An email object with attachments attribute.
+
+    Returns:
+        A list of tuples containing (source_scope, surface_scope, ordinal, text)
+        for each attachment that contains extractable text.
+    """
     rows: list[tuple[str, str, int | None, str]] = []
     for index, attachment in enumerate(getattr(email, "attachments", None) or []):
         if not isinstance(attachment, dict):
@@ -47,6 +73,15 @@ def _attachment_surface_candidates(email: Any) -> list[tuple[str, str, int | Non
 
 
 def _fallback_email_surface(email: Any) -> list[tuple[str, str, int | None, str]]:
+    """Extract fallback text surface from email body fields.
+
+    Args:
+        email: An email object with body text fields.
+
+    Returns:
+        A list containing a single tuple with email body text if available,
+        or an empty list if no body text is found.
+    """
     text = _clean_text(
         getattr(email, "forensic_body_text", "") or getattr(email, "clean_body", "") or getattr(email, "raw_body_text", "")
     )
@@ -76,24 +111,32 @@ def extract_entity_occurrence_rows_from_email(
             if not text:
                 continue
             for term in terms:
-                for match in re.finditer(re.escape(term), text, flags=re.IGNORECASE):
-                    char_start = int(match.start())
-                    char_end = int(match.end())
-                    key = (str(normalized_form or ""), source_scope, surface_scope, segment_ordinal, char_start, char_end)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    rows.append(
-                        (
-                            str(entity_text or ""),
-                            str(entity_type or ""),
-                            str(normalized_form or ""),
-                            source_scope,
-                            surface_scope,
-                            segment_ordinal,
-                            char_start,
-                            char_end,
-                            _clean_text(match.group(0)),
-                        )
+                rows.extend(
+                    _occurrence_rows(
+                        term, text, entity_text, entity_type, normalized_form, source_scope, surface_scope, segment_ordinal, seen
                     )
+                )
+    return rows
+
+
+def _occurrence_rows(term, text, entity_text, entity_type, normalized, source_scope, surface_scope, ordinal, seen):
+    rows = []
+    for match in re.finditer(re.escape(term), text, flags=re.IGNORECASE):
+        start, end = int(match.start()), int(match.end())
+        key = (str(normalized or ""), source_scope, surface_scope, ordinal, start, end)
+        if key not in seen:
+            seen.add(key)
+            rows.append(
+                (
+                    str(entity_text or ""),
+                    str(entity_type or ""),
+                    str(normalized or ""),
+                    source_scope,
+                    surface_scope,
+                    ordinal,
+                    start,
+                    end,
+                    _clean_text(match.group(0)),
+                )
+            )
     return rows

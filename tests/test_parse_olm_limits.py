@@ -92,6 +92,20 @@ def test_shared_xml_parser_rejects_deeply_nested_xml():
         etree.fromstring(xml, parser=_new_xml_parser())
 
 
+def test_shared_xml_parser_does_not_resolve_external_entities(tmp_path: Path):
+    from lxml import etree
+
+    secret = tmp_path / "external.txt"
+    secret.write_text("must-not-be-expanded", encoding="utf-8")
+    xml = f'<!DOCTYPE root [<!ENTITY xxe SYSTEM "{secret.as_uri()}">]><root>&xxe;</root>'.encode()
+
+    root = etree.fromstring(xml, parser=_new_xml_parser())
+
+    assert root.text is None
+    assert len(root) == 1
+    assert isinstance(root[0], etree._Entity)
+
+
 def test_parse_olm_accepts_uppercase_xml_extension(tmp_path: Path):
     archive = tmp_path / "sample-uppercase.olm"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:

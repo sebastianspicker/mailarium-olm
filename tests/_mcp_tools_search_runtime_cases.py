@@ -1,10 +1,7 @@
-# ruff: noqa: F401
 import json
-import sqlite3
 from unittest.mock import patch
 
 import pytest
-from pydantic import ValidationError
 
 from src.config import get_settings
 

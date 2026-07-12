@@ -39,18 +39,55 @@ from .repo_paths import validate_local_read_path, validate_new_output_path
 
 
 def _cli_execution_authority(case_action: str) -> dict[str, str]:
+    """Build an execution authority dict for CLI case actions.
+
+    Creates an authority dictionary with surface and case action information,
+    adding the command family marker.
+
+    Args:
+        case_action: The specific case action being performed.
+
+    Returns:
+        A dict with execution authority information including surface,
+        case_action, and command_family.
+    """
     authority = build_execution_authority(surface="repository_cli", case_action=case_action)
     authority["command_family"] = "case"
     return authority
 
 
 def _stamp_cli_payload(payload: dict[str, Any], *, case_action: str) -> dict[str, Any]:
+    """Stamp a payload dict with CLI execution authority.
+
+    Adds execution authority information to a payload dictionary.
+
+    Args:
+        payload: The payload dict to stamp.
+        case_action: The case action for the authority.
+
+    Returns:
+        A new dict with the execution authority added.
+    """
     stamped = dict(payload)
     stamped["execution_authority"] = _cli_execution_authority(case_action)
     return stamped
 
 
 def _render_cli_json(payload: Any, *, case_action: str, indent: int | None = None) -> str:
+    """Render a payload as JSON with CLI execution authority stamping.
+
+    If the payload is a string, attempts to parse it as JSON first.
+    If the payload is a dict, stamps it with execution authority before
+    serializing to JSON.
+
+    Args:
+        payload: The data to render as JSON.
+        case_action: The case action for authority stamping.
+        indent: Optional indentation level for pretty printing.
+
+    Returns:
+        A JSON string representation of the payload.
+    """
     if isinstance(payload, str):
         try:
             loaded = json.loads(payload)
@@ -66,6 +103,21 @@ def _render_cli_json(payload: Any, *, case_action: str, indent: int | None = Non
 
 
 def _resolve_results_path(results_root: Path, path: Path | str) -> Path:
+    """Resolve a path relative to the results root directory.
+
+    Expands user paths, makes relative paths absolute relative to results_root,
+    and validates that the resolved path stays within the results root.
+
+    Args:
+        results_root: The root directory for results.
+        path: The path to resolve (string or Path).
+
+    Returns:
+        The resolved absolute Path.
+
+    Raises:
+        ValueError: If the resolved path escapes the results root.
+    """
     candidate = Path(path).expanduser()
     if not candidate.is_absolute():
         candidate = results_root / candidate
@@ -77,6 +129,21 @@ def _resolve_results_path(results_root: Path, path: Path | str) -> Path:
 
 
 def _require_existing_results_path(results_root: Path, path: Path | str, *, label: str) -> Path:
+    """Require that a path exists within the results root directory.
+
+    Resolves the path and checks that it exists.
+
+    Args:
+        results_root: The root directory for results.
+        path: The path to check (string or Path).
+        label: A label describing the path for error messages.
+
+    Returns:
+        The resolved existing Path.
+
+    Raises:
+        ValueError: If the path does not exist or escapes the results root.
+    """
     resolved = _resolve_results_path(results_root, path)
     if not resolved.exists():
         raise ValueError(f"{label} does not exist: {path}")
@@ -87,41 +154,122 @@ class _SyncToolDeps:
     """Minimal ToolDeps-compatible adapter for CLI execution."""
 
     def __init__(self, retriever: Any, email_db: Any):
+        """Initialize the adapter with retriever and database instances.
+
+        Args:
+            retriever: An EmailRetriever instance for searching.
+            email_db: An EmailDatabase instance for database operations.
+        """
         self._retriever = retriever
         self._email_db = email_db
 
     def get_retriever(self) -> Any:
+        """Get the retriever instance.
+
+        Returns:
+            The EmailRetriever instance.
+        """
         return self._retriever
 
     def get_email_db(self) -> Any:
+        """Get the email database instance.
+
+        Returns:
+            The EmailDatabase instance.
+        """
         return self._email_db
 
     async def offload(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Execute a function synchronously (no actual offloading in CLI context).
+
+        Args:
+            fn: The function to execute.
+            *args: Positional arguments for the function.
+            **kwargs: Keyword arguments for the function.
+
+        Returns:
+            The result of the function call.
+        """
         if args or kwargs:
             return fn(*args, **kwargs)
         return fn()
 
     def tool_annotations(self, title: str) -> Any:
+        """Get tool annotations for a title.
+
+        Args:
+            title: The title string.
+
+        Returns:
+            The title string (identity function for compatibility).
+        """
         return title
 
     def write_tool_annotations(self, title: str) -> Any:
+        """Get write tool annotations for a title.
+
+        Args:
+            title: The title string.
+
+        Returns:
+            The title string (identity function for compatibility).
+        """
         return title
 
     def idempotent_write_annotations(self, title: str) -> Any:
+        """Get idempotent write annotations for a title.
+
+        Args:
+            title: The title string.
+
+        Returns:
+            The title string (identity function for compatibility).
+        """
         return title
 
     DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available. Run ingestion first."})
 
     def sanitize(self, text: str) -> str:
+        """Sanitize text (identity function for compatibility).
+
+        Args:
+            text: The text to sanitize.
+
+        Returns:
+            The original text (no sanitization performed in CLI context).
+        """
         return text
 
 
 def _cli_exit(message: str, *, code: int) -> NoReturn:
+    """Exit the CLI with a message and exit code.
+
+    Args:
+        message: The error or status message to print.
+        code: The exit code to use.
+
+    Raises:
+        SystemExit: Always raised with the given code.
+    """
     print(message)
     raise SystemExit(code)
 
 
 def _read_text_or_exit(path: str, *, label: str) -> str:
+    """Read text from a file path, exiting on error.
+
+    Validates the path and reads its content as UTF-8 text.
+
+    Args:
+        path: The file path to read.
+        label: A label describing the file for error messages.
+
+    Returns:
+        The file content as a string.
+
+    Raises:
+        SystemExit: If the file cannot be read.
+    """
     try:
         input_path = validate_local_read_path(path, field_name=label)
         return input_path.read_text(encoding="utf-8")
@@ -130,6 +278,20 @@ def _read_text_or_exit(path: str, *, label: str) -> str:
 
 
 def _load_json_object_or_exit(path: str, *, label: str) -> Any:
+    """Load and parse a JSON file, exiting on error.
+
+    Reads the file and parses its content as JSON.
+
+    Args:
+        path: The JSON file path to load.
+        label: A label describing the file for error messages.
+
+    Returns:
+        The parsed JSON data (dict, list, etc.).
+
+    Raises:
+        SystemExit: If the file cannot be read or parsed as JSON.
+    """
     raw_input = _read_text_or_exit(path, label=label)
     try:
         return json.loads(raw_input)
@@ -138,6 +300,19 @@ def _load_json_object_or_exit(path: str, *, label: str) -> Any:
 
 
 def _write_text_or_exit(path: str, content: str, *, label: str) -> None:
+    """Write text to a file path, exiting on error.
+
+    Validates the output path, creates parent directories as needed,
+    and writes the content as UTF-8 text.
+
+    Args:
+        path: The file path to write to.
+        content: The text content to write.
+        label: A label describing the file for error messages.
+
+    Raises:
+        SystemExit: If the file cannot be written.
+    """
     try:
         output_path = validate_new_output_path(path, field_name=label)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,6 +322,18 @@ def _write_text_or_exit(path: str, content: str, *, label: str) -> None:
 
 
 def _validate_case_analysis_input_or_exit(raw_input: Any, *, label: str) -> EmailCaseAnalysisInput:
+    """Validate raw input as an EmailCaseAnalysisInput, exiting on error.
+
+    Args:
+        raw_input: The raw input data to validate.
+        label: A label describing the input for error messages.
+
+    Returns:
+        A validated EmailCaseAnalysisInput instance.
+
+    Raises:
+        SystemExit: If validation fails.
+    """
     try:
         return EmailCaseAnalysisInput.model_validate(raw_input)
     except ValidationError as exc:
@@ -154,6 +341,18 @@ def _validate_case_analysis_input_or_exit(raw_input: Any, *, label: str) -> Emai
 
 
 def _validate_full_pack_input_or_exit(payload: dict[str, Any], *, label: str) -> EmailCaseFullPackInput:
+    """Validate a payload as an EmailCaseFullPackInput, exiting on error.
+
+    Args:
+        payload: The payload dict to validate.
+        label: A label describing the payload for error messages.
+
+    Returns:
+        A validated EmailCaseFullPackInput instance.
+
+    Raises:
+        SystemExit: If validation fails.
+    """
     try:
         return EmailCaseFullPackInput.model_validate(payload)
     except ValidationError as exc:
@@ -161,6 +360,18 @@ def _validate_full_pack_input_or_exit(payload: dict[str, Any], *, label: str) ->
 
 
 def _validate_counsel_export_input_or_exit(payload: dict[str, Any], *, label: str) -> EmailLegalSupportExportInput:
+    """Validate a payload as an EmailLegalSupportExportInput, exiting on error.
+
+    Args:
+        payload: The payload dict to validate.
+        label: A label describing the payload for error messages.
+
+    Returns:
+        A validated EmailLegalSupportExportInput instance.
+
+    Raises:
+        SystemExit: If validation fails.
+    """
     try:
         return EmailLegalSupportExportInput.model_validate(payload)
     except ValidationError as exc:
@@ -180,10 +391,30 @@ def run_case_analyze_impl(retriever: Any, get_email_db: Callable[[], Any], args:
 
 
 def _load_case_analysis_input(path: str) -> EmailCaseAnalysisInput:
+    """Load and validate a case analysis input file.
+
+    Args:
+        path: Path to the JSON input file.
+
+    Returns:
+        A validated EmailCaseAnalysisInput instance.
+
+    Raises:
+        SystemExit: If the file cannot be read or validated.
+    """
     return _validate_case_analysis_input_or_exit(_load_json_object_or_exit(path, label="case input"), label="case input")
 
 
 def _validated_gather_evidence_limits(args: Any) -> tuple[int, int]:
+    """Extract and validate gather evidence limits from args.
+
+    Args:
+        args: Argument namespace containing harvest_limit_per_wave and
+            promote_limit_per_wave attributes.
+
+    Returns:
+        A tuple of (harvest_limit_per_wave, promote_limit_per_wave).
+    """
     validated = CaseGatherEvidenceLimitsInput.model_validate(
         {
             "harvest_limit_per_wave": int(getattr(args, "harvest_limit_per_wave", 12)),
@@ -330,6 +561,17 @@ def run_case_archive_results_impl(args: Any) -> None:
 
 
 def _require_email_db(get_email_db: Callable[[], Any]) -> Any:
+    """Require and return an EmailDatabase instance.
+
+    Args:
+        get_email_db: A callable that returns an EmailDatabase instance.
+
+    Returns:
+        The EmailDatabase instance.
+
+    Raises:
+        ValueError: If the database is not available.
+    """
     db = get_email_db()
     if db is None:
         raise ValueError("SQLite database not available. Run ingestion first.")
@@ -337,6 +579,15 @@ def _require_email_db(get_email_db: Callable[[], Any]) -> Any:
 
 
 def _load_optional_json(path: str | None, *, default: Any) -> Any:
+    """Load an optional JSON file, returning a default if not provided.
+
+    Args:
+        path: Optional path to a JSON file.
+        default: Default value to return if path is None.
+
+    Returns:
+        The parsed JSON data, or the default value.
+    """
     if not path:
         return default
     return _load_json_object_or_exit(path, label="optional json input")
@@ -372,34 +623,10 @@ def run_case_counsel_pack_impl(retriever: Any, get_email_db: Callable[[], Any], 
     payload = asyncio.run(build_case_analysis(deps, params))
     rendered_payload = json.loads(payload)
     exporter = LegalSupportExporter()
-    target = str(params.delivery_target or "").strip()
-    counsel_export_status = getattr(exporter, "counsel_export_status", None)
-    if target in {"counsel_handoff", "counsel_handoff_bundle"} and callable(counsel_export_status):
-        export_status = counsel_export_status(payload=rendered_payload)
-        if isinstance(export_status, dict) and not bool(export_status.get("ready")):
-            blockers = [str(item) for item in export_status.get("blockers", []) if item]
-            export_metadata = export_status.get("export_metadata")
-            readiness = export_metadata.get("counsel_export_readiness", {}) if isinstance(export_metadata, dict) else {}
-            result = {
-                "workflow": "case_counsel_pack",
-                "status": "blocked",
-                "delivery_target": params.delivery_target,
-                "delivery_format": params.delivery_format,
-                "output_path": params.output_path,
-                "analysis_query": str(rendered_payload.get("analysis_query") or ""),
-                "next_step": readiness.get("next_step"),
-                "blockers": [
-                    {
-                        "field": blocker,
-                        "severity": "blocking",
-                        "reason": "Counsel-facing export remains blocked until the recorded readiness issue is resolved.",
-                    }
-                    for blocker in blockers
-                ],
-                "export_metadata": export_metadata,
-            }
-            print(_render_cli_json(result, case_action="counsel-pack"))
-            return 0 if bool(getattr(args, "allow_blocked_exit_zero", False)) else 1
+    blocked = _blocked_counsel_export(exporter, rendered_payload, params)
+    if blocked is not None:
+        print(_render_cli_json(blocked, case_action="counsel-pack"))
+        return 0 if bool(getattr(args, "allow_blocked_exit_zero", False)) else 1
     result = exporter.export_file(
         payload=rendered_payload,
         output_path=params.output_path,
@@ -409,6 +636,38 @@ def run_case_counsel_pack_impl(retriever: Any, get_email_db: Callable[[], Any], 
     rendered_result = {"workflow": "case_counsel_pack", **result}
     print(_render_cli_json(rendered_result, case_action="counsel-pack"))
     return 0
+
+
+def _blocked_counsel_export(exporter: Any, payload: dict[str, Any], params: Any) -> dict[str, Any] | None:
+    target = str(params.delivery_target or "").strip()
+    status_fn = getattr(exporter, "counsel_export_status", None)
+    if target not in {"counsel_handoff", "counsel_handoff_bundle"} or not callable(status_fn):
+        return None
+    status = status_fn(payload=payload)
+    if not isinstance(status, dict) or bool(status.get("ready")):
+        return None
+    metadata = status.get("export_metadata")
+    readiness = metadata.get("counsel_export_readiness", {}) if isinstance(metadata, dict) else {}
+    blockers = [str(item) for item in status.get("blockers", []) if item]
+    return {
+        "workflow": "case_counsel_pack",
+        "status": "blocked",
+        "delivery_target": params.delivery_target,
+        "delivery_format": params.delivery_format,
+        "output_path": params.output_path,
+        "analysis_query": str(payload.get("analysis_query") or ""),
+        "next_step": readiness.get("next_step"),
+        "blockers": [_counsel_blocker(item) for item in blockers],
+        "export_metadata": metadata,
+    }
+
+
+def _counsel_blocker(field: str) -> dict[str, str]:
+    return {
+        "field": field,
+        "severity": "blocking",
+        "reason": "Counsel-facing export remains blocked until the recorded readiness issue is resolved.",
+    }
 
 
 def run_case_review_status_impl(get_email_db: Callable[[], Any], args: Any) -> None:

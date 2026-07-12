@@ -5,22 +5,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._utils import _as_dict, _as_list, _compact
 from .question_execution_waves import get_wave_definition
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _clean_text(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
-
-
 def _coerce_non_negative_int(value: Any) -> int | None:
+    """Coerce a value to a non-negative int, returning None if conversion fails or result is negative."""
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -61,36 +51,37 @@ def _find_snippet_bounds(body_text: str, snippet: str) -> tuple[int | None, int 
 
 
 def _wave_meta(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract wave metadata from payload including wave_id, label, question_ids, and scan_id."""
     wave_execution = _as_dict(payload.get("wave_execution"))
-    wave_id = _clean_text(wave_execution.get("wave_id"))
+    wave_id = _compact(wave_execution.get("wave_id"))
     if not wave_id:
         raise ValueError("wave_execution.wave_id is required for evidence harvest")
     definition = get_wave_definition(wave_id)
-    label = _clean_text(wave_execution.get("label")) or definition.label
+    label = _compact(wave_execution.get("label")) or definition.label
     questions = [
-        _clean_text(item)
-        for item in (_as_list(wave_execution.get("questions")) or list(definition.question_ids))
-        if _clean_text(item)
+        _compact(item) for item in (_as_list(wave_execution.get("questions")) or list(definition.question_ids)) if _compact(item)
     ]
     return {
         "wave_id": definition.wave_id,
         "wave_label": label,
         "question_ids": questions,
-        "scan_id": _clean_text(wave_execution.get("scan_id")),
+        "scan_id": _compact(wave_execution.get("scan_id")),
     }
 
 
 def _raw_archive_candidates(payload: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Extract raw archive candidates from payload's archive_harvest.evidence_bank."""
     archive_harvest = _as_dict(payload.get("archive_harvest"))
     evidence_bank = [row for row in _as_list(archive_harvest.get("evidence_bank")) if isinstance(row, dict)]
     rows: list[tuple[str, dict[str, Any]]] = []
     for row in evidence_bank:
-        candidate_kind = _clean_text(row.get("candidate_kind")) or "body"
+        candidate_kind = _compact(row.get("candidate_kind")) or "body"
         rows.append((candidate_kind, dict(row)))
     return rows
 
 
 def _candidate_rows(payload: dict[str, Any], *, harvest_limit_per_wave: int) -> list[tuple[str, dict[str, Any]]]:
+    """Get candidate rows from payload, preferring archive harvest, with per-wave limit."""
     raw_rows = _raw_archive_candidates(payload)
     if raw_rows:
         return raw_rows[:harvest_limit_per_wave]
@@ -102,6 +93,7 @@ def _candidate_rows(payload: dict[str, Any], *, harvest_limit_per_wave: int) -> 
 
 
 def _candidate_summary(*, wave_label: str, question_ids: list[str], candidate_kind: str, rank: int) -> str:
+    """Generate a human-readable summary for a harvested candidate."""
     joined_questions = ", ".join(question_ids[:4]) if question_ids else "unmapped questions"
     if candidate_kind == "attachment":
         return f"{wave_label}: harvested attachment candidate for {joined_questions} (rank {rank})."
@@ -116,27 +108,28 @@ def _candidate_context(
     question_ids: list[str],
     scan_id: str,
 ) -> dict[str, Any]:
+    """Extract and normalize context metadata from a candidate for evidence storage."""
     attachment = _as_dict(candidate.get("attachment")) if candidate_kind == "attachment" else {}
     provenance = _as_dict(candidate.get("provenance"))
-    support_type = _clean_text(candidate.get("support_type"))
+    support_type = _compact(candidate.get("support_type"))
     return {
         "wave_id": wave_id,
         "question_ids": list(question_ids),
         "scan_id": scan_id,
         "candidate_kind": candidate_kind,
-        "match_reason": _clean_text(candidate.get("match_reason")),
-        "attachment_filename": _clean_text(attachment.get("filename")),
-        "attachment_mime_type": _clean_text(attachment.get("mime_type")),
-        "harvest_source": _clean_text(candidate.get("harvest_source")),
-        "body_render_source": _clean_text(candidate.get("body_render_source") or provenance.get("body_render_source")),
-        "verification_status": _clean_text(candidate.get("verification_status")),
-        "language": _clean_text(candidate.get("detected_language")),
-        "language_confidence": _clean_text(candidate.get("detected_language_confidence")),
-        "matched_query_lanes": [item for item in _as_list(candidate.get("matched_query_lanes")) if _clean_text(item)],
-        "matched_query_queries": [item for item in _as_list(candidate.get("matched_query_queries")) if _clean_text(item)],
-        "thread_group_id": _clean_text(candidate.get("thread_group_id")),
-        "thread_group_source": _clean_text(candidate.get("thread_group_source")),
-        "segment_type": _clean_text(candidate.get("segment_type") or provenance.get("segment_type")),
+        "match_reason": _compact(candidate.get("match_reason")),
+        "attachment_filename": _compact(attachment.get("filename")),
+        "attachment_mime_type": _compact(attachment.get("mime_type")),
+        "harvest_source": _compact(candidate.get("harvest_source")),
+        "body_render_source": _compact(candidate.get("body_render_source") or provenance.get("body_render_source")),
+        "verification_status": _compact(candidate.get("verification_status")),
+        "language": _compact(candidate.get("detected_language")),
+        "language_confidence": _compact(candidate.get("detected_language_confidence")),
+        "matched_query_lanes": [item for item in _as_list(candidate.get("matched_query_lanes")) if _compact(item)],
+        "matched_query_queries": [item for item in _as_list(candidate.get("matched_query_queries")) if _compact(item)],
+        "thread_group_id": _compact(candidate.get("thread_group_id")),
+        "thread_group_source": _compact(candidate.get("thread_group_source")),
+        "segment_type": _compact(candidate.get("segment_type") or provenance.get("segment_type")),
         "segment_ordinal": int(candidate.get("segment_ordinal") or provenance.get("segment_ordinal") or 0),
         "support_type": support_type,
         "counterevidence": support_type == "counterevidence",
@@ -152,8 +145,9 @@ def _notes_for_promoted_candidate(
     question_ids: list[str],
     candidate: dict[str, Any],
 ) -> str:
-    lanes = ", ".join(_clean_text(item) for item in _as_list(candidate.get("matched_query_lanes")) if _clean_text(item))
-    evidence_handle = _clean_text(_as_dict(candidate.get("provenance")).get("evidence_handle"))
+    """Build provenance notes for an auto-promoted evidence candidate."""
+    lanes = ", ".join(_compact(item) for item in _as_list(candidate.get("matched_query_lanes")) if _compact(item))
+    evidence_handle = _compact(_as_dict(candidate.get("provenance")).get("evidence_handle"))
     notes = [
         "Auto-promoted from wave-driven evidence harvest.",
         f"run_id={run_id}",
@@ -166,25 +160,26 @@ def _notes_for_promoted_candidate(
         notes.append(f"matched_query_lanes={lanes}")
     if evidence_handle:
         notes.append(f"evidence_handle={evidence_handle}")
-    verification_status = _clean_text(candidate.get("verification_status"))
+    verification_status = _compact(candidate.get("verification_status"))
     if verification_status:
         notes.append(f"verification_status={verification_status}")
-    harvest_source = _clean_text(candidate.get("harvest_source"))
+    harvest_source = _compact(candidate.get("harvest_source"))
     if harvest_source:
         notes.append(f"harvest_source={harvest_source}")
-    candidate_kind = _clean_text(candidate.get("candidate_kind"))
+    candidate_kind = _compact(candidate.get("candidate_kind"))
     if candidate_kind:
         notes.append(f"candidate_kind={candidate_kind}")
-    support_type = _clean_text(candidate.get("support_type"))
+    support_type = _compact(candidate.get("support_type"))
     if support_type:
         notes.append(f"support_type={support_type}")
-    segment_type = _clean_text(candidate.get("segment_type"))
+    segment_type = _compact(candidate.get("segment_type"))
     if segment_type:
         notes.append(f"segment_type={segment_type}")
     return " | ".join(notes)
 
 
 def _relevance_for_candidate(*, rank: int) -> int:
+    """Map candidate rank to a relevance score (5 for rank 0-1, 4 for 2-3, 3 otherwise)."""
     if rank <= 1:
         return 5
     if rank <= 3:
@@ -193,8 +188,9 @@ def _relevance_for_candidate(*, rank: int) -> int:
 
 
 def _exact_quote_from_surface(snippet: str, surface_text: str) -> str:
+    """Extract exact quote from surface text using snippet bounds, tolerating collapsed whitespace."""
     surface = str(surface_text or "")
-    compact_snippet = _clean_text(snippet)
+    compact_snippet = _compact(snippet)
     if not compact_snippet or not surface.strip():
         return ""
     start, end = _find_snippet_bounds(surface, compact_snippet)
@@ -205,12 +201,13 @@ def _exact_quote_from_surface(snippet: str, surface_text: str) -> str:
 
 
 def _segment_exact_quote(db: Any, *, uid: str, candidate: dict[str, Any]) -> str:
+    """Recover exact quote from message segments in the database for a candidate."""
     conn = getattr(db, "conn", None)
     if conn is None or not uid:
         return ""
     provenance = _as_dict(candidate.get("provenance"))
     segment_ordinal = int(candidate.get("segment_ordinal") or provenance.get("segment_ordinal") or 0)
-    segment_type = _clean_text(candidate.get("segment_type") or provenance.get("segment_type"))
+    segment_type = _compact(candidate.get("segment_type") or provenance.get("segment_type"))
     rows = conn.execute(
         """SELECT ordinal, segment_type, text
            FROM message_segments
@@ -218,17 +215,16 @@ def _segment_exact_quote(db: Any, *, uid: str, candidate: dict[str, Any]) -> str
            ORDER BY ordinal ASC""",
         (uid,),
     ).fetchall()
-    snippet = _clean_text(candidate.get("snippet"))
+    snippet = _compact(candidate.get("snippet"))
+    exact = _segment_quote(rows, snippet=snippet, segment_ordinal=segment_ordinal, segment_type=segment_type)
+    return exact or _segment_quote(rows, snippet=snippet, segment_ordinal=0, segment_type=segment_type)
+
+
+def _segment_quote(rows: list[Any], *, snippet: str, segment_ordinal: int, segment_type: str) -> str:
     for row in rows:
         if segment_ordinal and int(row["ordinal"] or 0) != segment_ordinal:
             continue
-        if segment_type and _clean_text(row["segment_type"]) != segment_type:
-            continue
-        exact = _exact_quote_from_surface(snippet, str(row["text"] or ""))
-        if exact:
-            return exact
-    for row in rows:
-        if segment_type and _clean_text(row["segment_type"]) != segment_type:
+        if segment_type and _compact(row["segment_type"]) != segment_type:
             continue
         exact = _exact_quote_from_surface(snippet, str(row["text"] or ""))
         if exact:
@@ -237,22 +233,14 @@ def _segment_exact_quote(db: Any, *, uid: str, candidate: dict[str, Any]) -> str
 
 
 def _attachment_exact_quote(db: Any, *, uid: str, candidate: dict[str, Any]) -> str:
+    """Recover exact quote from email attachments in the database for a candidate."""
     if db is None or not uid or not hasattr(db, "attachments_for_email"):
         return ""
     attachment = _as_dict(candidate.get("attachment"))
-    filename = _clean_text(attachment.get("filename") or candidate.get("attachment_filename"))
-    attachment_id = _clean_text(attachment.get("attachment_id") or candidate.get("attachment_id"))
-    snippet = _clean_text(candidate.get("snippet"))
-    for record in db.attachments_for_email(uid):
-        if (
-            attachment_id
-            and _clean_text(record.get("attachment_id"))
-            and _clean_text(record.get("attachment_id")) != attachment_id
-        ):
-            continue
-        record_name = _clean_text(record.get("name"))
-        if filename and record_name and record_name != filename:
-            continue
+    filename = _compact(attachment.get("filename") or candidate.get("attachment_filename"))
+    attachment_id = _compact(attachment.get("attachment_id") or candidate.get("attachment_id"))
+    snippet = _compact(candidate.get("snippet"))
+    for record in _matching_attachment_records(db, uid=uid, attachment_id=attachment_id, filename=filename):
         for field in ("extracted_text", "text_preview"):
             exact = _exact_quote_from_surface(snippet, str(record.get(field) or ""))
             if exact:
@@ -260,12 +248,25 @@ def _attachment_exact_quote(db: Any, *, uid: str, candidate: dict[str, Any]) -> 
     return ""
 
 
+def _matching_attachment_records(db: Any, *, uid: str, attachment_id: str, filename: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for record in db.attachments_for_email(uid):
+        record_id, record_name = _compact(record.get("attachment_id")), _compact(record.get("name"))
+        if attachment_id and record_id and record_id != attachment_id:
+            continue
+        if filename and record_name and record_name != filename:
+            continue
+        records.append(record)
+    return records
+
+
 def _body_exact_quote(db: Any, *, uid: str, candidate: dict[str, Any]) -> str:
+    """Recover exact quote from email body text in the database for a candidate."""
     if db is None or not uid or not hasattr(db, "get_emails_full_batch"):
         return ""
-    snippet = _clean_text(candidate.get("snippet"))
+    snippet = _compact(candidate.get("snippet"))
     full_batch = db.get_emails_full_batch([uid])
-    full_email = dict(full_batch.get(uid) or {}) if isinstance(full_batch, dict) else {}
+    full_email = dict(_as_dict(full_batch).get(uid) or {})
     for field in ("forensic_body_text", "body_text", "raw_body_text", "subject"):
         exact = _exact_quote_from_surface(snippet, str(full_email.get(field) or ""))
         if exact:
@@ -274,7 +275,8 @@ def _body_exact_quote(db: Any, *, uid: str, candidate: dict[str, Any]) -> str:
 
 
 def _recover_exact_quote(db: Any, *, candidate_kind: str, candidate: dict[str, Any]) -> str:
-    uid = _clean_text(candidate.get("uid"))
+    """Recover exact quote using multiple strategies (locator, attachment, segment, body)."""
+    uid = _compact(candidate.get("uid"))
     if not uid:
         return ""
     locator_exact = _locator_exact_quote(db, candidate_kind=candidate_kind, candidate=candidate)
@@ -289,6 +291,7 @@ def _recover_exact_quote(db: Any, *, candidate_kind: str, candidate: dict[str, A
 
 
 def _locator_slice(text: str, *, start: int | None, end: int | None) -> str:
+    """Safely slice text using start and end indices with bounds checking."""
     if not text:
         return ""
     if start is None or end is None:
@@ -302,7 +305,8 @@ def _locator_slice(text: str, *, start: int | None, end: int | None) -> str:
 
 
 def _body_surface_for_locator(full_email: dict[str, Any], body_render_source: str) -> str:
-    normalized_source = _clean_text(body_render_source).casefold()
+    """Select the appropriate body text field from email based on render source."""
+    normalized_source = _compact(body_render_source).casefold()
     if normalized_source in {"forensic_body_text", "quoted_reply", "message_segments"}:
         return str(full_email.get("forensic_body_text") or "")
     if normalized_source in {"raw_body_text", "raw_source"}:
@@ -311,7 +315,8 @@ def _body_surface_for_locator(full_email: dict[str, Any], body_render_source: st
 
 
 def _locator_exact_quote(db: Any, *, candidate_kind: str, candidate: dict[str, Any]) -> str:
-    uid = _clean_text(candidate.get("uid"))
+    """Recover exact quote using character position locator from candidate provenance."""
+    uid = _compact(candidate.get("uid"))
     if not uid:
         return ""
     provenance = _as_dict(candidate.get("provenance"))
@@ -320,76 +325,72 @@ def _locator_exact_quote(db: Any, *, candidate_kind: str, candidate: dict[str, A
     if start is None or end is None:
         return ""
     if candidate_kind == "attachment":
-        attachment = _as_dict(candidate.get("attachment"))
-        filename = _clean_text(attachment.get("filename") or candidate.get("attachment_filename"))
-        attachment_id = _clean_text(attachment.get("attachment_id") or candidate.get("attachment_id"))
-        if db is None or not hasattr(db, "attachments_for_email"):
-            return ""
-        for record in db.attachments_for_email(uid):
-            if (
-                attachment_id
-                and _clean_text(record.get("attachment_id"))
-                and _clean_text(record.get("attachment_id")) != attachment_id
-            ):
-                continue
-            record_name = _clean_text(record.get("name"))
-            if filename and record_name and record_name != filename:
-                continue
-            quote = _locator_slice(str(record.get("extracted_text") or ""), start=start, end=end)
-            if quote:
-                return quote
-        return ""
+        return _attachment_locator_quote(db, uid=uid, candidate=candidate, start=start, end=end)
+    return _body_locator_quote(db, uid=uid, candidate=candidate, provenance=provenance, start=start, end=end)
 
+
+def _attachment_locator_quote(db: Any, *, uid: str, candidate: dict[str, Any], start: int, end: int) -> str:
+    if db is None or not hasattr(db, "attachments_for_email"):
+        return ""
+    attachment = _as_dict(candidate.get("attachment"))
+    filename = _compact(attachment.get("filename") or candidate.get("attachment_filename"))
+    attachment_id = _compact(attachment.get("attachment_id") or candidate.get("attachment_id"))
+    for record in _matching_attachment_records(db, uid=uid, attachment_id=attachment_id, filename=filename):
+        quote = _locator_slice(str(record.get("extracted_text") or ""), start=start, end=end)
+        if quote:
+            return quote
+    return ""
+
+
+def _body_locator_quote(db: Any, *, uid: str, candidate: dict[str, Any], provenance: dict[str, Any], start: int, end: int) -> str:
     if db is None or not hasattr(db, "get_emails_full_batch"):
         return ""
-    full_batch = db.get_emails_full_batch([uid])
-    full_email = dict(full_batch.get(uid) or {}) if isinstance(full_batch, dict) else {}
+    full_email = dict(_as_dict(db.get_emails_full_batch([uid])).get(uid) or {})
     if not full_email:
         return ""
-    body_render_source = _clean_text(candidate.get("body_render_source") or provenance.get("body_render_source"))
-    surface = _body_surface_for_locator(full_email, body_render_source)
-    return _locator_slice(surface, start=start, end=end)
+    render_source = _compact(candidate.get("body_render_source") or provenance.get("body_render_source"))
+    return _locator_slice(_body_surface_for_locator(full_email, render_source), start=start, end=end)
 
 
 def _document_locator_for_candidate(*, candidate_kind: str, candidate: dict[str, Any]) -> dict[str, Any]:
+    """Build a document locator dict from candidate provenance and metadata."""
     provenance = _as_dict(candidate.get("provenance"))
     locator = {
-        "evidence_handle": _clean_text(provenance.get("evidence_handle")),
-        "chunk_id": _clean_text(provenance.get("chunk_id")),
+        "evidence_handle": _compact(provenance.get("evidence_handle")),
+        "chunk_id": _compact(provenance.get("chunk_id")),
         "snippet_start": provenance.get("snippet_start"),
         "snippet_end": provenance.get("snippet_end"),
-        "segment_type": _clean_text(candidate.get("segment_type") or provenance.get("segment_type")),
-        "source_scope": _clean_text(provenance.get("source_scope") or candidate.get("source_scope")),
+        "segment_type": _compact(candidate.get("segment_type") or provenance.get("segment_type")),
+        "source_scope": _compact(provenance.get("source_scope") or candidate.get("source_scope")),
         "char_start": provenance.get("char_start"),
         "char_end": provenance.get("char_end"),
-        "surface_hash": _clean_text(provenance.get("surface_hash") or candidate.get("surface_hash")),
-        "body_render_source": _clean_text(candidate.get("body_render_source") or provenance.get("body_render_source")),
+        "surface_hash": _compact(provenance.get("surface_hash") or candidate.get("surface_hash")),
+        "body_render_source": _compact(candidate.get("body_render_source") or provenance.get("body_render_source")),
     }
     segment_ordinal = int(candidate.get("segment_ordinal") or provenance.get("segment_ordinal") or 0)
     if segment_ordinal > 0:
         locator["segment_ordinal"] = segment_ordinal
     if candidate_kind == "attachment":
-        attachment = _as_dict(candidate.get("attachment"))
-        locator.update(
-            {
-                "attachment_filename": _clean_text(attachment.get("filename") or candidate.get("attachment_filename")),
-                "attachment_mime_type": _clean_text(attachment.get("mime_type")),
-                "attachment_id": _clean_text(
-                    attachment.get("attachment_id") or candidate.get("attachment_id") or provenance.get("attachment_id")
-                ),
-                "content_sha256": _clean_text(
-                    attachment.get("content_sha256") or candidate.get("content_sha256") or provenance.get("content_sha256")
-                ),
-                "locator_version": int(
-                    attachment.get("locator_version")
-                    or candidate.get("locator_version")
-                    or provenance.get("locator_version")
-                    or 1
-                ),
-                "text_locator": _as_dict(attachment.get("text_locator")),
-            }
-        )
+        locator.update(_attachment_locator(candidate, provenance))
     return {key: value for key, value in locator.items() if value not in (None, "", {})}
+
+
+def _attachment_locator(candidate: dict[str, Any], provenance: dict[str, Any]) -> dict[str, Any]:
+    attachment = _as_dict(candidate.get("attachment"))
+    return {
+        "attachment_filename": _compact(attachment.get("filename") or candidate.get("attachment_filename")),
+        "attachment_mime_type": _compact(attachment.get("mime_type")),
+        "attachment_id": _compact(
+            attachment.get("attachment_id") or candidate.get("attachment_id") or provenance.get("attachment_id")
+        ),
+        "content_sha256": _compact(
+            attachment.get("content_sha256") or candidate.get("content_sha256") or provenance.get("content_sha256")
+        ),
+        "locator_version": int(
+            attachment.get("locator_version") or candidate.get("locator_version") or provenance.get("locator_version") or 1
+        ),
+        "text_locator": _as_dict(attachment.get("text_locator")),
+    }
 
 
 def harvest_wave_payload(
@@ -415,144 +416,13 @@ def harvest_wave_payload(
             "promoted_evidence_ids": [],
         }
 
-    meta = _wave_meta(payload)
-    harvested = _candidate_rows(payload, harvest_limit_per_wave=harvest_limit_per_wave)
-    candidate_count = 0
-    body_candidate_count = 0
-    attachment_candidate_count = 0
-    exact_body_candidate_count = 0
-    duplicate_candidate_count = 0
-    promoted_count = 0
-    linked_existing_evidence_count = 0
-    promoted_evidence_ids: list[int] = []
+    from .evidence_harvest_stages import harvest_wave_stage
 
-    for candidate_kind, candidate in harvested:
-        recovered_exact_quote = _recover_exact_quote(db, candidate_kind=candidate_kind, candidate=candidate)
-        quote_candidate = recovered_exact_quote or _clean_text(candidate.get("snippet"))
-        if not quote_candidate:
-            continue
-        if candidate_kind == "body":
-            body_candidate_count += 1
-        else:
-            attachment_candidate_count += 1
-        verification_status = _clean_text(candidate.get("verification_status"))
-        verified_exact = bool(recovered_exact_quote)
-        if candidate_kind == "body" and verified_exact:
-            exact_body_candidate_count += 1
-
-        stored = db.add_evidence_candidate(
-            run_id=run_id,
-            phase_id=phase_id,
-            wave_id=meta["wave_id"],
-            wave_label=meta["wave_label"],
-            question_ids=meta["question_ids"],
-            email_uid=_clean_text(candidate.get("uid")) or None,
-            candidate_kind=candidate_kind,
-            quote_candidate=quote_candidate,
-            summary=_candidate_summary(
-                wave_label=meta["wave_label"],
-                question_ids=meta["question_ids"],
-                candidate_kind=candidate_kind,
-                rank=int(candidate.get("rank") or 0),
-            ),
-            category_hint="general",
-            rank=int(candidate.get("rank") or 0),
-            score=float(candidate.get("score") or 0.0),
-            verification_status=verification_status,
-            verified_exact=verified_exact,
-            subject=_clean_text(candidate.get("subject")),
-            sender_name=_clean_text(candidate.get("sender_name")),
-            sender_email=_clean_text(candidate.get("sender_email")),
-            date=_clean_text(candidate.get("date")),
-            conversation_id=_clean_text(candidate.get("conversation_id")),
-            matched_query_lanes=[
-                _clean_text(item) for item in _as_list(candidate.get("matched_query_lanes")) if _clean_text(item)
-            ],
-            matched_query_queries=[
-                _clean_text(item) for item in _as_list(candidate.get("matched_query_queries")) if _clean_text(item)
-            ],
-            provenance=_as_dict(candidate.get("provenance")),
-            context=_candidate_context(
-                candidate=candidate,
-                candidate_kind=candidate_kind,
-                wave_id=meta["wave_id"],
-                question_ids=meta["question_ids"],
-                scan_id=meta["scan_id"],
-            ),
-        )
-        if stored.get("inserted"):
-            candidate_count += 1
-        else:
-            duplicate_candidate_count += 1
-            continue
-
-        if not verified_exact or promoted_count >= promote_limit_per_wave:
-            continue
-        email_uid = _clean_text(candidate.get("uid"))
-        if not email_uid:
-            continue
-        document_locator = _document_locator_for_candidate(candidate_kind=candidate_kind, candidate=candidate)
-        find_with_artifact = getattr(db, "find_evidence_by_email_artifact_quote", None)
-        if callable(find_with_artifact):
-            existing = find_with_artifact(
-                email_uid=email_uid,
-                key_quote=quote_candidate,
-                candidate_kind=candidate_kind,
-                document_locator=document_locator,
-            )
-        else:
-            existing = db.find_evidence_by_email_quote(email_uid=email_uid, key_quote=quote_candidate)
-        if existing:
-            stored_id = int(_as_dict(stored).get("id") or 0)
-            existing_id = int(_as_dict(existing).get("id") or 0)
-            if stored_id and existing_id:
-                db.mark_evidence_candidate_promoted(stored_id, evidence_id=existing_id)
-            linked_existing_evidence_count += 1
-            continue
-        evidence = db.add_evidence(
-            email_uid=email_uid,
-            category="general",
-            key_quote=quote_candidate,
-            summary=f"{meta['wave_label']}: auto-promoted exact quote from archive harvest.",
-            relevance=_relevance_for_candidate(rank=int(candidate.get("rank") or 0)),
-            notes=_notes_for_promoted_candidate(
-                run_id=run_id,
-                phase_id=phase_id,
-                wave_id=meta["wave_id"],
-                question_ids=meta["question_ids"],
-                candidate=candidate,
-            ),
-            candidate_kind=candidate_kind,
-            provenance=_as_dict(candidate.get("provenance")),
-            document_locator=document_locator,
-            context=_candidate_context(
-                candidate=candidate,
-                candidate_kind=candidate_kind,
-                wave_id=meta["wave_id"],
-                question_ids=meta["question_ids"],
-                scan_id=meta["scan_id"],
-            ),
-        )
-        stored_id = int(_as_dict(stored).get("id") or 0)
-        evidence_id = int(_as_dict(evidence).get("id") or 0)
-        if stored_id and evidence_id:
-            db.mark_evidence_candidate_promoted(stored_id, evidence_id=evidence_id)
-            promoted_count += 1
-            promoted_evidence_ids.append(evidence_id)
-
-    return {
-        "status": "completed",
-        "run_id": run_id,
-        "phase_id": phase_id,
-        "wave_id": meta["wave_id"],
-        "wave_label": meta["wave_label"],
-        "question_ids": list(meta["question_ids"]),
-        "candidate_count": candidate_count,
-        "body_candidate_count": body_candidate_count,
-        "attachment_candidate_count": attachment_candidate_count,
-        "exact_body_candidate_count": exact_body_candidate_count,
-        "duplicate_candidate_count": duplicate_candidate_count,
-        "promoted_count": promoted_count,
-        "linked_existing_evidence_count": linked_existing_evidence_count,
-        "promoted_evidence_ids": promoted_evidence_ids,
-    }
+    return harvest_wave_stage(
+        db,
+        payload=payload,
+        run_id=run_id,
+        phase_id=phase_id,
+        harvest_limit_per_wave=harvest_limit_per_wave,
+        promote_limit_per_wave=promote_limit_per_wave,
+    )

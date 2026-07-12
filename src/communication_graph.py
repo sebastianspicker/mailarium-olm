@@ -102,267 +102,8 @@ def build_communication_graph(
     target_actor_id = str(target_person.get("actor_id") or "")
     target_name = str(target_person.get("name") or "")
 
-    nodes: dict[str, dict[str, str]] = {}
-    edges: dict[tuple[str, str], dict[str, Any]] = {}
-    sender_stats: defaultdict[str, dict[str, Any]] = defaultdict(
-        lambda: {
-            "included_uids": [],
-            "excluded_uids": [],
-            "target_relevant_included_uids": [],
-            "target_relevant_excluded_uids": [],
-            "decision_included_uids": [],
-            "decision_excluded_uids": [],
-            "escalated_uids": [],
-            "escalated_included_uids": [],
-            "escalated_excluded_uids": [],
-            "threads_included": set(),
-            "threads_excluded": set(),
-            "excluded_subject_families": set(),
-            "included_subject_families": set(),
-            "decision_subject_families": set(),
-            "thread_visibility": defaultdict(
-                lambda: {
-                    "included_uids": [],
-                    "excluded_uids": [],
-                    "target_relevant_excluded_uids": [],
-                }
-            ),
-        }
-    )
-    findings: list[dict[str, Any]] = []
-
-    for candidate in candidates:
-        uid = str(candidate.get("uid") or "")
-        sender_actor_id = str(candidate.get("sender_actor_id") or "")
-        sender_email = str(candidate.get("sender_email") or "").lower()
-        sender_node_id = sender_actor_id or sender_email
-        if sender_node_id:
-            nodes[sender_node_id] = {
-                "node_id": sender_node_id,
-                "kind": "actor" if sender_actor_id else "email",
-                "email": sender_email,
-            }
-        recipient_records = _recipient_records(full_map.get(uid))
-        for record in recipient_records:
-            recipient_node_id = record["email"]
-            nodes[recipient_node_id] = {
-                "node_id": recipient_node_id,
-                "kind": "email",
-                "email": record["email"],
-            }
-            edge_key = (sender_node_id or sender_email, recipient_node_id)
-            edge = edges.get(edge_key)
-            if edge is None:
-                edge = {
-                    "from": edge_key[0],
-                    "to": recipient_node_id,
-                    "message_count": 0,
-                    "channels": Counter(),
-                    "message_uids": [],
-                }
-                edges[edge_key] = edge
-            edge["message_count"] += 1
-            edge["channels"][record["channel"]] += 1
-            if uid and uid not in edge["message_uids"]:
-                edge["message_uids"].append(uid)
-
-        if not sender_node_id:
-            continue
-        recipients = {record["email"] for record in recipient_records}
-        thread_group_id = str(candidate.get("thread_group_id") or "")
-        subject_family = _subject_family(candidate)
-        behavior_ids = _behavior_ids(candidate)
-        target_included = bool(target_email and target_email in recipients)
-        target_referenced = _text_mentions_target(candidate, target_email=target_email, target_name=target_name)
-        target_relevant = bool(target_referenced or behavior_ids & {"exclusion", "withholding", "selective_non_response"})
-        decision_or_update = _decision_or_update_signal(candidate, behavior_ids=behavior_ids)
-        thread_visibility = sender_stats[sender_node_id]["thread_visibility"][thread_group_id or f"uid:{uid}"]
-        if target_included:
-            sender_stats[sender_node_id]["included_uids"].append(uid)
-            if subject_family:
-                sender_stats[sender_node_id]["included_subject_families"].add(subject_family)
-            thread_visibility["included_uids"].append(uid)
-            if thread_group_id:
-                sender_stats[sender_node_id]["threads_included"].add(thread_group_id)
-            if target_relevant:
-                sender_stats[sender_node_id]["target_relevant_included_uids"].append(uid)
-            if target_relevant and decision_or_update:
-                sender_stats[sender_node_id]["decision_included_uids"].append(uid)
-        elif target_email and target_relevant:
-            sender_stats[sender_node_id]["excluded_uids"].append(uid)
-            sender_stats[sender_node_id]["target_relevant_excluded_uids"].append(uid)
-            if subject_family:
-                sender_stats[sender_node_id]["excluded_subject_families"].add(subject_family)
-            thread_visibility["excluded_uids"].append(uid)
-            thread_visibility["target_relevant_excluded_uids"].append(uid)
-            if thread_group_id:
-                sender_stats[sender_node_id]["threads_excluded"].add(thread_group_id)
-            if decision_or_update:
-                sender_stats[sender_node_id]["decision_excluded_uids"].append(uid)
-                if subject_family:
-                    sender_stats[sender_node_id]["decision_subject_families"].add(subject_family)
-        if len(recipients) >= 2 and behavior_ids & {"escalation", "public_correction"}:
-            sender_stats[sender_node_id]["escalated_uids"].append(uid)
-            if target_included:
-                sender_stats[sender_node_id]["escalated_included_uids"].append(uid)
-            elif target_email and target_relevant:
-                sender_stats[sender_node_id]["escalated_excluded_uids"].append(uid)
-
-    for sender_node_id, stats in sender_stats.items():
-        graph_plus_behavior = "graph_plus_behavior"
-        target_relevant_excluded_uids = list(stats["target_relevant_excluded_uids"])
-        if len(target_relevant_excluded_uids) >= 2:
-            findings.append(
-                {
-                    "finding_id": f"repeated_exclusion:{sender_node_id}",
-                    "graph_signal_type": "repeated_exclusion",
-                    "confidence": "medium",
-                    "evidence_basis": graph_plus_behavior,
-                    "summary": (
-                        "Same sender repeatedly sends target-relevant messages while the target remains absent "
-                        "from visible recipients."
-                    ),
-                    "evidence_chain": {
-                        "sender_node_id": sender_node_id,
-                        "message_uids": target_relevant_excluded_uids,
-                        "thread_group_ids": sorted(stats["threads_excluded"]),
-                        "subject_families": sorted(stats["excluded_subject_families"]),
-                    },
-                    "counter_indicators": [
-                        "Recipient omission may still have a neutral operational explanation without broader case context.",
-                    ],
-                }
-            )
-        if stats["included_uids"] and target_relevant_excluded_uids:
-            findings.append(
-                {
-                    "finding_id": f"visibility_asymmetry:{sender_node_id}",
-                    "graph_signal_type": "visibility_asymmetry",
-                    "confidence": "medium",
-                    "evidence_basis": "graph_only",
-                    "summary": (
-                        "Same sender shows mixed visibility patterns, sometimes "
-                        "including the target and sometimes excluding them."
-                    ),
-                    "evidence_chain": {
-                        "sender_node_id": sender_node_id,
-                        "included_uids": list(stats["included_uids"]),
-                        "excluded_uids": target_relevant_excluded_uids,
-                        "subject_families": sorted(stats["included_subject_families"] | stats["excluded_subject_families"]),
-                    },
-                    "counter_indicators": [
-                        "Different recipient sets may reflect different process stages rather than hostile exclusion.",
-                    ],
-                }
-            )
-        if stats["decision_excluded_uids"] and stats["decision_included_uids"]:
-            findings.append(
-                {
-                    "finding_id": f"decision_visibility_asymmetry:{sender_node_id}",
-                    "graph_signal_type": "decision_visibility_asymmetry",
-                    "confidence": "medium",
-                    "evidence_basis": graph_plus_behavior,
-                    "summary": (
-                        "The same sender shows decision or update handling both with and without the target "
-                        "visible on the recipient list."
-                    ),
-                    "evidence_chain": {
-                        "sender_node_id": sender_node_id,
-                        "included_uids": list(stats["decision_included_uids"]),
-                        "excluded_uids": list(stats["decision_excluded_uids"]),
-                        "subject_families": sorted(stats["decision_subject_families"]),
-                    },
-                    "counter_indicators": [
-                        "Decision-flow visibility can change for neutral workflow or need-to-know reasons.",
-                    ],
-                }
-            )
-        if len(stats["escalated_uids"]) >= 1 and stats["included_uids"]:
-            findings.append(
-                {
-                    "finding_id": f"selective_escalation:{sender_node_id}",
-                    "graph_signal_type": "selective_escalation",
-                    "confidence": "low",
-                    "evidence_basis": graph_plus_behavior,
-                    "summary": "Same sender uses multi-recipient escalation or correction patterns in target-related messages.",
-                    "evidence_chain": {
-                        "sender_node_id": sender_node_id,
-                        "message_uids": list(stats["escalated_uids"]),
-                    },
-                    "counter_indicators": [
-                        "Broader recipient visibility may be required for operational escalation or recordkeeping.",
-                    ],
-                }
-            )
-        if stats["escalated_included_uids"] and stats["escalated_excluded_uids"]:
-            findings.append(
-                {
-                    "finding_id": f"escalation_visibility_asymmetry:{sender_node_id}",
-                    "graph_signal_type": "escalation_visibility_asymmetry",
-                    "confidence": "medium",
-                    "evidence_basis": graph_plus_behavior,
-                    "summary": (
-                        "The same sender shows escalation or public-correction messages both with and without "
-                        "the target visible, creating a visibility asymmetry around escalation."
-                    ),
-                    "evidence_chain": {
-                        "sender_node_id": sender_node_id,
-                        "included_uids": list(stats["escalated_included_uids"]),
-                        "excluded_uids": list(stats["escalated_excluded_uids"]),
-                    },
-                    "counter_indicators": [
-                        "Escalation routing can legitimately vary with audience, responsibility, or recordkeeping needs.",
-                    ],
-                }
-            )
-        shared_threads = sorted(stats["threads_included"] & stats["threads_excluded"])
-        if shared_threads:
-            findings.append(
-                {
-                    "finding_id": f"forked_side_channel:{sender_node_id}",
-                    "graph_signal_type": "forked_side_channel",
-                    "confidence": "low",
-                    "evidence_basis": "graph_only",
-                    "summary": "Same sender shows both included and excluded target communication within the same thread group.",
-                    "evidence_chain": {
-                        "sender_node_id": sender_node_id,
-                        "thread_group_ids": shared_threads,
-                    },
-                    "counter_indicators": [
-                        "Separate recipient lists within one thread can still be operationally justified.",
-                    ],
-                }
-            )
-        fork_threads = []
-        fork_uids: list[str] = []
-        for thread_key, visibility in stats["thread_visibility"].items():
-            if visibility["included_uids"] and visibility["target_relevant_excluded_uids"]:
-                if thread_key and not thread_key.startswith("uid:"):
-                    fork_threads.append(thread_key)
-                for uid in [*visibility["included_uids"], *visibility["target_relevant_excluded_uids"]]:
-                    if uid and uid not in fork_uids:
-                        fork_uids.append(uid)
-        if fork_threads:
-            findings.append(
-                {
-                    "finding_id": f"thread_fork_exclusion:{sender_node_id}",
-                    "graph_signal_type": "thread_fork_exclusion",
-                    "confidence": "medium",
-                    "evidence_basis": graph_plus_behavior,
-                    "summary": (
-                        "Within the same thread group, the sender forks target-relevant discussion into branches "
-                        "where the target is no longer visible."
-                    ),
-                    "evidence_chain": {
-                        "sender_node_id": sender_node_id,
-                        "thread_group_ids": sorted(fork_threads),
-                        "message_uids": fork_uids,
-                    },
-                    "counter_indicators": [
-                        "Thread-level recipient changes can still arise from legitimate workflow splitting.",
-                    ],
-                }
-            )
+    nodes, edges, sender_stats = _collect_graph_data(candidates, full_map, target_email, target_name)
+    findings = _graph_findings(sender_stats)
 
     node_list = sorted(nodes.values(), key=lambda node: node["node_id"])
     edge_list = sorted(
@@ -394,3 +135,287 @@ def build_communication_graph(
         "edges": edge_list,
         "graph_findings": findings,
     }
+
+
+def _collect_graph_data(candidates, full_map, target_email, target_name):
+    nodes: dict[str, dict[str, str]] = {}
+    edges: dict[tuple[str, str], dict[str, Any]] = {}
+    sender_stats: defaultdict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "included_uids": [],
+            "excluded_uids": [],
+            "target_relevant_included_uids": [],
+            "target_relevant_excluded_uids": [],
+            "decision_included_uids": [],
+            "decision_excluded_uids": [],
+            "escalated_uids": [],
+            "escalated_included_uids": [],
+            "escalated_excluded_uids": [],
+            "threads_included": set(),
+            "threads_excluded": set(),
+            "excluded_subject_families": set(),
+            "included_subject_families": set(),
+            "decision_subject_families": set(),
+            "thread_visibility": defaultdict(
+                lambda: {
+                    "included_uids": [],
+                    "excluded_uids": [],
+                    "target_relevant_excluded_uids": [],
+                }
+            ),
+        }
+    )
+    for candidate in candidates:
+        _record_graph_candidate(candidate, full_map, target_email, target_name, nodes, edges, sender_stats)
+
+    return nodes, edges, sender_stats
+
+
+def _record_graph_candidate(candidate, full_map, target_email, target_name, nodes, edges, sender_stats):
+    uid = str(candidate.get("uid") or "")
+    sender_actor_id = str(candidate.get("sender_actor_id") or "")
+    sender_email = str(candidate.get("sender_email") or "").lower()
+    sender_node_id = sender_actor_id or sender_email
+    if sender_node_id:
+        nodes[sender_node_id] = {
+            "node_id": sender_node_id,
+            "kind": "actor" if sender_actor_id else "email",
+            "email": sender_email,
+        }
+    recipients = _recipient_records(full_map.get(uid))
+    _record_edges(uid, sender_node_id or sender_email, recipients, nodes, edges)
+    if sender_node_id:
+        _record_sender_stats(candidate, uid, sender_node_id, recipients, target_email, target_name, sender_stats)
+
+
+def _record_edges(uid, sender_node_id, recipient_records, nodes, edges):
+    for record in recipient_records:
+        recipient_id = record["email"]
+        nodes[recipient_id] = {"node_id": recipient_id, "kind": "email", "email": recipient_id}
+        key = (sender_node_id, recipient_id)
+        edge = edges.setdefault(
+            key, {"from": sender_node_id, "to": recipient_id, "message_count": 0, "channels": Counter(), "message_uids": []}
+        )
+        edge["message_count"] += 1
+        edge["channels"][record["channel"]] += 1
+        if uid and uid not in edge["message_uids"]:
+            edge["message_uids"].append(uid)
+
+
+def _record_sender_stats(candidate, uid, sender_id, recipient_records, target_email, target_name, sender_stats):
+    recipients = {record["email"] for record in recipient_records}
+    thread_id = str(candidate.get("thread_group_id") or "")
+    subject = _subject_family(candidate)
+    behavior_ids = _behavior_ids(candidate)
+    included = bool(target_email and target_email in recipients)
+    target_relevant = bool(
+        _text_mentions_target(candidate, target_email=target_email, target_name=target_name)
+        or behavior_ids & {"exclusion", "withholding", "selective_non_response"}
+    )
+    decision = _decision_or_update_signal(candidate, behavior_ids=behavior_ids)
+    stats = sender_stats[sender_id]
+    visibility = stats["thread_visibility"][thread_id or f"uid:{uid}"]
+    if included:
+        _record_included(stats, visibility, uid, subject, thread_id, target_relevant, decision)
+    elif target_email and target_relevant:
+        _record_excluded(stats, visibility, uid, subject, thread_id, decision)
+    _record_escalation_stats(stats, uid, recipients, behavior_ids, included, target_email, target_relevant)
+
+
+def _record_escalation_stats(stats, uid, recipients, behavior_ids, included, target_email, target_relevant):
+    if len(recipients) < 2 or not behavior_ids & {"escalation", "public_correction"}:
+        return
+    stats["escalated_uids"].append(uid)
+    if included:
+        stats["escalated_included_uids"].append(uid)
+    elif target_email and target_relevant:
+        stats["escalated_excluded_uids"].append(uid)
+
+
+def _record_included(stats, visibility, uid, subject, thread_id, relevant, decision):
+    stats["included_uids"].append(uid)
+    visibility["included_uids"].append(uid)
+    if subject:
+        stats["included_subject_families"].add(subject)
+    if thread_id:
+        stats["threads_included"].add(thread_id)
+    if relevant:
+        stats["target_relevant_included_uids"].append(uid)
+    if relevant and decision:
+        stats["decision_included_uids"].append(uid)
+
+
+def _record_excluded(stats, visibility, uid, subject, thread_id, decision):
+    stats["excluded_uids"].append(uid)
+    stats["target_relevant_excluded_uids"].append(uid)
+    visibility["excluded_uids"].append(uid)
+    visibility["target_relevant_excluded_uids"].append(uid)
+    if subject:
+        stats["excluded_subject_families"].add(subject)
+    if thread_id:
+        stats["threads_excluded"].add(thread_id)
+    if decision:
+        stats["decision_excluded_uids"].append(uid)
+        if subject:
+            stats["decision_subject_families"].add(subject)
+
+
+def _graph_findings(sender_stats):
+    findings = []
+    builders = (
+        _repeated_exclusion_finding,
+        _visibility_asymmetry_finding,
+        _decision_visibility_finding,
+        _selective_escalation_finding,
+        _escalation_visibility_finding,
+        _forked_side_channel_finding,
+        _thread_fork_finding,
+    )
+    for sender_id, stats in sender_stats.items():
+        findings.extend(finding for builder in builders if (finding := builder(sender_id, stats)))
+    return findings
+
+
+def _graph_finding(sender_id, signal_type, confidence, basis, summary, evidence_chain, counter_indicator):
+    return {
+        "finding_id": f"{signal_type}:{sender_id}",
+        "graph_signal_type": signal_type,
+        "confidence": confidence,
+        "evidence_basis": basis,
+        "summary": summary,
+        "evidence_chain": {"sender_node_id": sender_id, **evidence_chain},
+        "counter_indicators": [counter_indicator],
+    }
+
+
+def _repeated_exclusion_finding(sender_id, stats):
+    excluded = list(stats["target_relevant_excluded_uids"])
+    if len(excluded) < 2:
+        return None
+    return _graph_finding(
+        sender_id,
+        "repeated_exclusion",
+        "medium",
+        "graph_plus_behavior",
+        "Same sender repeatedly sends target-relevant messages while the target remains absent from visible recipients.",
+        {
+            "message_uids": excluded,
+            "thread_group_ids": sorted(stats["threads_excluded"]),
+            "subject_families": sorted(stats["excluded_subject_families"]),
+        },
+        "Recipient omission may still have a neutral operational explanation without broader case context.",
+    )
+
+
+def _visibility_asymmetry_finding(sender_id, stats):
+    excluded = list(stats["target_relevant_excluded_uids"])
+    if not stats["included_uids"] or not excluded:
+        return None
+    return _graph_finding(
+        sender_id,
+        "visibility_asymmetry",
+        "medium",
+        "graph_only",
+        "Same sender shows mixed visibility patterns, sometimes including the target and sometimes excluding them.",
+        {
+            "included_uids": list(stats["included_uids"]),
+            "excluded_uids": excluded,
+            "subject_families": sorted(stats["included_subject_families"] | stats["excluded_subject_families"]),
+        },
+        "Different recipient sets may reflect different process stages rather than hostile exclusion.",
+    )
+
+
+def _decision_visibility_finding(sender_id, stats):
+    if not stats["decision_excluded_uids"] or not stats["decision_included_uids"]:
+        return None
+    return _graph_finding(
+        sender_id,
+        "decision_visibility_asymmetry",
+        "medium",
+        "graph_plus_behavior",
+        "The same sender shows decision or update handling both with and without the target visible on the recipient list.",
+        {
+            "included_uids": list(stats["decision_included_uids"]),
+            "excluded_uids": list(stats["decision_excluded_uids"]),
+            "subject_families": sorted(stats["decision_subject_families"]),
+        },
+        "Decision-flow visibility can change for neutral workflow or need-to-know reasons.",
+    )
+
+
+def _selective_escalation_finding(sender_id, stats):
+    if not stats["escalated_uids"] or not stats["included_uids"]:
+        return None
+    return _graph_finding(
+        sender_id,
+        "selective_escalation",
+        "low",
+        "graph_plus_behavior",
+        "Same sender uses multi-recipient escalation or correction patterns in target-related messages.",
+        {"message_uids": list(stats["escalated_uids"])},
+        "Broader recipient visibility may be required for operational escalation or recordkeeping.",
+    )
+
+
+def _escalation_visibility_finding(sender_id, stats):
+    if not stats["escalated_included_uids"] or not stats["escalated_excluded_uids"]:
+        return None
+    return _graph_finding(
+        sender_id,
+        "escalation_visibility_asymmetry",
+        "medium",
+        "graph_plus_behavior",
+        (
+            "The same sender shows escalation or public-correction messages both with and without the target visible, "
+            "creating a visibility asymmetry around escalation."
+        ),
+        {"included_uids": list(stats["escalated_included_uids"]), "excluded_uids": list(stats["escalated_excluded_uids"])},
+        "Escalation routing can legitimately vary with audience, responsibility, or recordkeeping needs.",
+    )
+
+
+def _forked_side_channel_finding(sender_id, stats):
+    shared_threads = sorted(stats["threads_included"] & stats["threads_excluded"])
+    if not shared_threads:
+        return None
+    return _graph_finding(
+        sender_id,
+        "forked_side_channel",
+        "low",
+        "graph_only",
+        "Same sender shows both included and excluded target communication within the same thread group.",
+        {"thread_group_ids": shared_threads},
+        "Separate recipient lists within one thread can still be operationally justified.",
+    )
+
+
+def _thread_fork_finding(sender_id, stats):
+    fork_threads, fork_uids = _fork_evidence(stats["thread_visibility"])
+    if not fork_threads:
+        return None
+    return _graph_finding(
+        sender_id,
+        "thread_fork_exclusion",
+        "medium",
+        "graph_plus_behavior",
+        (
+            "Within the same thread group, the sender forks target-relevant discussion into branches where the target "
+            "is no longer visible."
+        ),
+        {"thread_group_ids": sorted(fork_threads), "message_uids": fork_uids},
+        "Thread-level recipient changes can still arise from legitimate workflow splitting.",
+    )
+
+
+def _fork_evidence(thread_visibility):
+    threads, uids = [], []
+    for thread_key, visibility in thread_visibility.items():
+        if not visibility["included_uids"] or not visibility["target_relevant_excluded_uids"]:
+            continue
+        if thread_key and not thread_key.startswith("uid:"):
+            threads.append(thread_key)
+        for uid in [*visibility["included_uids"], *visibility["target_relevant_excluded_uids"]]:
+            if uid and uid not in uids:
+                uids.append(uid)
+    return threads, uids

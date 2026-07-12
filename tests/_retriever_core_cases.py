@@ -1,4 +1,4 @@
-# ruff: noqa: F401,I001
+# ruff: noqa: I001
 """Targeted coverage tests for src/retriever.py uncovered lines.
 
 Each test targets a specific branch or code path identified by coverage analysis.
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.retriever import EmailRetriever, SearchResult
+from src.retriever import SearchResult
 
 # ── Helpers ────────────────────────────────────────────────────────
 

@@ -94,6 +94,11 @@ def build_legacy_parser() -> argparse.ArgumentParser:
     parser.add_argument("--topic", type=int, default=None, metavar="TOPIC_ID", help="Filter by topic ID.")
     parser.add_argument("--cluster-id", type=int, default=None, metavar="CLUSTER_ID", help="Filter by cluster ID.")
     parser.add_argument("--expand-query", action="store_true", help="Expand query with related terms.")
+    _add_legacy_operational_flags(parser)
+    return parser
+
+
+def _add_legacy_operational_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--chromadb-path", default=None, help="Custom ChromaDB path.")
     parser.add_argument("--sqlite-path", default=None, help="Custom SQLite metadata path.")
     parser.add_argument("--stats", action="store_true", help="Print archive statistics and exit.")
@@ -188,17 +193,29 @@ def build_legacy_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--page-size", type=_browse_page_size_arg, default=20, help="Emails per page for --browse (default: 20, max: 50)."
     )
-    return parser
 
 
 def infer_subcommand(args: argparse.Namespace) -> str | None:
     """Map legacy flags to the equivalent modern subcommand."""
+    return (
+        _infer_basic_subcommand(args)
+        or _infer_evidence_subcommand(args)
+        or _infer_analytics_subcommand(args)
+        or _infer_training_admin_subcommand(args)
+    )
+
+
+def _infer_basic_subcommand(args: argparse.Namespace) -> str | None:
     if getattr(args, "query", None) is not None:
         return "search"
     if getattr(args, "browse", False):
         return "browse"
     if any(getattr(args, f, None) for f in ["export_thread", "export_email", "generate_report", "export_network"]):
         return "export"
+    return None
+
+
+def _infer_evidence_subcommand(args: argparse.Namespace) -> str | None:
     if getattr(args, "evidence_list", False):
         args.evidence_action = "list"
         return "evidence"
@@ -225,6 +242,17 @@ def infer_subcommand(args: argparse.Namespace) -> str | None:
         args.evidence_action = "provenance"
         args.uid = args.provenance
         return "evidence"
+    return None
+
+
+def _infer_analytics_subcommand(args: argparse.Namespace) -> str | None:
+    simple = _infer_simple_analytics_subcommand(args)
+    if simple:
+        return simple
+    return _infer_detailed_analytics_subcommand(args)
+
+
+def _infer_simple_analytics_subcommand(args: argparse.Namespace) -> str | None:
     if getattr(args, "stats", False):
         args.analytics_action = "stats"
         return "analytics"
@@ -235,6 +263,10 @@ def infer_subcommand(args: argparse.Namespace) -> str | None:
     if getattr(args, "suggest", False):
         args.analytics_action = "suggest"
         return "analytics"
+    return None
+
+
+def _infer_detailed_analytics_subcommand(args: argparse.Namespace) -> str | None:
     if getattr(args, "top_contacts", None):
         args.analytics_action = "contacts"
         if not hasattr(args, "email_address"):
@@ -255,6 +287,10 @@ def infer_subcommand(args: argparse.Namespace) -> str | None:
     if getattr(args, "response_times", False):
         args.analytics_action = "response-times"
         return "analytics"
+    return None
+
+
+def _infer_training_admin_subcommand(args: argparse.Namespace) -> str | None:
     if getattr(args, "generate_training_data", None):
         args.training_action = "generate-data"
         args.output_path = args.generate_training_data
@@ -318,68 +354,13 @@ def validate_arg_combinations(args: argparse.Namespace, parser: argparse.Argumen
         parser.error("--date-from cannot be later than --date-to")
     if args.json and args.format is not None:
         parser.error("--json cannot be combined with --format; use only --format {text,json}")
-    if args.query is None and (
-        args.sender
-        or args.subject
-        or args.folder
-        or args.cc
-        or args.to
-        or args.bcc
-        or args.has_attachments
-        or args.priority is not None
-        or args.email_type is not None
-        or args.date_from
-        or args.date_to
-        or args.min_score is not None
-        or args.json
-        or args.format is not None
-        or args.topic is not None
-        or args.cluster_id is not None
-        or args.expand_query
-    ):
+    if args.query is None and _has_query_options(args):
         parser.error(
             "--sender/--subject/--folder/--cc/--to/--bcc/--has-attachments/"
             "--priority/--email-type/--date-from/--date-to/--min-score/"
             "--topic/--cluster-id/--expand-query/--json/--format require --query"
         )
-    analytics_modes = [
-        bool(args.top_contacts),
-        bool(args.volume),
-        args.entities is not None,
-        bool(args.heatmap),
-        bool(args.response_times),
-    ]
-    evidence_modes = [
-        bool(args.evidence_list),
-        args.evidence_export is not None,
-        bool(args.evidence_stats),
-        bool(args.evidence_verify),
-    ]
-    custody_modes = [
-        args.dossier is not None,
-        bool(args.custody_chain),
-        bool(args.provenance),
-    ]
-    finetune_modes = [
-        args.generate_training_data is not None,
-        args.fine_tune is not None,
-    ]
-    operational_modes = [
-        bool(args.stats),
-        bool(args.list_senders),
-        bool(args.reset_index),
-        bool(args.suggest),
-        args.generate_report is not None,
-        args.export_network is not None,
-        bool(args.export_thread),
-        bool(args.export_email),
-        bool(args.browse),
-        *analytics_modes,
-        *evidence_modes,
-        *custody_modes,
-        *finetune_modes,
-    ]
-    if sum(operational_modes) > 1:
+    if sum(_operational_modes(args)) > 1:
         parser.error(
             "--stats, --list-senders, --reset-index, --suggest, --generate-report, "
             "--export-network, --export-thread, --export-email, --browse, "
@@ -388,7 +369,44 @@ def validate_arg_combinations(args: argparse.Namespace, parser: argparse.Argumen
             "--top-contacts, --volume, "
             "--entities, --heatmap, and --response-times are mutually exclusive"
         )
-    if args.query and any(operational_modes):
+    if args.query and any(_operational_modes(args)):
         parser.error(
             "--query cannot be combined with operational commands (--stats, --list-senders, --reset-index, --top-contacts, etc.)"
         )
+
+
+def _has_query_options(args: argparse.Namespace) -> bool:
+    truthy = ("sender", "subject", "folder", "cc", "to", "bcc", "has_attachments", "date_from", "date_to", "json", "expand_query")
+    optional = ("priority", "email_type", "min_score", "format", "topic", "cluster_id")
+    return any(bool(getattr(args, name)) for name in truthy) or any(getattr(args, name) is not None for name in optional)
+
+
+def _operational_modes(args: argparse.Namespace) -> list[bool]:
+    truthy = (
+        "stats",
+        "list_senders",
+        "reset_index",
+        "suggest",
+        "export_thread",
+        "export_email",
+        "browse",
+        "top_contacts",
+        "volume",
+        "heatmap",
+        "response_times",
+        "evidence_list",
+        "evidence_stats",
+        "evidence_verify",
+        "custody_chain",
+        "provenance",
+    )
+    optional = (
+        "generate_report",
+        "export_network",
+        "entities",
+        "evidence_export",
+        "dossier",
+        "generate_training_data",
+        "fine_tune",
+    )
+    return [bool(getattr(args, name)) for name in truthy] + [getattr(args, name) is not None for name in optional]

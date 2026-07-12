@@ -62,6 +62,23 @@ _DEEP_CONTEXT_EMAIL_FIELDS = {
 
 def _thread_graph_for_email(email: dict[str, Any]) -> dict[str, Any]:
     """Return canonical vs inferred thread graph fields for one email."""
+    canonical = _canonical_thread_graph(email)
+    inferred = _inferred_thread_graph(email)
+    return {"canonical": canonical, "inferred": inferred}
+
+
+def _canonical_thread_graph(email: dict[str, Any]) -> dict[str, Any]:
+    references = _email_references(email)
+    canonical: dict[str, Any] = {
+        "conversation_id": str(email.get("conversation_id") or ""),
+        "in_reply_to": str(email.get("in_reply_to") or ""),
+        "references": [str(reference) for reference in references if reference],
+    }
+    canonical["has_thread_links"] = bool(canonical["conversation_id"] or canonical["in_reply_to"] or canonical["references"])
+    return canonical
+
+
+def _email_references(email: dict[str, Any]) -> list[Any]:
     references = email.get("references") or []
     if not references and email.get("references_json"):
         try:
@@ -69,13 +86,11 @@ def _thread_graph_for_email(email: dict[str, Any]) -> dict[str, Any]:
         except json.JSONDecodeError:
             references = []
     if not isinstance(references, list):
-        references = []
-    canonical: dict[str, Any] = {
-        "conversation_id": str(email.get("conversation_id") or ""),
-        "in_reply_to": str(email.get("in_reply_to") or ""),
-        "references": [str(reference) for reference in references if reference],
-    }
-    canonical["has_thread_links"] = bool(canonical["conversation_id"] or canonical["in_reply_to"] or canonical["references"])
+        return []
+    return references
+
+
+def _inferred_thread_graph(email: dict[str, Any]) -> dict[str, Any]:
     inferred: dict[str, Any] = {
         "parent_uid": str(email.get("inferred_parent_uid") or ""),
         "thread_id": str(email.get("inferred_thread_id") or ""),
@@ -83,10 +98,7 @@ def _thread_graph_for_email(email: dict[str, Any]) -> dict[str, Any]:
         "confidence": float(email.get("inferred_match_confidence") or 0.0),
     }
     inferred["has_parent_link"] = bool(inferred["parent_uid"] or inferred["thread_id"])
-    return {
-        "canonical": canonical,
-        "inferred": inferred,
-    }
+    return inferred
 
 
 def _compact_email_for_deep_context(email: dict[str, Any]) -> dict[str, Any]:
@@ -113,44 +125,14 @@ def _compact_deep_context_payload(payload: dict[str, Any], *, budget: int) -> di
         return payload
     compacted = json.loads(json.dumps(payload, default=str))
     email = compacted.get("email")
-    if isinstance(email, dict):
-        body_text = str(email.get("body_text") or "")
-        if body_text:
-            email["body_total_chars"] = len(body_text)
-    conversation_debug = compacted.get("conversation_debug")
-    if isinstance(conversation_debug, dict):
-        segments = conversation_debug.get("segments")
-        if isinstance(segments, list) and segments:
-            conversation_debug["segment_sample"] = [
-                {
-                    "ordinal": item.get("ordinal"),
-                    "segment_type": item.get("segment_type"),
-                    "source_surface": item.get("source_surface"),
-                }
-                for item in segments[:3]
-                if isinstance(item, dict)
-            ]
-            conversation_debug["segment_truncated_count"] = max(0, len(segments) - len(conversation_debug["segment_sample"]))
-            conversation_debug.pop("segments", None)
+    _compact_email_body_metadata(email)
+    _compact_conversation_debug(compacted.get("conversation_debug"))
     if _estimated_json_chars(compacted) <= budget:
         return compacted
-    thread_payload = compacted.get("thread")
-    if isinstance(thread_payload, dict):
-        timeline = thread_payload.get("timeline")
-        if isinstance(timeline, list) and len(timeline) > 2:
-            thread_payload["timeline"] = timeline[:1] + timeline[-1:]
-            thread_payload["timeline_truncated_count"] = max(0, len(timeline) - len(thread_payload["timeline"]))
-        summary = str(thread_payload.get("summary") or "")
-        if summary:
-            thread_payload["summary"] = _trim_text(summary, 240)
+    _compact_thread_payload(compacted.get("thread"))
     if _estimated_json_chars(compacted) <= budget:
         return compacted
-    evidence = compacted.get("evidence")
-    if isinstance(evidence, dict):
-        items = evidence.get("items")
-        if isinstance(items, list) and len(items) > 8:
-            evidence["items"] = items[:8]
-            evidence["truncated_count"] = len(items) - len(evidence["items"])
+    _compact_evidence_payload(compacted.get("evidence"))
     if _estimated_json_chars(compacted) <= budget:
         return compacted
     if isinstance(email, dict):
@@ -176,6 +158,44 @@ def _compact_deep_context_payload(payload: dict[str, Any], *, budget: int) -> di
             break
         compacted.pop(optional_key, None)
     return compacted
+
+
+def _compact_email_body_metadata(email: Any) -> None:
+    if isinstance(email, dict) and (body_text := str(email.get("body_text") or "")):
+        email["body_total_chars"] = len(body_text)
+
+
+def _compact_conversation_debug(debug: Any) -> None:
+    if not isinstance(debug, dict) or not isinstance(debug.get("segments"), list) or not debug["segments"]:
+        return
+    segments = debug["segments"]
+    debug["segment_sample"] = [
+        {"ordinal": item.get("ordinal"), "segment_type": item.get("segment_type"), "source_surface": item.get("source_surface")}
+        for item in segments[:3]
+        if isinstance(item, dict)
+    ]
+    debug["segment_truncated_count"] = max(0, len(segments) - len(debug["segment_sample"]))
+    debug.pop("segments", None)
+
+
+def _compact_thread_payload(thread: Any) -> None:
+    if not isinstance(thread, dict):
+        return
+    timeline = thread.get("timeline")
+    if isinstance(timeline, list) and len(timeline) > 2:
+        thread["timeline"] = timeline[:1] + timeline[-1:]
+        thread["timeline_truncated_count"] = max(0, len(timeline) - len(thread["timeline"]))
+    if summary := str(thread.get("summary") or ""):
+        thread["summary"] = _trim_text(summary, 240)
+
+
+def _compact_evidence_payload(evidence: Any) -> None:
+    if not isinstance(evidence, dict) or not isinstance(evidence.get("items"), list):
+        return
+    items = evidence["items"]
+    if len(items) > 8:
+        evidence["items"] = items[:8]
+        evidence["truncated_count"] = len(items) - len(evidence["items"])
 
 
 def register(mcp: Any, deps: ToolDepsProto) -> None:
@@ -299,134 +319,18 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
         """
 
         def _work(db):
-            email = db.get_email_full(params.uid)
-            if not email:
-                return json_error(f"Email not found: {params.uid}. Verify the UID is correct.")
-            # Sanitize untrusted email body content
-            body_text, body_source = resolve_body_for_render(email, params.render_mode)
-            email["body_text"] = deps.sanitize(body_text)
-            email["body_render_mode"] = params.render_mode
-            email["body_render_source"] = body_source
-            weak_message = weak_message_semantics(email)
-            if weak_message:
-                email["weak_message"] = weak_message
-            max_body = params.max_body_chars
-            # When the caller didn't explicitly set max_body_chars (None sentinel),
-            # honour the model-profile setting.
-            if max_body is None:
-                max_body = get_settings().mcp_max_full_body_chars
-            if max_body > 0:
-                email["body_text"] = truncate_body(
-                    email["body_text"],
-                    max_body,
-                )
-            result: dict = {"email": _compact_email_for_deep_context(email)}
-            if weak_message:
-                result["email"]["weak_message"] = weak_message
-
-            # Thread context
+            prepared = _prepare_deep_context_email(db, params, deps)
+            if isinstance(prepared, str):
+                return prepared
+            email, result = prepared
             if params.include_thread:
-                conv_id = email.get("conversation_id", "")
-                if conv_id:
-                    thread_emails = db.get_thread_emails(conv_id)
-                    thread: dict = {
-                        "conversation_id": conv_id,
-                        "email_count": len(thread_emails),
-                        "participants": _unique_participants(thread_emails),
-                        "date_range": _thread_date_range(thread_emails),
-                    }
-                    if len(thread_emails) > 1:
-                        from ..thread_summarizer import summarize_thread
-
-                        thread["summary"] = summarize_thread(
-                            [
-                                {
-                                    "clean_body": deps.sanitize(e.get("body_text") or ""),
-                                    "sender_email": e.get("sender_email", ""),
-                                    "sender_name": e.get("sender_name", ""),
-                                    "date": e.get("date", ""),
-                                    "subject": e.get("subject", ""),
-                                }
-                                for e in thread_emails
-                            ],
-                            max_sentences=5,
-                        )
-                        thread["timeline"] = [
-                            {
-                                "sender": e.get("sender_email", ""),
-                                "date": str(e.get("date", ""))[:10],
-                                "subject": e.get("subject", ""),
-                            }
-                            for e in thread_emails
-                        ]
-                    result["thread"] = thread
-                else:
-                    result["thread"] = {"note": "No conversation_id — standalone email."}
-
-            # Existing evidence from this email
+                _add_deep_thread(result, email, db, deps)
             if params.include_evidence:
-                ev = db.list_evidence(email_uid=params.uid, limit=50)
-                items = ev.get("items", [])
-                result["evidence"] = {
-                    "count": len(items),
-                    "items": [
-                        {
-                            "id": i.get("id"),
-                            "category": i.get("category"),
-                            "relevance": i.get("relevance"),
-                            "summary": i.get("summary", ""),
-                            "quote_preview": (
-                                ((i.get("key_quote") or "")[:80] + "...")
-                                if len(i.get("key_quote") or "") > 80
-                                else (i.get("key_quote") or "")
-                            ),
-                        }
-                        for i in items
-                    ],
-                }
-
-            # Sender profile (pure SQLite, no networkx dependency)
+                _add_deep_evidence(result, db, params.uid)
             if params.include_sender_stats:
-                sender_email = email.get("sender_email", "")
-                if sender_email:
-                    sender: dict = {"email": sender_email}
-                    try:
-                        sender["top_contacts"] = db.top_contacts(sender_email, limit=5)
-                    except Exception:  # pylint: disable=broad-exception-caught
-                        logger.debug("Failed to fetch top_contacts for %s", sender_email, exc_info=True)
-                    try:
-                        row = db.conn.execute(
-                            "SELECT COUNT(*) AS c FROM emails WHERE sender_email = ?",
-                            (sender_email,),
-                        ).fetchone()
-                        sender["total_emails_sent"] = row["c"]
-                    except Exception:  # pylint: disable=broad-exception-caught
-                        logger.debug("Failed to count emails for sender %s", sender_email, exc_info=True)
-                    result["sender"] = sender
-
+                _add_deep_sender(result, email, db)
             if params.include_conversation_debug:
-                segments = email.get("segments")
-                if segments is None:
-                    segments = db.conn.execute(
-                        """SELECT ordinal, segment_type, depth, text, source_surface, provenance_json
-                           FROM message_segments
-                           WHERE email_uid = ?
-                           ORDER BY ordinal ASC""",
-                        (params.uid,),
-                    ).fetchall()
-                thread_graph = _thread_graph_for_email(email)
-                inferred_thread = {
-                    "parent_uid": thread_graph["inferred"]["parent_uid"],
-                    "thread_id": thread_graph["inferred"]["thread_id"],
-                    "reason": thread_graph["inferred"]["reason"],
-                    "confidence": thread_graph["inferred"]["confidence"],
-                }
-                result["conversation_debug"] = {
-                    "segment_count": len(segments),
-                    "segments": [dict(segment) if not isinstance(segment, dict) else segment for segment in segments],
-                    "canonical_thread": thread_graph["canonical"],
-                    "inferred_thread": inferred_thread,
-                }
+                _add_deep_conversation_debug(result, email, db, params.uid)
 
             return json_response(
                 _compact_deep_context_payload(result, budget=get_settings().mcp_max_json_response_chars),
@@ -434,6 +338,110 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
             )
 
         return await run_with_db(deps, _work)
+
+
+def _prepare_deep_context_email(db, params, deps) -> tuple[dict, dict] | str:
+    email = db.get_email_full(params.uid)
+    if not email:
+        return json_error(f"Email not found: {params.uid}. Verify the UID is correct.")
+    body_text, body_source = resolve_body_for_render(email, params.render_mode)
+    email["body_text"] = deps.sanitize(body_text)
+    email["body_render_mode"] = params.render_mode
+    email["body_render_source"] = body_source
+    weak_message = weak_message_semantics(email)
+    if weak_message:
+        email["weak_message"] = weak_message
+    max_body = params.max_body_chars if params.max_body_chars is not None else get_settings().mcp_max_full_body_chars
+    if max_body > 0:
+        email["body_text"] = truncate_body(email["body_text"], max_body)
+    result = {"email": _compact_email_for_deep_context(email)}
+    if weak_message:
+        result["email"]["weak_message"] = weak_message
+    return email, result
+
+
+def _add_deep_thread(result: dict, email: dict, db, deps) -> None:
+    conversation_id = email.get("conversation_id", "")
+    if not conversation_id:
+        result["thread"] = {"note": "No conversation_id — standalone email."}
+        return
+    emails = db.get_thread_emails(conversation_id)
+    thread = {
+        "conversation_id": conversation_id,
+        "email_count": len(emails),
+        "participants": _unique_participants(emails),
+        "date_range": _thread_date_range(emails),
+    }
+    if len(emails) > 1:
+        from ..thread_summarizer import summarize_thread
+
+        thread["summary"] = summarize_thread([_thread_summary_email(item, deps) for item in emails], max_sentences=5)
+        thread["timeline"] = [_thread_timeline_email(item) for item in emails]
+    result["thread"] = thread
+
+
+def _thread_summary_email(email: dict, deps) -> dict[str, str]:
+    return {
+        "clean_body": deps.sanitize(email.get("body_text") or ""),
+        "sender_email": email.get("sender_email", ""),
+        "sender_name": email.get("sender_name", ""),
+        "date": email.get("date", ""),
+        "subject": email.get("subject", ""),
+    }
+
+
+def _thread_timeline_email(email: dict) -> dict[str, str]:
+    return {"sender": email.get("sender_email", ""), "date": str(email.get("date", ""))[:10], "subject": email.get("subject", "")}
+
+
+def _add_deep_evidence(result: dict, db, uid: str) -> None:
+    items = db.list_evidence(email_uid=uid, limit=50).get("items", [])
+    result["evidence"] = {"count": len(items), "items": [_deep_evidence_item(item) for item in items]}
+
+
+def _deep_evidence_item(item: dict) -> dict[str, Any]:
+    quote = item.get("key_quote") or ""
+    return {
+        "id": item.get("id"),
+        "category": item.get("category"),
+        "relevance": item.get("relevance"),
+        "summary": item.get("summary", ""),
+        "quote_preview": quote[:80] + "..." if len(quote) > 80 else quote,
+    }
+
+
+def _add_deep_sender(result: dict, email: dict, db) -> None:
+    sender_email = email.get("sender_email", "")
+    if not sender_email:
+        return
+    sender = {"email": sender_email}
+    try:
+        sender["top_contacts"] = db.top_contacts(sender_email, limit=5)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.debug("Failed to fetch top_contacts for %s", sender_email, exc_info=True)
+    try:
+        row = db.conn.execute("SELECT COUNT(*) AS c FROM emails WHERE sender_email = ?", (sender_email,)).fetchone()
+        sender["total_emails_sent"] = row["c"]
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.debug("Failed to count emails for sender %s", sender_email, exc_info=True)
+    result["sender"] = sender
+
+
+def _add_deep_conversation_debug(result: dict, email: dict, db, uid: str) -> None:
+    segments = email.get("segments")
+    if segments is None:
+        segments = db.conn.execute(
+            """SELECT ordinal, segment_type, depth, text, source_surface, provenance_json
+               FROM message_segments WHERE email_uid = ? ORDER BY ordinal ASC""",
+            (uid,),
+        ).fetchall()
+    graph = _thread_graph_for_email(email)
+    result["conversation_debug"] = {
+        "segment_count": len(segments),
+        "segments": [dict(segment) if not isinstance(segment, dict) else segment for segment in segments],
+        "canonical_thread": graph["canonical"],
+        "inferred_thread": graph["inferred"],
+    }
 
 
 def _unique_participants(thread_emails: list[dict]) -> list[str]:

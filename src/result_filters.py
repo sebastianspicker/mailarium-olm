@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -32,6 +33,29 @@ STRING_FILTERS: dict[str, tuple[tuple[str, ...], str]] = {
 }
 
 
+@dataclass(frozen=True)
+class MetadataFilterRequest:
+    """Typed immutable request for the metadata-only filtering stage."""
+
+    sender: str | None = None
+    subject: str | None = None
+    folder: str | None = None
+    cc: str | None = None
+    to: str | None = None
+    bcc: str | None = None
+    email_type: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+    has_attachments: bool | None = None
+    priority: int | None = None
+    min_score: float | None = None
+    allowed_uids: set[str] | None = None
+    category: str | None = None
+    is_calendar: bool | None = None
+    attachment_name: str | None = None
+    attachment_type: str | None = None
+
+
 def _matches_string(
     result: SearchResult,
     needle: str | None,
@@ -52,6 +76,7 @@ def _matches_string(
 
 
 def _matches_date_from(result: SearchResult, date_from: str | None) -> bool:
+    """Check if result date is on or after the from date."""
     if not date_from:
         return True
     raw_date = result.metadata.get("date")
@@ -64,6 +89,7 @@ def _matches_date_from(result: SearchResult, date_from: str | None) -> bool:
 
 
 def _matches_date_to(result: SearchResult, date_to: str | None) -> bool:
+    """Check if result date is on or before the to date."""
     if not date_to:
         return True
     raw_date = result.metadata.get("date")
@@ -76,6 +102,7 @@ def _matches_date_to(result: SearchResult, date_to: str | None) -> bool:
 
 
 def _matches_has_attachments(result: SearchResult, has_attachments: bool | None) -> bool:
+    """Check if result has attachments matching the filter."""
     if has_attachments is None:
         return True
     raw = result.metadata.get("has_attachments", False)
@@ -84,6 +111,7 @@ def _matches_has_attachments(result: SearchResult, has_attachments: bool | None)
 
 
 def _matches_priority(result: SearchResult, priority: int | None) -> bool:
+    """Check if result priority is at least the minimum priority."""
     if priority is None:
         return True
     try:
@@ -94,6 +122,7 @@ def _matches_priority(result: SearchResult, priority: int | None) -> bool:
 
 
 def _matches_min_score(result: SearchResult, min_score: float | None) -> bool:
+    """Check if result score is at least the minimum score."""
     if min_score is None:
         return True
     calibration = str(result.metadata.get("score_calibration") or "").strip().lower()
@@ -106,6 +135,7 @@ def _matches_allowed_uids(
     result: SearchResult,
     allowed_uids: set[str] | None,
 ) -> bool:
+    """Check if result UID is in the allowed set."""
     if allowed_uids is None:
         return True
     uid = str(result.metadata.get("uid", "")).strip()
@@ -113,6 +143,7 @@ def _matches_allowed_uids(
 
 
 def _matches_category(result: SearchResult, category: str | None) -> bool:
+    """Check if result has the specified category."""
     if not category:
         return True
     raw = str(result.metadata.get("categories", "") or "")
@@ -122,6 +153,7 @@ def _matches_category(result: SearchResult, category: str | None) -> bool:
 
 
 def _matches_is_calendar(result: SearchResult, is_calendar: bool | None) -> bool:
+    """Check if result is a calendar message matching the filter."""
     if is_calendar is None:
         return True
     value = str(result.metadata.get("is_calendar_message", "False"))
@@ -172,53 +204,59 @@ def _matches_attachment_type(result: SearchResult, attachment_type: str | None) 
     return _has_ext(legacy_fname)
 
 
-def apply_metadata_filters(
-    results: list[SearchResult],
-    *,
-    sender: str | None = None,
-    subject: str | None = None,
-    folder: str | None = None,
-    cc: str | None = None,
-    to: str | None = None,
-    bcc: str | None = None,
-    email_type: str | None = None,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    has_attachments: bool | None = None,
-    priority: int | None = None,
-    min_score: float | None = None,
-    allowed_uids: set[str] | None = None,
-    category: str | None = None,
-    is_calendar: bool | None = None,
-    attachment_name: str | None = None,
-    attachment_type: str | None = None,
-) -> list[SearchResult]:
+def apply_metadata_filters(results: list[SearchResult], **filter_values: Any) -> list[SearchResult]:
     """Apply all metadata filters to search results in one pass."""
+    return _apply_filter_request(results, MetadataFilterRequest(**filter_values))
+
+
+def _apply_filter_request(results: list[SearchResult], request: MetadataFilterRequest) -> list[SearchResult]:
+    """Apply one normalized request without changing result order or scores."""
+    return [result for result in results if _matches_filter_request(result, request)]
+
+
+def _matches_filter_request(result: SearchResult, request: MetadataFilterRequest) -> bool:
+    """Test the independent filter groups for one candidate result."""
+    return (
+        _matches_string_request(result, request)
+        and _matches_core_request(result, request)
+        and _matches_attachment_request(result, request)
+    )
+
+
+def _matches_string_request(result: SearchResult, request: MetadataFilterRequest) -> bool:
+    """Match sender and message-field string filters as a data-driven group."""
     _sf = STRING_FILTERS
     string_filters = [
-        (sender, *_sf["sender"]),
-        (subject, *_sf["subject"]),
-        (folder, *_sf["folder"]),
-        (cc, *_sf["cc"]),
-        (to, *_sf["to"]),
-        (bcc, *_sf["bcc"]),
-        (email_type, *_sf["email_type"]),
+        (request.sender, *_sf["sender"]),
+        (request.subject, *_sf["subject"]),
+        (request.folder, *_sf["folder"]),
+        (request.cc, *_sf["cc"]),
+        (request.to, *_sf["to"]),
+        (request.bcc, *_sf["bcc"]),
+        (request.email_type, *_sf["email_type"]),
     ]
-    return [
-        result
-        for result in results
-        if all(_matches_string(result, needle, keys, mtype) for needle, keys, mtype in string_filters)
-        and _matches_date_from(result, date_from)
-        and _matches_date_to(result, date_to)
-        and _matches_has_attachments(result, has_attachments)
-        and _matches_priority(result, priority)
-        and _matches_min_score(result, min_score)
-        and _matches_allowed_uids(result, allowed_uids)
-        and _matches_category(result, category)
-        and _matches_is_calendar(result, is_calendar)
-        and _matches_attachment_name(result, attachment_name)
-        and _matches_attachment_type(result, attachment_type)
-    ]
+    return all(_matches_string(result, needle, keys, match_type) for needle, keys, match_type in string_filters)
+
+
+def _matches_core_request(result: SearchResult, request: MetadataFilterRequest) -> bool:
+    """Match dates, flags, scores, semantic scope, and category filters."""
+    return all(
+        (
+            _matches_date_from(result, request.date_from),
+            _matches_date_to(result, request.date_to),
+            _matches_has_attachments(result, request.has_attachments),
+            _matches_priority(result, request.priority),
+            _matches_min_score(result, request.min_score),
+            _matches_allowed_uids(result, request.allowed_uids),
+            _matches_category(result, request.category),
+            _matches_is_calendar(result, request.is_calendar),
+        )
+    )
+
+
+def _matches_attachment_request(result: SearchResult, request: MetadataFilterRequest) -> bool:
+    """Match the two attachment-specific filters as one independent group."""
+    return _matches_attachment_name(result, request.attachment_name) and _matches_attachment_type(result, request.attachment_type)
 
 
 # ── Deduplication ──
@@ -244,6 +282,7 @@ def _email_dedup_key(meta: dict[str, Any]) -> str | None:
 
 
 def _attachment_dedup_key(meta: dict[str, Any]) -> str | None:
+    """Build a deduplication key for attachments from metadata."""
     email_key = _email_dedup_key(meta)
     if not email_key:
         return None
@@ -286,6 +325,7 @@ def _deduplicate_by_email(results: list[SearchResult]) -> list[SearchResult]:
 
 
 def _safe_json_float(value: Any) -> float | None:
+    """Safely convert a value to a rounded float, handling non-finite values."""
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -296,10 +336,11 @@ def _safe_json_float(value: Any) -> float | None:
 
 
 def _json_safe(value: Any) -> Any:
+    """Make a value JSON-safe by handling non-finite floats and nested structures."""
     if isinstance(value, float) and not math.isfinite(value):
         return None
     if isinstance(value, dict):
         return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [_json_safe(v) for v in value]
     return value

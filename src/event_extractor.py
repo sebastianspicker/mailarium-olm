@@ -59,10 +59,12 @@ _EVENT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 
 def _clean_text(value: Any) -> str:
+    """Normalize and clean text by collapsing whitespace and stripping."""
     return " ".join(str(value or "").split()).strip()
 
 
 def _surface_hash(text: str) -> str:
+    """Compute SHA256 hash of text for surface identification."""
     return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
 
 
@@ -78,6 +80,7 @@ def _event_key(
     trigger_text: str,
     event_date: str,
 ) -> str:
+    """Generate a unique hash key for an event based on its attributes."""
     seed = "|".join(
         (
             uid,
@@ -95,6 +98,15 @@ def _event_key(
 
 
 def _segment_surface_candidates(email: Any) -> list[tuple[str, str, int | None, str]]:
+    """Extract text surface candidates from email segments.
+
+    Args:
+        email: An email object with segments attribute.
+
+    Returns:
+        A list of tuples containing (source_scope, surface_scope, ordinal, text)
+        for each segment that contains text.
+    """
     candidates: list[tuple[str, str, int | None, str]] = []
     for index, segment in enumerate(getattr(email, "segments", None) or []):
         segment_type = str(getattr(segment, "segment_type", "") or "")
@@ -116,6 +128,15 @@ def _segment_surface_candidates(email: Any) -> list[tuple[str, str, int | None, 
 
 
 def _attachment_surface_candidates(email: Any) -> list[tuple[str, str, int | None, str]]:
+    """Extract text surface candidates from email attachments.
+
+    Args:
+        email: An email object with attachments attribute.
+
+    Returns:
+        A list of tuples containing (source_scope, surface_scope, ordinal, text)
+        for each attachment that contains extractable text.
+    """
     candidates: list[tuple[str, str, int | None, str]] = []
     for index, attachment in enumerate(getattr(email, "attachments", None) or []):
         if not isinstance(attachment, dict):
@@ -130,6 +151,15 @@ def _attachment_surface_candidates(email: Any) -> list[tuple[str, str, int | Non
 
 
 def _is_boilerplate_surface(text: str) -> bool:
+    """Check if a text surface appears to be boilerplate/footer content.
+
+    Args:
+        text: The text to check.
+
+    Returns:
+        True if the text is short and contains multiple footer-like markers,
+        False otherwise.
+    """
     compact = _clean_text(text).casefold()
     if not compact:
         return True
@@ -148,6 +178,19 @@ def _extract_from_candidates(
     degrade_confidence: bool,
     skip_boilerplate: bool,
 ) -> list[tuple[object, ...]]:
+    """Extract event rows from text surface candidates.
+
+    Args:
+        uid: The unique identifier of the email.
+        event_date: The date of the email.
+        candidates: List of text surface candidates to search for events.
+        seen_event_keys: Set of already-seen event keys to avoid duplicates.
+        degrade_confidence: If True, degrade language confidence to low.
+        skip_boilerplate: If True, skip surfaces identified as boilerplate.
+
+    Returns:
+        A list of event record tuples ready for database upsert.
+    """
     rows: list[tuple[object, ...]] = []
     for source_scope, surface_scope, segment_ordinal, text in candidates:
         if not text:
@@ -157,9 +200,7 @@ def _extract_from_candidates(
         surface_hash = _surface_hash(text)
         language_details = detect_language_details(text)
         detected_language = str(language_details.get("language") or "unknown")
-        confidence = str(language_details.get("confidence") or "low")
-        if degrade_confidence and confidence != _LOW_SIGNAL_EVENT_CONFIDENCE:
-            confidence = _LOW_SIGNAL_EVENT_CONFIDENCE
+        confidence = _event_confidence(language_details, degrade_confidence)
         for event_kind, pattern in _EVENT_RULES:
             for match in pattern.finditer(text):
                 trigger_text = _clean_text(match.group(0))
@@ -210,6 +251,11 @@ def _extract_from_candidates(
                     )
                 )
     return rows
+
+
+def _event_confidence(details: dict[str, Any], degrade: bool) -> str:
+    confidence = str(details.get("confidence") or "low")
+    return _LOW_SIGNAL_EVENT_CONFIDENCE if degrade and confidence != _LOW_SIGNAL_EVENT_CONFIDENCE else confidence
 
 
 def extract_event_rows_from_email(email: Any) -> list[tuple[object, ...]]:

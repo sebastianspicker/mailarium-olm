@@ -7,6 +7,7 @@ from typing import Any
 
 
 def render_sidebar_impl(*, st_module: Any, retriever: Any) -> None:
+    """Render the sidebar with archive statistics, folders, and top senders."""
     from html import escape as html_escape
 
     st_module.sidebar.markdown("#### Archive Overview")
@@ -51,9 +52,7 @@ def render_sidebar_impl(*, st_module: Any, retriever: Any) -> None:
                 st_module.sidebar.progress(pct)
 
 
-def inject_styles_impl(*, st_module: Any) -> None:
-    st_module.markdown(
-        """
+_STYLE_CSS = """
         <style>
         :root {
             --bg-primary: #f8fafc;
@@ -225,12 +224,16 @@ def inject_styles_impl(*, st_module: Any) -> None:
             color: var(--ink-muted);
         }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
+        """
+
+
+def inject_styles_impl(*, st_module: Any) -> None:
+    """Inject custom CSS styles for the Streamlit email browser UI."""
+    st_module.markdown(_STYLE_CSS, unsafe_allow_html=True)
 
 
 def _score_css_class(score: float) -> str:
+    """Return the CSS class for a score badge based on the score value."""
     if score >= 0.75:
         return "score-high"
     if score >= 0.45:
@@ -239,6 +242,7 @@ def _score_css_class(score: float) -> str:
 
 
 def _type_badge_html(email_type: str | None) -> str:
+    """Generate HTML for an email type badge (reply, forward, attachment, etc.)."""
     if not email_type or email_type == "original":
         return ""
     css_class = f"type-{email_type}" if email_type in ("reply", "forward") else "type-original"
@@ -246,6 +250,7 @@ def _type_badge_html(email_type: str | None) -> str:
 
 
 def _attachment_badge_html(att_count: str | int) -> str:
+    """Generate HTML for an attachment count badge."""
     count = str(att_count)
     if count in ("0", "", "None"):
         return ""
@@ -260,106 +265,82 @@ def render_results_impl(
     retriever: Any | None,
     format_date_fn: Any,
 ) -> None:
+    """Render search results as expandable cards with metadata and preview text."""
     from html import escape as html_escape
 
     st_module.markdown("### Matching Emails")
 
     for index, result in enumerate(results, 1):
-        metadata = result.metadata
-        title = html_escape(metadata.get("subject", "(no subject)"))
-        sender_name = html_escape(metadata.get("sender_name", ""))
-        sender_email_val = html_escape(metadata.get("sender_email", ""))
-        sender_display = sender_name or sender_email_val or "?"
-        date_value = str(metadata.get("date", "?"))[:10]
-        folder = html_escape(metadata.get("folder", "Unknown"))
-        body = result.text or ""
-        preview = body if len(body) <= preview_chars else f"{body[:preview_chars]}..."
-        score = float(result.score)
+        _render_result_card(st_module, result, index, preview_chars, retriever, format_date_fn, html_escape)
 
-        email_type = metadata.get("email_type", "original")
-        att_count = metadata.get("attachment_count", "0")
-        score_pct = f"{score:.0%}"
-        expander_label = f"{index}. {title}  --  {sender_display}  |  {date_value}  |  {score_pct}"
 
-        with st_module.expander(expander_label, expanded=index == 1):
-            score_class = _score_css_class(score)
-            badges_html = f"<span class='score-badge {score_class}'>{score_pct}</span>"
-            badges_html += _type_badge_html(email_type)
-            badges_html += _attachment_badge_html(att_count)
-            st_module.markdown(badges_html, unsafe_allow_html=True)
+def _render_result_card(st, result, index: int, preview_chars: int, retriever, format_date, escape) -> None:
+    metadata = result.metadata
+    sender = escape(metadata.get("sender_name", "")) or escape(metadata.get("sender_email", "")) or "?"
+    date = str(metadata.get("date", "?"))[:10]
+    score = float(result.score)
+    label = f"{index}. {escape(metadata.get('subject', '(no subject)'))}  --  {sender}  |  {date}  |  {score:.0%}"
+    with st.expander(label, expanded=index == 1):
+        badges = f"<span class='score-badge {_score_css_class(score)}'>{score:.0%}</span>"
+        badges += _type_badge_html(metadata.get("email_type", "original"))
+        badges += _attachment_badge_html(metadata.get("attachment_count", "0"))
+        st.markdown(badges, unsafe_allow_html=True)
+        _render_result_metadata(st, metadata, sender, date, format_date, escape)
+        _render_result_body(st, result.text or "", preview_chars, escape)
+        _render_result_actions(st, result, retriever)
 
-            meta_col1, meta_col2, meta_col3, meta_col4 = st_module.columns(4)
-            with meta_col1:
-                st_module.markdown(
-                    f"<div class='email-field'><strong>From:</strong> {sender_display}</div>",
-                    unsafe_allow_html=True,
-                )
-            with meta_col2:
-                to_value = metadata.get("to", "")
-                if to_value:
-                    to_list = [t.strip() for t in str(to_value).split(",") if t.strip()]
-                    to_display = html_escape(", ".join(to_list[:3]))
-                    if len(to_list) > 3:
-                        to_display += f" (+{len(to_list) - 3})"
-                    st_module.markdown(
-                        f"<div class='email-field'><strong>To:</strong> {to_display}</div>",
-                        unsafe_allow_html=True,
-                    )
-            with meta_col3:
-                st_module.markdown(
-                    f"<div class='email-field'><strong>Folder:</strong> {folder}</div>",
-                    unsafe_allow_html=True,
-                )
-            with meta_col4:
-                formatted_date = format_date_fn(str(metadata.get("date", "")))
-                st_module.markdown(
-                    f"<div class='email-field'><strong>Date:</strong> {formatted_date or date_value}</div>",
-                    unsafe_allow_html=True,
-                )
 
-            att_names = metadata.get("attachment_names", "")
-            if att_names and str(att_names).strip():
-                st_module.markdown(
-                    f"<div class='email-field'><strong>Attachments:</strong> {html_escape(str(att_names))}</div>",
-                    unsafe_allow_html=True,
-                )
+def _render_result_metadata(st, metadata: dict, sender: str, date: str, format_date, escape) -> None:
+    columns = st.columns(4)
+    with columns[0]:
+        st.markdown(f"<div class='email-field'><strong>From:</strong> {sender}</div>", unsafe_allow_html=True)
+    with columns[1]:
+        recipients = [item.strip() for item in str(metadata.get("to", "")).split(",") if item.strip()]
+        if recipients:
+            display = escape(", ".join(recipients[:3])) + (f" (+{len(recipients) - 3})" if len(recipients) > 3 else "")
+            st.markdown(f"<div class='email-field'><strong>To:</strong> {display}</div>", unsafe_allow_html=True)
+    with columns[2]:
+        st.markdown(
+            f"<div class='email-field'><strong>Folder:</strong> {escape(metadata.get('folder', 'Unknown'))}</div>",
+            unsafe_allow_html=True,
+        )
+    with columns[3]:
+        formatted = format_date(str(metadata.get("date", "")))
+        st.markdown(f"<div class='email-field'><strong>Date:</strong> {formatted or date}</div>", unsafe_allow_html=True)
+    for label, value in (("Attachments", metadata.get("attachment_names", "")), ("Priority", metadata.get("priority", "0"))):
+        if value and str(value).strip() not in ("0", ""):
+            st.markdown(f"<div class='email-field'><strong>{label}:</strong> {escape(str(value))}</div>", unsafe_allow_html=True)
 
-            priority = metadata.get("priority", "0")
-            if priority and str(priority) not in ("0", ""):
-                st_module.markdown(
-                    f"<div class='email-field'><strong>Priority:</strong> {html_escape(str(priority))}</div>",
-                    unsafe_allow_html=True,
-                )
 
-            st_module.markdown(
-                f"<div class='email-body-preview'>{html_escape(preview)}</div>",
-                unsafe_allow_html=True,
+def _render_result_body(st, body: str, preview_chars: int, escape) -> None:
+    preview = body if len(body) <= preview_chars else f"{body[:preview_chars]}..."
+    st.markdown(f"<div class='email-body-preview'>{escape(preview)}</div>", unsafe_allow_html=True)
+    if len(body) > preview_chars:
+        with st.expander("Show full text", expanded=False):
+            st.markdown(f"<div class='email-body-full'>{escape(body)}</div>", unsafe_allow_html=True)
+
+
+def _render_result_actions(st, result, retriever) -> None:
+    columns = st.columns([1, 5])
+    conversation_id = str(result.metadata.get("conversation_id", "") or "").strip()
+    with columns[0]:
+        if (
+            conversation_id
+            and retriever is not None
+            and st.button("View Thread", key=f"thread_{result.chunk_id}", type="secondary")
+        ):
+            st.session_state["web_thread_id"] = conversation_id
+            st.rerun()
+    with columns[1]:
+        uid = result.metadata.get("uid", "")
+        uid_short = uid[:12] + "..." if len(uid) > 12 else uid
+        st.caption(f"UID: {uid_short} | Chunk: {result.chunk_id}")
+        inferred = str(result.metadata.get("inferred_thread_id", "") or "").strip()
+        if not conversation_id and inferred:
+            st.caption(
+                "Thread view in Streamlit is currently limited to canonical conversation IDs. "
+                "Use CLI or MCP answer-context workflows for inferred-thread review."
             )
-
-            if len(body) > preview_chars:
-                with st_module.expander("Show full text", expanded=False):
-                    st_module.markdown(
-                        f"<div class='email-body-full'>{html_escape(body)}</div>",
-                        unsafe_allow_html=True,
-                    )
-
-            btn_col1, btn_col2 = st_module.columns([1, 5])
-            conv_id = str(metadata.get("conversation_id", "") or "").strip()
-            with btn_col1:
-                if conv_id and retriever is not None:
-                    if st_module.button("View Thread", key=f"thread_{result.chunk_id}", type="secondary"):
-                        st_module.session_state["web_thread_id"] = conv_id
-                        st_module.rerun()
-            with btn_col2:
-                uid = metadata.get("uid", "")
-                uid_short = uid[:12] + "..." if len(uid) > 12 else uid
-                st_module.caption(f"UID: {uid_short} | Chunk: {result.chunk_id}")
-                inferred_thread_id = str(metadata.get("inferred_thread_id", "") or "").strip()
-                if not conv_id and inferred_thread_id:
-                    st_module.caption(
-                        "Thread view in Streamlit is currently limited to canonical conversation IDs. "
-                        "Use CLI or MCP answer-context workflows for inferred-thread review."
-                    )
 
 
 def render_results_summary_impl(
@@ -371,6 +352,7 @@ def render_results_summary_impl(
     search_modes: list[str] | None,
     build_filter_chip_html_fn: Any,
 ) -> None:
+    """Render summary metrics and active filters above search results."""
     scores = [float(result.score) for result in results]
     avg_score = sum(scores) / len(scores) if scores else 0.0
     max_score = max(scores) if scores else 0.0

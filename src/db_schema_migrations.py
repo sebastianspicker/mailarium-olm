@@ -68,76 +68,57 @@ def apply_pending_migrations_impl(
     """Apply any pending schema migrations and persist the current version."""
     row = cur.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
     current = row[0] if row and row[0] else 0
-    if current < 3:
-        _migrate_to_v3(cur, table_columns=table_columns)
-    if current < 4:
-        _migrate_to_v4(cur, table_columns=table_columns)
-    if current < 5:
-        _migrate_to_v5(cur, sparse_schema_sql=sparse_schema_sql)
-    if current < 6:
-        _migrate_to_v6(cur)
-    if current < 7:
-        _migrate_to_v7(cur, table_columns=table_columns)
-    if current < 8:
-        _migrate_to_v8(cur, table_columns=table_columns)
-    if current < 9:
-        _migrate_to_v9(cur, table_columns=table_columns)
-    if current < 10:
-        _migrate_to_v10(cur, table_columns=table_columns)
-    if current < 11:
-        _migrate_to_v11(cur, table_columns=table_columns)
-    if current < 12:
-        _migrate_to_v12(cur, table_columns=table_columns)
-    if current < 13:
-        _migrate_to_v13(cur, table_columns=table_columns)
-    if current < 14:
-        _migrate_to_v14(cur, table_columns=table_columns)
-    if current < 15:
-        _migrate_to_v15(cur)
-    if current < 16:
-        _migrate_to_v16(cur, table_columns=table_columns)
-    if current < 17:
-        _migrate_to_v17(cur, table_columns=table_columns)
-    if current < 18:
-        _migrate_to_v18(cur, table_columns=table_columns)
-    if current < 19:
-        _migrate_to_v19(cur)
-    if current < 20:
-        _migrate_to_v20(cur)
-    if current < 21:
-        _migrate_to_v21(cur)
-    if current < 22:
-        _migrate_to_v22(cur, table_columns=table_columns)
-    if current < 23:
-        _migrate_to_v23(cur, table_columns=table_columns)
-    if current < 24:
-        _migrate_to_v24(cur, table_columns=table_columns)
-    if current < 25:
-        _migrate_to_v25(cur)
-    if current < 26:
-        _migrate_to_v26(cur, table_columns=table_columns)
-    if current < 27:
-        _migrate_to_v27(cur, table_columns=table_columns)
-    if current < 28:
-        _migrate_to_v28(cur, table_columns=table_columns)
-    if current < 29:
-        _migrate_to_v29(cur)
-    if current < 30:
-        _migrate_to_v30(cur)
-    if current < 31:
-        _migrate_to_v31(cur)
-    if current < 32:
-        _migrate_to_v32(cur)
-    if current < 33:
-        _migrate_to_v33(cur)
-    if current < 34:
-        _migrate_to_v34(cur)
+    for version, migration in _migration_steps(cur, table_columns, sparse_schema_sql):
+        if current < version:
+            migration()
     if current < schema_version:
         cur.execute(
             "INSERT OR REPLACE INTO schema_version(version) VALUES(?)",
             (schema_version,),
         )
     conn.commit()
+
+
+def _migration_steps(
+    cur: sqlite3.Cursor, table_columns: Callable[[sqlite3.Cursor, str], set[str]], sparse_schema_sql: str
+) -> tuple[tuple[int, Callable[[], None]], ...]:
+    def with_columns(migration: Callable[..., None]) -> Callable[[], None]:
+        return lambda: migration(cur, table_columns=table_columns)
+
+    return (
+        (3, with_columns(_migrate_to_v3)),
+        (4, with_columns(_migrate_to_v4)),
+        (5, lambda: _migrate_to_v5(cur, sparse_schema_sql=sparse_schema_sql)),
+        (6, lambda: _migrate_to_v6(cur)),
+        (7, with_columns(_migrate_to_v7)),
+        (8, with_columns(_migrate_to_v8)),
+        (9, with_columns(_migrate_to_v9)),
+        (10, with_columns(_migrate_to_v10)),
+        (11, with_columns(_migrate_to_v11)),
+        (12, with_columns(_migrate_to_v12)),
+        (13, with_columns(_migrate_to_v13)),
+        (14, with_columns(_migrate_to_v14)),
+        (15, lambda: _migrate_to_v15(cur)),
+        (16, with_columns(_migrate_to_v16)),
+        (17, with_columns(_migrate_to_v17)),
+        (18, with_columns(_migrate_to_v18)),
+        (19, lambda: _migrate_to_v19(cur)),
+        (20, lambda: _migrate_to_v20(cur)),
+        (21, lambda: _migrate_to_v21(cur)),
+        (22, with_columns(_migrate_to_v22)),
+        (23, with_columns(_migrate_to_v23)),
+        (24, with_columns(_migrate_to_v24)),
+        (25, lambda: _migrate_to_v25(cur)),
+        (26, with_columns(_migrate_to_v26)),
+        (27, with_columns(_migrate_to_v27)),
+        (28, with_columns(_migrate_to_v28)),
+        (29, lambda: _migrate_to_v29(cur)),
+        (30, lambda: _migrate_to_v30(cur)),
+        (31, lambda: _migrate_to_v31(cur)),
+        (32, lambda: _migrate_to_v32(cur)),
+        (33, lambda: _migrate_to_v33(cur)),
+        (34, lambda: _migrate_to_v34(cur)),
+    )
 
 
 def _migrate_to_v3(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -385,10 +366,7 @@ def _migrate_to_v19(cur: sqlite3.Cursor) -> None:
     logger.info("Schema migration v19: added matter review override persistence")
 
 
-def _migrate_to_v20(cur: sqlite3.Cursor) -> None:
-    """Add persisted matter workspace and snapshot tables (schema v20)."""
-    cur.executescript(
-        """CREATE TABLE IF NOT EXISTS matters (
+_MATTER_SCHEMA_V20_SQL = """CREATE TABLE IF NOT EXISTS matters (
             matter_id TEXT PRIMARY KEY,
             workspace_id TEXT NOT NULL UNIQUE,
             case_label TEXT DEFAULT '',
@@ -536,7 +514,11 @@ def _migrate_to_v20(cur: sqlite3.Cursor) -> None:
             FOREIGN KEY (snapshot_id) REFERENCES matter_snapshots(snapshot_id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_matter_exports_snapshot_id ON matter_exports(snapshot_id, created_at DESC);"""
-    )
+
+
+def _migrate_to_v20(cur: sqlite3.Cursor) -> None:
+    """Add persisted matter workspace and snapshot tables (schema v20)."""
+    cur.executescript(_MATTER_SCHEMA_V20_SQL)
     logger.info("Schema migration v20: added persisted matter workspace tables")
 
 

@@ -25,6 +25,89 @@ from .storage import (
 logger = logging.getLogger(__name__)
 
 
+def _new_chunks(chunks: list[EmailChunk], existing: set[str], skip_existing_check: bool) -> list[EmailChunk]:
+    """Keep first-seen chunks that are not already stored."""
+    seen: set[str] = set()
+    selected: list[EmailChunk] = []
+    for chunk in chunks:
+        if chunk.chunk_id in seen:
+            continue
+        seen.add(chunk.chunk_id)
+        if skip_existing_check or chunk.chunk_id not in existing:
+            selected.append(chunk)
+    return selected
+
+
+def _chunk_storage_values(
+    chunks: list[EmailChunk], encoded_embeddings: list[list[float]]
+) -> tuple[list[str], list[list[float]], list[str], list[dict]]:
+    """Return parallel ChromaDB values, retaining the incoming chunk order."""
+    needs_encoding = [chunk for chunk in chunks if chunk.embedding is None]
+    pre_embedded = [chunk for chunk in chunks if chunk.embedding is not None]
+    all_chunks = needs_encoding + pre_embedded
+    embeddings = encoded_embeddings + [chunk.embedding for chunk in pre_embedded]
+    return (
+        [chunk.chunk_id for chunk in all_chunks],
+        [embedding for embedding in embeddings if embedding is not None],
+        [chunk.text for chunk in all_chunks],
+        [chunk.metadata for chunk in all_chunks],
+    )
+
+
+def _store_chunk_batches(
+    collection: object,
+    values: tuple[list[str], list[list[float]], list[str], list[dict]],
+    batch_size: int,
+    use_upsert: bool,
+    existing: set[str],
+) -> int:
+    """Persist prepared vectors in HNSW-friendly batches and update the ID cache."""
+    all_ids, all_embeddings, all_texts, all_metadatas = values
+    write = getattr(collection, "upsert" if use_upsert else "add")
+    for batch_start in range(0, len(all_ids), batch_size):
+        batch_end = batch_start + batch_size
+        write(
+            ids=all_ids[batch_start:batch_end],
+            embeddings=all_embeddings[batch_start:batch_end],
+            documents=all_texts[batch_start:batch_end],
+            metadatas=all_metadatas[batch_start:batch_end],
+        )
+        existing.update(all_ids[batch_start:batch_end])
+    return len(all_ids)
+
+
+def _log_add_progress(added: int, elapsed: float, encode_time: float, write_time: float) -> None:
+    """Log one add operation with its stable timing fields."""
+    rate = added / elapsed if elapsed > 0 else 0
+    logger.info(
+        "Stored %s chunks (%.1fs total: encode=%.1fs, chromadb=%.1fs, %.0f chunks/s)",
+        added,
+        elapsed,
+        encode_time,
+        write_time,
+        rate,
+    )
+
+
+def _log_embedding_start(show_progress: bool, skip_existing_check: bool, new_count: int, total_count: int) -> None:
+    """Log the selected deduplication strategy without affecting write behavior."""
+    if show_progress and not skip_existing_check:
+        logger.info("Embedding %s new chunks (%s already stored).", new_count, total_count - new_count)
+    elif show_progress:
+        logger.info("Embedding %s chunks with SQLite-ledger/upsert dedupe.", new_count)
+
+
+def _encode_new_chunks(
+    embedder: MultiVectorEmbedder, chunks: list[EmailChunk]
+) -> tuple[list[EmailChunk], list[list[float]], MultiVectorResult | None, float]:
+    """Encode only chunks lacking vectors and report the elapsed encode time."""
+    needs_encoding = [chunk for chunk in chunks if chunk.embedding is None]
+    started = time.monotonic()
+    result = embedder.encode_all([chunk.text for chunk in needs_encoding]) if needs_encoding else None
+    embeddings = to_builtin_list(result.dense) if result is not None else []
+    return needs_encoding, embeddings, result, time.monotonic() - started
+
+
 class EmailEmbedder:
     """Manages embedding and storage of email chunks."""
 
@@ -128,88 +211,25 @@ class EmailEmbedder:
         if not chunks:
             return 0
 
-        # Deduplicate: skip chunks already in DB *and* duplicates within this batch
-        seen: set[str] = set()
-        new_chunks: list[EmailChunk] = []
-        existing: set[str] = set()
-        if not skip_existing_check:
-            existing = self.get_existing_ids(refresh=False)
-        for chunk in chunks:
-            if (skip_existing_check or chunk.chunk_id not in existing) and chunk.chunk_id not in seen:
-                seen.add(chunk.chunk_id)
-                new_chunks.append(chunk)
+        existing = set() if skip_existing_check else self.get_existing_ids(refresh=False)
+        new_chunks = _new_chunks(chunks, existing, skip_existing_check)
 
         if not new_chunks:
             if show_progress:
                 logger.info("All %s chunks already in database, skipping.", len(chunks))
             return 0
 
-        if show_progress and not skip_existing_check:
-            logger.info(
-                "Embedding %s new chunks (%s already stored).",
-                len(new_chunks),
-                len(chunks) - len(new_chunks),
-            )
-        elif show_progress:
-            logger.info("Embedding %s chunks with SQLite-ledger/upsert dedupe.", len(new_chunks))
+        _log_embedding_start(show_progress, skip_existing_check, len(new_chunks), len(chunks))
 
         t_start = time.monotonic()
 
         # ── Encode ALL chunks in one pass (maximises GPU throughput) ────
-        needs_encoding = [c for c in new_chunks if c.embedding is None]
-        pre_embedded = [c for c in new_chunks if c.embedding is not None]
-
-        encoded_embeddings: list[list[float]] = []
-        result: MultiVectorResult | None = None
-        t_encode_start = time.monotonic()
-        if needs_encoding:
-            texts = [c.text for c in needs_encoding]
-            result = self.embedder.encode_all(texts)
-            encoded_embeddings = to_builtin_list(result.dense)
-        dt_encode = time.monotonic() - t_encode_start
-
-        # Build merged lists: encoded chunks + pre-embedded chunks
-        all_ids: list[str] = []
-        all_embeddings: list[list[float]] = []
-        all_texts: list[str] = []
-        all_metadatas: list[dict] = []
-
-        for i, chunk in enumerate(needs_encoding):
-            all_ids.append(chunk.chunk_id)
-            all_embeddings.append(encoded_embeddings[i])
-            all_texts.append(chunk.text)
-            all_metadatas.append(chunk.metadata)
-
-        for chunk in pre_embedded:
-            all_ids.append(chunk.chunk_id)
-            if chunk.embedding is None:  # pragma: no cover — filtered above
-                continue
-            all_embeddings.append(chunk.embedding)
-            all_texts.append(chunk.text)
-            all_metadatas.append(chunk.metadata)
+        needs_encoding, encoded_embeddings, result, dt_encode = _encode_new_chunks(self.embedder, new_chunks)
 
         # ── Store to ChromaDB in batches (HNSW-friendly writes) ────────
-        added = 0
         t_write_start = time.monotonic()
-        for batch_start in range(0, len(all_ids), batch_size):
-            batch_end = batch_start + batch_size
-            if skip_existing_check:
-                self.collection.upsert(
-                    ids=all_ids[batch_start:batch_end],
-                    embeddings=all_embeddings[batch_start:batch_end],
-                    documents=all_texts[batch_start:batch_end],
-                    metadatas=all_metadatas[batch_start:batch_end],
-                )
-            else:
-                self.collection.add(
-                    ids=all_ids[batch_start:batch_end],
-                    embeddings=all_embeddings[batch_start:batch_end],
-                    documents=all_texts[batch_start:batch_end],
-                    metadatas=all_metadatas[batch_start:batch_end],
-                )
-            batch_count = min(batch_size, len(all_ids) - batch_start)
-            existing.update(all_ids[batch_start:batch_end])
-            added += batch_count
+        values = _chunk_storage_values(new_chunks, encoded_embeddings)
+        added = _store_chunk_batches(self.collection, values, batch_size, skip_existing_check, existing)
         dt_write = time.monotonic() - t_write_start
 
         if result is not None and result.sparse is not None:
@@ -221,15 +241,7 @@ class EmailEmbedder:
 
         if show_progress:
             elapsed = time.monotonic() - t_start
-            rate = added / elapsed if elapsed > 0 else 0
-            logger.info(
-                "Stored %s chunks (%.1fs total: encode=%.1fs, chromadb=%.1fs, %.0f chunks/s)",
-                added,
-                elapsed,
-                dt_encode,
-                dt_write,
-                rate,
-            )
+            _log_add_progress(added, elapsed, dt_encode, dt_write)
 
         return added
 

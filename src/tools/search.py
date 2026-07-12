@@ -64,6 +64,63 @@ def _build_search_kwargs(params: EmailSearchStructuredInput) -> dict[str, Any]:
     return kwargs
 
 
+def _retrieval_diagnostics(debug: object) -> dict[str, Any]:
+    """Project the stable public diagnostics fields from a retriever debug record."""
+    if not isinstance(debug, dict) or not debug:
+        return {}
+    diagnostics: dict[str, Any] = {}
+    text_fields = (
+        "original_query",
+        "executed_query",
+        "query_expansion_status",
+        "query_expansion_error_type",
+        "query_expansion_error",
+        "query_expansion_suffix",
+        "semantic_filter_status",
+    )
+    for field in text_fields:
+        value = str(debug.get(field) or "").strip()
+        if value:
+            diagnostics[field] = value
+    for field in ("expand_query_requested", "used_query_expansion"):
+        if field in debug:
+            diagnostics[field] = bool(debug[field])
+    if "semantic_filter_uid_count" in debug:
+        diagnostics["semantic_filter_uid_count"] = int(debug.get("semantic_filter_uid_count") or 0)
+    errors = debug.get("semantic_filter_errors")
+    if isinstance(errors, list) and errors:
+        diagnostics["semantic_filter_errors"] = errors
+    return diagnostics
+
+
+def _structured_filters(params: EmailSearchStructuredInput) -> dict[str, Any]:
+    """Return every structured-search filter, including explicit false values."""
+    output_order = (
+        "sender",
+        "subject",
+        "folder",
+        "cc",
+        "to",
+        "bcc",
+        "has_attachments",
+        "priority",
+        "email_type",
+        "date_from",
+        "date_to",
+        "min_score",
+        "rerank",
+        "hybrid",
+        "topic_id",
+        "cluster_id",
+        "expand_query",
+        "attachment_name",
+        "attachment_type",
+        "category",
+        "is_calendar",
+    )
+    return {field: getattr(params, field) for field in output_order}
+
+
 async def email_answer_context(params: EmailAnswerContextInput) -> str:
     """Build an answer-oriented evidence bundle for a natural-language question."""
     return await build_answer_context(_d(), params)
@@ -126,65 +183,11 @@ async def email_search_structured(params: EmailSearchStructuredInput) -> str:
 
             results, scan_meta = filter_seen(params.scan_id, results)
         payload = r.serialize_results(params.query, results)
-        debug = getattr(r, "last_search_debug", getattr(r, "_last_search_debug", None))
-        if isinstance(debug, dict) and debug:
-            retrieval_diagnostics: dict[str, Any] = {}
-            original_query = str(debug.get("original_query") or "").strip()
-            executed_query = str(debug.get("executed_query") or "").strip()
-            if original_query:
-                retrieval_diagnostics["original_query"] = original_query
-            if executed_query:
-                retrieval_diagnostics["executed_query"] = executed_query
-            if "expand_query_requested" in debug:
-                retrieval_diagnostics["expand_query_requested"] = bool(debug.get("expand_query_requested"))
-            if "used_query_expansion" in debug:
-                retrieval_diagnostics["used_query_expansion"] = bool(debug.get("used_query_expansion"))
-            query_expansion_status = str(debug.get("query_expansion_status") or "").strip()
-            if query_expansion_status:
-                retrieval_diagnostics["query_expansion_status"] = query_expansion_status
-            query_expansion_error_type = str(debug.get("query_expansion_error_type") or "").strip()
-            if query_expansion_error_type:
-                retrieval_diagnostics["query_expansion_error_type"] = query_expansion_error_type
-            query_expansion_error = str(debug.get("query_expansion_error") or "").strip()
-            if query_expansion_error:
-                retrieval_diagnostics["query_expansion_error"] = query_expansion_error
-            expansion_suffix = str(debug.get("query_expansion_suffix") or "").strip()
-            if expansion_suffix:
-                retrieval_diagnostics["query_expansion_suffix"] = expansion_suffix
-            semantic_filter_status = str(debug.get("semantic_filter_status") or "").strip()
-            if semantic_filter_status:
-                retrieval_diagnostics["semantic_filter_status"] = semantic_filter_status
-            if "semantic_filter_uid_count" in debug:
-                retrieval_diagnostics["semantic_filter_uid_count"] = int(debug.get("semantic_filter_uid_count") or 0)
-            semantic_filter_errors = debug.get("semantic_filter_errors")
-            if isinstance(semantic_filter_errors, list) and semantic_filter_errors:
-                retrieval_diagnostics["semantic_filter_errors"] = semantic_filter_errors
-            if retrieval_diagnostics:
-                payload["retrieval_diagnostics"] = retrieval_diagnostics
+        diagnostics = _retrieval_diagnostics(getattr(r, "last_search_debug", getattr(r, "_last_search_debug", None)))
+        if diagnostics:
+            payload["retrieval_diagnostics"] = diagnostics
         payload["top_k"] = effective_top_k
-        payload["filters"] = {
-            "sender": params.sender,
-            "subject": params.subject,
-            "folder": params.folder,
-            "cc": params.cc,
-            "to": params.to,
-            "bcc": params.bcc,
-            "has_attachments": params.has_attachments,
-            "priority": params.priority,
-            "email_type": params.email_type,
-            "date_from": params.date_from,
-            "date_to": params.date_to,
-            "min_score": params.min_score,
-            "rerank": params.rerank,
-            "hybrid": params.hybrid,
-            "topic_id": params.topic_id,
-            "cluster_id": params.cluster_id,
-            "expand_query": params.expand_query,
-            "attachment_name": params.attachment_name,
-            "attachment_type": params.attachment_type,
-            "category": params.category,
-            "is_calendar": params.is_calendar,
-        }
+        payload["filters"] = _structured_filters(params)
         payload["model"] = settings.embedding_model
         if scan_meta:
             payload["_scan"] = scan_meta

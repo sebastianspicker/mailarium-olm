@@ -4,7 +4,78 @@ from src.actor_witness_map import build_actor_witness_map
 
 
 def test_build_actor_witness_map_renders_actor_and_witness_outputs() -> None:
-    payload = build_actor_witness_map(
+    payload = _fixture_test_build_actor_witness_map_renders_actor_and_witness_outputs_payload()
+
+    assert payload is not None
+    assert payload["version"] == "1"
+    actor_map = payload["actor_map"]
+    witness_map = payload["witness_map"]
+    assert actor_map["actor_count"] == 3
+    manager = next(row for row in actor_map["actors"] if row["actor_id"] == "actor-manager")
+    assert manager["status"]["decision_maker"] is True
+    assert manager["status"]["gatekeeper"] is True
+    assert manager["helps_hurts_mixed"] == "hurts"
+    assert manager["coordination_points"][0]["coordination_type"] == "decision_visibility_asymmetry"
+    witness = next(row for row in actor_map["actors"] if row["actor_id"] == "actor-witness")
+    assert witness["status"]["witness"] is True
+    assert witness["tied_event_ids"] == ["chron-2"]
+    assert witness_map["primary_decision_makers"][0]["actor_id"] == "actor-manager"
+    assert witness_map["potentially_independent_witnesses"][0]["actor_id"] == "actor-witness"
+    assert witness_map["high_value_record_holders"][0]["record_holder_type"] in {
+        "calendar_record_holder",
+        "email_record_holder",
+    }
+    assert witness_map["coordination_points"][0]["coordination_id"] == "decision_visibility_asymmetry:actor-manager"
+
+
+def test_build_actor_witness_map_uses_chat_participants_when_actor_id_is_missing() -> None:
+    payload = _fixture_test_build_actor_witness_map_uses_chat_participants_when_actor_id_is_missing_payload()
+
+    assert payload is not None
+    manager = next(row for row in payload["actor_map"]["actors"] if row["actor_id"] == "actor-manager")
+    assert manager["source_record_count"] == 1
+    assert any(
+        holder["actor_id"] == "actor-manager" and holder["source_type"] == "chat_log"
+        for holder in payload["witness_map"]["high_value_record_holders"]
+    )
+
+
+def test_build_actor_witness_map_does_not_treat_org_context_record_holder_as_independent() -> None:
+    payload = _fixture_test_build_actor_witness_map_does_not_treat_org_context_record_holder_as_independent_payload()
+
+    assert payload is not None
+    manager = next(row for row in payload["actor_map"]["actors"] if row["actor_id"] == "actor-manager")
+    assert manager["status"]["witness"] is True
+    assert payload["witness_map"]["potentially_independent_witnesses"] == []
+
+
+def test_build_actor_witness_map_backfills_party_identity_and_uid_linkage() -> None:
+    payload = _fixture_test_build_actor_witness_map_backfills_party_identity_and_uid_linkage_payload()
+
+    assert payload is not None
+    manager = next(row for row in payload["actor_map"]["actors"] if row["actor_id"] == "actor-manager")
+    assert manager["name"] == "Morgan Manager"
+    assert manager["role_hint"] == "suspected_actor"
+    assert manager["tied_event_ids"] == ["chron-1"]
+    assert manager["source_record_count"] == 1
+
+
+def test_build_actor_witness_map_synthesizes_source_people_and_links_source_backed_chronology() -> None:
+    payload = _fixture_test_build_actor_witness_map_synthesizes_source_people_and_links_source_backed_chronology_payload()
+
+    assert payload is not None
+    manager = next(row for row in payload["actor_map"]["actors"] if row["email"] == "manager@example.com")
+    assert manager["name"] == "Morgan Manager"
+    assert manager["source_record_count"] == 1
+    assert manager["tied_event_ids"] == ["chron-1"]
+    assert any(
+        holder["actor_id"] == manager["actor_id"] and holder["source_type"] == "formal_document"
+        for holder in payload["witness_map"]["high_value_record_holders"]
+    )
+
+
+def _fixture_test_build_actor_witness_map_renders_actor_and_witness_outputs_payload():
+    return build_actor_witness_map(
         case_bundle={
             "scope": {
                 "target_person": {"name": "Alex Example", "email": "alex@example.com"},
@@ -104,30 +175,9 @@ def test_build_actor_witness_map_renders_actor_and_witness_outputs() -> None:
         },
     )
 
-    assert payload is not None
-    assert payload["version"] == "1"
-    actor_map = payload["actor_map"]
-    witness_map = payload["witness_map"]
-    assert actor_map["actor_count"] == 3
-    manager = next(row for row in actor_map["actors"] if row["actor_id"] == "actor-manager")
-    assert manager["status"]["decision_maker"] is True
-    assert manager["status"]["gatekeeper"] is True
-    assert manager["helps_hurts_mixed"] == "hurts"
-    assert manager["coordination_points"][0]["coordination_type"] == "decision_visibility_asymmetry"
-    witness = next(row for row in actor_map["actors"] if row["actor_id"] == "actor-witness")
-    assert witness["status"]["witness"] is True
-    assert witness["tied_event_ids"] == ["chron-2"]
-    assert witness_map["primary_decision_makers"][0]["actor_id"] == "actor-manager"
-    assert witness_map["potentially_independent_witnesses"][0]["actor_id"] == "actor-witness"
-    assert witness_map["high_value_record_holders"][0]["record_holder_type"] in {
-        "calendar_record_holder",
-        "email_record_holder",
-    }
-    assert witness_map["coordination_points"][0]["coordination_id"] == "decision_visibility_asymmetry:actor-manager"
 
-
-def test_build_actor_witness_map_uses_chat_participants_when_actor_id_is_missing() -> None:
-    payload = build_actor_witness_map(
+def _fixture_test_build_actor_witness_map_uses_chat_participants_when_actor_id_is_missing_payload():
+    return build_actor_witness_map(
         case_bundle={"scope": {"target_person": {"name": "Alex Example", "email": "alex@example.com"}}},
         actor_identity_graph={
             "actors": [
@@ -164,17 +214,9 @@ def test_build_actor_witness_map_uses_chat_participants_when_actor_id_is_missing
         },
     )
 
-    assert payload is not None
-    manager = next(row for row in payload["actor_map"]["actors"] if row["actor_id"] == "actor-manager")
-    assert manager["source_record_count"] == 1
-    assert any(
-        holder["actor_id"] == "actor-manager" and holder["source_type"] == "chat_log"
-        for holder in payload["witness_map"]["high_value_record_holders"]
-    )
 
-
-def test_build_actor_witness_map_does_not_treat_org_context_record_holder_as_independent() -> None:
-    payload = build_actor_witness_map(
+def _fixture_test_build_actor_witness_map_does_not_treat_org_context_record_holder_as_independent_payload():
+    return build_actor_witness_map(
         case_bundle={"scope": {"target_person": {"name": "Alex Example", "email": "alex@example.com"}}},
         actor_identity_graph={
             "actors": [
@@ -210,14 +252,9 @@ def test_build_actor_witness_map_does_not_treat_org_context_record_holder_as_ind
         },
     )
 
-    assert payload is not None
-    manager = next(row for row in payload["actor_map"]["actors"] if row["actor_id"] == "actor-manager")
-    assert manager["status"]["witness"] is True
-    assert payload["witness_map"]["potentially_independent_witnesses"] == []
 
-
-def test_build_actor_witness_map_backfills_party_identity_and_uid_linkage() -> None:
-    payload = build_actor_witness_map(
+def _fixture_test_build_actor_witness_map_backfills_party_identity_and_uid_linkage_payload():
+    return build_actor_witness_map(
         case_bundle={"scope": {"target_person": {"name": "Alex Example", "email": "alex@example.com"}}},
         actor_identity_graph={
             "actors": [
@@ -269,16 +306,9 @@ def test_build_actor_witness_map_backfills_party_identity_and_uid_linkage() -> N
         },
     )
 
-    assert payload is not None
-    manager = next(row for row in payload["actor_map"]["actors"] if row["actor_id"] == "actor-manager")
-    assert manager["name"] == "Morgan Manager"
-    assert manager["role_hint"] == "suspected_actor"
-    assert manager["tied_event_ids"] == ["chron-1"]
-    assert manager["source_record_count"] == 1
 
-
-def test_build_actor_witness_map_synthesizes_source_people_and_links_source_backed_chronology() -> None:
-    payload = build_actor_witness_map(
+def _fixture_test_build_actor_witness_map_synthesizes_source_people_and_links_source_backed_chronology_payload():
+    return build_actor_witness_map(
         case_bundle={"scope": {"target_person": {"name": "Alex Example", "email": "alex@example.com"}}},
         actor_identity_graph={
             "actors": [
@@ -312,14 +342,4 @@ def test_build_actor_witness_map_synthesizes_source_people_and_links_source_back
                 }
             ]
         },
-    )
-
-    assert payload is not None
-    manager = next(row for row in payload["actor_map"]["actors"] if row["email"] == "manager@example.com")
-    assert manager["name"] == "Morgan Manager"
-    assert manager["source_record_count"] == 1
-    assert manager["tied_event_ids"] == ["chron-1"]
-    assert any(
-        holder["actor_id"] == manager["actor_id"] and holder["source_type"] == "formal_document"
-        for holder in payload["witness_map"]["high_value_record_holders"]
     )

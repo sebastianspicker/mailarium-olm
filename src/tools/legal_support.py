@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src._utils import _as_dict
+
 from ..case_analysis import build_case_analysis_payload
 from ..comparative_treatment import shared_comparator_points
 from ..legal_support_exporter import LegalSupportExporter
@@ -11,10 +13,6 @@ from ..mcp_models import EmailLegalSupportExportInput, EmailLegalSupportInput
 from .utils import ToolDepsProto, get_deps, json_response, run_serialized_case_tool
 
 _deps: ToolDepsProto | None = None
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _d() -> ToolDepsProto:
@@ -76,30 +74,31 @@ def _comparator_matrix(payload: dict[str, Any]) -> dict[str, Any]:
     rows = shared_comparator_points(comparative)
     insufficiency = _as_dict(comparative.get("insufficiency"))
     if not insufficiency:
-        summary = _as_dict(comparative.get("summary"))
-        missing_inputs = [str(item) for item in summary.get("missing_inputs") or [] if str(item).strip()]
-        status = str(summary.get("status") or "")
-        if status == "insufficient_comparator_scope" or missing_inputs:
-            reason = str(summary.get("insufficiency_reason") or "") or (
-                "Comparator analysis is not yet supported on the current record."
-            )
-            recommended_next_inputs: list[str] = []
-            if "comparator_actors" in missing_inputs:
-                recommended_next_inputs.append("Add named comparator actors tied to the same manager, policy, or decision path.")
-            if "target_person" in missing_inputs:
-                recommended_next_inputs.append("Clarify the target person identity before comparing treatment.")
-            insufficiency = {
-                "status": "insufficient_comparator_scope",
-                "reason": reason,
-                "missing_inputs": missing_inputs,
-                "recommended_next_inputs": recommended_next_inputs,
-            }
+        insufficiency = _derived_comparator_insufficiency(_as_dict(comparative.get("summary")))
     return {
         "version": "2",
         "row_count": len(rows),
         "summary": comparative.get("summary"),
         "insufficiency": insufficiency or None,
         "rows": rows,
+    }
+
+
+def _derived_comparator_insufficiency(summary: dict[str, Any]) -> dict[str, Any]:
+    missing = [str(item) for item in summary.get("missing_inputs") or [] if str(item).strip()]
+    if str(summary.get("status") or "") != "insufficient_comparator_scope" and not missing:
+        return {}
+    recommendations: list[str] = []
+    if "comparator_actors" in missing:
+        recommendations.append("Add named comparator actors tied to the same manager, policy, or decision path.")
+    if "target_person" in missing:
+        recommendations.append("Clarify the target person identity before comparing treatment.")
+    return {
+        "status": "insufficient_comparator_scope",
+        "reason": str(summary.get("insufficiency_reason") or "")
+        or "Comparator analysis is not yet supported on the current record.",
+        "missing_inputs": missing,
+        "recommended_next_inputs": recommendations,
     }
 
 

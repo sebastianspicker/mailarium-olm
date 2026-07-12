@@ -8,16 +8,15 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
-from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 
 from .attachment_extractor import (
     attachment_format_profile,
     extraction_quality_profile,
 )
+from .multi_source_case_bundle_chronology import _chronology_text, _date_range_from_text
+from .multi_source_case_bundle_common import _normalized_text
 
 MULTI_SOURCE_CASE_BUNDLE_VERSION = "1"
 _DECLARED_SOURCE_TYPES = (
@@ -121,10 +120,17 @@ _DATE_ORIGIN_PRIORITY = {
     "source_timestamp": 25,
 }
 
-# ruff: noqa: F401,F821
-
 
 def _attachment_source_type(candidate: dict[str, Any], attachment: dict[str, Any]) -> str:
+    """Determine the source type for an attachment based on explicit hints and content analysis.
+
+    Args:
+        candidate: The candidate source dictionary containing context like subject and snippet.
+        attachment: The attachment dictionary containing metadata like filename and source_type_hint.
+
+    Returns:
+        The determined source type string from _DECLARED_SOURCE_TYPES.
+    """
     explicit_hint = str(attachment.get("source_type_hint") or "").strip()
     if explicit_hint in _DECLARED_SOURCE_TYPES:
         return explicit_hint
@@ -149,6 +155,14 @@ def _attachment_source_type(candidate: dict[str, Any], attachment: dict[str, Any
 
 
 def _attachment_document_kind(source_type: str) -> str:
+    """Map an attachment source type to its document kind representation.
+
+    Args:
+        source_type: The source type string (e.g., 'attachment', 'formal_document').
+
+    Returns:
+        The document kind string, prefixed with 'attached_' for non-attachment types.
+    """
     if source_type == "attachment":
         return "attachment"
     if source_type == "formal_document":
@@ -157,6 +171,14 @@ def _attachment_document_kind(source_type: str) -> str:
 
 
 def _attachment_reliability_basis_prefix(source_type: str) -> str:
+    """Get the reliability basis prefix for an attachment source type.
+
+    Args:
+        source_type: The source type string.
+
+    Returns:
+        The source type string to be used as the reliability basis prefix.
+    """
     return source_type
 
 
@@ -169,43 +191,99 @@ def _source_review_recommendation(
     format_profile: dict[str, Any] | None = None,
     extraction_quality: dict[str, Any] | None = None,
 ) -> str:
-    format_profile = format_profile if isinstance(format_profile, dict) else {}
-    extraction_quality = extraction_quality if isinstance(extraction_quality, dict) else {}
-    format_label = str(format_profile.get("format_label") or "source").strip()
-    handling_mode = str(format_profile.get("handling_mode") or "").strip()
-    support_level = str(format_profile.get("support_level") or "").strip()
-    if support_level == "unsupported":
+    """Generate a review recommendation based on extraction and source characteristics.
+
+    Args:
+        extraction_state: The state of text extraction (e.g., 'text_extracted', 'ocr_failed').
+        evidence_strength: The strength of evidence (e.g., 'strong_text', 'weak').
+        ocr_used: Whether OCR was used for text extraction.
+        source_type: The type of source (e.g., 'email', 'attachment', 'note_record').
+        format_profile: Optional dictionary containing format-related metadata.
+        extraction_quality: Optional dictionary containing quality assessment metadata.
+
+    Returns:
+        A string recommendation for how to handle the source in review.
+    """
+    profile = format_profile if isinstance(format_profile, dict) else {}
+    quality = extraction_quality if isinstance(extraction_quality, dict) else {}
+    return _review_recommendation_stages(extraction_state, evidence_strength, ocr_used, source_type, profile, quality)
+
+
+def _review_recommendation_stages(
+    extraction_state: str,
+    evidence_strength: str,
+    ocr_used: bool,
+    source_type: str,
+    profile: dict[str, Any],
+    quality: dict[str, Any],
+) -> str:
+    unsupported = _unsupported_recommendation(profile)
+    if unsupported:
+        return unsupported
+    extracted = _extracted_text_recommendation(extraction_state, evidence_strength, source_type, profile)
+    if extracted:
+        return extracted
+    return _fallback_review_recommendation(extraction_state, evidence_strength, ocr_used, quality)
+
+
+def _unsupported_recommendation(profile: dict[str, Any]) -> str:
+    if str(profile.get("support_level") or "") != "unsupported":
+        return ""
+    label = str(profile.get("format_label") or "source").strip()
+    return (
+        f"{label} is not currently supported for reliable extraction; keep it as a visible reference "
+        "and review the original file directly."
+    )
+
+
+def _extracted_text_recommendation(
+    extraction_state: str, evidence_strength: str, source_type: str, profile: dict[str, Any]
+) -> str:
+    if extraction_state != "text_extracted" or evidence_strength != "strong_text":
+        return ""
+    format_label = str(profile.get("format_label") or "source").strip()
+    mode = str(profile.get("handling_mode") or "").strip()
+    if mode == "flattened_tabular_text":
+        return f"{format_label} text is usable, but sheet structure and formulas were flattened during extraction."
+    if mode == "calendar_text_flattened":
         return (
-            f"{format_label} is not currently supported for reliable extraction; keep it as a visible reference "
-            "and review the original file directly."
+            f"{format_label} text is usable, but richer calendar structure was flattened and should be checked "
+            "against the original file when timing detail matters."
         )
-    if evidence_strength == "strong_text" and extraction_state == "text_extracted":
-        if handling_mode == "flattened_tabular_text":
-            return f"{format_label} text is usable, but sheet structure and formulas were flattened during extraction."
-        if handling_mode == "calendar_text_flattened":
-            return (
-                f"{format_label} text is usable, but richer calendar structure was flattened and should be checked "
-                "against the original file when timing detail matters."
-            )
-        if source_type == "note_record":
-            return "Extracted note text can support chronology, summary comparison, and follow-up directly."
-        if source_type == "time_record":
-            return "Extracted time-record text can support chronology and attendance follow-up directly."
-        if source_type == "participation_record":
-            return "Extracted participation-record text can support process and consultation follow-up directly."
-        if source_type == "formal_document":
-            return "Native extracted document text can support chronology and exhibit follow-up directly."
-        return "Extracted attachment text can support downstream follow-up directly."
+    return _source_type_review(source_type)
+
+
+def _source_type_review(source_type: str) -> str:
+    recommendations = {
+        "note_record": "Extracted note text can support chronology, summary comparison, and follow-up directly.",
+        "time_record": "Extracted time-record text can support chronology and attendance follow-up directly.",
+        "participation_record": "Extracted participation-record text can support process and consultation follow-up directly.",
+        "formal_document": "Native extracted document text can support chronology and exhibit follow-up directly.",
+    }
+    return recommendations.get(source_type, "Extracted attachment text can support downstream follow-up directly.")
+
+
+def _fallback_review_recommendation(
+    extraction_state: str, evidence_strength: str, ocr_used: bool, quality: dict[str, Any]
+) -> str:
     if evidence_strength == "strong_text" and ocr_used:
         return "OCR-recovered text is usable, but the original page image should be checked before relying on fine wording."
     if extraction_state in {"ocr_failed", "extraction_failed", "binary_only", "image_embedding_only"}:
         return "Treat this source as a weak documentary reference until the original file is reviewed manually."
-    if extraction_quality.get("manual_review_required"):
+    if quality.get("manual_review_required"):
         return "Manual review is still required before treating this source as strong documentary proof."
     return "Review the original file before treating this source as strong documentary proof."
 
 
 def _source_reliability_for_chat_log(chat_log: dict[str, Any]) -> dict[str, Any]:
+    """Determine reliability assessment for a chat log source.
+
+    Args:
+        chat_log: Dictionary containing chat log data with participants and parsed_messages.
+
+    Returns:
+        Dictionary with reliability level, basis, and caveats for the chat log.
+    """
     participants = [str(item) for item in chat_log.get("participants", []) if str(item).strip()]
     parsed_messages = [item for item in chat_log.get("parsed_messages", []) if isinstance(item, dict)]
     if participants and parsed_messages:
@@ -236,6 +314,14 @@ def _source_reliability_for_chat_log(chat_log: dict[str, Any]) -> dict[str, Any]
 
 
 def _is_formal_document(attachment: dict[str, Any]) -> bool:
+    """Check if an attachment should be classified as a formal document.
+
+    Args:
+        attachment: Dictionary containing attachment metadata with filename and mime_type.
+
+    Returns:
+        True if the attachment has a formal document extension or MIME type, False otherwise.
+    """
     filename = str(attachment.get("filename") or "").strip()
     mime_type = str(attachment.get("mime_type") or "").strip().lower()
     if Path(filename).suffix.lower() in _FORMAL_DOCUMENT_EXTENSIONS:
@@ -244,6 +330,14 @@ def _is_formal_document(attachment: dict[str, Any]) -> bool:
 
 
 def _source_reliability_for_email(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Determine reliability assessment for an email source.
+
+    Args:
+        candidate: Dictionary containing email candidate data.
+
+    Returns:
+        Dictionary with reliability level, basis, and caveats for the email.
+    """
     weak_message = candidate.get("weak_message")
     verification_status = str(candidate.get("verification_status") or "")
     if weak_message:
@@ -258,6 +352,15 @@ def _source_reliability_for_email(candidate: dict[str, Any]) -> dict[str, Any]:
 
 
 def _source_reliability_for_attachment(candidate: dict[str, Any], *, source_type: str) -> dict[str, Any]:
+    """Determine reliability assessment for an attachment source.
+
+    Args:
+        candidate: Dictionary containing attachment candidate data.
+        source_type: The determined source type for the attachment.
+
+    Returns:
+        Dictionary with reliability level, basis, and caveats for the attachment.
+    """
     attachment = cast(dict[str, Any], candidate.get("attachment")) if isinstance(candidate.get("attachment"), dict) else {}
     evidence_strength = str(attachment.get("evidence_strength") or "")
     extraction_state = str(attachment.get("extraction_state") or "")
@@ -292,6 +395,14 @@ def _source_reliability_for_attachment(candidate: dict[str, Any], *, source_type
 
 
 def _source_reliability_for_meeting(note: dict[str, Any]) -> dict[str, Any]:
+    """Determine reliability assessment for a meeting note source.
+
+    Args:
+        note: Dictionary containing meeting note data.
+
+    Returns:
+        Dictionary with reliability level, basis, and caveats for the meeting note.
+    """
     extracted_from = str(note.get("_extracted_from") or "")
     if extracted_from == "meeting_data":
         return {"level": "high", "basis": "calendar_meeting_metadata", "caveats": []}
@@ -303,6 +414,17 @@ def _source_reliability_for_meeting(note: dict[str, Any]) -> dict[str, Any]:
 
 
 def _weighting_metadata(*, source_type: str, reliability_level: str, text_available: bool) -> dict[str, Any]:
+    """Generate weighting metadata for a source based on type, reliability, and text availability.
+
+    Args:
+        source_type: The type of source.
+        reliability_level: The reliability level ('low', 'medium', 'high').
+        text_available: Whether extracted text is available.
+
+    Returns:
+        Dictionary containing weight_label, base_weight, text_available, and
+        can_corroborate_or_contradict flags.
+    """
     base_weight = 0.4
     if reliability_level == "medium":
         base_weight = 0.7
@@ -318,114 +440,196 @@ def _weighting_metadata(*, source_type: str, reliability_level: str, text_availa
 
 
 def _string_list(value: Any) -> list[str]:
+    """Convert a value to a list of non-empty strings.
+
+    Args:
+        value: The value to convert (typically a list or None).
+
+    Returns:
+        A list of stripped string items, or empty list if value is not a list.
+    """
     return [str(item) for item in value if str(item).strip()] if isinstance(value, list) else []
 
 
 def _documentary_support_payload(candidate: dict[str, Any], *, source_type: str) -> dict[str, Any] | None:
-    attachment = candidate.get("attachment") if isinstance(candidate.get("attachment"), dict) else {}
+    """Extract or construct documentary support payload from a candidate.
+
+    Args:
+        candidate: Dictionary containing candidate data with optional attachment.
+        source_type: The determined source type for the candidate.
+
+    Returns:
+        Dictionary with documentary support metadata, or None if no attachment exists.
+    """
+    attachment = _attachment_payload(candidate)
     if not attachment:
         return None
-    explicit_payload = attachment.get("documentary_support")
-    if isinstance(explicit_payload, dict) and explicit_payload:
-        return {
-            "filename": str(explicit_payload.get("filename") or attachment.get("filename") or ""),
-            "mime_type": str(explicit_payload.get("mime_type") or attachment.get("mime_type") or ""),
-            "text_available": bool(explicit_payload.get("text_available")),
-            "evidence_strength": str(explicit_payload.get("evidence_strength") or attachment.get("evidence_strength") or ""),
-            "extraction_state": str(explicit_payload.get("extraction_state") or attachment.get("extraction_state") or ""),
-            "ocr_used": bool(explicit_payload.get("ocr_used") if "ocr_used" in explicit_payload else attachment.get("ocr_used")),
-            "failure_reason": str(explicit_payload.get("failure_reason") or attachment.get("failure_reason") or ""),
-            "text_preview": str(explicit_payload.get("text_preview") or attachment.get("text_preview") or ""),
-            "format_profile": dict(explicit_payload.get("format_profile") or attachment.get("format_profile") or {}),
-            "extraction_quality": dict(explicit_payload.get("extraction_quality") or attachment.get("extraction_quality") or {}),
-            "review_recommendation": str(
-                explicit_payload.get("review_recommendation") or attachment.get("review_recommendation") or ""
-            ),
-        }
-    extraction_state = str(attachment.get("extraction_state") or "")
-    evidence_strength = str(attachment.get("evidence_strength") or "")
+    explicit = attachment.get("documentary_support")
+    if isinstance(explicit, dict) and explicit:
+        return _explicit_documentary_support(explicit, attachment)
+    return _derived_documentary_support(attachment, source_type)
+
+
+def _attachment_payload(candidate: dict[str, Any]) -> dict[str, Any]:
+    attachment = candidate.get("attachment")
+    return cast(dict[str, Any], attachment) if isinstance(attachment, dict) else {}
+
+
+def _explicit_documentary_support(payload: dict[str, Any], attachment: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "filename": _support_string(payload, attachment, "filename"),
+        "mime_type": _support_string(payload, attachment, "mime_type"),
+        "text_available": bool(payload.get("text_available")),
+        "evidence_strength": _support_string(payload, attachment, "evidence_strength"),
+        "extraction_state": _support_string(payload, attachment, "extraction_state"),
+        "ocr_used": bool(payload.get("ocr_used") if "ocr_used" in payload else attachment.get("ocr_used")),
+        "failure_reason": _support_string(payload, attachment, "failure_reason"),
+        "text_preview": _support_string(payload, attachment, "text_preview"),
+        "format_profile": _support_mapping(payload, attachment, "format_profile"),
+        "extraction_quality": _support_mapping(payload, attachment, "extraction_quality"),
+        "review_recommendation": _support_string(payload, attachment, "review_recommendation"),
+    }
+
+
+def _support_string(primary: dict[str, Any], fallback: dict[str, Any], key: str) -> str:
+    return str(primary.get(key) or fallback.get(key) or "")
+
+
+def _support_mapping(primary: dict[str, Any], fallback: dict[str, Any], key: str) -> dict[str, Any]:
+    return dict(primary.get(key) or fallback.get(key) or {})
+
+
+def _derived_documentary_support(attachment: dict[str, Any], source_type: str) -> dict[str, Any]:
+    state = str(attachment.get("extraction_state") or "")
+    strength = str(attachment.get("evidence_strength") or "")
     ocr_used = bool(attachment.get("ocr_used"))
-    format_profile = dict(attachment.get("format_profile") or {})
-    if not format_profile:
-        format_profile = attachment_format_profile(
-            filename=str(attachment.get("filename") or ""),
-            mime_type=str(attachment.get("mime_type") or ""),
-            extraction_state=extraction_state,
-            evidence_strength=evidence_strength,
-            ocr_used=ocr_used,
-            text_available=bool(attachment.get("text_available")),
-        )
-    extraction_quality = dict(attachment.get("extraction_quality") or {})
-    if not extraction_quality:
-        extraction_quality = extraction_quality_profile(
-            extraction_state=extraction_state,
-            evidence_strength=evidence_strength,
-            ocr_used=ocr_used,
-            format_profile=format_profile,
-        )
+    profile = _format_profile(attachment, state, strength, ocr_used)
+    quality = _extraction_quality(attachment, state, strength, ocr_used, profile)
+    return _derived_support_payload(attachment, source_type, state, strength, ocr_used, profile, quality)
+
+
+def _format_profile(attachment: dict[str, Any], state: str, strength: str, ocr_used: bool) -> dict[str, Any]:
+    profile = dict(attachment.get("format_profile") or {})
+    if profile:
+        return profile
+    return attachment_format_profile(
+        filename=str(attachment.get("filename") or ""),
+        mime_type=str(attachment.get("mime_type") or ""),
+        extraction_state=state,
+        evidence_strength=strength,
+        ocr_used=ocr_used,
+        text_available=bool(attachment.get("text_available")),
+    )
+
+
+def _extraction_quality(
+    attachment: dict[str, Any], state: str, strength: str, ocr_used: bool, profile: dict[str, Any]
+) -> dict[str, Any]:
+    quality = dict(attachment.get("extraction_quality") or {})
+    return quality or extraction_quality_profile(
+        extraction_state=state, evidence_strength=strength, ocr_used=ocr_used, format_profile=profile
+    )
+
+
+def _derived_support_payload(
+    attachment: dict[str, Any],
+    source_type: str,
+    state: str,
+    strength: str,
+    ocr_used: bool,
+    profile: dict[str, Any],
+    quality: dict[str, Any],
+) -> dict[str, Any]:
+    review = str(attachment.get("review_recommendation") or "")
     return {
         "filename": str(attachment.get("filename") or ""),
         "mime_type": str(attachment.get("mime_type") or ""),
         "text_available": bool(attachment.get("text_available")),
-        "evidence_strength": evidence_strength,
-        "extraction_state": extraction_state,
+        "evidence_strength": strength,
+        "extraction_state": state,
         "ocr_used": ocr_used,
         "failure_reason": str(attachment.get("failure_reason") or ""),
         "text_preview": str(attachment.get("text_preview") or ""),
-        "format_profile": format_profile,
-        "extraction_quality": extraction_quality,
-        "review_recommendation": str(attachment.get("review_recommendation") or "")
+        "format_profile": profile,
+        "extraction_quality": quality,
+        "review_recommendation": review
         or _source_review_recommendation(
-            extraction_state=extraction_state,
-            evidence_strength=evidence_strength,
+            extraction_state=state,
+            evidence_strength=strength,
             ocr_used=ocr_used,
             source_type=source_type,
-            format_profile=format_profile,
-            extraction_quality=extraction_quality,
+            format_profile=profile,
+            extraction_quality=quality,
         ),
     }
 
 
 def _spreadsheet_semantics(source: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract or derive spreadsheet semantics from a source.
+
+    Args:
+        source: Dictionary containing source data with optional spreadsheet_semantics.
+
+    Returns:
+        Dictionary with spreadsheet metadata (record_type, sheet_names, date_range, etc.),
+        or None if not applicable (non-time_record sources without explicit semantics).
+    """
     explicit = source.get("spreadsheet_semantics")
     if isinstance(explicit, dict) and explicit:
         return explicit
+    if not _is_spreadsheet_time_record(source):
+        return None
+    return _spreadsheet_payload(_chronology_text(source))
+
+
+def _is_spreadsheet_time_record(source: dict[str, Any]) -> bool:
     if str(source.get("source_type") or "") != "time_record":
-        return None
-    documentary = (
-        cast(dict[str, Any], source.get("documentary_support")) if isinstance(source.get("documentary_support"), dict) else {}
-    )
-    format_profile = documentary.get("format_profile")
-    if not isinstance(format_profile, dict) or str(format_profile.get("format_family") or "") != "spreadsheet":
-        return None
-    chronology_text = _chronology_text(source)
+        return False
+    documentary = cast(dict[str, Any], source.get("documentary_support") or {})
+    profile = documentary.get("format_profile")
+    return isinstance(profile, dict) and str(profile.get("format_family") or "") == "spreadsheet"
+
+
+def _spreadsheet_payload(chronology_text: str) -> dict[str, Any]:
     explicit_dates = list(dict.fromkeys(match.group(1) for match in _ISO_DATE_RE.finditer(chronology_text)))
     date_range = _date_range_from_text(chronology_text)
-    month_labels = sorted({match.group(1).lower() for match in _MONTH_LABEL_RE.finditer(chronology_text)})
-    sheet_names = list(
-        dict.fromkeys(match.group(1).strip() for match in _SHEET_NAME_RE.finditer(chronology_text) if match.group(1).strip())
-    )
-    lower_text = chronology_text.lower()
-    record_type = "generic_time_record"
-    if any(token in lower_text for token in ("time system", "nova time")):
-        record_type = "time system_export"
-    elif "attendance" in lower_text:
-        record_type = "attendance_export"
-    elif any(token in lower_text for token in ("arbeitszeit", "timesheet", "time sheet", "zeiterfassung")):
-        record_type = "time_tracking_export"
+    sheet_names = _spreadsheet_sheet_names(chronology_text)
     return {
-        "record_type": record_type,
+        "record_type": _spreadsheet_record_type(chronology_text),
         "sheet_names": sheet_names,
         "sheet_count": len(sheet_names),
-        "explicit_dates": list(dict.fromkeys(explicit_dates)),
+        "explicit_dates": explicit_dates,
         "date_range": date_range,
-        "month_labels": month_labels,
+        "month_labels": sorted({match.group(1).lower() for match in _MONTH_LABEL_RE.finditer(chronology_text)}),
         "date_signal_strength": "range" if date_range else "dates" if explicit_dates else "weak",
         "structure_signal": "sheeted" if sheet_names else "flattened_rows_only",
     }
 
 
+def _spreadsheet_sheet_names(text: str) -> list[str]:
+    return list(dict.fromkeys(match.group(1).strip() for match in _SHEET_NAME_RE.finditer(text) if match.group(1).strip()))
+
+
+def _spreadsheet_record_type(text: str) -> str:
+    lower_text = text.lower()
+    if any(token in lower_text for token in ("time system", "nova time")):
+        return "time system_export"
+    if "attendance" in lower_text:
+        return "attendance_export"
+    if any(token in lower_text for token in ("arbeitszeit", "timesheet", "time sheet", "zeiterfassung")):
+        return "time_tracking_export"
+    return "generic_time_record"
+
+
 def _document_locator(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Extract document locator information from a candidate's provenance.
+
+    Args:
+        candidate: Dictionary containing candidate data with provenance information.
+
+    Returns:
+        Dictionary with evidence_handle, chunk_id, snippet bounds, and page/section hints.
+    """
     provenance = dict(candidate.get("provenance") or {})
     return {
         "evidence_handle": str(provenance.get("evidence_handle") or ""),

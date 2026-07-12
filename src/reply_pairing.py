@@ -19,6 +19,16 @@ _REPLY_DELAY_HOURS = 48.0
 
 
 def _parse_iso_like(value: str) -> datetime | None:
+    """Parse an ISO-like datetime string into a datetime object.
+
+    Handles various ISO 8601 formats including Z suffix for UTC.
+
+    Args:
+        value: The datetime string to parse.
+
+    Returns:
+        Parsed datetime object with timezone info removed, or None if parsing fails.
+    """
     raw = str(value or "").strip()
     if not raw:
         return None
@@ -32,6 +42,16 @@ def _parse_iso_like(value: str) -> datetime | None:
 
 
 def _extract_emails(values: list[Any]) -> list[str]:
+    """Extract unique email addresses from a list of values.
+
+    Uses regex to find email addresses in string representations of values.
+
+    Args:
+        values: List of values to search for email addresses.
+
+    Returns:
+        List of unique lowercase email addresses found.
+    """
     emails: list[str] = []
     for value in values:
         for match in _EMAIL_RE.finditer(str(value or "")):
@@ -42,6 +62,17 @@ def _extract_emails(values: list[Any]) -> list[str]:
 
 
 def _normalized_subject(value: str) -> str:
+    """Normalize an email subject by removing common prefixes and extra whitespace.
+
+    Removes Re:, Fw:, Fwd:, Aw: prefixes (case-insensitive) and collapses
+    multiple whitespace characters.
+
+    Args:
+        value: The subject string to normalize.
+
+    Returns:
+        Normalized lowercase subject string.
+    """
     subject = str(value or "").strip().lower()
     while True:
         updated = _SUBJECT_PREFIX_RE.sub("", subject)
@@ -52,6 +83,18 @@ def _normalized_subject(value: str) -> str:
 
 
 def _best_text(candidate: dict[str, Any], full_email: dict[str, Any] | None) -> str:
+    """Extract the best available text from a candidate or full email.
+
+    Tries multiple sources in order of preference: candidate snippet,
+    full email body_text, full email normalized_body_text.
+
+    Args:
+        candidate: The candidate dictionary with potential snippet.
+        full_email: Optional full email dictionary with body text fields.
+
+    Returns:
+        The first non-empty text found, or empty string.
+    """
     for source in (
         str(candidate.get("snippet") or ""),
         str((full_email or {}).get("body_text") or ""),
@@ -63,6 +106,22 @@ def _best_text(candidate: dict[str, Any], full_email: dict[str, Any] | None) -> 
 
 
 def _request_expected(text: str) -> tuple[bool, list[str], str, float, bool]:
+    """Determine if a text contains a reply request and classify the detection.
+
+    Checks for request wording patterns and question marks to identify
+    if a reply is expected from the text.
+
+    Args:
+        text: The text to analyze.
+
+    Returns:
+        Tuple containing:
+            - bool: True if a request is expected
+            - list[str]: List of detection reason strings
+            - str: Detection status ('detected', 'format_limited', 'no_clear_request')
+            - float: Detection confidence score (0.0-1.0)
+            - bool: True if format is limited (quoted reply wrapper)
+    """
     reasons: list[str] = []
     if _REQUEST_RE.search(text):
         reasons.append("request_wording")
@@ -77,6 +136,18 @@ def _request_expected(text: str) -> tuple[bool, list[str], str, float, bool]:
 
 
 def _thread_key(candidate: dict[str, Any], full_email: dict[str, Any] | None) -> str:
+    """Extract a thread identifier from a candidate or full email.
+
+    Tries multiple fields in order: thread_group_id, conversation_id from
+    candidate, then conversation_id from full email.
+
+    Args:
+        candidate: The candidate dictionary.
+        full_email: Optional full email dictionary.
+
+    Returns:
+        The first non-empty thread identifier found, or empty string.
+    """
     for value in (
         str(candidate.get("thread_group_id") or ""),
         str(candidate.get("conversation_id") or ""),
@@ -91,25 +162,52 @@ def _row_for_candidate(
     candidate: dict[str, Any],
     full_email: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """Create a normalized row dictionary from a candidate and optional full email.
+
+    Extracts and normalizes key fields for reply-pairing analysis.
+
+    Args:
+        candidate: The candidate dictionary with email metadata.
+        full_email: Optional full email dictionary with additional fields.
+
+    Returns:
+        Dictionary containing normalized fields:
+            - uid: Unique identifier
+            - date: Date string
+            - parsed_date: Parsed datetime object
+            - sender_email: Normalized sender email
+            - subject: Subject string
+            - normalized_subject: Normalized subject
+            - conversation_id: Conversation identifier
+            - thread_key: Thread identifier
+            - recipients: List of recipient emails
+            - text: Best available text content
+    """
+    full_email = full_email or {}
     recipients = _extract_emails(
-        [
-            *list((full_email or {}).get("to") or []),
-            *list((full_email or {}).get("cc") or []),
-            *list((full_email or {}).get("bcc") or []),
-        ]
+        [*list(full_email.get("to") or []), *list(full_email.get("cc") or []), *list(full_email.get("bcc") or [])]
     )
+    uid = _string_value(candidate, "uid")
+    date = _string_value(candidate, "date")
+    sender_email = _string_value(candidate, "sender_email").lower()
+    subject = _string_value(candidate, "subject")
+    conversation_id = _string_value(candidate, "conversation_id") or _string_value(full_email, "conversation_id")
     return {
-        "uid": str(candidate.get("uid") or ""),
-        "date": str(candidate.get("date") or ""),
-        "parsed_date": _parse_iso_like(str(candidate.get("date") or "")),
-        "sender_email": str(candidate.get("sender_email") or "").lower(),
-        "subject": str(candidate.get("subject") or ""),
-        "normalized_subject": _normalized_subject(str(candidate.get("subject") or "")),
-        "conversation_id": str(candidate.get("conversation_id") or (full_email or {}).get("conversation_id") or ""),
+        "uid": uid,
+        "date": date,
+        "parsed_date": _parse_iso_like(date),
+        "sender_email": sender_email,
+        "subject": subject,
+        "normalized_subject": _normalized_subject(subject),
+        "conversation_id": conversation_id,
         "thread_key": _thread_key(candidate, full_email),
         "recipients": recipients,
         "text": _best_text(candidate, full_email),
     }
+
+
+def _string_value(mapping, key):
+    return str(mapping.get(key) or "")
 
 
 def build_reply_pairing_index(
@@ -119,92 +217,116 @@ def build_reply_pairing_index(
     case_scope: Any,
 ) -> dict[str, dict[str, Any]]:
     """Return conservative reply-pairing metadata for target-authored requests."""
-    target_email = str(getattr(getattr(case_scope, "target_person", None), "email", "") or "").strip().lower()
-    suspected_actor_emails = {
-        str(getattr(actor, "email", "") or "").strip().lower()
-        for actor in list(getattr(case_scope, "suspected_actors", []) or [])
-        if str(getattr(actor, "email", "") or "").strip()
-    }
-    rows = [
-        _row_for_candidate(candidate, full_map.get(str(candidate.get("uid") or "")) if isinstance(full_map, dict) else None)
-        for candidate in candidates
-    ]
+    target_email = _actor_email(getattr(case_scope, "target_person", None))
+    suspected_actor_emails = _actor_emails(getattr(case_scope, "suspected_actors", []))
+    rows = _candidate_rows(candidates, full_map)
     rows = [row for row in rows if row["uid"]]
     rows.sort(key=lambda row: (row["parsed_date"] or datetime.max, row["uid"]))
 
     index: dict[str, dict[str, Any]] = {}
     for row in rows:
-        request_expected, request_reasons, detection_status, detection_confidence, format_limited = _request_expected(row["text"])
-        target_authored_request = bool(target_email and row["sender_email"] == target_email)
-        if suspected_actor_emails:
-            relevant_actor_emails = [email for email in row["recipients"] if email in suspected_actor_emails]
-        else:
-            relevant_actor_emails = [email for email in row["recipients"] if email and email != target_email]
-        summary: dict[str, Any] = {
-            "request_expected": request_expected,
-            "request_detection_reasons": request_reasons,
-            "request_detection_status": detection_status,
-            "request_detection_confidence": detection_confidence,
-            "format_limited": format_limited,
-            "target_authored_request": target_authored_request,
-            "relevant_actor_emails": relevant_actor_emails,
-            "response_status": "not_applicable",
-            "direct_reply_uid": "",
-            "direct_reply_sender_email": "",
-            "response_delay_hours": None,
-            "later_activity_uids": [],
-            "later_activity_by_relevant_actor": False,
-            "supports_selective_non_response_inference": False,
-            "counter_indicators": [],
-        }
+        summary = _pairing_summary(row, target_email, suspected_actor_emails)
         index[row["uid"]] = summary
-        if not request_expected:
-            if format_limited:
-                summary["counter_indicators"].append(
-                    "Quoted-wrapper formatting is visible, but the visible text does not expose a bounded reply request."
-                )
-            else:
-                summary["counter_indicators"].append("The message did not contain a bounded reply-expected cue.")
+        if _pair_request(row, rows, summary, target_email):
             continue
-        if not target_authored_request:
-            summary["counter_indicators"].append("Selective non-response checks are limited to target-authored requests.")
-            continue
-        if not relevant_actor_emails:
-            summary["counter_indicators"].append("No relevant recipient actor was visible for reply-pairing checks.")
-            continue
+    return index
 
-        later_rows = []
-        for later in rows:
-            if later["uid"] == row["uid"]:
-                continue
-            if later["parsed_date"] is None or row["parsed_date"] is None or later["parsed_date"] <= row["parsed_date"]:
-                continue
-            if later["sender_email"] not in relevant_actor_emails:
-                continue
-            same_thread = bool(row["thread_key"] and later["thread_key"] and row["thread_key"] == later["thread_key"])
-            same_subject = bool(row["normalized_subject"] and row["normalized_subject"] == later["normalized_subject"])
-            if not same_thread and not same_subject:
-                continue
-            later_rows.append(later)
 
-        summary["later_activity_uids"] = [later["uid"] for later in later_rows]
-        summary["later_activity_by_relevant_actor"] = bool(later_rows)
-        direct_reply = next((later for later in later_rows if target_email in later["recipients"]), None)
-        if direct_reply is not None and row["parsed_date"] is not None and direct_reply["parsed_date"] is not None:
-            delay_hours = round((direct_reply["parsed_date"] - row["parsed_date"]).total_seconds() / 3600, 2)
-            summary["direct_reply_uid"] = direct_reply["uid"]
-            summary["direct_reply_sender_email"] = direct_reply["sender_email"]
-            summary["response_delay_hours"] = delay_hours
-            summary["response_status"] = "delayed_reply" if delay_hours > _REPLY_DELAY_HOURS else "direct_reply"
-            summary["counter_indicators"].append("A direct reply from a relevant actor is visible in the current evidence set.")
-            continue
-        if later_rows:
-            summary["response_status"] = "indirect_activity_without_direct_reply"
-            summary["supports_selective_non_response_inference"] = True
-            continue
+def _actor_email(actor):
+    return str(getattr(actor, "email", "") or "").strip().lower()
+
+
+def _actor_emails(actors):
+    return {email for actor in list(actors or []) if (email := _actor_email(actor))}
+
+
+def _candidate_rows(candidates, full_map):
+    full_map = full_map if isinstance(full_map, dict) else {}
+    return [_row_for_candidate(candidate, full_map.get(_string_value(candidate, "uid"))) for candidate in candidates]
+
+
+def _pairing_summary(row, target_email, suspected_actor_emails):
+    request_expected, request_reasons, detection_status, detection_confidence, format_limited = _request_expected(row["text"])
+    target_authored_request = bool(target_email and row["sender_email"] == target_email)
+    relevant_actor_emails = _relevant_actor_emails(row["recipients"], suspected_actor_emails, target_email)
+    return {
+        "request_expected": request_expected,
+        "request_detection_reasons": request_reasons,
+        "request_detection_status": detection_status,
+        "request_detection_confidence": detection_confidence,
+        "format_limited": format_limited,
+        "target_authored_request": target_authored_request,
+        "relevant_actor_emails": relevant_actor_emails,
+        "response_status": "not_applicable",
+        "direct_reply_uid": "",
+        "direct_reply_sender_email": "",
+        "response_delay_hours": None,
+        "later_activity_uids": [],
+        "later_activity_by_relevant_actor": False,
+        "supports_selective_non_response_inference": False,
+        "counter_indicators": [],
+    }
+
+
+def _relevant_actor_emails(recipients, suspected_actor_emails, target_email):
+    if suspected_actor_emails:
+        return [email for email in recipients if email in suspected_actor_emails]
+    return [email for email in recipients if email and email != target_email]
+
+
+def _pair_request(row, rows, summary, target_email):
+    if not summary["request_expected"]:
+        message = (
+            "Quoted-wrapper formatting is visible, but the visible text does not expose a bounded reply request."
+            if summary["format_limited"]
+            else "The message did not contain a bounded reply-expected cue."
+        )
+        summary["counter_indicators"].append(message)
+        return True
+    if not summary["target_authored_request"]:
+        summary["counter_indicators"].append("Selective non-response checks are limited to target-authored requests.")
+        return True
+    if not summary["relevant_actor_emails"]:
+        summary["counter_indicators"].append("No relevant recipient actor was visible for reply-pairing checks.")
+        return True
+
+    later_rows = _later_rows(row, rows, summary["relevant_actor_emails"])
+
+    summary["later_activity_uids"] = [later["uid"] for later in later_rows]
+    summary["later_activity_by_relevant_actor"] = bool(later_rows)
+    direct_reply = next((later for later in later_rows if target_email in later["recipients"]), None)
+    if direct_reply is not None:
+        _record_direct_reply(summary, row, direct_reply)
+    elif later_rows:
+        summary["response_status"] = "indirect_activity_without_direct_reply"
+        summary["supports_selective_non_response_inference"] = True
+    else:
         summary["response_status"] = "no_reply_observed"
         summary["counter_indicators"].append(
             "No later activity from a relevant actor is visible in the current evidence set, "
             "so non-response remains context-limited."
         )
-    return index
+    return True
+
+
+def _later_rows(row, rows, relevant_actor_emails):
+    return [later for later in rows if _is_later_related_activity(row, later, relevant_actor_emails)]
+
+
+def _is_later_related_activity(row, later, relevant_actor_emails):
+    if later["uid"] == row["uid"] or row["parsed_date"] is None or later["parsed_date"] is None:
+        return False
+    if later["parsed_date"] <= row["parsed_date"] or later["sender_email"] not in relevant_actor_emails:
+        return False
+    same_thread = bool(row["thread_key"] and later["thread_key"] and row["thread_key"] == later["thread_key"])
+    same_subject = bool(row["normalized_subject"] and row["normalized_subject"] == later["normalized_subject"])
+    return same_thread or same_subject
+
+
+def _record_direct_reply(summary, row, direct_reply):
+    delay_hours = round((direct_reply["parsed_date"] - row["parsed_date"]).total_seconds() / 3600, 2)
+    summary["direct_reply_uid"] = direct_reply["uid"]
+    summary["direct_reply_sender_email"] = direct_reply["sender_email"]
+    summary["response_delay_hours"] = delay_hours
+    summary["response_status"] = "delayed_reply" if delay_hours > _REPLY_DELAY_HOURS else "direct_reply"
+    summary["counter_indicators"].append("A direct reply from a relevant actor is visible in the current evidence set.")

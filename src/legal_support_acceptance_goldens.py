@@ -74,26 +74,34 @@ def refresh_legal_support_goldens(
     check_only: bool = False,
 ) -> list[dict[str, object]]:
     """Refresh or check the committed realistic full-pack goldens."""
-    expanded_names = set(scenario_names or [])
-    if FULL_PACK_GOLDEN_ALIAS in expanded_names:
-        expanded_names.remove(FULL_PACK_GOLDEN_ALIAS)
-        expanded_names.update(item.name for item in LEGAL_SUPPORT_GOLDEN_SCENARIOS)
+    expanded_names = _expanded_scenario_names(scenario_names)
 
     outcomes: list[dict[str, object]] = []
     for scenario in legal_support_golden_scenarios(docs_agent_dir):
         if expanded_names and scenario.name not in expanded_names:
             continue
-        rendered = json.dumps(render_legal_support_golden(scenario), indent=2, ensure_ascii=False, sort_keys=True) + "\n"
-        existing = scenario.golden_path.read_text(encoding="utf-8") if scenario.golden_path.exists() else None
-        status = "match" if existing == rendered else "updated"
-        if not check_only and status == "updated":
-            scenario.golden_path.write_text(rendered, encoding="utf-8")
-        outcomes.append(
-            {
-                "scenario": scenario.name,
-                "case_id": scenario.case_id,
-                "golden_path": str(scenario.golden_path),
-                "status": status if check_only else ("written" if status == "updated" else "unchanged"),
-            }
-        )
+        outcomes.append(_refresh_scenario(scenario, check_only=check_only))
     return outcomes
+
+
+def _expanded_scenario_names(names: set[str] | None) -> set[str]:
+    expanded = set(names or [])
+    if FULL_PACK_GOLDEN_ALIAS in expanded:
+        expanded.remove(FULL_PACK_GOLDEN_ALIAS)
+        expanded.update(item.name for item in LEGAL_SUPPORT_GOLDEN_SCENARIOS)
+    return expanded
+
+
+def _refresh_scenario(scenario: ResolvedLegalSupportGoldenScenario, *, check_only: bool) -> dict[str, object]:
+    rendered = json.dumps(render_legal_support_golden(scenario), indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    existing = scenario.golden_path.read_text(encoding="utf-8") if scenario.golden_path.exists() else None
+    status = "match" if existing == rendered else "updated"
+    if not check_only and status == "updated":
+        scenario.golden_path.write_text(rendered, encoding="utf-8")
+    output_status = status if check_only else ("written" if status == "updated" else "unchanged")
+    return {
+        "scenario": scenario.name,
+        "case_id": scenario.case_id,
+        "golden_path": str(scenario.golden_path),
+        "status": output_status,
+    }

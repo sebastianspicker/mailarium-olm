@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
 from typing import Any
 
+from ._utils import _as_dict, _as_list
 from .qa_eval_cases import QuestionCase
 
 _ANSWER_TERM_RE = re.compile(r"[0-9a-zA-ZäöüÄÖÜß._-]+")
@@ -56,20 +56,27 @@ _ANSWER_STOPWORDS = {
     "without",
 }
 
-# ruff: noqa: F401
-
 
 def _normalize_eval_text(value: str) -> str:
+    """Normalize evaluation text by casefolding and collapsing whitespace."""
     return " ".join((value or "").casefold().split())
 
 
 def _append_unique(values: list[str], value: Any) -> None:
+    """Append a value to a list if it's non-empty and not already present."""
     compact = str(value or "").strip()
     if compact and compact not in values:
         values.append(compact)
 
 
 def _collect_identifiers(value: Any, *, field_names: set[str], observed: list[str]) -> None:
+    """Recursively collect identifier values from nested dicts/lists.
+
+    Args:
+        value: The value to search through (dict, list, or other).
+        field_names: Set of field names whose values should be collected.
+        observed: List to append unique found values to.
+    """
     if isinstance(value, dict):
         for key, item in value.items():
             if key in field_names:
@@ -86,6 +93,12 @@ def _collect_identifiers(value: Any, *, field_names: set[str], observed: list[st
 
 
 def _dict_has_substance(value: dict[str, Any]) -> bool:
+    """Check if a dict contains any non-empty, non-null values recursively.
+
+    Returns:
+        True if the dict has substance (non-empty nested dicts, non-empty lists,
+        or non-null/non-empty primitive values), False otherwise.
+    """
     for item in value.values():
         if isinstance(item, dict) and item and _dict_has_substance(item):
             return True
@@ -98,15 +111,18 @@ def _dict_has_substance(value: dict[str, Any]) -> bool:
     return False
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
 def _expected_answer_terms(case: QuestionCase) -> list[str]:
+    """Extract expected answer terms from a question case.
+
+    If explicit expected_answer_terms are provided, use those. Otherwise, derive
+    terms from the expected_answer text by tokenizing and filtering stopwords.
+
+    Args:
+        case: The question case containing expected answer information.
+
+    Returns:
+        List of unique, normalized answer terms (max 8 derived terms).
+    """
     explicit = [str(term).strip().casefold() for term in case.expected_answer_terms if str(term).strip()]
     if explicit:
         return list(dict.fromkeys(explicit))
@@ -122,6 +138,16 @@ def _expected_answer_terms(case: QuestionCase) -> list[str]:
 
 
 def _answer_content_match(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if the final answer text contains all expected answer terms.
+
+    Args:
+        case: The question case with expected answer terms.
+        payload: The payload containing the final_answer to check.
+
+    Returns:
+        True if all expected terms are found in the answer text, False if not,
+        None if no expected terms or no answer text available.
+    """
     expected_terms = _expected_answer_terms(case)
     if not expected_terms:
         return None
@@ -135,6 +161,17 @@ def _answer_content_match(case: QuestionCase, payload: dict[str, Any]) -> bool |
 
 
 def _archive_harvest_section(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract the archive_harvest section from a payload.
+
+    Looks for archive_harvest in multiple possible locations within the payload
+    structure (top-level, retrieval_diagnostics, retrieval_plan).
+
+    Args:
+        payload: The payload dict to search through.
+
+    Returns:
+        The archive_harvest dict if found, otherwise an empty dict.
+    """
     archive_harvest = payload.get("archive_harvest")
     if isinstance(archive_harvest, dict):
         return archive_harvest
@@ -152,6 +189,15 @@ def _archive_harvest_section(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _archive_harvest_coverage_pass(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if archive harvest coverage gate passed.
+
+    Args:
+        case: The question case (unused, for signature compatibility).
+        payload: The payload containing archive_harvest data.
+
+    Returns:
+        True if coverage gate status is 'pass', None if no archive_harvest found.
+    """
     del case
     archive_harvest = _archive_harvest_section(payload)
     if not archive_harvest:
@@ -160,6 +206,15 @@ def _archive_harvest_coverage_pass(case: QuestionCase, payload: dict[str, Any]) 
 
 
 def _archive_harvest_quality_pass(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if archive harvest quality gate passed.
+
+    Args:
+        case: The question case (unused, for signature compatibility).
+        payload: The payload containing archive_harvest data.
+
+    Returns:
+        True if quality gate status is 'pass', None if no archive_harvest found.
+    """
     del case
     archive_harvest = _archive_harvest_section(payload)
     if not archive_harvest:
@@ -168,6 +223,16 @@ def _archive_harvest_quality_pass(case: QuestionCase, payload: dict[str, Any]) -
 
 
 def _archive_harvest_mixed_source_present(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if archive harvest contains mixed source evidence.
+
+    Args:
+        case: The question case (unused, for signature compatibility).
+        payload: The payload containing archive_harvest data.
+
+    Returns:
+        True if mixed source candidates or non-email sources are present,
+        None if no archive_harvest found.
+    """
     del case
     archive_harvest = _archive_harvest_section(payload)
     if not archive_harvest:
@@ -178,6 +243,16 @@ def _archive_harvest_mixed_source_present(case: QuestionCase, payload: dict[str,
 
 
 def _archive_harvest_later_round_recovery(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if archive harvest recovered evidence in later rounds.
+
+    Args:
+        case: The question case (unused, for signature compatibility).
+        payload: The payload containing archive_harvest data.
+
+    Returns:
+        True if later round evidence or rerun rounds with recovered items exist,
+        None if no archive_harvest found.
+    """
     del case
     archive_harvest = _archive_harvest_section(payload)
     if not archive_harvest:
@@ -188,6 +263,17 @@ def _archive_harvest_later_round_recovery(case: QuestionCase, payload: dict[str,
 
 
 def _observed_support_source_ids(payload: dict[str, Any]) -> list[str]:
+    """Extract observed source IDs from candidates and attachment_candidates.
+
+    Collects source_id, uid (as email:uid), provenance.evidence_handle, and
+    document_locator.evidence_handle from candidate items.
+
+    Args:
+        payload: The payload dict containing candidates.
+
+    Returns:
+        List of unique observed source IDs.
+    """
     observed: list[str] = []
     for key in ("candidates", "attachment_candidates"):
         for item in payload.get(key, []) or []:
@@ -207,6 +293,15 @@ def _observed_support_source_ids(payload: dict[str, Any]) -> list[str]:
 
 
 def _support_source_id_hit(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if any expected support source ID is present in observed sources.
+
+    Args:
+        case: The question case with expected_support_source_ids.
+        payload: The payload to extract observed source IDs from.
+
+    Returns:
+        True if at least one expected source ID is found, None if no expected IDs.
+    """
     if not case.expected_support_source_ids:
         return None
     observed = _observed_support_source_ids(payload)
@@ -214,6 +309,16 @@ def _support_source_id_hit(case: QuestionCase, payload: dict[str, Any]) -> bool 
 
 
 def _support_source_id_recall(case: QuestionCase, payload: dict[str, Any]) -> float | None:
+    """Calculate recall ratio of expected support source IDs found in observed.
+
+    Args:
+        case: The question case with expected_support_source_ids.
+        payload: The payload to extract observed source IDs from.
+
+    Returns:
+        Ratio of matched expected source IDs to total expected (0.0-1.0),
+        None if no expected IDs.
+    """
     if not case.expected_support_source_ids:
         return None
     observed = _observed_support_source_ids(payload)
@@ -222,6 +327,17 @@ def _support_source_id_recall(case: QuestionCase, payload: dict[str, Any]) -> fl
 
 
 def _bundle_support_source_ids(payload: dict[str, Any]) -> list[str]:
+    """Extract source IDs from legal support product bundles in payload.
+
+    Searches through various bundle keys (multi_source_case_bundle, finding_evidence_index,
+    etc.) and collects values from specified field names.
+
+    Args:
+        payload: The payload dict containing bundle data.
+
+    Returns:
+        List of unique observed source IDs from bundles.
+    """
     observed: list[str] = []
     for key in (
         "multi_source_case_bundle",
@@ -243,6 +359,17 @@ def _bundle_support_source_ids(payload: dict[str, Any]) -> list[str]:
 
 
 def _bundle_support_uids(payload: dict[str, Any]) -> list[str]:
+    """Extract UIDs from legal support product bundles in payload.
+
+    Searches through bundle keys and collects uid, supporting_uids, and
+    message_or_document_id values.
+
+    Args:
+        payload: The payload dict containing bundle data.
+
+    Returns:
+        List of unique observed UIDs from bundles.
+    """
     observed: list[str] = []
     for key in ("multi_source_case_bundle", "finding_evidence_index", "matter_evidence_index", "master_chronology"):
         _collect_identifiers(
@@ -254,6 +381,15 @@ def _bundle_support_uids(payload: dict[str, Any]) -> list[str]:
 
 
 def _legal_support_product_source_ids(payload: dict[str, Any], *, product_ids: list[str]) -> list[str]:
+    """Extract source IDs from specific legal support products in payload.
+
+    Args:
+        payload: The payload dict containing product data.
+        product_ids: List of product keys to search through.
+
+    Returns:
+        List of unique observed source IDs from the specified products.
+    """
     observed: list[str] = []
     for product_id in product_ids:
         product = payload.get(product_id)
@@ -268,6 +404,17 @@ def _legal_support_product_source_ids(payload: dict[str, Any], *, product_ids: l
 
 
 def _observed_issue_ids(payload: dict[str, Any]) -> list[str]:
+    """Extract observed issue IDs from legal support products.
+
+    Searches through lawyer_issue_matrix, comparative_treatment, and case_dashboard
+    for issue_id field values.
+
+    Args:
+        payload: The payload dict containing product data.
+
+    Returns:
+        List of unique observed issue IDs.
+    """
     observed: list[str] = []
     for key in ("lawyer_issue_matrix", "comparative_treatment", "case_dashboard"):
         _collect_identifiers(payload.get(key), field_names={"issue_id"}, observed=observed)
@@ -275,6 +422,14 @@ def _observed_issue_ids(payload: dict[str, Any]) -> list[str]:
 
 
 def _observed_actor_ids(payload: dict[str, Any]) -> list[str]:
+    """Extract observed actor IDs from actor_map and case_dashboard.
+
+    Args:
+        payload: The payload dict containing actor data.
+
+    Returns:
+        List of unique observed actor IDs.
+    """
     observed: list[str] = []
     _collect_identifiers(payload.get("actor_map"), field_names={"actor_id"}, observed=observed)
     _collect_identifiers(payload.get("case_dashboard"), field_names={"actor_id"}, observed=observed)
@@ -282,6 +437,14 @@ def _observed_actor_ids(payload: dict[str, Any]) -> list[str]:
 
 
 def _observed_dashboard_card_ids(payload: dict[str, Any]) -> list[str]:
+    """Extract card IDs from case_dashboard.cards.
+
+    Args:
+        payload: The payload dict containing case_dashboard data.
+
+    Returns:
+        List of card IDs that have associated rows in the dashboard.
+    """
     dashboard = payload.get("case_dashboard")
     if not isinstance(dashboard, dict):
         return []
@@ -292,12 +455,29 @@ def _observed_dashboard_card_ids(payload: dict[str, Any]) -> list[str]:
 
 
 def _observed_checklist_group_ids(payload: dict[str, Any]) -> list[str]:
+    """Extract group IDs from document_request_checklist.
+
+    Args:
+        payload: The payload dict containing checklist data.
+
+    Returns:
+        List of unique observed group IDs.
+    """
     observed: list[str] = []
     _collect_identifiers(payload.get("document_request_checklist"), field_names={"group_id"}, observed=observed)
     return observed
 
 
 def _forbidden_values_absent(forbidden_values: list[str], observed_values: list[str]) -> bool | None:
+    """Check if none of the forbidden values appear in observed values.
+
+    Args:
+        forbidden_values: List of values that should not be present.
+        observed_values: List of values to check against forbidden list.
+
+    Returns:
+        True if no forbidden values are found in observed, None if no forbidden values.
+    """
     forbidden = [str(value).strip() for value in forbidden_values if str(value).strip()]
     if not forbidden:
         return None
@@ -306,6 +486,14 @@ def _forbidden_values_absent(forbidden_values: list[str], observed_values: list[
 
 
 def _candidate_uids(payload: dict[str, Any]) -> list[str]:
+    """Extract unique UIDs from candidates and attachment_candidates.
+
+    Args:
+        payload: The payload dict containing candidate data.
+
+    Returns:
+        List of unique candidate UIDs.
+    """
     uids: list[str] = []
     for key in ("candidates", "attachment_candidates"):
         for item in payload.get(key, []):
@@ -316,6 +504,15 @@ def _candidate_uids(payload: dict[str, Any]) -> list[str]:
 
 
 def _uids_for_key(payload: dict[str, Any], key: str) -> list[str]:
+    """Extract unique UIDs from items at a specific key in payload.
+
+    Args:
+        payload: The payload dict to search.
+        key: The key whose list value contains items with uid fields.
+
+    Returns:
+        List of unique UIDs from the specified key's items.
+    """
     uids: list[str] = []
     for item in payload.get(key, []):
         uid = item.get("uid")
@@ -325,6 +522,18 @@ def _uids_for_key(payload: dict[str, Any], key: str) -> list[str]:
 
 
 def _strong_attachment_support_uid_hit(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if any expected support UID has strong_text evidence strength in attachments.
+
+    Only applies to attachment_lookup bucket cases.
+
+    Args:
+        case: The question case with expected_support_uids.
+        payload: The payload containing attachment_candidates.
+
+    Returns:
+        True if a matching attachment has evidence_strength='strong_text',
+        None if not attachment_lookup bucket or no expected UIDs.
+    """
     if case.bucket != "attachment_lookup" or not case.expected_support_uids:
         return None
     for item in payload.get("attachment_candidates", []):
@@ -340,25 +549,48 @@ def _strong_attachment_support_uid_hit(case: QuestionCase, payload: dict[str, An
 
 
 def _strong_attachment_ocr_support_uid_hit(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if any expected support UID has strong_text OCR evidence in attachments.
+
+    Only applies to attachment_lookup bucket cases with attachment_ocr triage tag.
+
+    Args:
+        case: The question case with expected_support_uids and attachment_ocr tag.
+        payload: The payload containing attachment_candidates.
+
+    Returns:
+        True if a matching attachment has evidence_strength='strong_text',
+        ocr_used=True, and extraction_state='ocr_text_extracted',
+        None if conditions are not met.
+    """
     if case.bucket != "attachment_lookup" or not case.expected_support_uids or "attachment_ocr" not in case.triage_tags:
         return None
-    for item in payload.get("attachment_candidates", []):
-        uid = str(item.get("uid") or "")
-        if uid not in case.expected_support_uids:
-            continue
-        attachment = item.get("attachment") or {}
-        if not isinstance(attachment, dict):
-            continue
-        if (
-            str(attachment.get("evidence_strength") or "") == "strong_text"
-            and bool(attachment.get("ocr_used"))
-            and str(attachment.get("extraction_state") or "").strip().lower() == "ocr_text_extracted"
-        ):
-            return True
-    return False
+    return any(_is_strong_ocr_attachment(item, case.expected_support_uids) for item in payload.get("attachment_candidates", []))
+
+
+def _is_strong_ocr_attachment(item: dict[str, Any], expected_uids: list[str]) -> bool:
+    attachment = item.get("attachment") or {}
+    return (
+        str(item.get("uid") or "") in expected_uids
+        and isinstance(attachment, dict)
+        and str(attachment.get("evidence_strength") or "") == "strong_text"
+        and bool(attachment.get("ocr_used"))
+        and str(attachment.get("extraction_state") or "").strip().lower() == "ocr_text_extracted"
+    )
 
 
 def _weak_evidence_explained(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if weak evidence is properly explained when ambiguity is insufficient.
+
+    Only applies when expected_ambiguity is 'insufficient'. Checks for specific
+    weak reason markers in answer_quality or candidate weak_message codes.
+
+    Args:
+        case: The question case with expected_ambiguity.
+        payload: The payload containing answer_quality and candidates.
+
+    Returns:
+        True if weak evidence has an explanation, None if ambiguity is not insufficient.
+    """
     if (case.expected_ambiguity or "").lower() != "insufficient":
         return None
     weak_reason_markers = {
@@ -382,6 +614,17 @@ def _weak_evidence_explained(case: QuestionCase, payload: dict[str, Any]) -> boo
 
 
 def _resolve_top_uid(payload: dict[str, Any]) -> str | None:
+    """Resolve the top candidate UID from payload.
+
+    Tries answer_quality.top_candidate_uid first, then falls back to the first
+    candidate in candidates or attachment_candidates.
+
+    Args:
+        payload: The payload dict containing answer_quality and candidates.
+
+    Returns:
+        The top UID as a string, or None if not found.
+    """
     answer_quality = payload.get("answer_quality") or {}
     top_uid = answer_quality.get("top_candidate_uid")
     if top_uid:
@@ -396,6 +639,18 @@ def _resolve_top_uid(payload: dict[str, Any]) -> str | None:
 
 
 def _long_thread_answer_present(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if final answer text is present for long_thread cases.
+
+    Only applies to cases with 'long_thread' triage tag.
+
+    Args:
+        case: The question case with triage_tags.
+        payload: The payload containing final_answer.
+
+    Returns:
+        True if final answer text is non-empty, False if empty,
+        None if not a long_thread case.
+    """
     if "long_thread" not in case.triage_tags:
         return None
     final_answer = payload.get("final_answer")
@@ -405,6 +660,18 @@ def _long_thread_answer_present(case: QuestionCase, payload: dict[str, Any]) -> 
 
 
 def _long_thread_structure_preserved(case: QuestionCase, payload: dict[str, Any]) -> bool | None:
+    """Check if long thread structure (conversation_groups and timeline) is preserved.
+
+    Only applies to cases with 'long_thread' triage tag.
+
+    Args:
+        case: The question case with triage_tags.
+        payload: The payload containing conversation_groups and timeline.
+
+    Returns:
+        True if both conversation_groups and timeline.events are present,
+        None if not a long_thread case.
+    """
     if "long_thread" not in case.triage_tags:
         return None
     conversation_groups = payload.get("conversation_groups")
@@ -414,6 +681,19 @@ def _long_thread_structure_preserved(case: QuestionCase, payload: dict[str, Any]
 
 
 def _ambiguity_matches(expected: str | None, payload: dict[str, Any]) -> bool | None:
+    """Check if payload ambiguity matches expected ambiguity level.
+
+    Compares expected ambiguity string ('ambiguous', 'clear', 'insufficient')
+    against answer_quality confidence_label and ambiguity_reason.
+
+    Args:
+        expected: Expected ambiguity level ('ambiguous', 'clear', 'insufficient').
+        payload: The payload containing answer_quality data.
+
+    Returns:
+        True if ambiguity matches expected, False if it doesn't,
+        None if expected is None or no matching criteria.
+    """
     if expected is None:
         return None
     answer_quality = payload.get("answer_quality") or {}
@@ -421,22 +701,41 @@ def _ambiguity_matches(expected: str | None, payload: dict[str, Any]) -> bool | 
     reason = str(answer_quality.get("ambiguity_reason") or "").lower()
     count = int(payload.get("count") or 0)
     normalized = expected.lower()
-    if normalized == "ambiguous":
-        return label == "ambiguous" or bool(reason)
-    if normalized == "clear":
-        return label in {"high", "medium"} and not reason
-    if normalized == "insufficient":
-        return label == "low" or count == 0 or reason == "no_results"
-    return None
+    checks = {
+        "ambiguous": lambda: label == "ambiguous" or bool(reason),
+        "clear": lambda: label in {"high", "medium"} and not reason,
+        "insufficient": lambda: label == "low" or count == 0 or reason == "no_results",
+    }
+    check = checks.get(normalized)
+    return check() if check else None
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
+    """Calculate the ratio of numerator to denominator.
+
+    Args:
+        numerator: The numerator value.
+        denominator: The denominator value (must be > 0).
+
+    Returns:
+        The ratio as a float (0.0-1.0), or None if denominator is <= 0.
+    """
     if denominator <= 0:
         return None
     return numerator / denominator
 
 
 def _average_metric(results: list[dict[str, Any]], metric: str) -> dict[str, float | int]:
+    """Calculate average of a metric across a list of result dicts.
+
+    Args:
+        results: List of result dicts containing the metric.
+        metric: The key name of the metric to average.
+
+    Returns:
+        Dict with 'scorable' (count of valid values) and 'average' (mean value, rounded to 12 decimals).
+        Returns {'scorable': 0, 'average': 0.0} if no valid values found.
+    """
     values = [float(result[metric]) for result in results if result.get(metric) is not None]
     if not values:
         return {"scorable": 0, "average": 0.0}

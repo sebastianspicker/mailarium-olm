@@ -72,10 +72,10 @@ class TestFilterExtraction:
 
 class TestMainSessionStateEdges:
     @patch("src.web_app._build_csv_export")
-    @patch("src.web_app._export_results")
-    @patch("src.web_app._sort_label_from_value")
-    @patch("src.web_app._render_results")
-    @patch("src.web_app._results_summary")
+    @patch("src.web_app.build_export_payload")
+    @patch("src.web_app.build_active_filter_labels")
+    @patch("src.web_app.render_results")
+    @patch("src.web_app.render_results_summary")
     @patch("src.web_app.render_sidebar")
     @patch("src.web_app.inject_styles")
     @patch("src.web_app.get_retriever")

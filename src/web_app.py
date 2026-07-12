@@ -78,6 +78,7 @@ PAGE_SIZE = 20
 
 @st.cache_resource
 def get_retriever(chromadb_path: str | None, sqlite_path: str | None = None, _cache_version: int = 0):
+    """Get or create a cached EmailRetriever instance."""
     if sqlite_path is None:
         return EmailRetriever(chromadb_path=chromadb_path)
     return EmailRetriever(chromadb_path=chromadb_path, sqlite_path=sqlite_path)
@@ -89,10 +90,12 @@ def invalidate_retriever_cache() -> None:
 
 
 def render_sidebar(retriever: EmailRetriever) -> None:
+    """Render the sidebar UI component."""
     render_sidebar_impl(st_module=st, retriever=retriever)
 
 
 def render_results(results: list[Any], preview_chars: int, retriever: EmailRetriever | None = None) -> None:
+    """Render search results with the given preview character limit."""
     render_results_impl(
         st_module=st,
         results=results,
@@ -103,6 +106,7 @@ def render_results(results: list[Any], preview_chars: int, retriever: EmailRetri
 
 
 def inject_styles() -> None:
+    """Inject custom CSS styles into the Streamlit app."""
     inject_styles_impl(st_module=st)
 
 
@@ -112,6 +116,7 @@ def render_results_summary(
     sort_label: str,
     search_modes: list[str] | None = None,
 ) -> None:
+    """Render a summary of the search results."""
     render_results_summary_impl(
         st_module=st,
         results=results,
@@ -129,18 +134,22 @@ def _get_email_db_safe(sqlite_path: str | None, _cache_version: int = 0):
 
 
 def render_dashboard_page(sqlite_path: str | None = None) -> None:
+    """Render the dashboard page with analytics and metrics."""
     render_dashboard_page_impl(st_module=st, get_email_db_safe_fn=lambda: _get_email_db_safe(sqlite_path))
 
 
 def render_entity_page(sqlite_path: str | None = None) -> None:
+    """Render the entities page showing people and organizations."""
     render_entity_page_impl(st_module=st, get_email_db_safe_fn=lambda: _get_email_db_safe(sqlite_path))
 
 
 def render_network_page(sqlite_path: str | None = None) -> None:
+    """Render the network page showing communication graphs."""
     render_network_page_impl(st_module=st, get_email_db_safe_fn=lambda: _get_email_db_safe(sqlite_path))
 
 
 def render_evidence_page(sqlite_path: str | None = None) -> None:
+    """Render the evidence page showing collected evidence."""
     render_evidence_page_impl(
         st_module=st,
         get_email_db_safe_fn=lambda: _get_email_db_safe(sqlite_path),
@@ -149,6 +158,7 @@ def render_evidence_page(sqlite_path: str | None = None) -> None:
 
 
 def render_search_page(retriever: EmailRetriever) -> None:
+    """Render the search page UI."""
     render_search_page_impl(
         st_module=st,
         retriever=retriever,
@@ -167,6 +177,7 @@ def render_search_page(retriever: EmailRetriever) -> None:
 
 
 def main() -> None:
+    """Main entry point for the Streamlit web application."""
     inject_styles()
     st.markdown("<h1 class='hero-title'>Email RAG</h1>", unsafe_allow_html=True)
     st.markdown(

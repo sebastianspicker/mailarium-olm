@@ -1,4 +1,4 @@
-# ruff: noqa: F401,I001
+# ruff: noqa: I001
 """Extended tests for low-coverage MCP tool modules.
 
 Tests cover: threads.py, reporting.py, temporal.py, data_quality.py,
@@ -9,19 +9,13 @@ calls the async tool function, and asserts valid JSON with expected keys.
 from __future__ import annotations
 
 import json
-import sqlite3
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.config import get_settings
-from src.mcp_server import _offload
-from src.retriever import SearchResult
-from src.sanitization import sanitize_untrusted_text
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
-from .helpers.mcp_tool_extended_fakes import FakeMCP, MockDeps, MockEmailDB, MockRetriever, _make_result, _register_module
+from .helpers.mcp_tool_extended_fakes import FakeMCP, MockDeps, MockRetriever, _register_module
 
 
 class TestThreadTools:

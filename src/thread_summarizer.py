@@ -8,7 +8,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
-_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ])")
+_WHITESPACE_RE = re.compile(r"\s+")
 _GERMAN_STOP_WORDS = frozenset(
     {
         "aber",
@@ -84,7 +84,13 @@ def _split_sentences(text: str) -> list[str]:
         return []
     # Clean up whitespace
     text = re.sub(r"\s+", " ", text).strip()
-    sentences = _SENTENCE_RE.split(text)
+    sentences: list[str] = []
+    start = 0
+    for match in _WHITESPACE_RE.finditer(text):
+        if match.start() > 0 and text[match.start() - 1] in ".!?" and match.end() < len(text) and text[match.end()].isupper():
+            sentences.append(text[start : match.start()])
+            start = match.end()
+    sentences.append(text[start:])
     # Filter very short fragments
     return [s.strip() for s in sentences if len(s.strip()) > 10]
 
@@ -156,16 +162,7 @@ def summarize_thread(emails: list[dict], max_sentences: int = 5) -> str:
         return summarize_email(body, max_sentences=max_sentences)
 
     # Combine all email bodies
-    all_sentences = []
-    sentence_sources = []
-
-    for email in emails:
-        body = email.get("clean_body", "") or email.get("body", "")
-        sender = email.get("sender_name", "") or email.get("sender_email", "")
-        sentences = _split_sentences(body)
-        for s in sentences:
-            all_sentences.append(s)
-            sentence_sources.append(sender)
+    all_sentences = _thread_sentences(emails)
 
     if not all_sentences:
         return ""
@@ -185,21 +182,24 @@ def summarize_thread(emails: list[dict], max_sentences: int = 5) -> str:
             scores[i] *= 1.3
 
     # Diversity: penalize consecutive sentences from same sender
-    ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
-    selected = []
-    used_indices = set()
-
-    for idx in ranked:
-        if len(selected) >= max_sentences:
-            break
-        # Mild diversity: skip if sandwiched between two already-selected sentences
-        if idx - 1 in used_indices and idx + 1 in used_indices:
-            continue
-        selected.append(idx)
-        used_indices.add(idx)
-
-    selected.sort()  # Preserve chronological order
+    selected = _diverse_sentence_indices(scores, max_sentences)
     return " ".join(all_sentences[i] for i in selected)
+
+
+def _thread_sentences(emails: list[dict]) -> list[str]:
+    return [sentence for email in emails for sentence in _split_sentences(email.get("clean_body", "") or email.get("body", ""))]
+
+
+def _diverse_sentence_indices(scores: list[float], limit: int) -> list[int]:
+    selected: list[int] = []
+    used: set[int] = set()
+    for index in sorted(range(len(scores)), key=lambda item: scores[item], reverse=True):
+        if len(selected) >= limit:
+            break
+        if index - 1 not in used or index + 1 not in used:
+            selected.append(index)
+            used.add(index)
+    return sorted(selected)
 
 
 def _score_sentences(sentences: list[str]) -> list[float]:

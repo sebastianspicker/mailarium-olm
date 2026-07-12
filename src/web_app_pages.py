@@ -9,6 +9,7 @@ from .mcp_models_base import _resolve_local_path
 
 
 def get_email_db_safe_impl(sqlite_path: str | None = None) -> Any | None:
+    """Get an EmailDatabase instance safely, returning None if unavailable or invalid."""
     try:
         from .config import get_settings
         from .email_db import EmailDatabase
@@ -32,6 +33,7 @@ def get_email_db_safe_impl(sqlite_path: str | None = None) -> Any | None:
 
 
 def render_dashboard_page_impl(*, st_module: Any, get_email_db_safe_fn: Any) -> None:
+    """Render the dashboard page implementation with analytics and charts."""
     st_module.markdown("## Analytics Dashboard")
 
     db = get_email_db_safe_fn()
@@ -90,6 +92,7 @@ def render_dashboard_page_impl(*, st_module: Any, get_email_db_safe_fn: Any) -> 
 
 
 def render_entity_page_impl(*, st_module: Any, get_email_db_safe_fn: Any) -> None:
+    """Render the entity browser page implementation."""
     st_module.markdown("## Entity Browser")
 
     db = get_email_db_safe_fn()
@@ -122,6 +125,7 @@ def render_entity_page_impl(*, st_module: Any, get_email_db_safe_fn: Any) -> Non
 
 
 def render_network_page_impl(*, st_module: Any, get_email_db_safe_fn: Any) -> None:
+    """Render the communication network page implementation."""
     st_module.markdown("## Communication Network")
 
     db = get_email_db_safe_fn()
@@ -163,6 +167,7 @@ def render_network_page_impl(*, st_module: Any, get_email_db_safe_fn: Any) -> No
 
 
 def _relevance_badge_html(relevance: int) -> str:
+    """Generate HTML for a relevance badge with color coding and star rating."""
     relevance = max(1, min(5, relevance))
     rel_colors = {
         5: ("#065f46", "#d1fae5"),
@@ -184,6 +189,7 @@ def _relevance_badge_html(relevance: int) -> str:
 
 
 def _verified_badge_html(verified: bool) -> str:
+    """Generate HTML for a verification status badge."""
     if verified:
         return (
             "<span style='display:inline-block;padding:0.12rem 0.45rem;border-radius:6px;"
@@ -203,6 +209,7 @@ def render_evidence_page_impl(
     get_email_db_safe_fn: Any,
     type_badge_html_fn: Any,
 ) -> None:
+    """Render the evidence collection page implementation."""
     st_module.markdown("## Evidence Collection")
     st_module.info(
         "Exploratory evidence collection only. For authoritative lawyer-ready evidence indexes, chronology, and "
@@ -216,6 +223,13 @@ def render_evidence_page_impl(
         st_module.warning("SQLite database not available. Run ingestion first to enable evidence management.")
         return
 
+    categories = _render_evidence_overview(st_module, db)
+    items, total, cat_filter = _select_evidence_items(st_module, db, categories)
+    _render_evidence_items(st_module, items, total, type_badge_html_fn)
+    _render_evidence_export(st_module, db, cat_filter)
+
+
+def _render_evidence_overview(st_module: Any, db: Any) -> list[dict[str, Any]]:
     import pandas as pd
 
     stats = db.evidence_stats()
@@ -233,6 +247,12 @@ def render_evidence_page_impl(
         df_cats = pd.DataFrame(cats_with_items)
         st_module.bar_chart(df_cats, x="category", y="count")
 
+    return categories
+
+
+def _select_evidence_items(
+    st_module: Any, db: Any, categories: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], int, str | None]:
     st_module.divider()
     st_module.subheader("Browse Evidence")
     browse_col1, browse_col2, browse_col3 = st_module.columns(3)
@@ -259,6 +279,10 @@ def render_evidence_page_impl(
         items = result["items"]
         total = result["total"]
 
+    return items, total, cat_filter
+
+
+def _render_evidence_items(st_module: Any, items: list[dict[str, Any]], total: int, type_badge_html_fn: Any) -> None:
     st_module.caption(f"Showing {len(items)} of {total} items")
 
     if not items:
@@ -337,6 +361,8 @@ def render_evidence_page_impl(
                     f"Recipients: {item.get('recipients', '')}"
                 )
 
+
+def _render_evidence_export(st_module: Any, db: Any, cat_filter: str | None) -> None:
     st_module.divider()
     st_module.subheader("Export Evidence")
     export_col1, export_col2 = st_module.columns(2)

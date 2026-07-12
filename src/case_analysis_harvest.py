@@ -88,6 +88,12 @@ _build_archive_harvest_bundle_impl = _case_analysis_harvest_bundle.build_archive
 
 
 def _sync_patchable_harvest_globals() -> None:
+    """Synchronize patchable harvest globals across all split modules.
+
+    This ensures that functions like _attachment_expansion_rows, _thread_expansion_rows,
+    and _enrich_evidence_bank are available in all split module namespaces for
+    cross-module calls.
+    """
     patchable = {
         "_attachment_expansion_rows": globals().get("_attachment_expansion_rows"),
         "_thread_expansion_rows": globals().get("_thread_expansion_rows"),

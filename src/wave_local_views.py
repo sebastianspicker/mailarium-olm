@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src._utils import _as_dict, _as_list
+
 from .question_execution_waves import get_wave_definition
 
 _LINKAGE_KEYS = {
@@ -31,15 +33,8 @@ _LINKAGE_KEYS = {
 _LINKAGE_BUCKETS = tuple(sorted(set(_LINKAGE_KEYS.values())))
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
 def _wave_terms(wave_id: str) -> list[str]:
+    """Extract normalized search terms from a wave definition."""
     definition = get_wave_definition(wave_id)
     label_terms = [item.strip() for item in definition.label.replace("/", " ").split() if len(item.strip()) >= 4]
     terms = [
@@ -61,10 +56,12 @@ def _wave_terms(wave_id: str) -> list[str]:
 
 
 def _empty_context() -> dict[str, set[str]]:
+    """Create an empty linkage context with all bucket keys."""
     return {bucket: set() for bucket in _LINKAGE_BUCKETS}
 
 
 def _normalize_values(value: Any) -> list[str]:
+    """Normalize a value to a list of strings."""
     if isinstance(value, list):
         return [text for item in value for text in _normalize_values(item)]
     text = " ".join(str(value or "").split()).strip()
@@ -72,29 +69,32 @@ def _normalize_values(value: Any) -> list[str]:
 
 
 def _collect_linkage_ids(value: Any, *, collected: dict[str, set[str]] | None = None) -> dict[str, set[str]]:
+    """Collect linkage IDs from a value into categorized buckets."""
     bucketed = _empty_context() if collected is None else collected
     if isinstance(value, dict):
         for key, item in value.items():
             bucket = _LINKAGE_KEYS.get(str(key))
             if bucket:
                 bucketed[bucket].update(_normalize_values(item))
-            if isinstance(item, (dict, list)):
+            if isinstance(item, dict | list):
                 _collect_linkage_ids(item, collected=bucketed)
         return bucketed
     if isinstance(value, list):
         for item in value:
-            if isinstance(item, (dict, list)):
+            if isinstance(item, dict | list):
                 _collect_linkage_ids(item, collected=bucketed)
         return bucketed
     return bucketed
 
 
 def _row_matches_context(row: dict[str, Any], *, context: dict[str, set[str]]) -> bool:
+    """Check if a row matches any IDs in the context."""
     linkage = _collect_linkage_ids(row)
     return any(linkage[bucket] & context[bucket] for bucket in _LINKAGE_BUCKETS if context[bucket])
 
 
 def _merge_context(context: dict[str, set[str]], addition: dict[str, set[str]]) -> bool:
+    """Merge addition into context, returning True if any new values were added."""
     changed = False
     for bucket in _LINKAGE_BUCKETS:
         new_values = addition[bucket] - context[bucket]
@@ -105,26 +105,32 @@ def _merge_context(context: dict[str, set[str]], addition: dict[str, set[str]]) 
 
 
 def _finding_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract finding rows from the payload."""
     return [row for row in _as_list(_as_dict(payload.get("finding_evidence_index")).get("findings")) if isinstance(row, dict)]
 
 
 def _matter_evidence_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract matter evidence rows from the payload."""
     return [row for row in _as_list(_as_dict(payload.get("matter_evidence_index")).get("rows")) if isinstance(row, dict)]
 
 
 def _chronology_entries(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract chronology entries from the payload."""
     return [row for row in _as_list(_as_dict(payload.get("master_chronology")).get("entries")) if isinstance(row, dict)]
 
 
 def _issue_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract issue matrix rows from the payload."""
     return [row for row in _as_list(_as_dict(payload.get("lawyer_issue_matrix")).get("rows")) if isinstance(row, dict)]
 
 
 def _checklist_groups(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract document request checklist groups from the payload."""
     return [row for row in _as_list(_as_dict(payload.get("document_request_checklist")).get("groups")) if isinstance(row, dict)]
 
 
 def _promise_rows(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Extract promise analysis rows from the payload."""
     promise_analysis = _as_dict(payload.get("promise_contradiction_analysis"))
     promises = [row for row in _as_list(promise_analysis.get("promises_vs_actions")) if isinstance(row, dict)]
     omissions = [row for row in _as_list(promise_analysis.get("omission_rows")) if isinstance(row, dict)]
@@ -133,6 +139,7 @@ def _promise_rows(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], list[d
 
 
 def _seed_context_from_archive(payload: dict[str, Any]) -> dict[str, set[str]]:
+    """Build initial context from archive harvest evidence bank."""
     context = _empty_context()
     evidence_bank = [
         row for row in _as_list(_as_dict(payload.get("archive_harvest")).get("evidence_bank")) if isinstance(row, dict)
@@ -146,10 +153,12 @@ def _seed_context_from_archive(payload: dict[str, Any]) -> dict[str, set[str]]:
 
 
 def _linked_rows(rows: list[dict[str, Any]], *, context: dict[str, set[str]]) -> list[dict[str, Any]]:
+    """Filter rows to only those that match the context."""
     return [dict(row) for row in rows if _row_matches_context(row, context=context)]
 
 
 def _expand_context(payload: dict[str, Any], *, context: dict[str, set[str]]) -> dict[str, set[str]]:
+    """Expand context by iterating through related rows until no new IDs are found."""
     row_sets = [
         _finding_rows(payload),
         _matter_evidence_rows(payload),
@@ -178,61 +187,82 @@ def _wave_dashboard(
     checklist_groups: list[dict[str, Any]],
     contradiction_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    cards: dict[str, Any] = {}
-    if issue_rows:
-        cards["main_claims_or_issues"] = [
-            {
-                "issue_id": str(row.get("issue_id") or ""),
-                "title": str(row.get("title") or ""),
-                "status": str(row.get("legal_relevance_status") or ""),
-                "evidence_hint": str(row.get("relevant_facts") or row.get("missing_proof") or ""),
-            }
-            for row in issue_rows[:4]
-        ]
-    if chronology_entries:
-        cards["key_dates"] = [
-            {
-                "chronology_id": str(row.get("chronology_id") or ""),
-                "date": str(row.get("date") or ""),
-                "title": str(row.get("title") or row.get("description") or ""),
-            }
-            for row in chronology_entries[:4]
-        ]
-    if matter_rows:
-        cards["strongest_exhibits"] = [
-            {
-                "exhibit_id": str(row.get("exhibit_id") or ""),
-                "summary": str(row.get("short_description") or row.get("why_it_matters") or ""),
-                "strength": str(_as_dict(row.get("exhibit_reliability")).get("strength") or ""),
-                "quoted_evidence": dict(row.get("quoted_evidence") or {}),
-            }
-            for row in matter_rows[:4]
-        ]
-    if checklist_groups:
-        cards["recommended_next_actions"] = [
-            {
-                "group_id": str(group.get("group_id") or ""),
-                "summary": str(_as_dict(_as_list(group.get("items"))[0]).get("request") or group.get("title") or ""),
-            }
-            for group in checklist_groups[:4]
-        ]
-    if contradiction_rows:
-        cards["process_irregularities"] = [
-            {
-                "summary": str(
-                    row.get("summary")
-                    or row.get("point_summary")
-                    or row.get("original_statement_or_promise")
-                    or row.get("later_action")
-                    or ""
-                )
-            }
-            for row in contradiction_rows[:4]
-        ]
+    """Build a wave dashboard from various row types."""
+    cards = _nonempty_card_groups(
+        main_claims_or_issues=_wave_issue_cards(issue_rows),
+        key_dates=_wave_date_cards(chronology_entries),
+        strongest_exhibits=_wave_exhibit_cards(matter_rows),
+        recommended_next_actions=_wave_action_cards(checklist_groups),
+        process_irregularities=_wave_process_cards(contradiction_rows),
+    )
     return {
         "card_count": len(cards),
         "cards": cards,
     }
+
+
+def _nonempty_card_groups(**groups: list[dict[str, Any]]) -> dict[str, Any]:
+    return {key: values for key, values in groups.items() if values}
+
+
+def _wave_issue_cards(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "issue_id": str(row.get("issue_id") or ""),
+            "title": str(row.get("title") or ""),
+            "status": str(row.get("legal_relevance_status") or ""),
+            "evidence_hint": str(row.get("relevant_facts") or row.get("missing_proof") or ""),
+        }
+        for row in rows[:4]
+    ]
+
+
+def _wave_date_cards(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "chronology_id": str(row.get("chronology_id") or ""),
+            "date": str(row.get("date") or ""),
+            "title": str(row.get("title") or row.get("description") or ""),
+        }
+        for row in rows[:4]
+    ]
+
+
+def _wave_exhibit_cards(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "exhibit_id": str(row.get("exhibit_id") or ""),
+            "summary": str(row.get("short_description") or row.get("why_it_matters") or ""),
+            "strength": str(_as_dict(row.get("exhibit_reliability")).get("strength") or ""),
+            "quoted_evidence": dict(row.get("quoted_evidence") or {}),
+        }
+        for row in rows[:4]
+    ]
+
+
+def _wave_action_cards(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "group_id": str(group.get("group_id") or ""),
+            "summary": str(_as_dict(_as_list(group.get("items"))[0]).get("request") or group.get("title") or ""),
+        }
+        for group in groups[:4]
+    ]
+
+
+def _wave_process_cards(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "summary": str(
+                row.get("summary")
+                or row.get("point_summary")
+                or row.get("original_statement_or_promise")
+                or row.get("later_action")
+                or ""
+            )
+        }
+        for row in rows[:4]
+    ]
 
 
 def build_wave_local_views(payload: dict[str, Any], *, wave_id: str) -> dict[str, Any]:

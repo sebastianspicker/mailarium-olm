@@ -97,6 +97,21 @@ MEDICAL_TERMS = (
     "medical recommendation",
 )
 
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe_cell(value: Any) -> str:
+    """Return a spreadsheet-safe text representation of one CSV cell.
+
+    Leading formula characters are prefixed with an apostrophe so software
+    such as Excel and LibreOffice treats untrusted content as text.  Convert
+    first so every caller applies the same policy to non-string values.
+    """
+    text = str(value) if value is not None else ""
+    if text.startswith(_CSV_FORMULA_PREFIXES):
+        return f"'{text}"
+    return text
+
 
 def sanitize_untrusted_text(value: str) -> str:
     """Strip ANSI/OSC escapes and unsafe control chars from untrusted text."""
@@ -140,10 +155,12 @@ def privacy_mode_policy(mode: str | None) -> dict[str, Any]:
 
 
 def _path_has_identity_key(path: tuple[Any, ...]) -> bool:
+    """Check if any element in the path is a structured identity key."""
     return any(isinstance(item, str) and item in STRUCTURED_IDENTITY_KEYS for item in path)
 
 
 def _contains_any_term(text: str, terms: tuple[str, ...]) -> bool:
+    """Check if text (case-insensitive) contains any of the given terms."""
     lowered = text.lower()
     return any(term in lowered for term in terms)
 
@@ -187,6 +204,7 @@ def _redact_string(
 
 
 def _redact_value(value: Any, *, mode: str, path: tuple[Any, ...], counters: Counter[str]) -> Any:
+    """Recursively redact a value (string, list, or dict) according to privacy mode."""
     if isinstance(value, str):
         return _redact_string(value, mode=mode, path=path, counters=counters)
     if isinstance(value, list):

@@ -1,11 +1,7 @@
-# ruff: noqa: F401
 """Tests for the SQLite EmailDatabase."""
 
-import sqlite3
-
 from src.db_schema import init_schema
-from src.email_db import EmailDatabase, _parse_address
-from src.parse_olm import Email
+from src.email_db import EmailDatabase
 
 from .helpers.email_db_builders import _make_email
 

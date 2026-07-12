@@ -95,68 +95,63 @@ def _extract_body_from_source(raw_source: str) -> tuple[str, str]:
             return parts[1].strip(), ""
         return "", ""
 
-    body_text = ""
-    body_html = ""
-    calendar_text = ""
-
-    if msg.is_multipart():
-        for part in msg.walk():
-            ct = part.get_content_type()
-            if ct == "text/plain" and not body_text:
-                try:
-                    payload = part.get_content()
-                except (email.errors.MessageError, LookupError):
-                    logger.debug("Failed to decode text/plain MIME part", exc_info=True)
-                    continue
-                if isinstance(payload, str):
-                    body_text = payload
-            elif ct == "text/html" and not body_html:
-                try:
-                    payload = part.get_content()
-                except (email.errors.MessageError, LookupError):
-                    logger.debug("Failed to decode text/html MIME part", exc_info=True)
-                    continue
-                if isinstance(payload, str):
-                    body_html = payload
-            elif ct == "text/calendar" and not calendar_text:
-                try:
-                    payload = part.get_content()
-                except (email.errors.MessageError, LookupError):
-                    logger.debug("Failed to decode text/calendar MIME part", exc_info=True)
-                    continue
-                if isinstance(payload, str):
-                    calendar_text = _calendar_to_text(payload)
-    else:
-        ct = msg.get_content_type()
-        try:
-            payload = msg.get_content()
-        except (email.errors.MessageError, LookupError):
-            logger.debug("Failed to decode single-part message content", exc_info=True)
-            payload = None
-        if isinstance(payload, str):
-            if ct == "text/html":
-                body_html = payload
-            elif ct == "text/calendar":
-                body_text = _calendar_to_text(payload)
-            else:
-                body_text = payload
+    body_text, body_html, calendar_text = _message_bodies(msg)
 
     # Append calendar details when both text/plain and text/calendar exist
     if calendar_text:
-        if body_text:
-            body_text = f"{body_text}\n\n{calendar_text}"
-        else:
-            body_text = calendar_text
+        body_text = f"{body_text}\n\n{calendar_text}" if body_text else calendar_text
 
     # Fallback for multipart emails with only calendar or attachment parts
     if not body_text and not body_html and msg.is_multipart():
-        content_types = {part.get_content_type() for part in msg.walk() if not part.is_multipart()}
-        if "text/calendar" in content_types:
-            body_text = "[Calendar meeting invitation]"
-        elif content_types:
-            body_text = "[Attachment-only email]"
+        body_text = _multipart_fallback(msg)
 
     return body_text.strip(), body_html.strip()
+
+
+def _message_bodies(message) -> tuple[str, str, str]:
+    if message.is_multipart():
+        return _multipart_bodies(message)
+    body_text, body_html = _singlepart_bodies(message)
+    return body_text, body_html, ""
+
+
+def _multipart_fallback(message) -> str:
+    content_types = {part.get_content_type() for part in message.walk() if not part.is_multipart()}
+    if "text/calendar" in content_types:
+        return "[Calendar meeting invitation]"
+    return "[Attachment-only email]" if content_types else ""
+
+
+def _decoded_part(part) -> str:
+    try:
+        payload = part.get_content()
+    except (email.errors.MessageError, LookupError):
+        logger.debug("Failed to decode MIME part", exc_info=True)
+        return ""
+    return payload if isinstance(payload, str) else ""
+
+
+def _multipart_bodies(message) -> tuple[str, str, str]:
+    body_text = body_html = calendar = ""
+    for part in message.walk():
+        content_type = part.get_content_type()
+        if content_type == "text/plain" and not body_text:
+            body_text = _decoded_part(part)
+        elif content_type == "text/html" and not body_html:
+            body_html = _decoded_part(part)
+        elif content_type == "text/calendar" and not calendar:
+            payload = _decoded_part(part)
+            calendar = _calendar_to_text(payload) if payload else ""
+    return body_text, body_html, calendar
+
+
+def _singlepart_bodies(message) -> tuple[str, str]:
+    payload = _decoded_part(message)
+    if message.get_content_type() == "text/html":
+        return "", payload
+    if message.get_content_type() == "text/calendar":
+        return _calendar_to_text(payload), ""
+    return payload, ""
 
 
 def _calendar_to_text(ical_text: str) -> str:

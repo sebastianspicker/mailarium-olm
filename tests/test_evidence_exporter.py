@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 from unittest.mock import patch
 
@@ -211,6 +212,37 @@ def test_csv_export_respects_filters():
     result = exporter.export_csv(min_relevance=4)
     assert result["item_count"] == 2
     db.close()
+
+
+def test_csv_export_neutralizes_formula_values_in_every_untrusted_column(monkeypatch):
+    exporter = EvidenceExporter(object())
+    malicious = "=1+1"
+    item = dict.fromkeys(
+        (
+            "id",
+            "date",
+            "sender_name",
+            "sender_email",
+            "recipients",
+            "subject",
+            "category",
+            "key_quote",
+            "summary",
+            "relevance",
+            "notes",
+            "email_uid",
+            "created_at",
+            "updated_at",
+        ),
+        malicious,
+    )
+    item["verified"] = True
+    monkeypatch.setattr(exporter, "_get_filtered_items", lambda *_args: [item])
+
+    row = next(csv.reader(exporter.export_csv()["csv"].splitlines()[1:]))
+
+    assert all(not cell.startswith("=") for cell in row)
+    assert sum(cell.startswith("'") for cell in row) == len(row) - 1  # static yes/no field
 
 
 # ── File Export ───────────────────────────────────────────────
