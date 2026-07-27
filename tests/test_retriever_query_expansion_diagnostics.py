@@ -1,6 +1,8 @@
+"""Ensures query-expansion import failures remain visible in search diagnostics while retrieval still returns results."""
+
 from __future__ import annotations
 
-from src.retriever import EmailRetriever, SearchResult
+from mailarium.retriever import EmailRetriever, SearchResult
 
 
 def test_search_filtered_records_query_expansion_failure_diagnostics(monkeypatch) -> None:
@@ -19,7 +21,7 @@ def test_search_filtered_records_query_expansion_failure_diagnostics(monkeypatch
             )
         ]
 
-    monkeypatch.setattr("src.retriever_admin.import_module", fail_import)
+    monkeypatch.setattr("mailarium.retriever_admin.import_module", fail_import)
     retriever.search = search
 
     results = retriever.search_filtered(query="budget", expand_query=True)

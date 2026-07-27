@@ -10,6 +10,40 @@ import threading
 
 import pytest
 
+
+def _run_two_threads(target, *, indexed: bool = False) -> None:
+    threads = [threading.Thread(target=target, args=(index,) if indexed else ()) for index in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+
+def _started_broken_embed_pipeline(message: str):
+    from mailarium.chunker import EmailChunk
+    from mailarium.ingest import _EmbedPipeline
+
+    class BrokenEmbedder:
+        def add_chunks(self, chunks, batch_size=32):
+            raise RuntimeError(message)
+
+    pipeline = _EmbedPipeline(
+        embedder=BrokenEmbedder(),
+        email_db=None,
+        entity_extractor_fn=None,
+        batch_size=32,
+    )
+    pipeline.start()
+    fake_chunk = EmailChunk(
+        uid="test",
+        chunk_id="test::0",
+        text="hello",
+        metadata={"uid": "test"},
+    )
+    pipeline.submit([fake_chunk], [])
+    return pipeline, fake_chunk
+
+
 # ── EmailDatabase.conn double-init prevention ─────────────────
 
 
@@ -18,7 +52,7 @@ class TestEmailDatabaseConnThreadSafety:
 
     def test_concurrent_conn_access_returns_same_connection(self):
         """Two threads hitting .conn simultaneously must get the same object."""
-        from src.email_db import EmailDatabase
+        from mailarium.email_db import EmailDatabase
 
         db = EmailDatabase(":memory:")
         results: list = [None, None]
@@ -28,21 +62,16 @@ class TestEmailDatabaseConnThreadSafety:
             barrier.wait()  # synchronize so both threads hit .conn together
             results[idx] = db.conn
 
-        t0 = threading.Thread(target=access, args=(0,))
-        t1 = threading.Thread(target=access, args=(1,))
-        t0.start()
-        t1.start()
-        t0.join()
-        t1.join()
+        _run_two_threads(access, indexed=True)
 
         assert results[0] is results[1], (
-            "Two threads created different SQLite connections — EmailDatabase.conn is not properly synchronized"
+            "Two threads created different SQLite connections - EmailDatabase.conn is not properly synchronized"
         )
         db.close()
 
     def test_conn_property_idempotent(self):
         """Repeated .conn access returns the same connection."""
-        from src.email_db import EmailDatabase
+        from mailarium.email_db import EmailDatabase
 
         db = EmailDatabase(":memory:")
         c1 = db.conn
@@ -59,7 +88,7 @@ class TestRunWithNetworkThreadSafety:
 
     def test_network_lock_prevents_double_init(self):
         """Simulate two threads creating the CommunicationNetwork."""
-        from src.tools import utils
+        from mailarium.tools import utils
 
         init_count = 0
         original_lock = utils._network_lock
@@ -85,15 +114,10 @@ class TestRunWithNetworkThreadSafety:
                         net = FakeNetwork(db)
                         db._cached_comm_network = net  # pylint: disable=attribute-defined-outside-init
 
-        t0 = threading.Thread(target=create_network)
-        t1 = threading.Thread(target=create_network)
-        t0.start()
-        t1.start()
-        t0.join()
-        t1.join()
+        _run_two_threads(create_network)
 
         assert init_count == 1, (
-            f"CommunicationNetwork was initialized {init_count} times — double-checked locking in run_with_network is broken"
+            f"CommunicationNetwork was initialized {init_count} times - double-checked locking in run_with_network is broken"
         )
 
 
@@ -103,7 +127,7 @@ class TestRunWithNetworkThreadSafety:
 class TestMCPServerSingletons:
     """Verify MCP server singletons are initialized at most once.
 
-    Note: importing ``src.mcp_server`` acquires an instance lock via
+    Note: importing ``mailarium.mcp_server`` acquires an instance lock via
     ``fcntl.flock``.  If another MCP server process is running, the
     import raises ``SystemExit(1)``.  The test is skipped in that case.
     """
@@ -111,21 +135,21 @@ class TestMCPServerSingletons:
     def test_get_retriever_returns_same_instance(self, monkeypatch):
         """Concurrent get_retriever() calls must return the same object."""
         try:
-            from src import mcp_server
+            from mailarium import mcp_server
         except SystemExit:
             pytest.skip("MCP instance lock held by another process")
 
         call_count = 0
 
         class FakeRetriever:
-            def __init__(self):
+            def __init__(self, **_kwargs):
                 nonlocal call_count
                 call_count += 1
 
         monkeypatch.setattr(mcp_server, "_retriever", None)
 
         # Patch the import to use our fake
-        import src.retriever as retriever_mod
+        import mailarium.retriever as retriever_mod
 
         original_class = getattr(retriever_mod, "EmailRetriever", None)
         monkeypatch.setattr(retriever_mod, "EmailRetriever", FakeRetriever)
@@ -137,12 +161,7 @@ class TestMCPServerSingletons:
             barrier.wait()
             results[idx] = mcp_server.get_retriever()
 
-        t0 = threading.Thread(target=access, args=(0,))
-        t1 = threading.Thread(target=access, args=(1,))
-        t0.start()
-        t1.start()
-        t0.join()
-        t1.join()
+        _run_two_threads(access, indexed=True)
 
         assert results[0] is results[1], "get_retriever() returned different instances"
         assert call_count == 1, f"EmailRetriever was constructed {call_count} times"
@@ -161,7 +180,7 @@ class TestLruCacheSettings:
 
     def test_concurrent_get_settings_returns_same_instance(self):
         """Multiple threads calling get_settings() must get the same object."""
-        from src.config import get_settings
+        from mailarium.config import get_settings
 
         get_settings.cache_clear()
 
@@ -195,30 +214,7 @@ class TestEmbedPipelineErrorPropagation:
 
     def test_error_propagation_through_queue(self):
         """If consumer raises, finish() must re-raise on the producer side."""
-        from src.ingest import _EmbedPipeline
-
-        class BrokenEmbedder:
-            def add_chunks(self, chunks, batch_size=32):
-                raise RuntimeError("GPU on fire")
-
-        pipeline = _EmbedPipeline(
-            embedder=BrokenEmbedder(),
-            email_db=None,
-            entity_extractor_fn=None,
-            batch_size=32,
-        )
-        pipeline.start()
-
-        # Submit a batch that will cause the consumer to fail
-        from src.chunker import EmailChunk
-
-        fake_chunk = EmailChunk(
-            uid="test",
-            chunk_id="test::0",
-            text="hello",
-            metadata={"uid": "test"},
-        )
-        pipeline.submit([fake_chunk], [])
+        pipeline, _fake_chunk = _started_broken_embed_pipeline("GPU on fire")
 
         with pytest.raises(RuntimeError, match="GPU on fire"):
             pipeline.finish()
@@ -227,29 +223,7 @@ class TestEmbedPipelineErrorPropagation:
         """submit() must raise if the consumer has already failed."""
         import time
 
-        from src.ingest import _EmbedPipeline
-
-        class BrokenEmbedder:
-            def add_chunks(self, chunks, batch_size=32):
-                raise RuntimeError("boom")
-
-        pipeline = _EmbedPipeline(
-            embedder=BrokenEmbedder(),
-            email_db=None,
-            entity_extractor_fn=None,
-            batch_size=32,
-        )
-        pipeline.start()
-
-        from src.chunker import EmailChunk
-
-        fake_chunk = EmailChunk(
-            uid="test",
-            chunk_id="test::0",
-            text="hello",
-            metadata={"uid": "test"},
-        )
-        pipeline.submit([fake_chunk], [])
+        pipeline, fake_chunk = _started_broken_embed_pipeline("boom")
 
         # Wait for the consumer to process and fail
         time.sleep(0.2)

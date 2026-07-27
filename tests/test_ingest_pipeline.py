@@ -1,3 +1,5 @@
+"""Ingests archive content, enrichment metadata, and attachment evidence while preserving degraded and aborted-run states."""
+
 from ._ingest_cases import (
     test_attachment_payload_failure_marks_degraded_not_completed,
     test_exchange_entities_dedup_with_regex,

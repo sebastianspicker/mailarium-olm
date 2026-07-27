@@ -1,9 +1,9 @@
-"""Tests for NMF topic modeling."""
+"""Verifies NMF topic modeling derives stable topic assignments and representative terms."""
 
 import os
 import tempfile
 
-from src.topic_modeler import TopicModeler
+from mailarium.topic_modeler import TopicModeler
 
 # Minimal corpus for testing
 _CORPUS = [
@@ -142,8 +142,8 @@ class TestTopicModeler:
 
 class TestKeywordTopicSQLite:
     def _make_db(self):
-        from src.email_db import EmailDatabase
-        from src.parse_olm import Email
+        from mailarium.email_db import EmailDatabase
+        from mailarium.parse_olm import Email
 
         db = EmailDatabase(":memory:")
         email = Email(
@@ -243,17 +243,7 @@ class TestKeywordTopicSQLite:
 
 
 class TestMCPTopicTools:
-    def test_topics_tool_importable(self):
-        from src.tools import topics
-
-        assert callable(topics.register)
-
-    def test_search_by_topic_tool_importable(self):
-        from src.tools import topics
-
-        assert callable(topics.register)
-
-    def test_keywords_tool_importable(self):
-        from src.tools import topics
+    def test_topic_tools_registration_importable(self):
+        from mailarium.tools import topics
 
         assert callable(topics.register)

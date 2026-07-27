@@ -1,143 +1,50 @@
-from .helpers.ingest_fixtures import _make_mock_email, _MockEmbedder
+"""Degraded attachment reprocessing, batch flushing, and obsolete-chunk cleanup behavior."""
+
+import pytest
+
+from .helpers.ingest_fixtures import _make_mock_image_email, _make_reembed_embedder, _MockEmbedder, _seed_ingest_database
 
 
-def _make_image_email(idx: int):
-    email = _make_mock_email(idx)
-    filename = f"photo-{idx}.png"
-    email.has_attachments = True
-    email.attachment_names = [filename]
-    email.attachments = [
-        {
-            "name": filename,
-            "mime_type": "image/png",
-            "size": 128,
-            "content_id": "",
-            "is_inline": False,
-        }
-    ]
-    email.attachment_contents = [(filename, b"fake-image")]
-    return email
-
-
-def test_reprocess_degraded_attachments_batches_upserts_across_emails(tmp_path, monkeypatch):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-
-    emails = [_make_image_email(1), _make_image_email(2)]
-    sqlite_file = str(tmp_path / "test.db")
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
-    monkeypatch.setattr("src.attachment_extractor.extract_image_text_ocr", lambda filename, content, **_kw: None)
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
+@pytest.mark.parametrize(
+    ("batch_size", "expected_call_sizes"),
+    [(10, [2]), (1, [1, 1])],
+    ids=["batches-across-emails", "flushes-at-threshold"],
+)
+def test_reprocess_degraded_attachments_batches_by_requested_size(tmp_path, monkeypatch, batch_size, expected_call_sizes):
+    emails = [_make_mock_image_email(1), _make_mock_image_email(2)]
+    monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: False)
+    monkeypatch.setattr("mailarium.attachment_extractor.extract_image_text_ocr", lambda filename, content, **_kw: None)
+    ingest_mod, sqlite_file = _seed_ingest_database(monkeypatch, tmp_path, emails, extract_attachments=True)
 
     upsert_calls = []
-    get_existing_ids_calls = 0
-
-    class _TrackingEmbedder:
-        def __init__(self, **_kw):
-            self.collection = type("Collection", (), {"delete": lambda self, ids: None})()
-
-        def set_sparse_db(self, db):
-            pass
-
-        def close(self):
-            pass
-
-        def get_existing_ids(self, refresh=False):
-            nonlocal get_existing_ids_calls
-            get_existing_ids_calls += 1
-            return set()
-
-        def upsert_chunks(self, chunks, batch_size=100):
-            upsert_calls.append([chunk.chunk_id for chunk in chunks])
-            return len(chunks)
-
-    monkeypatch.setattr("src.embedder.EmailEmbedder", _TrackingEmbedder)
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
+    id_lookups = []
     monkeypatch.setattr(
-        "src.attachment_extractor.extract_image_text_ocr",
+        "mailarium.embedder.EmailEmbedder",
+        _make_reembed_embedder(existing_ids=set(), upsert_calls=upsert_calls, id_lookups=id_lookups),
+    )
+    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
+    monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: True)
+    monkeypatch.setattr(
+        "mailarium.attachment_extractor.extract_image_text_ocr",
         lambda filename, content, **_kw: f"Recovered screenshot text for {filename}",
     )
 
     result = ingest_mod.reprocess_degraded_attachments(
         "mock.olm",
         sqlite_path=sqlite_file,
-        batch_size=10,
+        batch_size=batch_size,
     )
 
     assert result["updated"] == 2
     assert result["chunks_added"] == 2
-    assert get_existing_ids_calls == 1
-    assert len(upsert_calls) == 1
-    assert len(upsert_calls[0]) == 2
-
-
-def test_reprocess_degraded_attachments_flushes_at_batch_threshold(tmp_path, monkeypatch):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-
-    emails = [_make_image_email(1), _make_image_email(2)]
-    sqlite_file = str(tmp_path / "test.db")
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
-    monkeypatch.setattr("src.attachment_extractor.extract_image_text_ocr", lambda filename, content, **_kw: None)
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
-
-    upsert_calls = []
-
-    class _TrackingEmbedder:
-        def __init__(self, **_kw):
-            self.collection = type("Collection", (), {"delete": lambda self, ids: None})()
-
-        def set_sparse_db(self, db):
-            pass
-
-        def close(self):
-            pass
-
-        def get_existing_ids(self, refresh=False):
-            return set()
-
-        def upsert_chunks(self, chunks, batch_size=100):
-            upsert_calls.append([chunk.chunk_id for chunk in chunks])
-            return len(chunks)
-
-    monkeypatch.setattr("src.embedder.EmailEmbedder", _TrackingEmbedder)
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
-    monkeypatch.setattr(
-        "src.attachment_extractor.extract_image_text_ocr",
-        lambda filename, content, **_kw: f"Recovered screenshot text for {filename}",
-    )
-
-    result = ingest_mod.reprocess_degraded_attachments(
-        "mock.olm",
-        sqlite_path=sqlite_file,
-        batch_size=1,
-    )
-
-    assert result["updated"] == 2
-    assert result["chunks_added"] == 2
-    assert [len(call) for call in upsert_calls] == [1, 1]
+    assert len(id_lookups) == 1
+    assert [len(call) for call in upsert_calls] == expected_call_sizes
 
 
 def test_reprocess_degraded_attachments_deletes_only_obsolete_chunk_ids(tmp_path, monkeypatch):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.ingest_reingest import _attachment_chunk_prefix
+    import mailarium.embedder as embedder_mod
+    import mailarium.ingest as ingest_mod
+    from mailarium.ingest_reingest import _attachment_chunk_prefix
 
     monkeypatch.setattr(
         ingest_mod,
@@ -146,44 +53,30 @@ def test_reprocess_degraded_attachments_deletes_only_obsolete_chunk_ids(tmp_path
     )
     monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
 
-    email = _make_image_email(1)
+    email = _make_mock_image_email(1)
     email_uid = email.uid
     filename = email.attachment_names[0]
     sqlite_file = str(tmp_path / "test.db")
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
-    monkeypatch.setattr("src.attachment_extractor.extract_image_text_ocr", lambda filename, content, **_kw: None)
+    monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: False)
+    monkeypatch.setattr("mailarium.attachment_extractor.extract_image_text_ocr", lambda filename, content, **_kw: None)
     ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
 
     stale_prefix = _attachment_chunk_prefix(email_uid, filename, 0)
     operations = []
 
-    class _TrackingEmbedder:
-        def __init__(self, **_kw):
-            class _Collection:
-                def delete(self, ids=None, **_kw):
-                    operations.append(("delete", list(ids)))
-
-            self.collection = _Collection()
-
-        def set_sparse_db(self, db):
-            pass
-
-        def close(self):
-            pass
-
-        def get_existing_ids(self, refresh=False):
-            return {f"{stale_prefix}0", f"{stale_prefix}1"}
-
-        def upsert_chunks(self, chunks, batch_size=100):
-            operations.append(("upsert", [chunk.chunk_id for chunk in chunks]))
-            return len(chunks)
-
-    monkeypatch.setattr("src.embedder.EmailEmbedder", _TrackingEmbedder)
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [_make_image_email(1)])
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
     monkeypatch.setattr(
-        "src.attachment_extractor.extract_image_text_ocr",
+        "mailarium.embedder.EmailEmbedder",
+        _make_reembed_embedder(
+            existing_ids={f"{stale_prefix}0", f"{stale_prefix}1"},
+            on_upsert=lambda chunks: operations.append(("upsert", [chunk.chunk_id for chunk in chunks])),
+            on_delete=lambda ids: operations.append(("delete", list(ids))),
+        ),
+    )
+    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [_make_mock_image_email(1)])
+    monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: True)
+    monkeypatch.setattr(
+        "mailarium.attachment_extractor.extract_image_text_ocr",
         lambda filename, content, **_kw: "Recovered screenshot text",
     )
 
@@ -201,9 +94,9 @@ def test_reprocess_degraded_attachments_deletes_only_obsolete_chunk_ids(tmp_path
 
 
 def test_reprocess_does_not_promote_missing_payload_attachments_to_completed(tmp_path, monkeypatch):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    import mailarium.embedder as embedder_mod
+    import mailarium.ingest as ingest_mod
+    from mailarium.email_db import EmailDatabase
 
     sqlite_file = str(tmp_path / "test.db")
     monkeypatch.setattr(
@@ -213,7 +106,7 @@ def test_reprocess_does_not_promote_missing_payload_attachments_to_completed(tmp
     )
     monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
 
-    degraded_email = _make_image_email(1)
+    degraded_email = _make_mock_image_email(1)
     degraded_email.attachment_names = ["scan.pdf"]
     degraded_email.attachments = [
         {
@@ -230,24 +123,11 @@ def test_reprocess_does_not_promote_missing_payload_attachments_to_completed(tmp
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [degraded_email])
     ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
 
-    class _TrackingEmbedder:
-        def __init__(self, **_kw):
-            self.collection = type("Collection", (), {"delete": lambda self, ids: None})()
-
-        def set_sparse_db(self, db):
-            pass
-
-        def close(self):
-            pass
-
-        def get_existing_ids(self, refresh=False):
-            return {f"{degraded_email.uid}__att_old__0"}
-
-        def upsert_chunks(self, chunks, batch_size=100):
-            return len(chunks)
-
-    monkeypatch.setattr("src.embedder.EmailEmbedder", _TrackingEmbedder)
-    reparsed_email = _make_image_email(1)
+    monkeypatch.setattr(
+        "mailarium.embedder.EmailEmbedder",
+        _make_reembed_embedder(existing_ids={f"{degraded_email.uid}__att_old__0"}),
+    )
+    reparsed_email = _make_mock_image_email(1)
     reparsed_email.attachment_names = ["scan.pdf"]
     reparsed_email.attachments = [
         {
@@ -281,8 +161,8 @@ def test_reprocess_does_not_promote_missing_payload_attachments_to_completed(tmp
 
 
 def test_reprocess_renamed_attachment_deletes_old_chunk_ids(tmp_path, monkeypatch):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
+    import mailarium.embedder as embedder_mod
+    import mailarium.ingest as ingest_mod
 
     sqlite_file = str(tmp_path / "test.db")
     monkeypatch.setattr(
@@ -292,7 +172,7 @@ def test_reprocess_renamed_attachment_deletes_old_chunk_ids(tmp_path, monkeypatc
     )
     monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
 
-    old_email = _make_image_email(1)
+    old_email = _make_mock_image_email(1)
     old_email.attachment_names = ["old-name.pdf"]
     old_email.attachments = [
         {
@@ -305,9 +185,9 @@ def test_reprocess_renamed_attachment_deletes_old_chunk_ids(tmp_path, monkeypatc
     ]
     old_email.attachment_contents = [("old-name.pdf", b"old-bytes")]
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [old_email])
-    monkeypatch.setattr("src.attachment_extractor.extract_text", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("src.attachment_extractor.extract_attachment_text_ocr", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
+    monkeypatch.setattr("mailarium.attachment_extractor.extract_text", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("mailarium.attachment_extractor.extract_attachment_text_ocr", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: False)
     ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
 
     old_chunk_id = f"{old_email.uid}__att_old_hash__0"
@@ -315,30 +195,16 @@ def test_reprocess_renamed_attachment_deletes_old_chunk_ids(tmp_path, monkeypatc
     delete_calls: list[list[str]] = []
     upsert_calls: list[list[str]] = []
 
-    class _TrackingEmbedder:
-        def __init__(self, **_kw):
-            class _Collection:
-                def delete(self, ids=None, **_kw):
-                    delete_calls.append(list(ids))
+    monkeypatch.setattr(
+        "mailarium.embedder.EmailEmbedder",
+        _make_reembed_embedder(
+            existing_ids={old_chunk_id, kept_other_chunk_id},
+            upsert_calls=upsert_calls,
+            delete_calls=delete_calls,
+        ),
+    )
 
-            self.collection = _Collection()
-
-        def set_sparse_db(self, db):
-            pass
-
-        def close(self):
-            pass
-
-        def get_existing_ids(self, refresh=False):
-            return {old_chunk_id, kept_other_chunk_id}
-
-        def upsert_chunks(self, chunks, batch_size=100):
-            upsert_calls.append([str(chunk.chunk_id) for chunk in chunks])
-            return len(chunks)
-
-    monkeypatch.setattr("src.embedder.EmailEmbedder", _TrackingEmbedder)
-
-    renamed_email = _make_image_email(1)
+    renamed_email = _make_mock_image_email(1)
     renamed_email.attachment_names = ["new-name.pdf"]
     renamed_email.attachments = [
         {
@@ -351,7 +217,7 @@ def test_reprocess_renamed_attachment_deletes_old_chunk_ids(tmp_path, monkeypatc
     ]
     renamed_email.attachment_contents = [("new-name.pdf", b"new-bytes")]
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [renamed_email])
-    monkeypatch.setattr("src.attachment_extractor.extract_text", lambda *_args, **_kwargs: "Recovered text")
+    monkeypatch.setattr("mailarium.attachment_extractor.extract_text", lambda *_args, **_kwargs: "Recovered text")
     monkeypatch.setattr(
         ingest_mod,
         "chunk_attachment",

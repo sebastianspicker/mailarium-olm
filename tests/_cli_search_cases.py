@@ -1,12 +1,5 @@
 # ruff: noqa: I001
-"""Tests for CLI command handler functions (_cmd_* and helpers).
-
-These tests exercise the uncovered handler logic in src/cli.py by:
-- Constructing argparse.Namespace objects directly
-- Mocking EmailRetriever and EmailDatabase
-- Capturing stdout/stderr with capsys
-- Verifying that the correct branches execute and produce output
-"""
+"""CLI search filters, output formats, sender display, and single-query execution."""
 
 from __future__ import annotations
 
@@ -15,7 +8,7 @@ import json
 
 import pytest
 
-from src.cli import (
+from mailarium.cli import (
     _cmd_search,
     _print_sender_lines,
     resolve_output_format,
@@ -24,7 +17,7 @@ from src.cli import (
 
 # ── Fake SearchResult ────────────────────────────────────────────────
 
-from .helpers.cli_fakes import _make_result, _make_retriever
+from .helpers.cli_fakes import _make_result, _make_retriever, _search_args
 
 
 class TestResolveOutputFormat:
@@ -136,29 +129,7 @@ class TestCmdSearch:
     def test_cmd_search_text_output(self, capsys):
         results = [_make_result()]
         retriever = _make_retriever(results)
-        args = argparse.Namespace(
-            query="test query",
-            format=None,
-            json=False,
-            top_k=10,
-            sender=None,
-            subject=None,
-            folder=None,
-            cc=None,
-            to=None,
-            bcc=None,
-            has_attachments=None,
-            priority=None,
-            email_type=None,
-            date_from=None,
-            date_to=None,
-            min_score=None,
-            rerank=False,
-            hybrid=False,
-            topic=None,
-            cluster_id=None,
-            expand_query=False,
-        )
+        args = _search_args(query="test query")
         with pytest.raises(SystemExit) as exc_info:
             _cmd_search(args, retriever)
         assert exc_info.value.code == 0
@@ -168,29 +139,7 @@ class TestCmdSearch:
     def test_cmd_search_json_format(self, capsys):
         results = [_make_result()]
         retriever = _make_retriever(results)
-        args = argparse.Namespace(
-            query="test",
-            format="json",
-            json=False,
-            top_k=10,
-            sender=None,
-            subject=None,
-            folder=None,
-            cc=None,
-            to=None,
-            bcc=None,
-            has_attachments=None,
-            priority=None,
-            email_type=None,
-            date_from=None,
-            date_to=None,
-            min_score=None,
-            rerank=False,
-            hybrid=False,
-            topic=None,
-            cluster_id=None,
-            expand_query=False,
-        )
+        args = _search_args(format="json")
         with pytest.raises(SystemExit) as exc_info:
             _cmd_search(args, retriever)
         assert exc_info.value.code == 0
@@ -200,17 +149,12 @@ class TestCmdSearch:
 
     def test_cmd_search_with_filters(self, capsys):
         retriever = _make_retriever(results=[])
-        args = argparse.Namespace(
+        args = _search_args(
             query="invoice",
-            format=None,
-            json=False,
             top_k=5,
             sender="alice",
             subject="budget",
             folder="sent",
-            cc=None,
-            to=None,
-            bcc=None,
             has_attachments=True,
             priority=3,
             email_type="reply",

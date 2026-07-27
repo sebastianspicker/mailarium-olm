@@ -1,6 +1,6 @@
-"""Tests for the SQLite EmailDatabase."""
+"""SQLite attachment statistics, filtering, and attachment-linked email retrieval."""
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
 from .helpers.email_db_builders import _make_email
 

@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/sebastianspicker/outlook-email-rag/security/advisories/new
     about: Report suspected vulnerabilities privately instead of opening a public issue.
   - name: Usage and operations docs
-    url: https://github.com/sebastianspicker/outlook-email-rag/tree/dev/docs
+    url: https://github.com/sebastianspicker/outlook-email-rag/tree/main/docs
     about: Start here for setup, runtime layout, CLI, MCP, Streamlit, and privacy boundaries.

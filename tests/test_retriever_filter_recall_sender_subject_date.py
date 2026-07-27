@@ -1,8 +1,13 @@
+"""Exercises sender, subject, folder, date, and score filters with adaptive candidate retrieval.
+
+It validates bounds and tolerates missing or non-string metadata without false matches.
+"""
+
 from __future__ import annotations
 
 import pytest
 
-from src.retriever import EmailRetriever, SearchResult
+from mailarium.retriever import EmailRetriever, SearchResult
 
 
 def test_search_filtered_expands_candidate_window_when_needed() -> None:
@@ -43,10 +48,13 @@ def test_search_filtered_rejects_excessive_top_k() -> None:
         retriever.search_filtered(query="budget", top_k=2000)
 
 
-def test_search_filtered_allows_large_top_k_with_filters() -> None:
-    retriever = EmailRetriever()
+def test_search_filtered_allows_large_top_k_with_filters(tmp_path) -> None:
+    retriever = EmailRetriever(
+        vector_index_path=str(tmp_path / "vector-index"),
+        sqlite_path=str(tmp_path / "email.db"),
+    )
     retriever._encode_query = lambda _query: [[0.1, 0.2, 0.3]]
-    retriever._merge_hybrid = lambda _query, raw_candidates, _fetch_size: raw_candidates
+    retriever._merge_hybrid = lambda _query, raw_candidates, _fetch_size, **_kwargs: raw_candidates
     retriever._apply_rerank = lambda _query, deduped, top_k: deduped[:top_k]
 
     size = 250
@@ -72,6 +80,7 @@ def test_search_filtered_allows_large_top_k_with_filters() -> None:
     )
 
     assert len(results) == 200
+    retriever.close()
 
 
 def test_search_filtered_treats_blank_sender_as_no_filter() -> None:
@@ -227,43 +236,43 @@ class TestDateFilterNoneDate:
     """Regression: emails with None/missing date must be excluded by date filters."""
 
     def test_date_from_excludes_none_date(self) -> None:
-        from src.result_filters import _matches_date_from
+        from mailarium.result_filters import _matches_date_from
 
         result = SearchResult("c1", "text", {"date": None, "uid": "u1"}, 0.1)
         assert _matches_date_from(result, "2024-01-01") is False
 
     def test_date_to_excludes_none_date(self) -> None:
-        from src.result_filters import _matches_date_to
+        from mailarium.result_filters import _matches_date_to
 
         result = SearchResult("c1", "text", {"date": None, "uid": "u1"}, 0.1)
         assert _matches_date_to(result, "2024-12-31") is False
 
     def test_date_from_excludes_missing_date(self) -> None:
-        from src.result_filters import _matches_date_from
+        from mailarium.result_filters import _matches_date_from
 
         result = SearchResult("c1", "text", {"uid": "u1"}, 0.1)
         assert _matches_date_from(result, "2024-01-01") is False
 
     def test_date_to_excludes_missing_date(self) -> None:
-        from src.result_filters import _matches_date_to
+        from mailarium.result_filters import _matches_date_to
 
         result = SearchResult("c1", "text", {"uid": "u1"}, 0.1)
         assert _matches_date_to(result, "2024-12-31") is False
 
     def test_date_from_includes_valid_date(self) -> None:
-        from src.result_filters import _matches_date_from
+        from mailarium.result_filters import _matches_date_from
 
         result = SearchResult("c1", "text", {"date": "2024-06-15T10:00:00", "uid": "u1"}, 0.1)
         assert _matches_date_from(result, "2024-01-01") is True
 
     def test_date_to_includes_valid_date(self) -> None:
-        from src.result_filters import _matches_date_to
+        from mailarium.result_filters import _matches_date_to
 
         result = SearchResult("c1", "text", {"date": "2024-06-15T10:00:00", "uid": "u1"}, 0.1)
         assert _matches_date_to(result, "2024-12-31") is True
 
     def test_date_from_no_filter_passes_none(self) -> None:
-        from src.result_filters import _matches_date_from
+        from mailarium.result_filters import _matches_date_from
 
         result = SearchResult("c1", "text", {"date": None, "uid": "u1"}, 0.1)
         assert _matches_date_from(result, None) is True

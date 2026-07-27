@@ -1,14 +1,17 @@
+"""Exercises live QA dependencies, retrieval ranking, and attachment evidence through the SQLite backend.
+
+It falls back from an unavailable vector accelerator without discarding grounded result metadata.
+"""
+
 import asyncio
+from contextlib import contextmanager
 from pathlib import Path
 
 from tests.helpers.qa_eval_fixtures import make_email
 
 
-def test_resolve_live_deps_falls_back_to_sqlite_when_chromadb_missing(monkeypatch, tmp_path: Path):
-    from src.config import get_settings
-    from src.email_db import EmailDatabase
-    from src.qa_eval import resolve_live_deps
-    from src.tools import search as search_tools
+def _setup_budget_database(tmp_path: Path, *, body_text: str) -> Path:
+    from mailarium.email_db import EmailDatabase
 
     sqlite_path = tmp_path / "email_metadata.db"
     db = EmailDatabase(str(sqlite_path))
@@ -16,69 +19,66 @@ def test_resolve_live_deps_falls_back_to_sqlite_when_chromadb_missing(monkeypatc
         make_email(
             subject="Budget request",
             sender_email="employee@example.test",
-            body_text="Please send the budget draft.",
+            body_text=body_text,
         )
     )
     db.close()
+    return sqlite_path
+
+
+def _sqlite_eval_resolver(email_db, *, preferred_backend="auto"):
+    assert preferred_backend == "auto"
+    from mailarium.qa_eval import _SQLiteEvalRetriever
+
+    return _SQLiteEvalRetriever(email_db)
+
+
+@contextmanager
+def _resolved_live_deps(monkeypatch, sqlite_path: Path, *, resolver, preferred_backend: str = "auto"):
+    from mailarium.config import get_settings
+    from mailarium.qa_eval import resolve_live_deps
+    from mailarium.tools import search as search_tools
 
     monkeypatch.setenv("SQLITE_PATH", str(sqlite_path))
     get_settings.cache_clear()
     monkeypatch.setattr(search_tools, "_deps", None)
-
-    def fake_resolve(email_db, *, preferred_backend="auto"):
-        assert preferred_backend == "auto"
-        from src.qa_eval import _SQLiteEvalRetriever
-
-        return _SQLiteEvalRetriever(email_db)
-
-    monkeypatch.setattr("src.qa_eval._resolve_live_retriever", fake_resolve)
-
+    monkeypatch.setattr("mailarium.qa_eval._resolve_live_retriever", resolver)
     try:
-        deps = resolve_live_deps()
+        yield resolve_live_deps(preferred_backend=preferred_backend)
     finally:
         get_settings.cache_clear()
 
-    assert deps.live_backend == "sqlite_fallback"
-    assert deps.get_retriever().backend_name == "sqlite_fallback"
+
+def test_resolve_live_deps_falls_back_to_sqlite_when_vector_accelerator_missing(monkeypatch, tmp_path: Path):
+    sqlite_path = _setup_budget_database(tmp_path, body_text="Please send the budget draft.")
+    with _resolved_live_deps(monkeypatch, sqlite_path, resolver=_sqlite_eval_resolver) as deps:
+        assert deps.live_backend == "sqlite_fallback"
+        assert deps.get_retriever().backend_name == "sqlite_fallback"
 
 
 def test_resolve_live_deps_uses_embedding_backend_when_requested(monkeypatch, tmp_path: Path):
-    from src.config import get_settings
-    from src.email_db import EmailDatabase
-    from src.qa_eval import resolve_live_deps
-    from src.tools import search as search_tools
-
-    sqlite_path = tmp_path / "email_metadata.db"
-    db = EmailDatabase(str(sqlite_path))
-    db.insert_email(
-        make_email(
-            subject="Budget request",
-            sender_email="employee@example.test",
-            body_text="Please send the budget draft.",
-        )
-    )
-    db.close()
+    sqlite_path = _setup_budget_database(tmp_path, body_text="Please send the budget draft.")
 
     class _EmbeddingRetriever:
         backend_name = "embedding"
 
-    monkeypatch.setenv("SQLITE_PATH", str(sqlite_path))
-    get_settings.cache_clear()
-    monkeypatch.setattr(search_tools, "_deps", None)
-    monkeypatch.setattr("src.qa_eval._resolve_live_retriever", lambda email_db, preferred_backend="auto": _EmbeddingRetriever())
+    def embedding_resolver(_email_db, *, preferred_backend="auto"):
+        assert preferred_backend == "embedding"
+        return _EmbeddingRetriever()
 
-    try:
-        deps = resolve_live_deps(preferred_backend="embedding")
-    finally:
-        get_settings.cache_clear()
-
-    assert deps.live_backend == "embedding"
-    assert deps.get_retriever().backend_name == "embedding"
+    with _resolved_live_deps(
+        monkeypatch,
+        sqlite_path,
+        resolver=embedding_resolver,
+        preferred_backend="embedding",
+    ) as deps:
+        assert deps.live_backend == "embedding"
+        assert deps.get_retriever().backend_name == "embedding"
 
 
 def test_sqlite_live_retriever_returns_real_results(tmp_path: Path):
-    from src.email_db import EmailDatabase
-    from src.qa_eval import _SQLiteEvalRetriever
+    from mailarium.email_db import EmailDatabase
+    from mailarium.qa_eval import _SQLiteEvalRetriever
 
     db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     db.insert_email(
@@ -100,8 +100,8 @@ def test_sqlite_live_retriever_returns_real_results(tmp_path: Path):
 
 
 def test_sqlite_live_retriever_preserves_attachment_evidence_metadata(tmp_path: Path):
-    from src.email_db import EmailDatabase
-    from src.qa_eval import _SQLiteEvalRetriever
+    from mailarium.email_db import EmailDatabase
+    from mailarium.qa_eval import _SQLiteEvalRetriever
 
     db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     email = make_email(
@@ -140,31 +140,9 @@ def test_sqlite_live_retriever_preserves_attachment_evidence_metadata(tmp_path: 
 
 
 def test_sqlite_live_retriever_uses_attachment_text_preview_in_result_text(tmp_path: Path):
-    from src.email_db import EmailDatabase
-    from src.qa_eval import _SQLiteEvalRetriever
+    from mailarium.qa_eval import _SQLiteEvalRetriever
 
-    db = EmailDatabase(str(tmp_path / "email_metadata.db"))
-    email = make_email(
-        subject="Budget spreadsheet",
-        sender_email="employee@example.test",
-        body_text="See the attachment.",
-        has_attachments=True,
-    )
-    email.attachments = [
-        {
-            "name": "budget.xlsx",
-            "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "size": 2048,
-            "content_id": "",
-            "is_inline": False,
-            "extraction_state": "text_extracted",
-            "evidence_strength": "strong_text",
-            "ocr_used": False,
-            "failure_reason": None,
-            "text_preview": "Budget Q4 total: 25000 EUR",
-        }
-    ]
-    db.insert_email(email)
+    db, _email = _setup_attachment_db(tmp_path)
 
     retriever = _SQLiteEvalRetriever(db)
     results = retriever.search_filtered(query="What does the budget spreadsheet say?", top_k=5)
@@ -175,7 +153,7 @@ def test_sqlite_live_retriever_uses_attachment_text_preview_in_result_text(tmp_p
 
 
 def _setup_attachment_db(tmp_path: Path) -> tuple:
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     email = make_email(
@@ -203,28 +181,13 @@ def _setup_attachment_db(tmp_path: Path) -> tuple:
 
 
 def test_live_payload_preserves_strong_attachment_text_with_sqlite_preview(tmp_path: Path, monkeypatch):
-    from src.config import get_settings
-    from src.qa_eval import QuestionCase, _live_payload, resolve_live_deps
-    from src.tools import search as search_tools
+    from mailarium.qa_eval import QuestionCase, _live_payload
 
     sqlite_path = tmp_path / "email_metadata.db"
     db, email = _setup_attachment_db(tmp_path)
     db.close()
 
-    monkeypatch.setenv("SQLITE_PATH", str(sqlite_path))
-    get_settings.cache_clear()
-    monkeypatch.setattr(search_tools, "_deps", None)
-
-    def fake_resolve(email_db, *, preferred_backend="auto"):
-        assert preferred_backend == "auto"
-        from src.qa_eval import _SQLiteEvalRetriever
-
-        return _SQLiteEvalRetriever(email_db)
-
-    monkeypatch.setattr("src.qa_eval._resolve_live_retriever", fake_resolve)
-
-    try:
-        deps = resolve_live_deps()
+    with _resolved_live_deps(monkeypatch, sqlite_path, resolver=_sqlite_eval_resolver) as deps:
         payload = asyncio.run(
             _live_payload(
                 QuestionCase(
@@ -236,8 +199,6 @@ def test_live_payload_preserves_strong_attachment_text_with_sqlite_preview(tmp_p
                 deps,
             )
         )
-    finally:
-        get_settings.cache_clear()
 
     assert payload["attachment_candidates"]
     attachment = payload["attachment_candidates"][0]["attachment"]
@@ -247,8 +208,8 @@ def test_live_payload_preserves_strong_attachment_text_with_sqlite_preview(tmp_p
 
 
 def test_sqlite_live_retriever_finds_attachment_case_from_natural_language_query(tmp_path: Path):
-    from src.email_db import EmailDatabase
-    from src.qa_eval import _SQLiteEvalRetriever
+    from mailarium.email_db import EmailDatabase
+    from mailarium.qa_eval import _SQLiteEvalRetriever
 
     db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     email = make_email(
@@ -284,8 +245,8 @@ def test_sqlite_live_retriever_finds_attachment_case_from_natural_language_query
 
 
 def test_sqlite_live_retriever_prefers_subject_topic_match_for_fact_queries(tmp_path: Path):
-    from src.email_db import EmailDatabase
-    from src.qa_eval import _SQLiteEvalRetriever
+    from mailarium.email_db import EmailDatabase
+    from mailarium.qa_eval import _SQLiteEvalRetriever
 
     db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     generic = make_email(
@@ -309,8 +270,8 @@ def test_sqlite_live_retriever_prefers_subject_topic_match_for_fact_queries(tmp_
 
 
 def test_sqlite_live_retriever_prefers_earliest_topic_anchor_for_begin_questions(tmp_path: Path):
-    from src.email_db import EmailDatabase
-    from src.qa_eval import _SQLiteEvalRetriever
+    from mailarium.email_db import EmailDatabase
+    from mailarium.qa_eval import _SQLiteEvalRetriever
 
     db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     early = make_email(
@@ -336,8 +297,8 @@ def test_sqlite_live_retriever_prefers_earliest_topic_anchor_for_begin_questions
 
 
 def test_sqlite_live_retriever_prefers_exact_title_match_for_titled_queries(tmp_path: Path):
-    from src.email_db import EmailDatabase
-    from src.qa_eval import _SQLiteEvalRetriever
+    from mailarium.email_db import EmailDatabase
+    from mailarium.qa_eval import _SQLiteEvalRetriever
 
     db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     expected = make_email(
@@ -361,8 +322,8 @@ def test_sqlite_live_retriever_prefers_exact_title_match_for_titled_queries(tmp_
 
 
 def test_sqlite_live_retriever_prefers_exact_forward_topic_over_version_variant(tmp_path: Path):
-    from src.email_db import EmailDatabase
-    from src.qa_eval import _SQLiteEvalRetriever
+    from mailarium.email_db import EmailDatabase
+    from mailarium.qa_eval import _SQLiteEvalRetriever
 
     db = EmailDatabase(str(tmp_path / "email_metadata.db"))
     older = make_email(
@@ -394,39 +355,13 @@ def test_sqlite_live_retriever_prefers_exact_forward_topic_over_version_variant(
 
 
 def test_resolve_live_deps_uses_sqlite_fallback_backend(monkeypatch, tmp_path: Path):
-    from src.config import get_settings
-    from src.email_db import EmailDatabase
-    from src.qa_eval import resolve_live_deps
-    from src.tools import search as search_tools
+    from mailarium.qa_eval import QuestionCase, _live_payload
 
-    sqlite_path = tmp_path / "email_metadata.db"
-    db = EmailDatabase(str(sqlite_path))
-    db.insert_email(
-        make_email(
-            subject="Budget request",
-            sender_email="employee@example.test",
-            body_text="Please send the updated budget draft.",
-        )
-    )
-    db.close()
-
-    monkeypatch.setenv("SQLITE_PATH", str(sqlite_path))
-    get_settings.cache_clear()
-    monkeypatch.setattr(search_tools, "_deps", None)
-
-    def fake_resolve(email_db, *, preferred_backend="auto"):
-        assert preferred_backend == "auto"
-        from src.qa_eval import _SQLiteEvalRetriever
-
-        return _SQLiteEvalRetriever(email_db)
-
-    monkeypatch.setattr("src.qa_eval._resolve_live_retriever", fake_resolve)
-
-    try:
-        deps = resolve_live_deps()
+    sqlite_path = _setup_budget_database(tmp_path, body_text="Please send the updated budget draft.")
+    with _resolved_live_deps(monkeypatch, sqlite_path, resolver=_sqlite_eval_resolver) as deps:
         payload = asyncio.run(
-            __import__("src.qa_eval", fromlist=["_live_payload"])._live_payload(
-                __import__("src.qa_eval", fromlist=["QuestionCase"]).QuestionCase(
+            _live_payload(
+                QuestionCase(
                     id="fact-001",
                     bucket="fact_lookup",
                     question="updated budget draft",
@@ -435,8 +370,6 @@ def test_resolve_live_deps_uses_sqlite_fallback_backend(monkeypatch, tmp_path: P
                 deps,
             )
         )
-    finally:
-        get_settings.cache_clear()
 
     assert deps.live_backend == "sqlite_fallback"
     assert payload["count"] >= 1

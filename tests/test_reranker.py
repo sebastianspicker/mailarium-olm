@@ -1,9 +1,9 @@
-"""Tests for cross-encoder reranker."""
+"""Verifies cross-encoder reranking orders retrieved messages by query relevance."""
 
 from unittest.mock import MagicMock
 
-from src.reranker import CrossEncoderReranker
-from src.retriever import SearchResult
+from mailarium.reranker import CrossEncoderReranker
+from mailarium.retriever import SearchResult
 
 
 def _result(chunk_id: str = "c1", text: str = "body", distance: float = 0.3) -> SearchResult:

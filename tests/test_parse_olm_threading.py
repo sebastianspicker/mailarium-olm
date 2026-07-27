@@ -1,3 +1,8 @@
+"""Exercises OLM thread, reply, recipient, and attachment attribution parsing across XML and source headers.
+
+It supplies stable defaults when linkage or blind-copy metadata is unavailable.
+"""
+
 from ._parse_olm_cases import (
     test_attachment_metadata_extracted,
     test_base_subject_strips_mixed_prefixes,

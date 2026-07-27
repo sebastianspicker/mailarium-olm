@@ -1,3 +1,5 @@
+"""Validates ingestion CLI limits, failure messages, timing switches, and dry-run summary disclosure."""
+
 from ._ingest_cases import (
     test_format_ingestion_summary_detailed_timing,
     test_format_ingestion_summary_for_dry_run_hides_db_totals,

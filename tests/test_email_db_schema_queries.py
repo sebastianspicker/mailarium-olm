@@ -1,3 +1,5 @@
+"""Validates versioned archive schema data and query paths for attachments, threads, batches, and subject groups."""
+
 from ._email_db_cases import (
     TestAttachmentQueries,
     TestEmailsByBaseSubject,

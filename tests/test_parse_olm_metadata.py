@@ -1,3 +1,8 @@
+"""Exercises OLM metadata extraction for calendars, categories, attachments, threading, and inference fields.
+
+It keeps absent optional metadata distinguishable from recovered values without duplicating body text.
+"""
+
 from ._parse_olm_cases import (
     test_calendar_body_extraction,
     test_calendar_body_from_source,

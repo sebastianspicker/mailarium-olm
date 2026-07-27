@@ -7,8 +7,33 @@ from typing import Any, cast
 
 import pytest
 
-import src.web_app as web_app
-from src.repo_paths import validate_runtime_path
+import mailarium.web_app as web_app
+from mailarium.repo_paths import validate_runtime_path
+
+
+def _set_main_streamlit(monkeypatch, *, page_name, sqlite_path="", errors=None):
+    """Install the minimal Streamlit surface consumed by ``main`` routing tests."""
+    sidebar_inputs = iter(["", sqlite_path])
+    fake_sidebar = SimpleNamespace(
+        radio=lambda *args, **kwargs: page_name,
+        text_input=lambda *args, **kwargs: next(sidebar_inputs),
+    )
+    attributes = {
+        "sidebar": fake_sidebar,
+        "markdown": lambda *args, **kwargs: None,
+        "info": lambda *args, **kwargs: None,
+    }
+    if errors is not None:
+        attributes["error"] = lambda message: errors.append(str(message))
+    monkeypatch.setattr(web_app, "st", SimpleNamespace(**attributes))
+
+
+def _stub_search_route(monkeypatch, calls):
+    """Prevent routing tests from entering dependent Streamlit page renderers."""
+    monkeypatch.setattr(web_app, "inject_styles", lambda: None)
+    monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
+    monkeypatch.setattr(web_app, "render_search_page", lambda retriever: calls.append(retriever))
+    monkeypatch.setattr(web_app, "get_retriever", lambda _vector_index, _sqlite=None: "retriever")
 
 
 def test_render_sidebar_delegates_to_impl(monkeypatch):
@@ -61,22 +86,8 @@ def test_render_search_page_delegates_with_callbacks(monkeypatch):
 
 def test_main_routes_search_to_render_search_page(monkeypatch):
     calls: list[object] = []
-
-    monkeypatch.setattr(web_app, "inject_styles", lambda: None)
-    monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
-    monkeypatch.setattr(web_app, "render_search_page", lambda retriever: calls.append(retriever))
-    monkeypatch.setattr(web_app, "get_retriever", lambda _chroma, _sqlite=None: "retriever")
-
-    fake_sidebar = SimpleNamespace(
-        radio=lambda *args, **kwargs: "Search",
-        text_input=lambda *args, **kwargs: "",
-    )
-    fake_streamlit = SimpleNamespace(
-        sidebar=fake_sidebar,
-        markdown=lambda *args, **kwargs: None,
-        info=lambda *args, **kwargs: None,
-    )
-    monkeypatch.setattr(web_app, "st", fake_streamlit)
+    _stub_search_route(monkeypatch, calls)
+    _set_main_streamlit(monkeypatch, page_name="Search")
 
     web_app.main()
 
@@ -86,26 +97,16 @@ def test_main_routes_search_to_render_search_page(monkeypatch):
 def test_main_routes_dashboard_with_sqlite_path(monkeypatch, tmp_path):
     calls: list[object] = []
     retriever_calls: list[tuple[object, object]] = []
-    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", str(tmp_path))
+    monkeypatch.setenv("MAILARIUM_ALLOWED_RUNTIME_ROOTS", str(tmp_path))
 
     monkeypatch.setattr(web_app, "inject_styles", lambda: None)
     monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
     monkeypatch.setattr(web_app, "render_dashboard_page", lambda sqlite_path=None: calls.append(sqlite_path))
     monkeypatch.setattr(
-        web_app, "get_retriever", lambda chroma, sqlite=None: retriever_calls.append((chroma, sqlite)) or "retriever"
+        web_app, "get_retriever", lambda vector_index, sqlite=None: retriever_calls.append((vector_index, sqlite)) or "retriever"
     )
 
-    sidebar_inputs = iter(["", str(tmp_path / "archive.db")])
-    fake_sidebar = SimpleNamespace(
-        radio=lambda *args, **kwargs: "Dashboard",
-        text_input=lambda *args, **kwargs: next(sidebar_inputs),
-    )
-    fake_streamlit = SimpleNamespace(
-        sidebar=fake_sidebar,
-        markdown=lambda *args, **kwargs: None,
-        info=lambda *args, **kwargs: None,
-    )
-    monkeypatch.setattr(web_app, "st", fake_streamlit)
+    _set_main_streamlit(monkeypatch, page_name="Dashboard", sqlite_path=str(tmp_path / "archive.db"))
 
     web_app.main()
 
@@ -120,22 +121,12 @@ def test_main_surfaces_runtime_path_errors_instead_of_crashing(monkeypatch, tmp_
     monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
     monkeypatch.setattr(web_app, "render_search_page", lambda retriever: None)
 
-    def fake_get_retriever(_chroma, _sqlite=None):
+    def fake_get_retriever(_vector_index, _sqlite=None):
         raise RuntimeError("invalid sqlite path")
 
     monkeypatch.setattr(web_app, "get_retriever", fake_get_retriever)
 
-    fake_sidebar = SimpleNamespace(
-        radio=lambda *args, **kwargs: "Search",
-        text_input=lambda *args, **kwargs: str(tmp_path / "bad-path"),
-    )
-    fake_streamlit = SimpleNamespace(
-        sidebar=fake_sidebar,
-        markdown=lambda *args, **kwargs: None,
-        info=lambda *args, **kwargs: None,
-        error=lambda message: errors.append(str(message)),
-    )
-    monkeypatch.setattr(web_app, "st", fake_streamlit)
+    _set_main_streamlit(monkeypatch, page_name="Search", sqlite_path=str(tmp_path / "bad-path"), errors=errors)
 
     web_app.main()
 
@@ -146,24 +137,8 @@ def test_main_surfaces_runtime_path_errors_instead_of_crashing(monkeypatch, tmp_
 def test_main_rejects_web_runtime_paths_outside_allowed_roots(monkeypatch):
     errors: list[str] = []
     calls: list[object] = []
-
-    monkeypatch.setattr(web_app, "inject_styles", lambda: None)
-    monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
-    monkeypatch.setattr(web_app, "render_search_page", lambda retriever: calls.append(retriever))
-    monkeypatch.setattr(web_app, "get_retriever", lambda _chroma, _sqlite=None: "retriever")
-
-    sidebar_inputs = iter(["", "/etc/archive.db"])
-    fake_sidebar = SimpleNamespace(
-        radio=lambda *args, **kwargs: "Search",
-        text_input=lambda *args, **kwargs: next(sidebar_inputs),
-    )
-    fake_streamlit = SimpleNamespace(
-        sidebar=fake_sidebar,
-        markdown=lambda *args, **kwargs: None,
-        info=lambda *args, **kwargs: None,
-        error=lambda message: errors.append(str(message)),
-    )
-    monkeypatch.setattr(web_app, "st", fake_streamlit)
+    _stub_search_route(monkeypatch, calls)
+    _set_main_streamlit(monkeypatch, page_name="Search", sqlite_path="/etc/archive.db", errors=errors)
 
     web_app.main()
 
@@ -183,24 +158,14 @@ def test_main_rejects_web_runtime_paths_outside_allowed_roots(monkeypatch):
 )
 def test_main_uses_resolved_sqlite_path_for_all_non_search_pages(monkeypatch, tmp_path, page_name, handler_name):
     calls: list[object] = []
-    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", str(tmp_path))
+    monkeypatch.setenv("MAILARIUM_ALLOWED_RUNTIME_ROOTS", str(tmp_path))
 
     monkeypatch.setattr(web_app, "inject_styles", lambda: None)
     monkeypatch.setattr(web_app, "render_sidebar", lambda retriever: None)
-    monkeypatch.setattr(web_app, "get_retriever", lambda _chroma, _sqlite=None: "retriever")
+    monkeypatch.setattr(web_app, "get_retriever", lambda _vector_index, _sqlite=None: "retriever")
     monkeypatch.setattr(web_app, handler_name, lambda sqlite_path=None: calls.append(sqlite_path))
 
-    sidebar_inputs = iter(["", str(tmp_path / "archive.db")])
-    fake_sidebar = SimpleNamespace(
-        radio=lambda *args, **kwargs: page_name,
-        text_input=lambda *args, **kwargs: next(sidebar_inputs),
-    )
-    fake_streamlit = SimpleNamespace(
-        sidebar=fake_sidebar,
-        markdown=lambda *args, **kwargs: None,
-        info=lambda *args, **kwargs: None,
-    )
-    monkeypatch.setattr(web_app, "st", fake_streamlit)
+    _set_main_streamlit(monkeypatch, page_name=page_name, sqlite_path=str(tmp_path / "archive.db"))
 
     web_app.main()
 

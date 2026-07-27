@@ -1,0 +1,46 @@
+name: Usage Question
+description: Ask a setup or workflow question using synthetic context only.
+title: "[question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use synthetic examples only. Do not include mailbox content, personal identifiers, private paths, databases, exports, or screenshots from a live archive.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Setup or installation
+        - Ingest
+        - CLI
+        - MCP
+        - Streamlit
+        - Retrieval or search
+        - Export or reporting
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Describe the desired outcome with a synthetic example.
+      placeholder: How can a local operator search a synthetic project archive by sender and date?
+    validations:
+      required: true
+  - type: textarea
+    id: attempts
+    attributes:
+      label: What have you tried?
+      description: Include sanitized commands, version output, and diagnostics when relevant.
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy Check
+      options:
+        - label: This question contains only synthetic or sanitized information and no live mailbox data.
+          required: true

@@ -1,53 +1,15 @@
-"""Tests for inferred thread-parent matching."""
+"""Verifies inferred threading links messages to plausible parents using header and subject signals."""
 
-from src.parse_olm import Email
-from src.thread_inference import infer_parent_candidate
+from mailarium.thread_inference import infer_parent_candidate
 
-
-def _make_email(**overrides) -> Email:
-    defaults = {
-        "message_id": "<msg1@example.com>",
-        "subject": "Budget Review",
-        "sender_name": "Alice",
-        "sender_email": "employee@example.test",
-        "to": ["Bob <bob@example.com>"],
-        "cc": [],
-        "bcc": [],
-        "date": "2024-01-15T10:30:00",
-        "body_text": "Test body",
-        "body_html": "",
-        "folder": "Inbox",
-        "has_attachments": False,
-        "to_identities": ["bob@example.com"],
-    }
-    defaults.update(overrides)
-    return Email(**defaults)
+from .helpers.email_db_builders import make_inferred_parent_email, make_inferred_reply_email
 
 
 def test_infer_parent_candidate_recovers_high_confidence_parent():
-    parent = _make_email(
-        message_id="<parent@example.com>",
-        subject="Budget Review",
-        sender_name="Alice",
-        sender_email="employee@example.test",
-        to=["Bob <bob@example.com>"],
-        to_identities=["bob@example.com"],
-        date="2024-01-15T10:00:00",
-        conversation_id="conv-1",
-    )
-    child = _make_email(
-        message_id="<child@example.com>",
-        subject="RE: Budget Review",
-        sender_name="Bob",
-        sender_email="bob@example.com",
-        to=["Alice <employee@example.test>"],
-        to_identities=["employee@example.test"],
-        date="2024-01-15T10:30:00",
+    parent = make_inferred_parent_email(conversation_id="conv-1")
+    child = make_inferred_reply_email(
         in_reply_to="",
         references=[],
-        reply_context_from="employee@example.test",
-        reply_context_to=["bob@example.com"],
-        reply_context_subject="Budget Review",
     )
 
     match = infer_parent_candidate(child, [parent])
@@ -59,29 +21,11 @@ def test_infer_parent_candidate_recovers_high_confidence_parent():
 
 
 def test_infer_parent_candidate_handles_aware_child_and_naive_parent_dates():
-    parent = _make_email(
-        message_id="<parent@example.com>",
-        subject="Budget Review",
-        sender_name="Alice",
-        sender_email="employee@example.test",
-        to=["Bob <bob@example.com>"],
-        to_identities=["bob@example.com"],
-        date="2024-01-15T10:00:00",
-        conversation_id="conv-1",
-    )
-    child = _make_email(
-        message_id="<child@example.com>",
-        subject="RE: Budget Review",
-        sender_name="Bob",
-        sender_email="bob@example.com",
-        to=["Alice <employee@example.test>"],
-        to_identities=["employee@example.test"],
+    parent = make_inferred_parent_email(conversation_id="conv-1")
+    child = make_inferred_reply_email(
         date="2024-01-15T10:30:00+00:00",
         in_reply_to="",
         references=[],
-        reply_context_from="employee@example.test",
-        reply_context_to=["bob@example.com"],
-        reply_context_subject="Budget Review",
     )
 
     match = infer_parent_candidate(child, [parent])
@@ -91,7 +35,7 @@ def test_infer_parent_candidate_handles_aware_child_and_naive_parent_dates():
 
 
 def test_infer_parent_candidate_returns_none_for_ambiguous_matches():
-    candidate_a = _make_email(
+    candidate_a = make_inferred_parent_email(
         message_id="<parent-a@example.com>",
         subject="Budget Review",
         sender_email="employee@example.test",
@@ -99,7 +43,7 @@ def test_infer_parent_candidate_returns_none_for_ambiguous_matches():
         to_identities=["bob@example.com"],
         date="2024-01-15T10:00:00",
     )
-    candidate_b = _make_email(
+    candidate_b = make_inferred_parent_email(
         message_id="<parent-b@example.com>",
         subject="Budget Review",
         sender_email="employee@example.test",
@@ -107,24 +51,13 @@ def test_infer_parent_candidate_returns_none_for_ambiguous_matches():
         to_identities=["bob@example.com"],
         date="2024-01-15T10:05:00",
     )
-    child = _make_email(
-        message_id="<child@example.com>",
-        subject="RE: Budget Review",
-        sender_name="Bob",
-        sender_email="bob@example.com",
-        to=["Alice <employee@example.test>"],
-        to_identities=["employee@example.test"],
-        date="2024-01-15T10:30:00",
-        reply_context_from="employee@example.test",
-        reply_context_to=["bob@example.com"],
-        reply_context_subject="Budget Review",
-    )
+    child = make_inferred_reply_email()
 
     assert infer_parent_candidate(child, [candidate_a, candidate_b]) is None
 
 
 def test_infer_parent_candidate_returns_none_for_low_confidence_case():
-    parent = _make_email(
+    parent = make_inferred_parent_email(
         message_id="<parent@example.com>",
         subject="Different topic",
         sender_email="carol@example.com",
@@ -132,40 +65,20 @@ def test_infer_parent_candidate_returns_none_for_low_confidence_case():
         to_identities=["dan@example.com"],
         date="2024-01-15T10:00:00",
     )
-    child = _make_email(
-        message_id="<child@example.com>",
+    child = make_inferred_reply_email(
         subject="RE: Budget Review",
-        sender_name="Bob",
-        sender_email="bob@example.com",
-        to=["Alice <employee@example.test>"],
-        to_identities=["employee@example.test"],
-        date="2024-01-15T10:30:00",
-        reply_context_subject="Budget Review",
+        reply_context_from="",
+        reply_context_to=[],
     )
 
     assert infer_parent_candidate(child, [parent]) is None
 
 
 def test_infer_parent_candidate_never_mutates_canonical_thread_fields():
-    parent = _make_email(
-        message_id="<parent@example.com>",
-        subject="Budget Review",
-        sender_email="employee@example.test",
-        to=["Bob <bob@example.com>"],
-        to_identities=["bob@example.com"],
-        date="2024-01-15T10:00:00",
-    )
-    child = _make_email(
-        message_id="<child@example.com>",
-        subject="RE: Budget Review",
-        sender_name="Bob",
-        sender_email="bob@example.com",
-        to=["Alice <employee@example.test>"],
-        to_identities=["employee@example.test"],
-        date="2024-01-15T10:30:00",
+    parent = make_inferred_parent_email()
+    child = make_inferred_reply_email(
         in_reply_to="",
         references=[],
-        reply_context_from="employee@example.test",
     )
 
     infer_parent_candidate(child, [parent])

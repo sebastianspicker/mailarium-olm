@@ -1,5 +1,11 @@
+"""Exercises answer confidence, timeline synthesis, quote handling, and final-response rendering.
+
+It prevents overclaims by rendering ambiguity or insufficient-evidence outcomes when support is weak.
+"""
+
+
 def test_answer_quality_reports_ambiguity_for_close_top_scores():
-    from src.tools.search_answer_context import _answer_quality
+    from mailarium.tools.search_answer_context import _answer_quality
 
     summary = _answer_quality(
         candidates=[
@@ -16,7 +22,7 @@ def test_answer_quality_reports_ambiguity_for_close_top_scores():
 
 
 def test_answer_quality_prefers_calibrated_body_evidence_over_slightly_higher_synthetic_segment_score():
-    from src.tools.search_answer_context import _answer_quality
+    from mailarium.tools.search_answer_context import _answer_quality
 
     summary = _answer_quality(
         candidates=[
@@ -37,7 +43,7 @@ def test_answer_quality_prefers_calibrated_body_evidence_over_slightly_higher_sy
 
 
 def test_answer_quality_exposes_stable_top_candidate_reference():
-    from src.tools.search_answer_context import _answer_quality
+    from mailarium.tools.search_answer_context import _answer_quality
 
     summary = _answer_quality(
         candidates=[
@@ -66,7 +72,7 @@ def test_answer_quality_exposes_stable_top_candidate_reference():
 
 
 def test_timeline_summary_tracks_sender_thread_and_recipient_set_changes():
-    from src.tools.search_answer_context import _timeline_summary
+    from mailarium.tools.search_answer_context import _timeline_summary
 
     timeline = _timeline_summary(
         candidates=[
@@ -134,7 +140,7 @@ def test_timeline_summary_tracks_sender_thread_and_recipient_set_changes():
 
 
 def test_answer_policy_prefers_forensic_verification_for_quotes():
-    from src.tools.search_answer_context import _answer_policy
+    from mailarium.tools.search_answer_context import _answer_policy
 
     policy = _answer_policy(
         question="What did they say exactly about the complaint?",
@@ -156,7 +162,7 @@ def test_answer_policy_prefers_forensic_verification_for_quotes():
 
 
 def test_answer_policy_marks_ambiguous_cases_without_overclaiming():
-    from src.tools.search_answer_context import _answer_policy
+    from mailarium.tools.search_answer_context import _answer_policy
 
     policy = _answer_policy(
         question="Who sent the note?",
@@ -182,7 +188,7 @@ def test_answer_policy_marks_ambiguous_cases_without_overclaiming():
 
 
 def test_answer_policy_marks_insufficient_evidence_for_weak_message():
-    from src.tools.search_answer_context import _answer_policy
+    from mailarium.tools.search_answer_context import _answer_policy
 
     policy = _answer_policy(
         question="What does the scan prove?",
@@ -204,7 +210,7 @@ def test_answer_policy_marks_insufficient_evidence_for_weak_message():
 
 
 def test_final_answer_contract_for_ambiguous_response():
-    from src.tools.search_answer_context import _final_answer_contract
+    from mailarium.tools.search_answer_context import _final_answer_contract
 
     contract = _final_answer_contract(
         answer_policy={
@@ -231,7 +237,7 @@ def test_final_answer_contract_for_ambiguous_response():
 
 
 def test_final_answer_contract_for_insufficient_evidence_response():
-    from src.tools.search_answer_context import _final_answer_contract
+    from mailarium.tools.search_answer_context import _final_answer_contract
 
     contract = _final_answer_contract(
         answer_policy={
@@ -252,7 +258,7 @@ def test_final_answer_contract_for_insufficient_evidence_response():
 
 
 def test_render_final_answer_for_answer_response():
-    from src.tools.search_answer_context import _render_final_answer
+    from mailarium.tools.search_answer_context import _render_final_answer
 
     final_answer = _render_final_answer(
         candidates=[
@@ -286,7 +292,7 @@ def test_render_final_answer_for_answer_response():
 
 
 def test_render_final_answer_prefers_exact_excerpt_for_exact_wording_requests():
-    from src.tools.search_answer_context import _render_final_answer
+    from mailarium.tools.search_answer_context import _render_final_answer
 
     final_answer = _render_final_answer(
         candidates=[
@@ -321,7 +327,7 @@ def test_render_final_answer_prefers_exact_excerpt_for_exact_wording_requests():
 
 
 def test_exact_wording_classifier_handles_broader_english_and_german_variants():
-    from src.tools.search_answer_context_rendering import _question_requests_exact_wording
+    from mailarium.tools.search_answer_context_rendering import _question_requests_exact_wording
 
     assert _question_requests_exact_wording("Give the exact quote word-for-word.") is True
     assert _question_requests_exact_wording("Mit welchem Wortlaut genau wurde das geschrieben?") is True
@@ -329,7 +335,7 @@ def test_exact_wording_classifier_handles_broader_english_and_german_variants():
 
 
 def test_render_final_answer_for_ambiguous_response():
-    from src.tools.search_answer_context import _render_final_answer
+    from mailarium.tools.search_answer_context import _render_final_answer
 
     final_answer = _render_final_answer(
         candidates=[
@@ -374,7 +380,7 @@ def test_render_final_answer_for_ambiguous_response():
 
 
 def test_render_final_answer_for_insufficient_evidence_response():
-    from src.tools.search_answer_context import _render_final_answer
+    from mailarium.tools.search_answer_context import _render_final_answer
 
     final_answer = _render_final_answer(
         candidates=[
@@ -408,7 +414,7 @@ def test_render_final_answer_for_insufficient_evidence_response():
 
 
 def test_render_final_answer_uses_attachment_handle_for_attachment_evidence():
-    from src.tools.search_answer_context import _render_final_answer
+    from mailarium.tools.search_answer_context import _render_final_answer
 
     final_answer = _render_final_answer(
         candidates=[],

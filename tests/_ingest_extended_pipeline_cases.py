@@ -1,11 +1,5 @@
 # ruff: noqa: I001
-"""Extended tests for src/ingest.py to increase coverage from ~73% to >=85%.
-
-Covers: reingest paths, _reset_index, _resolve_entity_extractor,
-_auto_download_spacy_models, _checkpoint_wal, _NoOpProgressBar,
-_make_progress_bar, _hash_file_sha256, pipeline edge cases,
-main() dispatch branches, attachment processing, and more.
-"""
+"""Ingest pipeline durability, analytics, attachments, checkpoints, and rollback behavior."""
 
 import argparse
 import types
@@ -13,14 +7,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.email_db import EmailDatabase
-from src.ingest import (
+from mailarium.email_db import EmailDatabase
+from mailarium.ingest import (
     _EmbedPipeline,
 )
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
 from .helpers.ingest_extended_fixtures import _MockEmailDB, _make_email
+from .helpers.ingest_fixtures import _make_ingest_body_chunks, _make_ingest_pipeline, _make_pipeline_embedder
 
 
 class TestCheckpointWal:
@@ -141,7 +136,7 @@ class TestPipelineProcessBatch:
         )
         assert pipeline._cooldown == 0.01
 
-        from src.chunker import EmailChunk
+        from mailarium.chunker import EmailChunk
 
         chunk = EmailChunk(uid="test", chunk_id="test::0", text="hello", metadata={})
         pipeline._process_batch([chunk], [])
@@ -162,7 +157,7 @@ class TestPipelineProcessBatch:
         pipeline._wal_checkpoint_interval = 1
         pipeline.batches_written = 0
 
-        from src.chunker import EmailChunk
+        from mailarium.chunker import EmailChunk
 
         chunk = EmailChunk(uid="test", chunk_id="test::0", text="hello", metadata={})
         pipeline._process_batch([chunk], [])
@@ -205,30 +200,30 @@ class TestPipelineSubmitError:
 
 
 class TestResetIndex:
-    def test_reset_index_deletes_sqlite_and_chromadb(self, tmp_path, monkeypatch):
-        from src.ingest import _reset_index
+    def test_reset_index_preserves_sqlite_and_deletes_derived_index(self, tmp_path, monkeypatch):
+        from mailarium.ingest import _reset_index
 
         sqlite_file = tmp_path / "test.db"
-        sqlite_file.write_text("dummy", encoding="utf-8")
-        chroma_dir = tmp_path / "chromadb"
-        chroma_dir.mkdir()
-        (chroma_dir / "data.bin").write_text("dummy", encoding="utf-8")
+        EmailDatabase(str(sqlite_file)).close()
+        vector_index_dir = tmp_path / "vector-index"
+        vector_index_dir.mkdir()
+        (vector_index_dir / "data.bin").write_text("dummy", encoding="utf-8")
 
         args = argparse.Namespace(
             sqlite_path=str(sqlite_file),
-            chromadb_path=str(chroma_dir),
+            vector_index_path=str(vector_index_dir),
         )
         _reset_index(args)
 
-        assert not sqlite_file.exists()
-        assert not chroma_dir.exists()
+        assert sqlite_file.exists()
+        assert not vector_index_dir.exists()
 
     def test_reset_index_handles_missing_files(self, tmp_path):
-        from src.ingest import _reset_index
+        from mailarium.ingest import _reset_index
 
         args = argparse.Namespace(
             sqlite_path=str(tmp_path / "nonexistent.db"),
-            chromadb_path=str(tmp_path / "nonexistent_dir"),
+            vector_index_path=str(tmp_path / "nonexistent_dir"),
         )
         # Should not raise
         _reset_index(args)
@@ -268,73 +263,31 @@ class TestPipelineSkipAlreadyInserted:
         email2 = _make_email(2)
         mock_db.insert_emails_batch = lambda emails, ingestion_run_id=None, commit=True: {email2.uid}
 
-        class _Embedder:
-            def __init__(self):
-                self.collection = MagicMock()
-                self.seen_chunk_ids: list[str] = []
-
-            def add_chunks(self, chunks, **_kw):
-                self.seen_chunk_ids = [str(chunk.chunk_id) for chunk in chunks]
-                return len(chunks)
-
-            def get_existing_ids(self, refresh=False):
-                return {f"{email1.uid}__0", f"{email2.uid}__0"}
-
-        pipeline = _EmbedPipeline(
-            embedder=_Embedder(),
-            email_db=mock_db,
-            entity_extractor_fn=None,
-            batch_size=100,
+        seen_chunk_ids = []
+        pipeline = _make_ingest_pipeline(
+            _make_pipeline_embedder(
+                existing_ids={f"{email1.uid}__0", f"{email2.uid}__0"},
+                seen_chunk_ids=seen_chunk_ids,
+            ),
+            mock_db,
         )
-        pipeline._wal_checkpoint_interval = 0
-
-        from src.chunker import EmailChunk
-
-        for email in (email1, email2):
-            email._ingest_body_chunk_count = 1
-            email._ingest_attachment_chunk_count = 0
-            email._ingest_image_chunk_count = 0
-            email._ingest_attachment_requested = False
-            email._ingest_image_requested = False
-        chunk1 = EmailChunk(uid=email1.uid, chunk_id=f"{email1.uid}__0", text="hello", metadata={"uid": email1.uid})
-        chunk2 = EmailChunk(uid=email2.uid, chunk_id=f"{email2.uid}__0", text="hello", metadata={"uid": email2.uid})
+        chunk1, chunk2 = _make_ingest_body_chunks(email1, email2)
 
         pipeline._process_batch([chunk1, chunk2], [email1, email2])
 
-        assert pipeline._embedder.seen_chunk_ids == [f"{email2.uid}__0"]
+        assert seen_chunk_ids == [f"{email2.uid}__0"]
         assert [row["email_uid"] for row in mock_db._pending] == [email2.uid]
         assert [row["email_uid"] for row in mock_db._completed] == [email2.uid]
 
     def test_marks_ingest_failed_when_embedding_raises(self):
         mock_db = _MockEmailDB()
 
-        class _BoomEmbedder:
-            def __init__(self):
-                self.collection = MagicMock()
-
-            def add_chunks(self, chunks, **_kw):
-                raise RuntimeError("vector store unavailable")
-
-            def get_existing_ids(self, refresh=False):
-                return {"uid__0"}
-
-        pipeline = _EmbedPipeline(
-            embedder=_BoomEmbedder(),
-            email_db=mock_db,
-            entity_extractor_fn=None,
-            batch_size=100,
-        )
-        pipeline._wal_checkpoint_interval = 0
-
-        from src.chunker import EmailChunk
-
         email = _make_email(1)
-        email._ingest_body_chunk_count = 1
-        email._ingest_attachment_chunk_count = 0
-        email._ingest_image_chunk_count = 0
-        email._ingest_attachment_requested = False
-        email._ingest_image_requested = False
-        chunk = EmailChunk(uid=email.uid, chunk_id=f"{email.uid}__0", text="hello", metadata={"uid": email.uid})
+        pipeline = _make_ingest_pipeline(
+            _make_pipeline_embedder(existing_ids={"uid__0"}, error=RuntimeError("vector store unavailable")),
+            mock_db,
+        )
+        (chunk,) = _make_ingest_body_chunks(email)
 
         with pytest.raises(RuntimeError, match="vector store unavailable"):
             pipeline._process_batch([chunk], [email])
@@ -346,33 +299,9 @@ class TestPipelineSkipAlreadyInserted:
         mock_db = _MockEmailDB()
         mock_db.mark_ingest_batch_completed = MagicMock(side_effect=RuntimeError("sqlite finalize failed"))
 
-        class _Embedder:
-            def __init__(self):
-                self.collection = MagicMock()
-
-            def add_chunks(self, chunks, **_kw):
-                return len(chunks)
-
-            def get_existing_ids(self, refresh=False):
-                return {"uid__0"}
-
-        pipeline = _EmbedPipeline(
-            embedder=_Embedder(),
-            email_db=mock_db,
-            entity_extractor_fn=None,
-            batch_size=100,
-        )
-        pipeline._wal_checkpoint_interval = 0
-
-        from src.chunker import EmailChunk
-
         email = _make_email(1)
-        email._ingest_body_chunk_count = 1
-        email._ingest_attachment_chunk_count = 0
-        email._ingest_image_chunk_count = 0
-        email._ingest_attachment_requested = False
-        email._ingest_image_requested = False
-        chunk = EmailChunk(uid=email.uid, chunk_id=f"{email.uid}__0", text="hello", metadata={"uid": email.uid})
+        pipeline = _make_ingest_pipeline(_make_pipeline_embedder(existing_ids={"uid__0"}), mock_db)
+        (chunk,) = _make_ingest_body_chunks(email)
 
         with pytest.raises(RuntimeError, match="sqlite finalize failed"):
             pipeline._process_batch([chunk], [email])
@@ -387,34 +316,11 @@ class TestPipelineSkipAlreadyInserted:
         mock_db.insert_emails_batch = lambda emails, ingestion_run_id=None, commit=True: {email2.uid}
         mock_db.mark_ingest_batch_completed = MagicMock(side_effect=RuntimeError("sqlite finalize failed"))
 
-        class _Embedder:
-            def __init__(self):
-                self.collection = MagicMock()
-
-            def add_chunks(self, chunks, **_kw):
-                return len(chunks)
-
-            def get_existing_ids(self, refresh=False):
-                return {f"{email1.uid}__0", f"{email2.uid}__0"}
-
-        pipeline = _EmbedPipeline(
-            embedder=_Embedder(),
-            email_db=mock_db,
-            entity_extractor_fn=None,
-            batch_size=100,
+        pipeline = _make_ingest_pipeline(
+            _make_pipeline_embedder(existing_ids={f"{email1.uid}__0", f"{email2.uid}__0"}),
+            mock_db,
         )
-        pipeline._wal_checkpoint_interval = 0
-
-        from src.chunker import EmailChunk
-
-        for email in (email1, email2):
-            email._ingest_body_chunk_count = 1
-            email._ingest_attachment_chunk_count = 0
-            email._ingest_image_chunk_count = 0
-            email._ingest_attachment_requested = False
-            email._ingest_image_requested = False
-        chunk1 = EmailChunk(uid=email1.uid, chunk_id=f"{email1.uid}__0", text="hello", metadata={"uid": email1.uid})
-        chunk2 = EmailChunk(uid=email2.uid, chunk_id=f"{email2.uid}__0", text="hello", metadata={"uid": email2.uid})
+        chunk1, chunk2 = _make_ingest_body_chunks(email1, email2)
 
         with pytest.raises(RuntimeError, match="sqlite finalize failed"):
             pipeline._process_batch([chunk1, chunk2], [email1, email2])
@@ -423,7 +329,7 @@ class TestPipelineSkipAlreadyInserted:
         assert mock_db._failed == {"email_uids": [email2.uid], "error_message": "sqlite finalize failed"}
 
     def test_ingest_marks_run_failed_when_pipeline_raises(self, monkeypatch, tmp_path):
-        import src.ingest as ingest_mod
+        import mailarium.ingest as ingest_mod
 
         emails = [_make_email(1)]
         monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
@@ -452,7 +358,7 @@ class TestPipelineSkipAlreadyInserted:
             def get_existing_ids(self, refresh=False):
                 return {f"{emails[0].uid}__0"}
 
-        monkeypatch.setattr("src.embedder.EmailEmbedder", _BoomEmbedder)
+        monkeypatch.setattr("mailarium.embedder.EmailEmbedder", _BoomEmbedder)
 
         sqlite_file = str(tmp_path / "test.db")
         with pytest.raises(RuntimeError, match="vector store unavailable"):
@@ -467,27 +373,12 @@ class TestPipelineSkipAlreadyInserted:
     def test_rolls_back_relational_rows_when_embedding_raises(self, tmp_path):
         db = EmailDatabase(str(tmp_path / "emails.db"))
 
-        class _BoomEmbedder:
-            def add_chunks(self, chunks, **_kw):
-                raise RuntimeError("vector store unavailable")
-
-        pipeline = _EmbedPipeline(
-            embedder=_BoomEmbedder(),
-            email_db=db,
-            entity_extractor_fn=None,
-            batch_size=100,
-        )
-        pipeline._wal_checkpoint_interval = 0
-
-        from src.chunker import EmailChunk
-
         email = _make_email(1, body_text="")
-        email._ingest_body_chunk_count = 1
-        email._ingest_attachment_chunk_count = 0
-        email._ingest_image_chunk_count = 0
-        email._ingest_attachment_requested = False
-        email._ingest_image_requested = False
-        chunk = EmailChunk(uid=email.uid, chunk_id=f"{email.uid}__0", text="hello", metadata={"uid": email.uid})
+        pipeline = _make_ingest_pipeline(
+            _make_pipeline_embedder(existing_ids=set(), error=RuntimeError("vector store unavailable")),
+            db,
+        )
+        (chunk,) = _make_ingest_body_chunks(email)
 
         with pytest.raises(RuntimeError, match="vector store unavailable"):
             pipeline._process_batch([chunk], [email])
@@ -501,7 +392,7 @@ class TestPipelineSkipAlreadyInserted:
 class TestAttachmentProcessing:
     def test_attachment_text_extraction(self, monkeypatch, tmp_path):
         """When extract_attachments=True, attachment text should be chunked."""
-        import src.ingest as ingest_mod
+        import mailarium.ingest as ingest_mod
 
         class _EmailWithAtt:
             def __init__(self):
@@ -535,8 +426,8 @@ class TestAttachmentProcessing:
         original_import = __import__
 
         def _mock_import(name, *args, **kwargs):
-            if name == "src.attachment_extractor" or (args and "attachment_extractor" in str(args)):
-                mod = types.ModuleType("src.attachment_extractor")
+            if name == "mailarium.attachment_extractor" or (args and "attachment_extractor" in str(args)):
+                mod = types.ModuleType("mailarium.attachment_extractor")
                 mod.extract_text = lambda name, data: "extracted text" if data else None
                 return mod
             return original_import(name, *args, **kwargs)

@@ -1,19 +1,14 @@
-"""Extended tests for src/ingest.py to increase coverage from ~73% to >=85%.
-
-Covers: reingest paths, _reset_index, _resolve_entity_extractor,
-_auto_download_spacy_models, _checkpoint_wal, _NoOpProgressBar,
-_make_progress_bar, _hash_file_sha256, pipeline edge cases,
-main() dispatch branches, attachment processing, and more.
-"""
+"""Fake ingest dependencies, email records, and import blockers for ingest tests."""
 
 from unittest.mock import MagicMock
 
-from src.parse_olm import Email
+from mailarium.parse_olm import Email
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
 def _make_email(idx, body_text="Body text that is long enough for analytics processing and detection"):
+    """Build deterministic email data without external services."""
     return Email(
         message_id=f"<msg{idx}@test.com>",
         subject=f"Subject {idx}",
@@ -31,36 +26,44 @@ def _make_email(idx, body_text="Body text that is long enough for analytics proc
 
 
 class _MockEmbedder:
+    """Test double carrying deterministic MockEmbedder state for focused unit tests."""
+
     def __init__(self, **_kw):
-        self.chromadb_path = "mock"
+        """Implement the init behavior exposed by the _MockEmbedder test double."""
+        self.vector_index_path = "mock"
         self.model_name = "mock"
         self._count = 0
         self.collection = MagicMock()
         self.collection.metadata = {"hnsw:space": "cosine"}
 
     def count(self):
+        """Implement the count behavior exposed by the _MockEmbedder test double."""
         return self._count
 
     def add_chunks(self, chunks, **_kw):
+        """Implement the add chunks behavior exposed by the _MockEmbedder test double."""
         self._count += len(chunks)
         return len(chunks)
 
     def set_sparse_db(self, db):
-        pass
+        """Implement the set sparse db behavior exposed by the _MockEmbedder test double."""
 
     def warmup(self):
-        pass
+        """Implement the warmup behavior exposed by the _MockEmbedder test double."""
 
     def close(self):
-        pass
+        """Implement the close behavior exposed by the _MockEmbedder test double."""
 
     def get_existing_ids(self, refresh=False):
+        """Implement the get existing ids behavior exposed by the _MockEmbedder test double."""
         return set()
 
     def delete_chunks_by_uid(self, uid):
+        """Implement the delete chunks by uid behavior exposed by the _MockEmbedder test double."""
         return 0
 
     def upsert_chunks(self, chunks, batch_size=100):
+        """Implement the upsert chunks behavior exposed by the _MockEmbedder test double."""
         return len(chunks)
 
 
@@ -68,6 +71,7 @@ class _MockEmailDB:
     """Lightweight mock for EmailDatabase used in pipeline tests."""
 
     def __init__(self):
+        """Implement the init behavior exposed by the _MockEmailDB test double."""
         self.conn = MagicMock()
         self._inserted = []
         self._entities = []
@@ -77,34 +81,42 @@ class _MockEmailDB:
         self._failed = {}
 
     def insert_emails_batch(self, emails, ingestion_run_id=None, commit=True):
+        """Implement the insert emails batch behavior exposed by the _MockEmailDB test double."""
         uids = [e.uid for e in emails]
         self._inserted.extend(uids)
         return set(uids)
 
     def insert_entities_batch(self, uid, entities, commit=True, **kwargs):
+        """Implement the insert entities batch behavior exposed by the _MockEmailDB test double."""
         self._entities.extend(entities)
 
     def update_analytics_batch(self, rows, commit=True):
+        """Implement the update analytics batch behavior exposed by the _MockEmailDB test double."""
         self._analytics.extend(rows)
         return len(rows)
 
     def mark_ingest_batch_pending(self, rows, commit=True):
+        """Implement the mark ingest batch pending behavior exposed by the _MockEmailDB test double."""
         self._pending = list(rows)
 
     def mark_ingest_batch_completed(self, rows, commit=True):
+        """Implement the mark ingest batch completed behavior exposed by the _MockEmailDB test double."""
         self._completed = list(rows)
 
     def mark_ingest_batch_failed(self, email_uids, *, error_message, commit=True):
+        """Implement the mark ingest batch failed behavior exposed by the _MockEmailDB test double."""
         self._failed = {"email_uids": list(email_uids), "error_message": error_message}
 
     def email_exists(self, uid):
+        """Implement the email exists behavior exposed by the _MockEmailDB test double."""
         return uid in self._inserted
 
     def email_count(self):
+        """Implement the email count behavior exposed by the _MockEmailDB test double."""
         return len(self._inserted)
 
     def close(self):
-        pass
+        """Implement the close behavior exposed by the _MockEmailDB test double."""
 
 
 def _block_import(module_name):

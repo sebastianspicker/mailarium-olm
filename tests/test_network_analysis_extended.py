@@ -1,48 +1,17 @@
-"""Extended tests for src/network_analysis.py — targeting uncovered lines."""
+"""Network analysis fallbacks, graph paths, cache limits, timing, relationships, and GraphML export."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from src.email_db import EmailDatabase
-from src.network_analysis import _ANALYSIS_CACHE_MAX, _BETWEENNESS_CACHE_MAX, CommunicationNetwork
-from src.parse_olm import Email
+import pytest
 
+from mailarium.email_db import EmailDatabase
+from mailarium.network_analysis import _ANALYSIS_CACHE_MAX, _BETWEENNESS_CACHE_MAX, CommunicationNetwork
 
-def _make_email(**overrides) -> Email:
-    defaults = {
-        "message_id": "<msg1@example.com>",
-        "subject": "Hello",
-        "sender_name": "Alice",
-        "sender_email": "employee@example.test",
-        "to": ["Bob <bob@example.com>"],
-        "cc": [],
-        "bcc": [],
-        "date": "2024-01-15T10:30:00",
-        "body_text": "Test body",
-        "body_html": "",
-        "folder": "Inbox",
-        "has_attachments": False,
-    }
-    defaults.update(overrides)
-    return Email(**defaults)
-
-
-def _populated_db() -> EmailDatabase:
-    db = EmailDatabase(":memory:")
-    db.insert_email(_make_email(message_id="<m1@example.test>", to=["Bob <bob@example.com>"]))
-    db.insert_email(_make_email(message_id="<m2@example.test>", to=["Bob <bob@example.com>"]))
-    db.insert_email(_make_email(message_id="<m3@example.test>", to=["Carol <carol@example.com>"]))
-    db.insert_email(
-        _make_email(
-            message_id="<m4@example.test>",
-            sender_email="bob@example.com",
-            sender_name="Bob",
-            to=["Alice <employee@example.test>"],
-        )
-    )
-    return db
+from .helpers.email_db_builders import _make_email
+from .helpers.email_db_builders import make_network_db as _populated_db
 
 
 def _large_db(n_nodes: int = 120) -> EmailDatabase:
@@ -151,8 +120,15 @@ class TestFindPathsEdgeCases:
 
 
 class TestCommunityDetection:
-    def test_community_detection_fallback_to_label_propagation(self):
-        """When louvain_communities is not available, use label_propagation."""
+    @pytest.mark.parametrize(
+        ("method_name", "method_args", "result_key"),
+        [
+            ("network_analysis", (), "communities"),
+            ("relationship_summary", ("employee@example.test",), "community"),
+        ],
+    )
+    def test_community_detection_fallback_to_label_propagation(self, method_name, method_args, result_key):
+        """Both graph reports use label propagation when Louvain is unavailable."""
         db = _populated_db()
         net = CommunicationNetwork(db)
         import networkx as nx
@@ -162,8 +138,8 @@ class TestCommunityDetection:
         try:
             if hasattr(nx.community, "louvain_communities"):
                 delattr(nx.community, "louvain_communities")
-            result = net.network_analysis()
-            assert isinstance(result["communities"], list)
+            result = getattr(net, method_name)(*method_args)
+            assert isinstance(result[result_key], list)
         finally:
             if original is not None:
                 nx.community.louvain_communities = original
@@ -362,22 +338,6 @@ class TestRelationshipSummaryEdgeCases:
                 if original_lpc is not None:
                     nx.community.label_propagation_communities = original_lpc
         assert result["community"] == []
-
-    def test_relationship_summary_label_propagation_fallback(self):
-        """Uses label_propagation when louvain not available."""
-        db = _populated_db()
-        net = CommunicationNetwork(db)
-        import networkx as nx
-
-        original = getattr(nx.community, "louvain_communities", None)
-        try:
-            if hasattr(nx.community, "louvain_communities"):
-                delattr(nx.community, "louvain_communities")
-            result = net.relationship_summary("employee@example.test")
-            assert isinstance(result["community"], list)
-        finally:
-            if original is not None:
-                nx.community.louvain_communities = original
 
 
 # ── export_graphml ───────────────────────────────────────────

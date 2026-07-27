@@ -1,20 +1,16 @@
 # ruff: noqa: I001
-"""Targeted coverage tests for src/retriever.py uncovered lines.
-
-Each test targets a specific branch or code path identified by coverage analysis.
-All tests run without GPU, real models, or network access.
-"""
+"""Retriever thread results, archive summaries, serialization, and output-budget behavior."""
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.retriever import EmailRetriever
+from mailarium.retriever import EmailRetriever
 
 # ── Helpers ────────────────────────────────────────────────────────
 
-from .helpers.retriever_cases import _bare_retriever, _make_result
+from .helpers.retriever_cases import _bare_retriever, _make_result, _thread_collection
 
 
 class TestSearchByThread:
@@ -37,15 +33,14 @@ class TestSearchByThread:
 
     def test_returns_results_sorted_by_date(self):
         r = _bare_retriever()
-        r.collection = MagicMock()
-        r.collection.get.return_value = {
-            "ids": ["c1", "c2"],
-            "documents": ["body1", "body2"],
-            "metadatas": [
+        r.collection = _thread_collection(
+            ids=["c1", "c2"],
+            documents=["body1", "body2"],
+            metadatas=[
                 {"uid": "u1", "date": "2024-01-02", "conversation_id": "conv1"},
                 {"uid": "u2", "date": "2024-01-01", "conversation_id": "conv1"},
             ],
-        }
+        )
 
         thread = r.search_by_thread("conv1")
         # Should be sorted by date
@@ -74,17 +69,33 @@ class TestSearchByThread:
         uids = [t.metadata["uid"] for t in thread]
         assert uids == ["u1", "u2"]
 
-    def test_sorts_thread_results_by_parsed_timestamp_not_raw_string(self):
+    def test_prefers_one_body_row_over_attachment_chunks_for_same_email(self):
         r = _bare_retriever()
         r.collection = MagicMock()
         r.collection.get.return_value = {
-            "ids": ["c1", "c2"],
-            "documents": ["body1", "body2"],
+            "ids": ["u1__att_0_0", "u1__0", "u1__att_1_0"],
+            "documents": ["attachment one", "email body", "attachment two"],
             "metadatas": [
+                {"uid": "u1", "date": "2024-01-01", "attachment_filename": "one.pdf"},
+                {"uid": "u1", "date": "2024-01-01"},
+                {"uid": "u1", "date": "2024-01-01", "attachment_filename": "two.pdf"},
+            ],
+        }
+
+        thread = r.search_by_thread("conv1")
+
+        assert [item.chunk_id for item in thread] == ["u1__0"]
+
+    def test_sorts_thread_results_by_parsed_timestamp_not_raw_string(self):
+        r = _bare_retriever()
+        r.collection = _thread_collection(
+            ids=["c1", "c2"],
+            documents=["body1", "body2"],
+            metadatas=[
                 {"uid": "u1", "date": "Wed, 25 Jun 2025 10:52:47 +0200", "conversation_id": "conv1"},
                 {"uid": "u2", "date": "2025-06-25T08:00:00+00:00", "conversation_id": "conv1"},
             ],
-        }
+        )
 
         thread = r.search_by_thread("conv1")
 
@@ -104,14 +115,14 @@ class TestListSendersSqlite:
         senders = r.list_senders(limit=5)
         assert senders == [{"name": "Alice", "email": "alice@example.test", "count": 10}]
 
-    def test_falls_back_to_chromadb_when_sqlite_fails(self):
+    def test_falls_back_to_vector_collection_when_sqlite_fails(self):
         r = _bare_retriever()
         mock_db = MagicMock()
         mock_db.top_senders.side_effect = RuntimeError("db error")
         r._email_db = mock_db
         r._email_db_checked = True
 
-        # Provide a chromadb fallback collection
+        # Provide a vector-collection fallback.
         class FakeCollection:
             def get(self, include, limit, offset):
                 if offset == 0:
@@ -219,11 +230,11 @@ def test_stats_empty_collection_without_db():
         "unique_senders": 0,
         "date_range": {},
         "folders": {},
-        "metadata_source": "chromadb_fallback",
+        "metadata_source": "vector_collection_fallback",
     }
 
 
-def test_stats_chromadb_counts_unknown_uid_rows():
+def test_stats_vector_collection_counts_unknown_uid_rows():
     r = _bare_retriever()
 
     class FakeCollection:
@@ -329,15 +340,11 @@ class TestSerializeResults:
 
 def test_reset_index(tmp_path):
     r = _bare_retriever()
-    r.collection_name = "test_coll"
-    r.chromadb_path = str(tmp_path / "test")
-    r.client = MagicMock()
-    new_collection = MagicMock()
-    r.client.get_or_create_collection = MagicMock(return_value=new_collection)
-
-    with patch("src.retriever.get_collection", return_value=new_collection):
-        r.reset_index()
-        r.client.delete_collection.assert_called_once_with("test_coll")
+    r.collection = MagicMock()
+    r.image_collection = MagicMock()
+    r.reset_index()
+    r.collection.reset.assert_called_once()
+    r.image_collection.reset.assert_called_once()
 
 
 def test_email_db_returns_none_when_no_sqlite_path():
@@ -374,7 +381,7 @@ def test_email_db_rechecks_when_sqlite_appears_later(tmp_path):
     db_path = Path(r.settings.sqlite_path)
     db_path.touch()
 
-    with patch("src.email_db.EmailDatabase") as mock_db:
+    with patch("mailarium.email_db.EmailDatabase") as mock_db:
         assert r.email_db is mock_db.return_value
 
     mock_db.assert_called_once_with(str(db_path))

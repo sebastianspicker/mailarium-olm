@@ -6,44 +6,30 @@ import json
 
 import pytest
 
+from tests._scan_session_cases import configured_scan_retriever, make_search_result
+
 pytest_plugins = ["tests._scan_session_cases"]
 
 
 @pytest.mark.asyncio
 async def test_triage_without_scan_id_unchanged(monkeypatch):
-    from src import mcp_server
-    from src.config import get_settings
-    from src.mcp_models import EmailTriageInput
-    from src.tools.search import email_triage
-    from tests._scan_session_cases import ScanRetriever, make_search_result
+    from mailarium.mcp_models import EmailTriageInput
+    from mailarium.tools.search import email_triage
 
-    get_settings.cache_clear()
-    retriever = ScanRetriever([make_search_result("uid1")])
-    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
-
-    try:
+    with configured_scan_retriever(monkeypatch, ["uid1"]):
         params = EmailTriageInput(query="test")
         result = await email_triage(params)
         data = json.loads(result)
         assert "_scan" not in data
         assert data["count"] == 1
-    finally:
-        get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
 async def test_triage_with_scan_id_returns_scan_meta(monkeypatch):
-    from src import mcp_server
-    from src.config import get_settings
-    from src.mcp_models import EmailTriageInput
-    from src.tools.search import email_triage
-    from tests._scan_session_cases import ScanRetriever, make_search_result
+    from mailarium.mcp_models import EmailTriageInput
+    from mailarium.tools.search import email_triage
 
-    get_settings.cache_clear()
-    retriever = ScanRetriever([make_search_result("uid1"), make_search_result("uid2")])
-    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
-
-    try:
+    with configured_scan_retriever(monkeypatch, ["uid1", "uid2"]):
         params = EmailTriageInput(query="test", scan_id="sess1")
         result = await email_triage(params)
         data = json.loads(result)
@@ -52,23 +38,14 @@ async def test_triage_with_scan_id_returns_scan_meta(monkeypatch):
         assert data["_scan"]["new_count"] == 2
         assert data["_scan"]["excluded_count"] == 0
         assert data["_scan"]["seen_total"] == 2
-    finally:
-        get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
 async def test_triage_second_call_excludes_seen(monkeypatch):
-    from src import mcp_server
-    from src.config import get_settings
-    from src.mcp_models import EmailTriageInput
-    from src.tools.search import email_triage
-    from tests._scan_session_cases import ScanRetriever, make_search_result
+    from mailarium.mcp_models import EmailTriageInput
+    from mailarium.tools.search import email_triage
 
-    get_settings.cache_clear()
-    retriever = ScanRetriever([make_search_result("uid1"), make_search_result("uid2")])
-    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
-
-    try:
+    with configured_scan_retriever(monkeypatch, ["uid1", "uid2"]) as retriever:
         params_one = EmailTriageInput(query="test", scan_id="sess1")
         await email_triage(params_one)
 
@@ -79,23 +56,14 @@ async def test_triage_second_call_excludes_seen(monkeypatch):
         assert data_two["_scan"]["new_count"] == 1
         assert data_two["_scan"]["excluded_count"] == 1
         assert data_two["count"] == 1
-    finally:
-        get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
 async def test_search_with_scan_id_excludes_seen(monkeypatch):
-    from src import mcp_server
-    from src.config import get_settings
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
-    from tests._scan_session_cases import ScanRetriever, make_search_result
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
-    get_settings.cache_clear()
-    retriever = ScanRetriever([make_search_result("uid1"), make_search_result("uid2")])
-    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
-
-    try:
+    with configured_scan_retriever(monkeypatch, ["uid1", "uid2"]):
         params_one = EmailSearchStructuredInput(query="test", scan_id="sess1")
         result_one = await email_search_structured(params_one)
         data_one = json.loads(result_one)
@@ -106,14 +74,12 @@ async def test_search_with_scan_id_excludes_seen(monkeypatch):
         data_two = json.loads(result_two)
         assert data_two["_scan"]["excluded_count"] == 2
         assert data_two["_scan"]["new_count"] == 0
-    finally:
-        get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
 async def test_email_scan_status_nonexistent():
-    from src.mcp_models import EmailScanInput
-    from src.scan_session import session_status
+    from mailarium.mcp_models import EmailScanInput
+    from mailarium.scan_session import session_status
 
     params = EmailScanInput(action="status", scan_id="nonexistent")
     status = session_status(params.scan_id)
@@ -122,7 +88,7 @@ async def test_email_scan_status_nonexistent():
 
 @pytest.mark.asyncio
 async def test_email_scan_flag_then_candidates():
-    from src import scan_session
+    from mailarium import scan_session
 
     scan_session.flag_candidates("test", ["uid1", "uid2"], label="bossing", phase=1, score=0.8)
 

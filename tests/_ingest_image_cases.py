@@ -1,15 +1,17 @@
 # ruff: noqa: I001
 
+"""Image-attachment ingestion, OCR fallback, and image-embedding accounting behavior."""
+
 import pytest
 
-from src.ingest import _EmbedPipeline
+from mailarium.ingest import _EmbedPipeline
 
 from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
 
 
 def test_ingest_embed_images_enables_extract_attachments(monkeypatch):
     """embed_images=True should auto-enable extract_attachments."""
-    import src.ingest as ingest_mod
+    import mailarium.ingest as ingest_mod
 
     class _Email:
         def __init__(self, idx):
@@ -35,7 +37,7 @@ def test_ingest_embed_images_enables_extract_attachments(monkeypatch):
 
 def test_ingest_embed_images_param_accepted(monkeypatch):
     """Verify embed_images param is accepted by ingest() function."""
-    import src.ingest as ingest_mod
+    import mailarium.ingest as ingest_mod
 
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [])
 
@@ -45,7 +47,7 @@ def test_ingest_embed_images_param_accepted(monkeypatch):
 
 def test_ingest_stats_include_image_embeddings(monkeypatch):
     """Verify image_embeddings key exists in ingestion stats."""
-    import src.ingest as ingest_mod
+    import mailarium.ingest as ingest_mod
 
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [])
 
@@ -55,8 +57,8 @@ def test_ingest_stats_include_image_embeddings(monkeypatch):
 
 def test_ingest_embed_images_skipped_on_low_memory(monkeypatch):
     """Low-memory systems skip Visualized-BGE startup unless explicitly forced."""
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
+    import mailarium.embedder as embedder_mod
+    import mailarium.ingest as ingest_mod
 
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [])
     monkeypatch.setattr(ingest_mod, "should_enable_image_embedding", lambda: False)
@@ -68,9 +70,9 @@ def test_ingest_embed_images_skipped_on_low_memory(monkeypatch):
 
 
 def test_image_embedder_unavailable_marks_not_requested(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    import mailarium.embedder as embedder_mod
+    import mailarium.ingest as ingest_mod
+    from mailarium.email_db import EmailDatabase
 
     email = _make_mock_email(1)
     email.has_attachments = True
@@ -93,7 +95,10 @@ def test_image_embedder_unavailable_marks_not_requested(monkeypatch, tmp_path):
         "chunk_email",
         lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
     )
-    monkeypatch.setattr("src.attachment_extractor._get_image_embedder", lambda: type("Probe", (), {"is_available": False})())
+    monkeypatch.setattr(
+        "mailarium.attachment_extractor._get_image_embedder",
+        lambda: type("Probe", (), {"is_available": False})(),
+    )
     monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
 
     sqlite_file = str(tmp_path / "test.db")

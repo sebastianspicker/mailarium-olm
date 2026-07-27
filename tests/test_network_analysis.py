@@ -1,43 +1,10 @@
-"""Tests for communication network analysis."""
+"""Verifies communication-network analysis derives contacts, relationships, and graph metrics."""
 
-from src.email_db import EmailDatabase
-from src.network_analysis import CommunicationNetwork
-from src.parse_olm import Email
+from mailarium.email_db import EmailDatabase
+from mailarium.network_analysis import CommunicationNetwork
 
-
-def _make_email(**overrides) -> Email:
-    defaults = {
-        "message_id": "<msg1@example.com>",
-        "subject": "Hello",
-        "sender_name": "Alice",
-        "sender_email": "employee@example.test",
-        "to": ["Bob <bob@example.com>"],
-        "cc": [],
-        "bcc": [],
-        "date": "2024-01-15T10:30:00",
-        "body_text": "Test body",
-        "body_html": "",
-        "folder": "Inbox",
-        "has_attachments": False,
-    }
-    defaults.update(overrides)
-    return Email(**defaults)
-
-
-def _populated_db() -> EmailDatabase:
-    db = EmailDatabase(":memory:")
-    db.insert_email(_make_email(message_id="<m1@example.test>", to=["Bob <bob@example.com>"]))
-    db.insert_email(_make_email(message_id="<m2@example.test>", to=["Bob <bob@example.com>"]))
-    db.insert_email(_make_email(message_id="<m3@example.test>", to=["Carol <carol@example.com>"]))
-    db.insert_email(
-        _make_email(
-            message_id="<m4@example.test>",
-            sender_email="bob@example.com",
-            sender_name="Bob",
-            to=["Alice <employee@example.test>"],
-        )
-    )
-    return db
+from .helpers.email_db_builders import _make_email
+from .helpers.email_db_builders import make_network_db as _populated_db
 
 
 class TestCommunicationNetwork:

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import sys  # noqa: F401 - used implicitly by import machinery mocks
+from contextlib import contextmanager
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
+
+original_import = __import__
 
 
 @dataclass
@@ -41,7 +44,7 @@ def _make_results(n: int = 2) -> list[_FakeResult]:
 
 
 def test_render_single_query_plain_impl_output(capsys) -> None:
-    from src.cli_commands_search import render_single_query_plain_impl
+    from mailarium.cli_commands_search import render_single_query_plain_impl
 
     results = _make_results(2)
     render_single_query_plain_impl(query="test query", results=results, sanitize_text=lambda t: t)
@@ -53,7 +56,7 @@ def test_render_single_query_plain_impl_output(capsys) -> None:
 
 
 def test_render_single_query_plain_impl_long_body_truncated(capsys) -> None:
-    from src.cli_commands_search import render_single_query_plain_impl
+    from mailarium.cli_commands_search import render_single_query_plain_impl
 
     long_result = _FakeResult(
         chunk_id="c1",
@@ -66,7 +69,7 @@ def test_render_single_query_plain_impl_long_body_truncated(capsys) -> None:
     assert "..." in out
 
 
-# ── run_browse_impl — ImportError fallback (lines 271-283) ──────────────────
+# ── run_browse_impl - ImportError fallback (lines 271-283) ──────────────────
 
 
 def _mock_page(n: int = 3, total: int | None = None) -> dict:
@@ -89,13 +92,8 @@ def _make_db(page: dict) -> MagicMock:
     return db
 
 
-def test_run_browse_impl_import_error_fallback(capsys) -> None:
-    """Lines 271-283: run_browse_impl prints plain text when rich is unavailable."""
-    from src.cli_commands_search import run_browse_impl
-
-    page = _mock_page(2, total=5)
-    db = _make_db(page)
-
+@contextmanager
+def _without_rich():
     with patch("builtins.__import__") as mock_import:
 
         def _side_effect(name, *args, **kwargs):
@@ -104,7 +102,17 @@ def test_run_browse_impl_import_error_fallback(capsys) -> None:
             return original_import(name, *args, **kwargs)
 
         mock_import.side_effect = _side_effect
+        yield
 
+
+def test_run_browse_impl_import_error_fallback(capsys) -> None:
+    """Lines 271-283: run_browse_impl prints plain text when rich is unavailable."""
+    from mailarium.cli_commands_search import run_browse_impl
+
+    page = _mock_page(2, total=5)
+    db = _make_db(page)
+
+    with _without_rich():
         run_browse_impl(
             get_email_db=lambda: db,
             sanitize_text=lambda t: t,
@@ -122,12 +130,9 @@ def test_run_browse_impl_import_error_fallback(capsys) -> None:
     assert "Next page" in out
 
 
-original_import = __import__
-
-
 def test_run_browse_impl_no_emails(capsys) -> None:
     """Empty page exits early."""
-    from src.cli_commands_search import run_browse_impl
+    from mailarium.cli_commands_search import run_browse_impl
 
     db = _make_db({"emails": [], "total": 0})
     run_browse_impl(
@@ -142,24 +147,16 @@ def test_run_browse_impl_no_emails(capsys) -> None:
     assert "No emails found" in out
 
 
-# ── run_interactive_impl — ImportError branch (lines 30-32) ─────────────────
+# ── run_interactive_impl - ImportError branch (lines 30-32) ─────────────────
 
 
 def test_run_interactive_impl_without_rich(capsys) -> None:
     """Lines 30-32: run_interactive_impl prints help message when rich unavailable."""
-    from src.cli_commands_search import run_interactive_impl
+    from mailarium.cli_commands_search import run_interactive_impl
 
     retriever = MagicMock()
 
-    with patch("builtins.__import__") as mock_import:
-
-        def _side_effect(name, *args, **kwargs):
-            if name.startswith("rich"):
-                raise ImportError(f"mocked: {name}")
-            return original_import(name, *args, **kwargs)
-
-        mock_import.side_effect = _side_effect
-
+    with _without_rich():
         run_interactive_impl(
             retriever=retriever,
             top_k=5,

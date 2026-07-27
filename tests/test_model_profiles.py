@@ -1,17 +1,20 @@
-"""Tests for model-aware MCP response profiles."""
+"""Verifies model-aware MCP profiles select response limits and formatting for client capabilities."""
 
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 
 import pytest
+
+from tests._scan_session_cases import ScanRetriever, make_search_result
 
 # ── Profile resolution ────────────────────────────────────────
 
 
 class TestProfileResolution:
     def test_default_profile_is_auto(self, monkeypatch):
-        from src.config import Settings, get_settings
+        from mailarium.config import Settings, get_settings
 
         monkeypatch.delenv("MCP_MODEL_PROFILE", raising=False)
         get_settings.cache_clear()
@@ -29,7 +32,7 @@ class TestProfileResolution:
             get_settings.cache_clear()
 
     def test_tight_profile_sets_tight_defaults(self, monkeypatch):
-        from src.config import Settings, get_settings
+        from mailarium.config import Settings, get_settings
 
         monkeypatch.setenv("MCP_MODEL_PROFILE", "tight")
         # Clear any per-variable overrides
@@ -56,7 +59,7 @@ class TestProfileResolution:
             get_settings.cache_clear()
 
     def test_generous_profile_sets_generous_defaults(self, monkeypatch):
-        from src.config import Settings, get_settings
+        from mailarium.config import Settings, get_settings
 
         monkeypatch.setenv("MCP_MODEL_PROFILE", "generous")
         for var in [
@@ -82,7 +85,7 @@ class TestProfileResolution:
             get_settings.cache_clear()
 
     def test_unknown_profile_falls_back_to_auto(self, monkeypatch):
-        from src.config import Settings, get_settings
+        from mailarium.config import Settings, get_settings
 
         monkeypatch.setenv("MCP_MODEL_PROFILE", "gpt4")
         for var in [
@@ -105,7 +108,7 @@ class TestProfileResolution:
             get_settings.cache_clear()
 
     def test_env_override_wins_over_profile(self, monkeypatch):
-        from src.config import Settings, get_settings
+        from mailarium.config import Settings, get_settings
 
         monkeypatch.setenv("MCP_MODEL_PROFILE", "tight")
         monkeypatch.setenv("MCP_MAX_BODY_CHARS", "1000")
@@ -120,7 +123,7 @@ class TestProfileResolution:
             get_settings.cache_clear()
 
     def test_resolve_runtime_passes_through_profile(self, monkeypatch):
-        from src.config import get_settings, resolve_runtime_settings
+        from mailarium.config import get_settings, resolve_runtime_settings
 
         monkeypatch.setenv("MCP_MODEL_PROFILE", "generous")
         for var in [
@@ -145,53 +148,29 @@ class TestProfileResolution:
 # ── Per-tool result clamping ──────────────────────────────────
 
 
-def _make_result(chunk_id="x", text="hello", distance=0.25):
-    from src.retriever import SearchResult
+@contextmanager
+def _profile_retriever(monkeypatch, profile: str):
+    from mailarium import mcp_server
+    from mailarium.config import get_settings
 
-    return SearchResult(
-        chunk_id=chunk_id,
-        text=text,
-        metadata={"subject": "Hi", "sender_email": "a@example.com"},
-        distance=distance,
-    )
-
-
-class _CapturingRetriever:
-    """Captures search_filtered kwargs for assertion."""
-
-    def __init__(self):
-        self.captured_kwargs = {}
-
-    def search_filtered(self, **kwargs):
-        self.captured_kwargs = kwargs
-        return [_make_result()]
-
-    def serialize_results(self, query, results):
-        return {"query": query, "count": len(results), "results": []}
-
-    def format_results_for_llm(self, results):
-        return "formatted"
-
-    def stats(self):
-        return {"total_emails": 100, "date_range": {}, "unique_senders": 5}
+    monkeypatch.setenv("MCP_MODEL_PROFILE", profile)
+    for var in ("MCP_MAX_TRIAGE_RESULTS", "MCP_MAX_SEARCH_RESULTS"):
+        monkeypatch.delenv(var, raising=False)
+    get_settings.cache_clear()
+    retriever = ScanRetriever([make_search_result()])
+    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
+    try:
+        yield retriever
+    finally:
+        get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
 async def test_triage_top_k_clamped_by_profile(monkeypatch):
-    from src import mcp_server
-    from src.config import get_settings
-    from src.mcp_models import EmailTriageInput
-    from src.tools import search as search_mod
+    from mailarium.mcp_models import EmailTriageInput
+    from mailarium.tools import search as search_mod
 
-    monkeypatch.setenv("MCP_MODEL_PROFILE", "tight")
-    for var in ["MCP_MAX_TRIAGE_RESULTS", "MCP_MAX_SEARCH_RESULTS"]:
-        monkeypatch.delenv(var, raising=False)
-    get_settings.cache_clear()
-
-    retriever = _CapturingRetriever()
-    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
-
-    try:
+    with _profile_retriever(monkeypatch, "tight") as retriever:
         # Pydantic allows up to 100; tight profile caps at 30
         params = EmailTriageInput(query="test query", top_k=80)
         result = await search_mod.email_triage(params)
@@ -201,26 +180,14 @@ async def test_triage_top_k_clamped_by_profile(monkeypatch):
         assert data["_capped"]["requested"] == 80
         assert data["_capped"]["effective"] == 30
         assert data["_capped"]["profile"] == "tight"
-    finally:
-        get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
 async def test_search_top_k_clamped_by_profile(monkeypatch):
-    from src import mcp_server
-    from src.config import get_settings
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
-    monkeypatch.setenv("MCP_MODEL_PROFILE", "tight")
-    for var in ["MCP_MAX_TRIAGE_RESULTS", "MCP_MAX_SEARCH_RESULTS"]:
-        monkeypatch.delenv(var, raising=False)
-    get_settings.cache_clear()
-
-    retriever = _CapturingRetriever()
-    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
-
-    try:
+    with _profile_retriever(monkeypatch, "tight") as retriever:
         # Pydantic allows up to 30; tight profile caps at 15
         params = EmailSearchStructuredInput(query="test query", top_k=30)
         result = await email_search_structured(params)
@@ -230,35 +197,21 @@ async def test_search_top_k_clamped_by_profile(monkeypatch):
         assert data["_capped"]["requested"] == 30
         assert data["_capped"]["effective"] == 15
         assert data["_capped"]["profile"] == "tight"
-    finally:
-        get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
 async def test_no_capping_when_under_limit(monkeypatch):
     """When top_k <= profile limit, no _capped metadata is emitted."""
-    from src import mcp_server
-    from src.config import get_settings
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
-    monkeypatch.setenv("MCP_MODEL_PROFILE", "generous")
-    for var in ["MCP_MAX_TRIAGE_RESULTS", "MCP_MAX_SEARCH_RESULTS"]:
-        monkeypatch.delenv(var, raising=False)
-    get_settings.cache_clear()
-
-    retriever = _CapturingRetriever()
-    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
-
-    try:
+    with _profile_retriever(monkeypatch, "generous") as retriever:
         params = EmailSearchStructuredInput(query="test", top_k=10)
         result = await email_search_structured(params)
         data = json.loads(result)
 
         assert retriever.captured_kwargs["top_k"] == 10
         assert "_capped" not in data
-    finally:
-        get_settings.cache_clear()
 
 
 # ── Diagnostics includes profile ──────────────────────────────
@@ -266,8 +219,8 @@ async def test_no_capping_when_under_limit(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_diagnostics_includes_profile(monkeypatch):
-    from src.config import get_settings
-    from src.tools.diagnostics import email_diagnostics
+    from mailarium.config import get_settings
+    from mailarium.tools.diagnostics import email_diagnostics
 
     monkeypatch.setenv("MCP_MODEL_PROFILE", "tight")
     for var in [
@@ -285,7 +238,6 @@ async def test_diagnostics_includes_profile(monkeypatch):
         device = "cpu"
         _model = None
         has_sparse = False
-        has_colbert = False
 
     class _FakeRetriever:
         embedder = _FakeEmbedder()

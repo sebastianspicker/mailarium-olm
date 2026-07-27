@@ -1,9 +1,5 @@
 # ruff: noqa: I001
-"""Targeted coverage tests for src/retriever.py uncovered lines.
-
-Each test targets a specific branch or code path identified by coverage analysis.
-All tests run without GPU, real models, or network access.
-"""
+"""Retriever sparse, BM25, and hybrid-result fusion fallback behavior."""
 
 import types
 from unittest.mock import MagicMock, patch
@@ -11,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 # ── Helpers ────────────────────────────────────────────────────────
 
-from .helpers.retriever_cases import _bare_retriever, _make_result
+from .helpers.retriever_cases import _bare_retriever, _configured_sparse_retriever, _make_result
 
 
 class TestMergeHybrid:
@@ -47,9 +43,9 @@ class TestMergeHybrid:
         ]
 
         # Need to make bm25_index module available
-        mock_bm25 = types.ModuleType("src.bm25_index")
+        mock_bm25 = types.ModuleType("mailarium.bm25_index")
 
-        def rrf(semantic_ids, keyword_ids, k=60):
+        def rrf(semantic_ids, keyword_ids, k=60, **_weights):
             # Simple merge: keyword IDs first, then semantic
             merged = []
             seen = set()
@@ -60,7 +56,7 @@ class TestMergeHybrid:
             return merged
 
         mock_bm25.reciprocal_rank_fusion = rrf
-        with patch.dict("sys.modules", {"src.bm25_index": mock_bm25}):
+        with patch.dict("sys.modules", {"mailarium.bm25_index": mock_bm25}):
             result = r._merge_hybrid("test", semantic, 10)
             chunk_ids = [res.chunk_id for res in result]
             assert "c1" in chunk_ids
@@ -74,10 +70,22 @@ class TestMergeHybrid:
         r._get_sparse_results = MagicMock(return_value=["c99"])
 
         # Make the import fail
-        with patch.dict("sys.modules", {"src.bm25_index": None}):
+        with patch.dict("sys.modules", {"mailarium.bm25_index": None}):
             semantic = [_make_result("c1")]
             result = r._merge_hybrid("test", semantic, 10)
             assert result is semantic
+
+    def test_merge_hybrid_failure_does_not_claim_fusion(self):
+        r = _bare_retriever()
+        r._last_search_debug = {}
+        r._get_sparse_results = MagicMock(return_value=["c1"])
+        semantic = [_make_result("c1")]
+
+        with patch("mailarium.retriever_hybrid._merged_hybrid_results", side_effect=RuntimeError("fusion failed")):
+            result = r._merge_hybrid("test", semantic, 10)
+
+        assert result is semantic
+        assert "fusion" not in r._last_search_debug
 
     def test_merge_hybrid_generic_exception_returns_semantic(self):
         r = _bare_retriever()
@@ -94,9 +102,9 @@ class TestMergeHybrid:
         r.collection.get.side_effect = RuntimeError("db error")
 
         semantic = [_make_result("c1", uid="u1")]
-        mock_bm25 = types.ModuleType("src.bm25_index")
+        mock_bm25 = types.ModuleType("mailarium.bm25_index")
         mock_bm25.reciprocal_rank_fusion = lambda s, k, **kw: k + [x for x in s if x not in k]
-        with patch.dict("sys.modules", {"src.bm25_index": mock_bm25}):
+        with patch.dict("sys.modules", {"mailarium.bm25_index": mock_bm25}):
             result = r._merge_hybrid("test", semantic, 10)
             # c1 is in semantic, c_missing failed to fetch but shouldn't crash
             assert any(res.chunk_id == "c1" for res in result)
@@ -131,9 +139,9 @@ class TestGetSparseResults:
         mock_sparse.is_built = False
         mock_sparse.doc_count = 0
 
-        mock_sparse_module = types.ModuleType("src.sparse_index")
+        mock_sparse_module = types.ModuleType("mailarium.sparse_index")
         mock_sparse_module.SparseIndex = MagicMock(return_value=mock_sparse)
-        with patch.dict("sys.modules", {"src.sparse_index": mock_sparse_module}):
+        with patch.dict("sys.modules", {"mailarium.sparse_index": mock_sparse_module}):
             r._sparse_index = None
             result = r._get_sparse_results("test", 10)
             assert result is None
@@ -142,7 +150,7 @@ class TestGetSparseResults:
         r = _bare_retriever()
         mock_embedder = MagicMock()
         mock_embedder.has_sparse = True
-        mock_embedder.encode_sparse.return_value = [{}]  # empty sparse vector
+        mock_embedder.encode_sparse_query.return_value = [{}]  # empty sparse vector
         r._embedder = mock_embedder
         r._email_db = MagicMock()
         r._email_db_checked = True
@@ -153,27 +161,13 @@ class TestGetSparseResults:
         r._sparse_index = mock_sparse
 
         # Empty sparse vector should return None
-        mock_embedder.encode_sparse.return_value = [{}]
+        mock_embedder.encode_sparse_query.return_value = [{}]
         result = r._get_sparse_results("test", 10)
         assert result is None
 
     def test_returns_chunk_ids_on_success(self):
-        r = _bare_retriever()
-        mock_embedder = MagicMock()
-        mock_embedder.has_sparse = True
-        mock_embedder.encode_sparse.return_value = [{1: 0.5, 2: 0.3}]
-        r._embedder = mock_embedder
-        r._email_db = MagicMock()
-        r._email_db_checked = True
-        r.collection = MagicMock()
-        r.collection.count.return_value = 100
-        r.collection.metadata = {"index_revision": "rev-1"}
-
-        mock_sparse = MagicMock()
-        mock_sparse.is_built = True
-        mock_sparse.doc_count = 100
+        r, mock_sparse, _ = _configured_sparse_retriever({1: 0.5, 2: 0.3})
         mock_sparse.search.return_value = [("c1", 0.9), ("c2", 0.8)]
-        r._sparse_index = mock_sparse
 
         result = r._get_sparse_results("test", 10)
         assert result == ["c1", "c2"]
@@ -182,7 +176,7 @@ class TestGetSparseResults:
         r = _bare_retriever()
         mock_embedder = MagicMock()
         mock_embedder.has_sparse = True
-        mock_embedder.encode_sparse.side_effect = RuntimeError("boom")
+        mock_embedder.encode_sparse_query.side_effect = RuntimeError("boom")
         r._embedder = mock_embedder
         r._email_db = MagicMock()
         r._email_db_checked = True
@@ -197,22 +191,8 @@ class TestGetSparseResults:
         assert result is None
 
     def test_partial_sparse_coverage_still_returns_sparse_results(self):
-        r = _bare_retriever()
-        mock_embedder = MagicMock()
-        mock_embedder.has_sparse = True
-        mock_embedder.encode_sparse.return_value = [{1: 0.9}]
-        r._embedder = mock_embedder
-        r._email_db = MagicMock()
-        r._email_db_checked = True
-        r.collection = MagicMock()
-        r.collection.count.return_value = 100
-        r.collection.metadata = {"index_revision": "rev-1"}
-
-        mock_sparse = MagicMock()
-        mock_sparse.is_built = True
-        mock_sparse.doc_count = 80
+        r, mock_sparse, _ = _configured_sparse_retriever({1: 0.9}, sparse_doc_count=80)
         mock_sparse.search.return_value = [("c5", 0.7)]
-        r._sparse_index = mock_sparse
         r._set_last_search_debug({})
 
         assert r._get_sparse_results("test", 10) == ["c5"]
@@ -220,9 +200,10 @@ class TestGetSparseResults:
 
     def test_sparse_rebuilds_when_revision_changes_with_same_count(self):
         r = _bare_retriever()
+        r.settings = MagicMock(sparse_model="test-sparse", sparse_model_revision="test-revision")
         mock_embedder = MagicMock()
         mock_embedder.has_sparse = True
-        mock_embedder.encode_sparse.return_value = [{1: 0.5}]
+        mock_embedder.encode_sparse_query.return_value = [{1: 0.5}]
         r._embedder = mock_embedder
         r._email_db = MagicMock()
         r._email_db_checked = True
@@ -239,7 +220,11 @@ class TestGetSparseResults:
 
         result = r._get_sparse_results("test", 10)
         assert result == ["c1"]
-        mock_sparse.build_from_db.assert_called_once_with(r._email_db)  # pylint: disable=no-member
+        mock_sparse.build_from_db.assert_called_once_with(
+            r._email_db,
+            model_id="test-sparse",
+            model_revision="test-revision",
+        )  # pylint: disable=no-member
 
 
 class TestGetBM25Results:
@@ -271,9 +256,9 @@ class TestGetBM25Results:
         mock_bm25_instance.is_built = True
         mock_bm25_instance.search.return_value = [("c1", 0.5)]
 
-        mock_bm25_module = types.ModuleType("src.bm25_index")
+        mock_bm25_module = types.ModuleType("mailarium.bm25_index")
         mock_bm25_module.BM25Index = MagicMock(return_value=mock_bm25_instance)
-        with patch.dict("sys.modules", {"src.bm25_index": mock_bm25_module}):
+        with patch.dict("sys.modules", {"mailarium.bm25_index": mock_bm25_module}):
             result = r._get_bm25_results("test", 10)
             assert result == ["c1"]
             mock_bm25_instance.build_from_collection.assert_called_once()
@@ -283,7 +268,7 @@ class TestGetBM25Results:
         r._bm25_index = None
         r.collection = MagicMock()
 
-        with patch.dict("sys.modules", {"src.bm25_index": None}):
+        with patch.dict("sys.modules", {"mailarium.bm25_index": None}):
             result = r._get_bm25_results("test", 10)
             assert result is None
 

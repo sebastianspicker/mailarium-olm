@@ -1,6 +1,13 @@
+"""Exercises recipient, attachment-presence, and priority filters in email search results.
+
+It treats blank or unspecified optional filters as no constraint rather than rejecting valid retrieval.
+"""
+
 from __future__ import annotations
 
-from src.retriever import EmailRetriever, SearchResult
+import pytest
+
+from mailarium.retriever import EmailRetriever, SearchResult
 
 
 def test_search_filtered_applies_cc_filter() -> None:
@@ -95,7 +102,11 @@ def test_search_filtered_applies_bcc_filter() -> None:
     assert results[0].chunk_id == "match"
 
 
-def test_search_filtered_applies_has_attachments_true() -> None:
+@pytest.mark.parametrize(
+    ("has_attachments", "expected_chunk_id"),
+    [(True, "with-att"), (False, "no-att")],
+)
+def test_search_filtered_applies_has_attachments(has_attachments: bool, expected_chunk_id: str) -> None:
     retriever = EmailRetriever.__new__(EmailRetriever)
 
     def _search(query, top_k=10, where=None):
@@ -115,36 +126,10 @@ def test_search_filtered_applies_has_attachments_true() -> None:
         ]
 
     retriever.search = _search
-    results = retriever.search_filtered(query="budget", has_attachments=True, top_k=5)
+    results = retriever.search_filtered(query="budget", has_attachments=has_attachments, top_k=5)
 
     assert len(results) == 1
-    assert results[0].chunk_id == "with-att"
-
-
-def test_search_filtered_applies_has_attachments_false() -> None:
-    retriever = EmailRetriever.__new__(EmailRetriever)
-
-    def _search(query, top_k=10, where=None):
-        return [
-            SearchResult(
-                chunk_id="with-att",
-                text="hello",
-                metadata={"has_attachments": "True", "date": "2024-01-01"},
-                distance=0.1,
-            ),
-            SearchResult(
-                chunk_id="no-att",
-                text="hello",
-                metadata={"has_attachments": "False", "date": "2024-01-01"},
-                distance=0.2,
-            ),
-        ]
-
-    retriever.search = _search
-    results = retriever.search_filtered(query="budget", has_attachments=False, top_k=5)
-
-    assert len(results) == 1
-    assert results[0].chunk_id == "no-att"
+    assert results[0].chunk_id == expected_chunk_id
 
 
 def test_search_filtered_applies_priority_filter() -> None:

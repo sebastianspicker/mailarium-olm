@@ -1,6 +1,6 @@
-"""Tests for sentiment analysis."""
+"""Verifies sentiment analysis classifies email tone and handles neutral or sparse text."""
 
-from src.sentiment_analyzer import analyze
+from mailarium.sentiment_analyzer import analyze
 
 
 def test_positive_text():

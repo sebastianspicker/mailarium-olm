@@ -1,8 +1,13 @@
+"""Exercises evidence deduplication, timeline compaction, and packing priority under response budgets.
+
+It preserves anchor identifiers and stronger evidence when snippets must be omitted.
+"""
+
 import pytest
 
 
 def test_dedupe_evidence_items_prefers_first_unique_handle():
-    from src.tools.search_answer_context import _dedupe_evidence_items
+    from mailarium.tools.search_answer_context import _dedupe_evidence_items
 
     items = [
         {
@@ -33,7 +38,7 @@ def test_dedupe_evidence_items_prefers_first_unique_handle():
 
 
 def test_compact_timeline_events_keeps_anchor_uids():
-    from src.tools.search_answer_context import _compact_timeline_events
+    from mailarium.tools.search_answer_context import _compact_timeline_events
 
     timeline = {
         "event_count": 6,
@@ -62,7 +67,7 @@ def test_compact_timeline_events_keeps_anchor_uids():
 
 
 def test_summarize_timeline_for_budget_keeps_anchor_uids_without_snippets():
-    from src.tools.search_answer_context import _summarize_timeline_for_budget
+    from mailarium.tools.search_answer_context import _summarize_timeline_for_budget
 
     timeline = {
         "event_count": 5,
@@ -88,7 +93,7 @@ def test_summarize_timeline_for_budget_keeps_anchor_uids_without_snippets():
 
 
 def test_packing_priority_prefers_strong_evidence_over_weak_high_score():
-    from src.tools.search_answer_context import _packing_priority
+    from mailarium.tools.search_answer_context import _packing_priority
 
     weak_priority = _packing_priority(
         {

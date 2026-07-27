@@ -1,4 +1,4 @@
-"""Extended tests for src/nlp_entity_extractor.py — targeting uncovered lines."""
+"""NLP entity model loading, language fallback, cache behavior, and entity normalization."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def _fake_nlp(text):
 
 
 def _setup_module_with_fake_nlp():
-    import src.nlp_entity_extractor as mod
+    import mailarium.nlp_entity_extractor as mod
 
     mod.reset_model_cache()
     mod._nlp_models["en"] = _fake_nlp
@@ -42,7 +42,7 @@ def _setup_module_with_fake_nlp():
 class TestLoadModels:
     def test_load_models_spacy_not_installed(self):
         """When spaCy is not importable, _load_models sets attempted flag."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         with patch.dict("sys.modules", {"spacy": None}):
@@ -52,7 +52,7 @@ class TestLoadModels:
 
     def test_load_models_model_not_found(self):
         """When spaCy model is not installed (OSError), it is skipped."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mock_spacy = MagicMock()
@@ -64,7 +64,7 @@ class TestLoadModels:
 
     def test_load_models_success(self):
         """When spaCy models load successfully, they are cached."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mock_model = MagicMock()
@@ -77,7 +77,7 @@ class TestLoadModels:
 
     def test_load_models_only_once(self):
         """_load_models only runs once even when called multiple times."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_load_attempted = True  # Simulate already loaded
@@ -87,7 +87,7 @@ class TestLoadModels:
 
     def test_load_models_partial_success(self):
         """When only some models load, available ones are cached."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mock_spacy = MagicMock()
@@ -112,7 +112,7 @@ class TestLoadModels:
 class TestGetNlpFallback:
     def test_get_nlp_fallback_to_first_available(self):
         """When requested lang not available and no English, use first model."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         fake_de = MagicMock()
@@ -124,7 +124,7 @@ class TestGetNlpFallback:
 
     def test_get_nlp_english_fallback(self):
         """When requested lang not available, fall back to English."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         fake_en = MagicMock()
@@ -140,7 +140,7 @@ class TestGetNlpFallback:
 
 class TestPreload:
     def test_preload_forces_model_loading(self):
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mock_spacy = MagicMock()
@@ -156,7 +156,7 @@ class TestPreload:
 class TestExtractSpacyEntitiesEdgeCases:
     def test_truncation_of_long_text(self):
         """Text > 100,000 chars is truncated."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         received_texts = []
@@ -174,7 +174,7 @@ class TestExtractSpacyEntitiesEdgeCases:
 
     def test_unmapped_spacy_type_skipped(self):
         """Entity with unmapped spaCy type (e.g. NORP) is skipped."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
 
@@ -189,7 +189,7 @@ class TestExtractSpacyEntitiesEdgeCases:
 
     def test_short_entity_text_skipped(self):
         """Entity text < 2 chars is skipped."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
 
@@ -204,7 +204,7 @@ class TestExtractSpacyEntitiesEdgeCases:
 
     def test_digit_only_entity_skipped(self):
         """Purely numeric entity text is skipped."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
 
@@ -219,7 +219,7 @@ class TestExtractSpacyEntitiesEdgeCases:
 
     def test_whitespace_only_entity_skipped(self):
         """Empty/whitespace entity text is skipped."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
 
@@ -239,13 +239,13 @@ class TestExtractSpacyEntitiesEdgeCases:
 class TestLanguageDetectionCache:
     def test_language_detection_with_sender_cache(self):
         """Language is detected and cached per email text content."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_models["en"] = _fake_nlp
         mod._nlp_load_attempted = True
 
-        with patch("src.language_detector.detect_language", return_value="en") as mock_detect:
+        with patch("mailarium.language_detector.detect_language", return_value="en") as mock_detect:
             # First call: detects language
             mod.extract_nlp_entities("Hello world", sender_email="employee@example.test")
             assert mock_detect.call_count == 1
@@ -260,26 +260,26 @@ class TestLanguageDetectionCache:
 
     def test_language_detection_unknown_falls_back_to_none(self):
         """When detection returns 'unknown', lang is set to None."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_models["en"] = _fake_nlp
         mod._nlp_load_attempted = True
 
-        with patch("src.language_detector.detect_language", return_value="unknown"):
+        with patch("mailarium.language_detector.detect_language", return_value="unknown"):
             entities = mod.extract_nlp_entities("Hallo Welt", sender_email="bob@example.com")
             # Should still work (falls back to English model)
             assert isinstance(entities, list)
 
     def test_sender_lang_cache_eviction(self):
         """LRU cache evicts oldest entry when full."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_models["en"] = _fake_nlp
         mod._nlp_load_attempted = True
 
-        with patch("src.language_detector.detect_language", return_value="en"):
+        with patch("mailarium.language_detector.detect_language", return_value="en"):
             # Fill cache beyond max
             for i in range(mod._LANG_CACHE_MAX + 5):
                 mod.extract_nlp_entities("Hello world test text", sender_email=f"user{i}@example.com")
@@ -288,13 +288,13 @@ class TestLanguageDetectionCache:
 
     def test_no_sender_email_still_caches_by_content(self):
         """Cache works even without sender_email (keyed by content hash)."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_models["en"] = _fake_nlp
         mod._nlp_load_attempted = True
 
-        with patch("src.language_detector.detect_language", return_value="en") as mock_detect:
+        with patch("mailarium.language_detector.detect_language", return_value="en") as mock_detect:
             mod.extract_nlp_entities("Hello world", sender_email=None)
             mod.extract_nlp_entities("Hello world", sender_email=None)
             # Same text content -> cached by content hash (only 1 detection call)
@@ -308,7 +308,7 @@ class TestLanguageDetectionCache:
         """Cached language is found by content hash on cache hit."""
         import hashlib
 
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_models["en"] = _fake_nlp
@@ -318,7 +318,7 @@ class TestLanguageDetectionCache:
         mod._sender_lang_cache[content_hash] = "en"
 
         # This should use cache, not call detect_language
-        with patch("src.language_detector.detect_language") as mock_detect:
+        with patch("mailarium.language_detector.detect_language") as mock_detect:
             mod.extract_nlp_entities("Hello world", sender_email="test@example.com")
             assert mock_detect.call_count == 0
 
@@ -328,12 +328,12 @@ class TestLanguageDetectionCache:
 
 class TestNormalizeEntity:
     def test_normalize_non_person_entity(self):
-        from src.nlp_entity_extractor import _normalize_entity
+        from mailarium.nlp_entity_extractor import _normalize_entity
 
         assert _normalize_entity("  Berlin  ", "location") == "berlin"
 
     def test_normalize_person_with_title(self):
-        from src.nlp_entity_extractor import _normalize_person
+        from mailarium.nlp_entity_extractor import _normalize_person
 
         assert _normalize_person("Herr Schmidt") == "schmidt"
         assert _normalize_person("Frau Mueller") == "mueller"

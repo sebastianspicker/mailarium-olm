@@ -14,7 +14,7 @@ class TestEvidenceAdd:
     async def test_add_evidence_happy_path(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_add"]
-        from src.mcp_models import EvidenceAddInput
+        from mailarium.mcp_models import EvidenceAddInput
 
         params = EvidenceAddInput(
             email_uid="uid-1",
@@ -50,7 +50,7 @@ class TestEvidenceAdd:
 
         MockDeps._email_db = FailDB()
         try:
-            from src.mcp_models import EvidenceAddInput
+            from mailarium.mcp_models import EvidenceAddInput
 
             params = EvidenceAddInput(
                 email_uid="uid-1",
@@ -69,7 +69,7 @@ class TestEvidenceAdd:
     async def test_add_evidence_accepts_workflow_neutral_category(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_add"]
-        from src.mcp_models import EvidenceAddInput
+        from mailarium.mcp_models import EvidenceAddInput
 
         params = EvidenceAddInput(
             email_uid="uid-1",
@@ -88,7 +88,7 @@ class TestEvidenceAddBatch:
     async def test_batch_add_all_succeed(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_add_batch"]
-        from src.mcp_models import EvidenceAddBatchInput, EvidenceAddInput
+        from mailarium.mcp_models import EvidenceAddBatchInput, EvidenceAddInput
 
         items = [
             EvidenceAddInput(
@@ -138,7 +138,7 @@ class TestEvidenceAddBatch:
 
         MockDeps._email_db = PartialFailDB()
         try:
-            from src.mcp_models import EvidenceAddBatchInput, EvidenceAddInput
+            from mailarium.mcp_models import EvidenceAddBatchInput, EvidenceAddInput
 
             items = [
                 EvidenceAddInput(
@@ -170,7 +170,7 @@ class TestEvidenceQuery:
     async def test_list_mode(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_query"]
-        from src.mcp_models import EvidenceQueryInput
+        from mailarium.mcp_models import EvidenceQueryInput
 
         params = EvidenceQueryInput(limit=10)
         result = await fn(params)
@@ -189,7 +189,7 @@ class TestEvidenceQuery:
             relevance=4,
         )
         fn = fake_mcp._tools["evidence_query"]
-        from src.mcp_models import EvidenceQueryInput
+        from mailarium.mcp_models import EvidenceQueryInput
 
         params = EvidenceQueryInput(query="deadline", limit=10)
         result = await fn(params)
@@ -200,7 +200,7 @@ class TestEvidenceQuery:
     async def test_timeline_mode(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_query"]
-        from src.mcp_models import EvidenceQueryInput
+        from mailarium.mcp_models import EvidenceQueryInput
 
         params = EvidenceQueryInput(sort="date", limit=10)
         result = await fn(params)
@@ -218,7 +218,7 @@ class TestEvidenceQuery:
             relevance=3,
         )
         fn = fake_mcp._tools["evidence_query"]
-        from src.mcp_models import EvidenceQueryInput
+        from mailarium.mcp_models import EvidenceQueryInput
 
         params = EvidenceQueryInput(include_quotes=False, limit=10)
         result = await fn(params)
@@ -238,7 +238,7 @@ class TestEvidenceQuery:
             relevance=2,
         )
         fn = fake_mcp._tools["evidence_query"]
-        from src.mcp_models import EvidenceQueryInput
+        from mailarium.mcp_models import EvidenceQueryInput
 
         params = EvidenceQueryInput(query="compact", include_quotes=False, limit=10)
         result = await fn(params)
@@ -250,7 +250,7 @@ class TestEvidenceQuery:
     async def test_timeline_compact_mode(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_query"]
-        from src.mcp_models import EvidenceQueryInput
+        from mailarium.mcp_models import EvidenceQueryInput
 
         params = EvidenceQueryInput(sort="date", include_quotes=False, limit=10)
         result = await fn(params)
@@ -271,7 +271,7 @@ class TestEvidenceGet:
             relevance=5,
         )
         fn = fake_mcp._tools["evidence_get"]
-        from src.mcp_models import EvidenceGetInput
+        from mailarium.mcp_models import EvidenceGetInput
 
         params = EvidenceGetInput(evidence_id=item["id"])
         result = await fn(params)
@@ -283,7 +283,7 @@ class TestEvidenceGet:
     async def test_get_nonexistent_evidence(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_get"]
-        from src.mcp_models import EvidenceGetInput
+        from mailarium.mcp_models import EvidenceGetInput
 
         params = EvidenceGetInput(evidence_id=99999)
         result = await fn(params)
@@ -303,7 +303,7 @@ class TestEvidenceUpdate:
             relevance=2,
         )
         fn = fake_mcp._tools["evidence_update"]
-        from src.mcp_models import EvidenceUpdateInput
+        from mailarium.mcp_models import EvidenceUpdateInput
 
         params = EvidenceUpdateInput(evidence_id=item["id"], summary="after", relevance=4)
         result = await fn(params)
@@ -315,7 +315,7 @@ class TestEvidenceUpdate:
     async def test_update_nonexistent(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_update"]
-        from src.mcp_models import EvidenceUpdateInput
+        from mailarium.mcp_models import EvidenceUpdateInput
 
         params = EvidenceUpdateInput(evidence_id=99999, summary="nope")
         result = await fn(params)
@@ -335,7 +335,7 @@ class TestEvidenceRemove:
             relevance=1,
         )
         fn = fake_mcp._tools["evidence_remove"]
-        from src.mcp_models import EvidenceRemoveInput
+        from mailarium.mcp_models import EvidenceRemoveInput
 
         params = EvidenceRemoveInput(evidence_id=item["id"])
         result = await fn(params)
@@ -346,7 +346,7 @@ class TestEvidenceRemove:
     async def test_remove_nonexistent(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_remove"]
-        from src.mcp_models import EvidenceRemoveInput
+        from mailarium.mcp_models import EvidenceRemoveInput
 
         params = EvidenceRemoveInput(evidence_id=99999)
         result = await fn(params)
@@ -370,7 +370,7 @@ class TestEvidenceOverview:
     async def test_overview_returns_stats_and_categories(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_overview"]
-        from src.mcp_models import EvidenceOverviewInput
+        from mailarium.mcp_models import EvidenceOverviewInput
 
         params = EvidenceOverviewInput()
         result = await fn(params)
@@ -382,7 +382,7 @@ class TestEvidenceOverview:
     async def test_overview_with_filter(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_overview"]
-        from src.mcp_models import EvidenceOverviewInput
+        from mailarium.mcp_models import EvidenceOverviewInput
 
         params = EvidenceOverviewInput(category="bossing", min_relevance=3)
         result = await fn(params)

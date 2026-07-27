@@ -1,4 +1,4 @@
-"""Tests for long-session MCP optimization: compact modes, limits, and response size guard."""
+"""Verifies MCP response budgeting compacts long sessions while enforcing size and safety limits."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class TestEvidenceCompactMode:
         }
 
     def test_compact_strips_quote_adds_preview(self):
-        from src.tools.evidence import _compact_evidence_items
+        from mailarium.tools.evidence import _compact_evidence_items
 
         items = [self._make_evidence_item()]
         result = _compact_evidence_items(items)
@@ -49,7 +49,7 @@ class TestEvidenceCompactMode:
         assert "key_quote" in items[0]
 
     def test_compact_strips_notes_and_content_hash(self):
-        from src.tools.evidence import _compact_evidence_items
+        from mailarium.tools.evidence import _compact_evidence_items
 
         items = [self._make_evidence_item()]
         result = _compact_evidence_items(items)
@@ -58,7 +58,7 @@ class TestEvidenceCompactMode:
         assert "content_hash" not in result[0]
 
     def test_compact_preserves_short_quote(self):
-        from src.tools.evidence import _compact_evidence_items
+        from mailarium.tools.evidence import _compact_evidence_items
 
         items = [self._make_evidence_item(quote="Short quote")]
         result = _compact_evidence_items(items)
@@ -67,7 +67,7 @@ class TestEvidenceCompactMode:
         assert not result[0]["quote_preview"].endswith("...")
 
     def test_compact_preserves_other_fields(self):
-        from src.tools.evidence import _compact_evidence_items
+        from mailarium.tools.evidence import _compact_evidence_items
 
         items = [self._make_evidence_item()]
         result = _compact_evidence_items(items)
@@ -94,32 +94,32 @@ class TestEvidenceCompactMode:
 
 class TestModelDefaults:
     def test_shared_recipients_limit(self):
-        from src.mcp_models import SharedRecipientsInput
+        from mailarium.mcp_models import SharedRecipientsInput
 
         m = SharedRecipientsInput(email_addresses=["a@example.test", "c@example.test"])
         assert m.limit == 30
 
     def test_coordinated_timing_limit(self):
-        from src.mcp_models import CoordinatedTimingInput
+        from mailarium.mcp_models import CoordinatedTimingInput
 
         m = CoordinatedTimingInput(email_addresses=["a@example.test", "c@example.test"])
         assert m.limit == 20
 
     def test_decisions_limit(self):
-        from src.mcp_models import DecisionsInput
+        from mailarium.mcp_models import DecisionsInput
 
         m = DecisionsInput(conversation_id="abc")
         assert m.limit == 30
 
     def test_custody_chain_defaults(self):
-        from src.mcp_models import CustodyChainInput
+        from mailarium.mcp_models import CustodyChainInput
 
         m = CustodyChainInput()
         assert m.compact is True
         assert m.limit == 50
 
     def test_custody_chain_max_limit(self):
-        from src.mcp_models import CustodyChainInput
+        from mailarium.mcp_models import CustodyChainInput
 
         with pytest.raises(ValueError):
             CustodyChainInput(limit=201)
@@ -171,7 +171,7 @@ class TestEvidenceTimelineLimit:
         return conn
 
     def test_timeline_unlimited(self, tmp_path):
-        from src.db_evidence import EvidenceMixin
+        from mailarium.db_evidence import EvidenceMixin
 
         conn = self._make_db(tmp_path)
         mixin = EvidenceMixin.__new__(EvidenceMixin)
@@ -184,7 +184,7 @@ class TestEvidenceTimelineLimit:
             conn.close()
 
     def test_timeline_with_limit(self, tmp_path):
-        from src.db_evidence import EvidenceMixin
+        from mailarium.db_evidence import EvidenceMixin
 
         conn = self._make_db(tmp_path)
         mixin = EvidenceMixin.__new__(EvidenceMixin)
@@ -199,7 +199,7 @@ class TestEvidenceTimelineLimit:
             conn.close()
 
     def test_timeline_limit_with_category_filter(self, tmp_path):
-        from src.db_evidence import EvidenceMixin
+        from mailarium.db_evidence import EvidenceMixin
 
         conn = self._make_db(tmp_path)
         mixin = EvidenceMixin.__new__(EvidenceMixin)
@@ -258,7 +258,7 @@ class TestCustodyCompactMode:
 
 class TestJsonResponseSizeGuard:
     def test_normal_size_passes_through(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         data = {"items": [1, 2, 3], "count": 3}
         result = json_response(data, max_chars=10000)
@@ -267,7 +267,7 @@ class TestJsonResponseSizeGuard:
         assert "_truncated" not in parsed
 
     def test_oversized_response_truncated(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         # Create a large response
         items = [{"text": "x" * 500, "id": i} for i in range(100)]
@@ -282,7 +282,7 @@ class TestJsonResponseSizeGuard:
         assert len(result) <= 5000
 
     def test_multi_item_list_can_truncate_to_zero_results(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         data = {"results": ["x" * 1000, "x" * 1000]}
         result = json_response(data, max_chars=100)
@@ -295,7 +295,7 @@ class TestJsonResponseSizeGuard:
         assert len(result) <= 100
 
     def test_tiny_positive_budgets_still_respect_hard_cap(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         for max_chars in [1, 2, 10, 20]:
             result = json_response({"results": ["x" * 1000, "x" * 1000]}, max_chars=max_chars)
@@ -303,7 +303,7 @@ class TestJsonResponseSizeGuard:
             json.loads(result)
 
     def test_unlimited_passes_through(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         items = [{"text": "x" * 500} for _ in range(50)]
         data = {"items": items}
@@ -313,7 +313,7 @@ class TestJsonResponseSizeGuard:
         assert "_truncated" not in parsed
 
     def test_single_item_truncated_when_oversized(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         data = {"items": [{"text": "x" * 1000}]}
         result = json_response(data, max_chars=100)
@@ -322,7 +322,7 @@ class TestJsonResponseSizeGuard:
         assert parsed["_truncated"] is True
 
     def test_non_dict_response_returns_valid_json(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         data = ["a" * 1000]
         result = json_response(data, max_chars=100)
@@ -331,7 +331,7 @@ class TestJsonResponseSizeGuard:
         assert "data" in parsed
 
     def test_dict_without_lists_hard_truncated(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         data = {"text": "x" * 5000}
         result = json_response(data, max_chars=100)
@@ -341,7 +341,7 @@ class TestJsonResponseSizeGuard:
         assert parsed["text"] != ""
 
     def test_dict_without_lists_keeps_nonempty_snippet_when_possible(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         data = {"text": "x" * 5000}
         result = json_response(data, max_chars=120)
@@ -350,7 +350,7 @@ class TestJsonResponseSizeGuard:
         assert parsed["text"] != ""
 
     def test_nested_dict_string_field_is_trimmed_before_fallback(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         data = {"email": {"body_text": "x" * 5000, "uid": "uid-1"}}
         result = json_response(data, max_chars=180)
@@ -361,7 +361,7 @@ class TestJsonResponseSizeGuard:
         assert parsed["email"]["body_text"] != ""
 
     def test_finds_largest_list_to_trim(self):
-        from src.tools.utils import json_response
+        from mailarium.tools.utils import json_response
 
         data = {
             "small": [1, 2],
@@ -376,12 +376,12 @@ class TestJsonResponseSizeGuard:
 
     def test_default_uses_config(self, monkeypatch):
         """json_response with no explicit max_chars uses config setting."""
-        from src.config import get_settings
+        from mailarium.config import get_settings
 
         get_settings.cache_clear()
         monkeypatch.setenv("MCP_MAX_JSON_RESPONSE_CHARS", "500")
         try:
-            from src.tools.utils import json_response
+            from mailarium.tools.utils import json_response
 
             data = {"items": [{"text": "x" * 100} for _ in range(20)]}
             result = json_response(data)
@@ -397,27 +397,27 @@ class TestJsonResponseSizeGuard:
 
 class TestJsonResponseConfig:
     def test_default_value(self):
-        from src.config import Settings
+        from mailarium.config import Settings
 
         s = Settings()
         assert s.mcp_max_json_response_chars == 32000
 
     def test_env_override(self, monkeypatch):
-        from src.config import Settings
+        from mailarium.config import Settings
 
         monkeypatch.setenv("MCP_MAX_JSON_RESPONSE_CHARS", "16000")
         s = Settings.from_env()
         assert s.mcp_max_json_response_chars == 16000
 
     def test_zero_means_unlimited(self, monkeypatch):
-        from src.config import Settings
+        from mailarium.config import Settings
 
         monkeypatch.setenv("MCP_MAX_JSON_RESPONSE_CHARS", "0")
         s = Settings.from_env()
         assert s.mcp_max_json_response_chars == 0
 
     def test_resolve_runtime_passes_through(self, monkeypatch):
-        from src.config import get_settings, resolve_runtime_settings
+        from mailarium.config import get_settings, resolve_runtime_settings
 
         get_settings.cache_clear()
         monkeypatch.setenv("MCP_MAX_JSON_RESPONSE_CHARS", "20000")

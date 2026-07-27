@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 from unittest.mock import MagicMock, patch
 
-from src.attachment_extractor import (
+from mailarium.attachment_extractor import (
     MAX_EXTRACTED_CHARS,
     _docx_extractor,
     _extract_docx,
@@ -21,6 +21,8 @@ from src.attachment_extractor import (
     extract_text,
     extract_text_with_reason,
 )
+
+from .helpers.attachment_extractor_fakes import _xlsx_loader
 
 
 class TestGetExtension:
@@ -90,7 +92,7 @@ class TestExtractHtml:
 
 class TestExtractTextRouting:
     def test_pdf_route(self) -> None:
-        with patch("src.attachment_extractor._extract_pdf", return_value="PDF text") as mock_extract:
+        with patch("mailarium.attachment_extractor._extract_pdf", return_value="PDF text") as mock_extract:
             result = extract_text("doc.pdf", b"fake")
             assert result == "PDF text"
             mock_extract.assert_called_once()
@@ -99,32 +101,32 @@ class TestExtractTextRouting:
         def fail_optional(*_args, failure_recorder=None, **_kwargs):
             failure_recorder("text_extraction_failed:PDF:RuntimeError")
 
-        with patch("src.attachment_extractor._optional_extract", fail_optional):
+        with patch("mailarium.attachment_extractor._optional_extract", fail_optional):
             text, failure_reason = extract_text_with_reason("doc.pdf", b"fake")
 
         assert text is None
         assert failure_reason == "text_extraction_failed:PDF:RuntimeError"
 
     def test_docx_route(self) -> None:
-        with patch("src.attachment_extractor._extract_docx", return_value="DOCX text") as mock_extract:
+        with patch("mailarium.attachment_extractor._extract_docx", return_value="DOCX text") as mock_extract:
             result = extract_text("doc.docx", b"fake")
             assert result == "DOCX text"
             mock_extract.assert_called_once()
 
     def test_xlsx_route(self) -> None:
-        with patch("src.attachment_extractor._extract_xlsx", return_value="XLSX text") as mock_extract:
+        with patch("mailarium.attachment_extractor._extract_xlsx", return_value="XLSX text") as mock_extract:
             result = extract_text("data.xlsx", b"fake")
             assert result == "XLSX text"
             mock_extract.assert_called_once()
 
     def test_pptx_route(self) -> None:
-        with patch("src.attachment_extractor._extract_pptx", return_value="PPTX text") as mock_extract:
+        with patch("mailarium.attachment_extractor._extract_pptx", return_value="PPTX text") as mock_extract:
             result = extract_text("slides.pptx", b"fake")
             assert result == "PPTX text"
             mock_extract.assert_called_once()
 
     def test_htm_route(self) -> None:
-        with patch("src.attachment_extractor._extract_html", return_value="HTML text") as mock_extract:
+        with patch("mailarium.attachment_extractor._extract_html", return_value="HTML text") as mock_extract:
             result = extract_text("page.htm", b"fake")
             assert result == "HTML text"
             mock_extract.assert_called_once()
@@ -167,7 +169,7 @@ class TestPdfExtractor:
         assert "Page 2 content" in result
 
     def test_extract_pdf_via_optional(self) -> None:
-        with patch("src.attachment_extractor._optional_extract", return_value="PDF out") as mock_extract:
+        with patch("mailarium.attachment_extractor._optional_extract", return_value="PDF out") as mock_extract:
             result = _extract_pdf(b"content")
             assert result == "PDF out"
             mock_extract.assert_called_once()
@@ -191,7 +193,7 @@ class TestDocxExtractor:
         assert "Paragraph two" in result
 
     def test_extract_docx_via_optional(self) -> None:
-        with patch("src.attachment_extractor._optional_extract", return_value="DOCX out") as mock_extract:
+        with patch("mailarium.attachment_extractor._optional_extract", return_value="DOCX out") as mock_extract:
             result = _extract_docx(b"content")
             assert result == "DOCX out"
             mock_extract.assert_called_once()
@@ -199,24 +201,15 @@ class TestDocxExtractor:
 
 class TestXlsxExtractor:
     def test_xlsx_extractor_function(self) -> None:
-        mock_ws = MagicMock()
-        mock_ws.iter_rows.return_value = [
-            ("Name", "Value"),
-            ("Alice", 100),
-            (None, None),
-        ]
-
-        mock_wb = MagicMock()
-        mock_wb.sheetnames = ["Sheet1"]
-        mock_wb.__getitem__ = MagicMock(return_value=mock_ws)
-
-        mock_load_workbook = MagicMock(return_value=mock_wb)
-        result = _xlsx_extractor(mock_load_workbook, io.BytesIO(b"fake"))
+        result = _xlsx_extractor(
+            _xlsx_loader([("Name", "Value"), ("Alice", 100), (None, None)]),
+            io.BytesIO(b"fake"),
+        )
         assert "[Sheet: Sheet1]" in result
         assert "Alice" in result
 
     def test_extract_xlsx_via_optional(self) -> None:
-        with patch("src.attachment_extractor._optional_extract", return_value="XLSX out") as mock_extract:
+        with patch("mailarium.attachment_extractor._optional_extract", return_value="XLSX out") as mock_extract:
             result = _extract_xlsx(b"content")
             assert result == "XLSX out"
             mock_extract.assert_called_once()

@@ -1,5 +1,10 @@
-from src.retriever import SearchResult
-from src.web_ui import (
+"""Exercises web UI filter labels, chronological and relevance sorting, export payloads, and filter-chip escaping.
+
+It avoids rendering untrusted filter values as executable markup.
+"""
+
+from mailarium.retriever import SearchResult
+from mailarium.web_ui import (
     build_active_filter_labels,
     build_export_payload,
     build_filter_chip_html,
@@ -28,8 +33,12 @@ def _result(
     )
 
 
+def _filter_labels(**filters):
+    return build_active_filter_labels(filters)
+
+
 def test_build_active_filter_labels_includes_selected_filters():
-    labels = build_active_filter_labels(
+    labels = _filter_labels(
         sender=" legal@example.com ",
         subject=" renewal ",
         folder=" finance ",
@@ -49,15 +58,7 @@ def test_build_active_filter_labels_includes_selected_filters():
 
 
 def test_build_active_filter_labels_includes_cc():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        cc="finance-team",
-    )
+    labels = _filter_labels(cc="finance-team")
 
     assert labels == ["CC: finance-team"]
 
@@ -118,41 +119,17 @@ def test_build_export_payload_includes_filters_and_sort():
 
 
 def test_build_active_filter_labels_includes_to():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        to="employee@example.test",
-    )
+    labels = _filter_labels(to="employee@example.test")
     assert labels == ["To: employee@example.test"]
 
 
 def test_build_active_filter_labels_includes_has_attachments():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        has_attachments=True,
-    )
+    labels = _filter_labels(has_attachments=True)
     assert labels == ["Has attachments"]
 
 
 def test_build_active_filter_labels_has_attachments_false_not_shown():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        has_attachments=False,
-    )
+    labels = _filter_labels(has_attachments=False)
     assert labels == []
 
 

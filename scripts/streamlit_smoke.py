@@ -16,6 +16,7 @@ SUCCESS_MARKERS = (
 
 
 def main() -> int:
+    """Probe several loopback ports, retrying only address conflicts or permission failures before reporting startup logs."""
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
     last_lines: list[str] = []
@@ -35,12 +36,13 @@ def main() -> int:
 
 
 def _probe_once(env: dict[str, str], port: int) -> tuple[int, list[str]]:
+    """Launch Streamlit headlessly, detect a startup banner within 30 seconds, and always terminate the child process."""
     command = [
         sys.executable,
         "-m",
         "streamlit",
         "run",
-        "src/web_app.py",
+        "mailarium/web_app.py",
         "--server.headless",
         "true",
         "--server.address",

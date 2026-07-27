@@ -1,12 +1,5 @@
 # ruff: noqa: I001
-"""Tests for CLI command handler functions (_cmd_* and helpers).
-
-These tests exercise the uncovered handler logic in src/cli.py by:
-- Constructing argparse.Namespace objects directly
-- Mocking EmailRetriever and EmailDatabase
-- Capturing stdout/stderr with capsys
-- Verifying that the correct branches execute and produce output
-"""
+"""Interactive CLI action selection and compact renderer behavior."""
 
 from __future__ import annotations
 
@@ -15,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import (
+from mailarium.cli import (
     _interactive_action,
     _render_interactive_intro,
     _render_results_table,
@@ -25,7 +18,7 @@ from src.cli import (
 
 # ── Fake SearchResult ────────────────────────────────────────────────
 
-from .helpers.cli_fakes import _make_result, _make_retriever
+from .helpers.cli_fakes import _make_result, _make_retriever, _search_args
 
 
 class TestInteractiveAction:
@@ -100,59 +93,33 @@ class TestRenderHelpers:
 class TestMainDispatch:
     def test_main_search_dispatch(self):
         """main() dispatches to _cmd_search for 'search' subcommand."""
-        from src.cli import main
+        from mailarium.cli import main
 
         mock_retriever = _make_retriever(results=[_make_result()])
-        with patch("src.cli.parse_args") as mock_parse:
-            mock_parse.return_value = argparse.Namespace(
-                subcommand="search",
-                log_level=None,
-                chromadb_path=None,
-                sqlite_path=None,
-                query="test",
-                format=None,
-                json=False,
-                top_k=10,
-                sender=None,
-                subject=None,
-                folder=None,
-                cc=None,
-                to=None,
-                bcc=None,
-                has_attachments=None,
-                priority=None,
-                email_type=None,
-                date_from=None,
-                date_to=None,
-                min_score=None,
-                rerank=False,
-                hybrid=False,
-                topic=None,
-                cluster_id=None,
-                expand_query=False,
-            )
-            with patch("src.cli.configure_logging"):
-                with patch("src.cli.EmailRetriever", return_value=mock_retriever, create=True):
-                    with patch("src.retriever.EmailRetriever", return_value=mock_retriever):
+        with patch("mailarium.cli.parse_args") as mock_parse:
+            mock_parse.return_value = _search_args()
+            with patch("mailarium.cli.configure_logging"):
+                with patch("mailarium.cli.EmailRetriever", return_value=mock_retriever, create=True):
+                    with patch("mailarium.retriever.EmailRetriever", return_value=mock_retriever):
                         with pytest.raises(SystemExit) as exc_info:
                             main(["search", "test"])
                         assert exc_info.value.code == 0
 
     def test_main_analytics_dispatch(self, capsys):
         """main() dispatches to _cmd_analytics for 'analytics' subcommand."""
-        from src.cli import main
+        from mailarium.cli import main
 
         mock_retriever = _make_retriever()
-        with patch("src.cli.parse_args") as mock_parse:
+        with patch("mailarium.cli.parse_args") as mock_parse:
             mock_parse.return_value = argparse.Namespace(
                 subcommand="analytics",
                 log_level=None,
-                chromadb_path=None,
+                vector_index_path=None,
                 sqlite_path=None,
                 analytics_action="stats",
             )
-            with patch("src.cli.configure_logging"):
-                with patch("src.retriever.EmailRetriever", return_value=mock_retriever):
+            with patch("mailarium.cli.configure_logging"):
+                with patch("mailarium.retriever.EmailRetriever", return_value=mock_retriever):
                     with pytest.raises(SystemExit) as exc_info:
                         main(["analytics", "stats"])
                     assert exc_info.value.code == 0
@@ -161,20 +128,20 @@ class TestMainDispatch:
 
     def test_main_admin_dispatch(self, capsys):
         """main() dispatches to _cmd_admin for 'admin' subcommand."""
-        from src.cli import main
+        from mailarium.cli import main
 
         mock_retriever = _make_retriever()
-        with patch("src.cli.parse_args") as mock_parse:
+        with patch("mailarium.cli.parse_args") as mock_parse:
             mock_parse.return_value = argparse.Namespace(
                 subcommand="admin",
                 log_level=None,
-                chromadb_path=None,
+                vector_index_path=None,
                 sqlite_path=None,
                 admin_action="reset-index",
                 yes=True,
             )
-            with patch("src.cli.configure_logging"):
-                with patch("src.retriever.EmailRetriever", return_value=mock_retriever):
+            with patch("mailarium.cli.configure_logging"):
+                with patch("mailarium.retriever.EmailRetriever", return_value=mock_retriever):
                     with pytest.raises(SystemExit) as exc_info:
                         main(["admin", "reset-index", "--yes"])
                     assert exc_info.value.code == 0
@@ -183,43 +150,17 @@ class TestMainDispatch:
 
     def test_main_sets_sqlite_override(self, tmp_path):
         """main() forwards a custom SQLite path to the DB-backed CLI layer."""
-        from src.cli import main
+        from mailarium.cli import main
 
         custom_db = str(tmp_path / "custom-email.db")
         mock_retriever = _make_retriever(results=[_make_result()])
-        with patch("src.cli.parse_args") as mock_parse:
-            mock_parse.return_value = argparse.Namespace(
-                subcommand="search",
-                log_level=None,
-                chromadb_path=None,
-                sqlite_path=custom_db,
-                query="test",
-                format=None,
-                json=False,
-                top_k=10,
-                sender=None,
-                subject=None,
-                folder=None,
-                cc=None,
-                to=None,
-                bcc=None,
-                has_attachments=None,
-                priority=None,
-                email_type=None,
-                date_from=None,
-                date_to=None,
-                min_score=None,
-                rerank=False,
-                hybrid=False,
-                topic=None,
-                cluster_id=None,
-                expand_query=False,
-            )
+        with patch("mailarium.cli.parse_args") as mock_parse:
+            mock_parse.return_value = _search_args(sqlite_path=custom_db)
             with (
-                patch("src.cli.configure_logging"),
-                patch("src.cli.set_cli_sqlite_path_override") as mock_set_sqlite,
-                patch("src.cli.EmailRetriever", return_value=mock_retriever, create=True),
-                patch("src.retriever.EmailRetriever", return_value=mock_retriever),
+                patch("mailarium.cli.configure_logging"),
+                patch("mailarium.cli.set_cli_sqlite_path_override") as mock_set_sqlite,
+                patch("mailarium.cli.EmailRetriever", return_value=mock_retriever, create=True),
+                patch("mailarium.retriever.EmailRetriever", return_value=mock_retriever),
                 pytest.raises(SystemExit),
             ):
                 main(["search", "test"])

@@ -1,18 +1,12 @@
 # ruff: noqa: I001
-"""Extended tests for src/ingest.py to increase coverage from ~73% to >=85%.
-
-Covers: reingest paths, _reset_index, _resolve_entity_extractor,
-_auto_download_spacy_models, _checkpoint_wal, _NoOpProgressBar,
-_make_progress_bar, _hash_file_sha256, pipeline edge cases,
-main() dispatch branches, attachment processing, and more.
-"""
+"""Ingest progress reporting, archive hashing, and entity-extractor resolution behavior."""
 
 import sys
 import types
 from unittest.mock import MagicMock, patch
 
 
-from src.ingest import (
+from mailarium.ingest import (
     _auto_download_spacy_models,
     _hash_file_sha256,
     _make_progress_bar,
@@ -91,11 +85,11 @@ class TestResolveEntityExtractor:
     def test_uses_spacy_when_available(self, monkeypatch):
         """When spaCy is available, should use NLP extractor."""
         # Create mock modules
-        mock_nlp = types.ModuleType("src.nlp_entity_extractor")
+        mock_nlp = types.ModuleType("mailarium.nlp_entity_extractor")
         mock_nlp.is_spacy_available = lambda: True
         mock_nlp.extract_nlp_entities = lambda text, sender: []
 
-        monkeypatch.setitem(__import__("sys").modules, "src.nlp_entity_extractor", mock_nlp)
+        monkeypatch.setitem(__import__("sys").modules, "mailarium.nlp_entity_extractor", mock_nlp)
         result = _resolve_entity_extractor(extract_entities=True, dry_run=False)
         assert result is not None
 
@@ -103,14 +97,14 @@ class TestResolveEntityExtractor:
         """Ingest should attempt spaCy model bootstrap by default when models are missing."""
         monkeypatch.delenv("SPACY_AUTO_DOWNLOAD_DURING_INGEST", raising=False)
         availability = {"value": False}
-        mock_nlp = types.ModuleType("src.nlp_entity_extractor")
+        mock_nlp = types.ModuleType("mailarium.nlp_entity_extractor")
         mock_nlp.extract_nlp_entities = lambda text, sender: []
         mock_nlp.is_spacy_available = lambda: availability["value"]
         reset_cache = MagicMock()
         mock_nlp.reset_model_cache = reset_cache
-        monkeypatch.setitem(sys.modules, "src.nlp_entity_extractor", mock_nlp)
+        monkeypatch.setitem(sys.modules, "mailarium.nlp_entity_extractor", mock_nlp)
         auto_download = MagicMock(side_effect=lambda: availability.__setitem__("value", True))
-        monkeypatch.setattr("src.ingest._auto_download_spacy_models", auto_download)
+        monkeypatch.setattr("mailarium.ingest._auto_download_spacy_models", auto_download)
 
         result = _resolve_entity_extractor(extract_entities=True, dry_run=False)
 
@@ -121,13 +115,13 @@ class TestResolveEntityExtractor:
     def test_skips_spacy_bootstrap_when_disabled_during_ingest(self, monkeypatch):
         """Operators can still opt out of spaCy bootstrap during ingest."""
         monkeypatch.setenv("SPACY_AUTO_DOWNLOAD_DURING_INGEST", "0")
-        mock_nlp = types.ModuleType("src.nlp_entity_extractor")
+        mock_nlp = types.ModuleType("mailarium.nlp_entity_extractor")
         mock_nlp.extract_nlp_entities = lambda text, sender: []
         mock_nlp.is_spacy_available = lambda: False
         mock_nlp.reset_model_cache = MagicMock()
-        monkeypatch.setitem(sys.modules, "src.nlp_entity_extractor", mock_nlp)
+        monkeypatch.setitem(sys.modules, "mailarium.nlp_entity_extractor", mock_nlp)
         auto_download = MagicMock()
-        monkeypatch.setattr("src.ingest._auto_download_spacy_models", auto_download)
+        monkeypatch.setattr("mailarium.ingest._auto_download_spacy_models", auto_download)
 
         result = _resolve_entity_extractor(extract_entities=True, dry_run=False)
 

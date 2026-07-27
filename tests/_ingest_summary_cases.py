@@ -1,18 +1,20 @@
-def test_format_ingestion_summary_includes_qol_fields():
-    from src.ingest import format_ingestion_summary
+"""Ingestion-summary fields for completed runs, dry runs, and timing data."""
 
-    lines = format_ingestion_summary(
-        {
-            "emails_parsed": 10,
-            "chunks_created": 20,
-            "chunks_added": 18,
-            "chunks_skipped": 2,
-            "batches_written": 3,
-            "total_in_db": 99,
-            "dry_run": False,
-            "elapsed_seconds": 1.5,
-        }
-    )
+_COMPLETED_INGEST_STATS = {
+    "emails_parsed": 10,
+    "chunks_created": 20,
+    "chunks_added": 18,
+    "chunks_skipped": 2,
+    "batches_written": 3,
+    "total_in_db": 99,
+    "dry_run": False,
+}
+
+
+def test_format_ingestion_summary_includes_qol_fields():
+    from mailarium.ingest import format_ingestion_summary
+
+    lines = format_ingestion_summary({**_COMPLETED_INGEST_STATS, "elapsed_seconds": 1.5})
 
     assert "=== Ingestion Summary ===" in lines
     assert "Emails parsed: 10" in lines
@@ -24,7 +26,7 @@ def test_format_ingestion_summary_includes_qol_fields():
 
 
 def test_format_ingestion_summary_for_dry_run_hides_db_totals():
-    from src.ingest import format_ingestion_summary
+    from mailarium.ingest import format_ingestion_summary
 
     lines = format_ingestion_summary(
         {
@@ -45,17 +47,11 @@ def test_format_ingestion_summary_for_dry_run_hides_db_totals():
 
 
 def test_format_ingestion_summary_includes_timing():
-    from src.ingest import format_ingestion_summary
+    from mailarium.ingest import format_ingestion_summary
 
     lines = format_ingestion_summary(
         {
-            "emails_parsed": 10,
-            "chunks_created": 20,
-            "chunks_added": 18,
-            "chunks_skipped": 2,
-            "batches_written": 3,
-            "total_in_db": 99,
-            "dry_run": False,
+            **_COMPLETED_INGEST_STATS,
             "elapsed_seconds": 10.5,
             "timing": {"embed_seconds": 8.0, "write_seconds": 1.5},
         }
@@ -66,17 +62,11 @@ def test_format_ingestion_summary_includes_timing():
 
 
 def test_format_ingestion_summary_detailed_timing():
-    from src.ingest import format_ingestion_summary
+    from mailarium.ingest import format_ingestion_summary
 
     lines = format_ingestion_summary(
         {
-            "emails_parsed": 10,
-            "chunks_created": 20,
-            "chunks_added": 18,
-            "chunks_skipped": 2,
-            "batches_written": 3,
-            "total_in_db": 99,
-            "dry_run": False,
+            **_COMPLETED_INGEST_STATS,
             "elapsed_seconds": 10.5,
             "timing": {
                 "embed_seconds": 6.0,

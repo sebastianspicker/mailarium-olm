@@ -1,4 +1,4 @@
-"""Tests for MCP server bug fixes: truncation, budgeting, defaults, lockfile."""
+"""Verifies MCP responses retain safe truncation, budgeting, defaults, and dependency-lock behavior."""
 
 from __future__ import annotations
 
@@ -8,24 +8,42 @@ import sys
 
 import pytest
 
+
+def _budget_result(text="body text", uid="uid1"):
+    from mailarium.retriever import SearchResult
+
+    return SearchResult(
+        chunk_id=f"chunk-{uid}",
+        text=text,
+        metadata={"sender_email": "a@example.test", "date": "2024-01-01", "uid": uid},
+        distance=0.2,
+    )
+
+
+def _bare_retriever():
+    from mailarium.retriever import EmailRetriever
+
+    return EmailRetriever.__new__(EmailRetriever)
+
+
 # ── truncate_body ─────────────────────────────────────────────
 
 
 class TestTruncateBody:
     def test_no_truncation_when_unlimited(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         text = "a" * 1000
         assert truncate_body(text, 0) == text
 
     def test_no_truncation_when_within_limit(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         text = "hello world"
         assert truncate_body(text, 500) == text
 
     def test_truncation_appends_hint(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         text = "a" * 600
         result = truncate_body(text, 500)
@@ -34,13 +52,13 @@ class TestTruncateBody:
         assert "truncated" in result
 
     def test_truncation_exact_boundary(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         text = "a" * 500
-        assert truncate_body(text, 500) == text  # Exactly at limit — no truncation
+        assert truncate_body(text, 500) == text  # Exactly at limit - no truncation
 
     def test_truncation_negative_is_unlimited(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         text = "a" * 1000
         assert truncate_body(text, -1) == text
@@ -51,7 +69,7 @@ class TestTruncateBody:
 
 class TestFormatContextBlockTruncation:
     def test_body_truncated_in_context_block(self):
-        from src.formatting import format_context_block
+        from mailarium.formatting import format_context_block
 
         text = "x" * 1000
         metadata = {"sender_name": "Alice", "sender_email": "a@example.test", "date": "2024-01-01"}
@@ -60,7 +78,7 @@ class TestFormatContextBlockTruncation:
         assert "x" * 200 in result
 
     def test_no_truncation_when_zero(self):
-        from src.formatting import format_context_block
+        from mailarium.formatting import format_context_block
 
         text = "x" * 1000
         metadata = {"date": "2024-01-01"}
@@ -74,14 +92,14 @@ class TestFormatContextBlockTruncation:
 
 class TestSettings:
     def test_default_mcp_settings(self):
-        from src.config import Settings
+        from mailarium.config import Settings
 
         s = Settings()
         assert s.mcp_max_body_chars == 500
         assert s.mcp_max_response_tokens == 8000
 
     def test_env_override(self, monkeypatch):
-        from src.config import Settings
+        from mailarium.config import Settings
 
         monkeypatch.setenv("MCP_MAX_BODY_CHARS", "0")
         monkeypatch.setenv("MCP_MAX_RESPONSE_TOKENS", "4000")
@@ -90,7 +108,7 @@ class TestSettings:
         assert s.mcp_max_response_tokens == 4000
 
     def test_resolve_runtime_passes_through(self, monkeypatch):
-        from src.config import get_settings, resolve_runtime_settings
+        from mailarium.config import get_settings, resolve_runtime_settings
 
         # Clear cached settings
         get_settings.cache_clear()
@@ -108,33 +126,17 @@ class TestSettings:
 
 
 class TestFormatResultsBudget:
-    def _make_result(self, text="body text", uid="uid1"):
-        from src.retriever import SearchResult
-
-        return SearchResult(
-            chunk_id=f"chunk-{uid}",
-            text=text,
-            metadata={"sender_email": "a@example.test", "date": "2024-01-01", "uid": uid},
-            distance=0.2,
-        )
-
-    def _make_retriever(self):
-        from src.retriever import EmailRetriever
-
-        r = EmailRetriever.__new__(EmailRetriever)
-        return r
-
     def test_body_truncation_applied(self):
-        r = self._make_retriever()
-        result = self._make_result(text="x" * 1000, uid="u1")
+        r = _bare_retriever()
+        result = _budget_result(text="x" * 1000, uid="u1")
         output = r.format_results_for_llm([result], max_body_chars=100, max_response_tokens=0)
         assert "truncated" in output
         assert "x" * 100 in output
 
     def test_budget_omits_excess_results(self):
-        r = self._make_retriever()
+        r = _bare_retriever()
         # Create many results with large bodies to exceed budget
-        results = [self._make_result(text="x" * 500, uid=f"u{i}") for i in range(50)]
+        results = [_budget_result(text="x" * 500, uid=f"u{i}") for i in range(50)]
         output = r.format_results_for_llm(
             results,
             max_body_chars=0,
@@ -143,8 +145,8 @@ class TestFormatResultsBudget:
         assert "omitted" in output or "Found 50" in output
 
     def test_unlimited_budget_shows_all(self):
-        r = self._make_retriever()
-        results = [self._make_result(uid=f"u{i}") for i in range(5)]
+        r = _bare_retriever()
+        results = [_budget_result(uid=f"u{i}") for i in range(5)]
         output = r.format_results_for_llm(results, max_body_chars=0, max_response_tokens=0)
         assert "omitted" not in output
         assert "Result 5" in output
@@ -155,29 +157,15 @@ class TestFormatResultsBudget:
 
 class TestSerializeResultsTruncation:
     def test_bodies_truncated(self):
-        from src.retriever import EmailRetriever, SearchResult
-
-        r = EmailRetriever.__new__(EmailRetriever)
-        result = SearchResult(
-            chunk_id="c1",
-            text="y" * 1000,
-            metadata={"uid": "u1"},
-            distance=0.1,
-        )
+        r = _bare_retriever()
+        result = _budget_result(text="y" * 1000, uid="u1")
         payload = r.serialize_results("test", [result], max_body_chars=100)
         assert "truncated" in payload["results"][0]["text"]
         assert payload["results"][0]["text"].startswith("y" * 100)
 
     def test_unlimited_no_truncation(self):
-        from src.retriever import EmailRetriever, SearchResult
-
-        r = EmailRetriever.__new__(EmailRetriever)
-        result = SearchResult(
-            chunk_id="c1",
-            text="y" * 1000,
-            metadata={"uid": "u1"},
-            distance=0.1,
-        )
+        r = _bare_retriever()
+        result = _budget_result(text="y" * 1000, uid="u1")
         payload = r.serialize_results("test", [result], max_body_chars=0)
         assert payload["results"][0]["text"] == "y" * 1000
 
@@ -187,7 +175,7 @@ class TestSerializeResultsTruncation:
 
 class TestMcpModelDefaults:
     def test_browse_defaults(self):
-        from src.mcp_models import BrowseInput
+        from mailarium.mcp_models import BrowseInput
 
         m = BrowseInput()
         assert m.include_body is False
@@ -210,7 +198,7 @@ class TestSmartSearchFlat:
             parsed = json.loads(sample_output)
             assert "formatted_results" not in parsed
         except json.JSONDecodeError:
-            pass  # Expected — flat text is not JSON
+            pass  # Expected - flat text is not JSON
 
 
 # ── Instance lock ─────────────────────────────────────────────
@@ -221,7 +209,7 @@ class TestInstanceLock:
         """The lock functions should be importable without side effects in tests."""
         # We can't test the actual lock in unit tests (it runs at module import),
         # but we verify the helper functions exist.
-        from src.mcp_server import _release_lock
+        from mailarium.mcp_server import _release_lock
 
         assert callable(_release_lock)
 
@@ -230,7 +218,7 @@ class TestInstanceLock:
         """Verify _acquire_instance_lock creates a lock file with PID."""
         import fcntl
 
-        from src.config import get_settings
+        from mailarium.config import get_settings
 
         lock_path = tmp_path / "mcp_server.lock"
 
@@ -261,7 +249,7 @@ class TestBrowseTruncation:
 
     def test_browse_body_truncated(self, monkeypatch):
         """Bodies returned by email_browse are truncated to mcp_max_body_chars."""
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         body = "x" * 1000
         result = truncate_body(body, 500)
@@ -274,27 +262,27 @@ class TestBrowseTruncation:
 
 class TestGetFullSoftLimit:
     def test_setting_default(self):
-        from src.config import Settings
+        from mailarium.config import Settings
 
         s = Settings()
         assert s.mcp_max_full_body_chars == 10000
 
     def test_env_override(self, monkeypatch):
-        from src.config import Settings
+        from mailarium.config import Settings
 
         monkeypatch.setenv("MCP_MAX_FULL_BODY_CHARS", "5000")
         s = Settings.from_env()
         assert s.mcp_max_full_body_chars == 5000
 
     def test_zero_means_unlimited(self, monkeypatch):
-        from src.config import Settings
+        from mailarium.config import Settings
 
         monkeypatch.setenv("MCP_MAX_FULL_BODY_CHARS", "0")
         s = Settings.from_env()
         assert s.mcp_max_full_body_chars == 0
 
     def test_resolve_runtime_passes_through(self, monkeypatch):
-        from src.config import get_settings, resolve_runtime_settings
+        from mailarium.config import get_settings, resolve_runtime_settings
 
         get_settings.cache_clear()
         monkeypatch.setenv("MCP_MAX_FULL_BODY_CHARS", "7500")
@@ -310,7 +298,7 @@ class TestGetFullSoftLimit:
 
 class TestNbspNormalization:
     def test_truncate_body_normalizes_nbsp(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         text = "hello\xa0world"
         result = truncate_body(text, 0)  # unlimited
@@ -318,7 +306,7 @@ class TestNbspNormalization:
         assert result == "hello world"
 
     def test_truncate_body_normalizes_before_truncation(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         text = "\xa0" * 100 + "x" * 500
         result = truncate_body(text, 200)
@@ -326,7 +314,7 @@ class TestNbspNormalization:
         assert result.startswith(" " * 100)
 
     def test_html_converter_strips_nbsp(self):
-        from src.html_converter import html_to_text
+        from mailarium.html_converter import html_to_text
 
         html = "<p>Hello&nbsp;world&nbsp;foo</p>"
         result = html_to_text(html)
@@ -338,25 +326,9 @@ class TestNbspNormalization:
 
 
 class TestSerializeResultsBudget:
-    def _make_result(self, text="body text", uid="uid1"):
-        from src.retriever import SearchResult
-
-        return SearchResult(
-            chunk_id=f"chunk-{uid}",
-            text=text,
-            metadata={"sender_email": "a@example.test", "date": "2024-01-01", "uid": uid},
-            distance=0.2,
-        )
-
-    def _make_retriever(self):
-        from src.retriever import EmailRetriever
-
-        r = EmailRetriever.__new__(EmailRetriever)
-        return r
-
     def test_budget_omits_excess(self):
-        r = self._make_retriever()
-        results = [self._make_result(text="x" * 500, uid=f"u{i}") for i in range(50)]
+        r = _bare_retriever()
+        results = [_budget_result(text="x" * 500, uid=f"u{i}") for i in range(50)]
         payload = r.serialize_results("test", results, max_body_chars=0, max_response_tokens=200)
         assert payload["results_truncated"] is True
         assert payload["count"] < 50
@@ -365,16 +337,16 @@ class TestSerializeResultsBudget:
         assert "omitted" in payload["truncation_note"]
 
     def test_unlimited_budget_shows_all(self):
-        r = self._make_retriever()
-        results = [self._make_result(uid=f"u{i}") for i in range(5)]
+        r = _bare_retriever()
+        results = [_budget_result(uid=f"u{i}") for i in range(5)]
         payload = r.serialize_results("test", results, max_body_chars=0, max_response_tokens=0)
         assert len(payload["results"]) == 5
         assert payload["results_truncated"] is False
 
     def test_budget_keeps_at_least_one_result(self):
         """Even with a very tight budget, the first result is always included."""
-        r = self._make_retriever()
-        results = [self._make_result(text="x" * 2000, uid="u0")]
+        r = _bare_retriever()
+        results = [_budget_result(text="x" * 2000, uid="u0")]
         payload = r.serialize_results("test", results, max_body_chars=0, max_response_tokens=1)
         assert len(payload["results"]) == 1
         assert payload["count"] == 1

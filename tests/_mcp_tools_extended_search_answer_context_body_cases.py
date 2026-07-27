@@ -1,10 +1,5 @@
 # ruff: noqa: I001
-"""Extended tests for low-coverage MCP tool modules.
-
-Tests cover: threads.py, reporting.py, temporal.py, data_quality.py,
-browse.py, and scan.py. Each test mocks deps (retriever + email_db),
-calls the async tool function, and asserts valid JSON with expected keys.
-"""
+"""MCP answer-context body candidates, evidence modes, groups, timeline, and attribution."""
 
 from __future__ import annotations
 
@@ -12,17 +7,24 @@ import json
 
 import pytest
 
-from src.retriever import SearchResult
+from mailarium.retriever import SearchResult
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
-from .helpers.mcp_tool_extended_fakes import FakeMCP, MockDeps, MockEmailDB, MockRetriever, _make_result
+from .helpers.mcp_tool_extended_fakes import (
+    FakeMCP,
+    MockDeps,
+    MockEmailDB,
+    MockRetriever,
+    _assert_strong_attachment_candidate,
+    _make_result,
+)
 
 
 class TestSearchTools:
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_and_returns_candidates(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class SegmentMatchingRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -35,7 +37,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             params = EmailAnswerContextInput(question="What was decided?", max_results=2)
             result = await fn(params)
@@ -59,7 +61,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_forensic_mode_uses_forensic_render(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class ForensicDB(MockEmailDB):
             def __init__(self):
@@ -83,7 +85,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             params = EmailAnswerContextInput(question="What was decided?", evidence_mode="forensic")
             result = await fn(params)
@@ -100,7 +102,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_handles_empty_results(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class EmptyRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -113,7 +115,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             params = EmailAnswerContextInput(question="Did anyone mention the maintenance window?")
             result = await fn(params)
@@ -129,7 +131,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_separates_attachment_candidates(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class AttachmentRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -159,7 +161,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="What is in the budget spreadsheet?"))
             data = json.loads(result)
@@ -169,16 +171,8 @@ class TestSearchTools:
             assert data["candidates"] == []
             assert len(data["attachment_candidates"]) == 1
             candidate = data["attachment_candidates"][0]
-            assert candidate["uid"] == "uid-1"
-            assert candidate["attachment"]["filename"] == "budget.xlsx"
+            _assert_strong_attachment_candidate(candidate, uid="uid-1", filename="budget.xlsx")
             assert candidate["attachment"]["mime_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            assert candidate["attachment"]["size"] == 2048
-            assert candidate["attachment"]["extraction_state"] == "text_extracted"
-            assert candidate["attachment"]["text_available"] is True
-            assert candidate["attachment"]["ocr_used"] is False
-            assert candidate["attachment"]["failure_reason"] is None
-            assert candidate["attachment"]["evidence_strength"] == "strong_text"
-            assert candidate["attachment"]["is_inline"] is False
             assert candidate["follow_up"]["uid"] == "uid-1"
             assert candidate["provenance"]["evidence_handle"].startswith("attachment:uid-1:budget.xlsx:")
         finally:
@@ -186,7 +180,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_surfaces_ocr_attachment_state(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class OCRAttachmentRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -216,7 +210,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="What does the invoice scan say?"))
             data = json.loads(result)
@@ -232,7 +226,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_adds_conversation_groups(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class ThreadedRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -262,7 +256,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="What happened in the budget thread?", max_results=2))
             data = json.loads(result)
@@ -283,7 +277,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_reports_ambiguity(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class AmbiguousRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -313,7 +307,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="Which result is best?", max_results=2))
             data = json.loads(result)
@@ -327,7 +321,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_adds_timeline(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class TemporalRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -366,7 +360,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="How did the rollout evolve?", max_results=3))
             data = json.loads(result)
@@ -383,7 +377,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_adds_speaker_attribution(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class SpeakerRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -405,7 +399,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="Who said what about the vendor?", max_results=1))
             data = json.loads(result)

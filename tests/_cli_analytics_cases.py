@@ -1,12 +1,5 @@
 # ruff: noqa: I001
-"""Tests for CLI command handler functions (_cmd_* and helpers).
-
-These tests exercise the uncovered handler logic in src/cli.py by:
-- Constructing argparse.Namespace objects directly
-- Mocking EmailRetriever and EmailDatabase
-- Capturing stdout/stderr with capsys
-- Verifying that the correct branches execute and produce output
-"""
+"""CLI analytics dispatch, legacy analytics actions, and validation behavior."""
 
 from __future__ import annotations
 
@@ -16,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import (
+from mailarium.cli import (
     _cmd_analytics,
 )
 
@@ -59,7 +52,7 @@ class TestCmdAnalytics:
     def test_analytics_suggest(self):
         retriever = _make_retriever()
         args = argparse.Namespace(analytics_action="suggest")
-        with patch("src.cli_commands._run_suggest") as mock_fn:
+        with patch("mailarium.cli_commands._run_suggest") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_analytics(args, retriever)
             assert exc_info.value.code == 0
@@ -72,8 +65,8 @@ class TestCmdAnalytics:
             email_address="employee@example.test",
         )
         mock_db = MagicMock()
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_top_contacts") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_top_contacts") as mock_fn:
                 with pytest.raises(SystemExit) as exc_info:
                     _cmd_analytics(args, retriever)
                 assert exc_info.value.code == 0
@@ -86,8 +79,8 @@ class TestCmdAnalytics:
             period="week",
         )
         mock_db = MagicMock()
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_volume") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_volume") as mock_fn:
                 with pytest.raises(SystemExit) as exc_info:
                     _cmd_analytics(args, retriever)
                 assert exc_info.value.code == 0
@@ -100,8 +93,8 @@ class TestCmdAnalytics:
             entity_type="organization",
         )
         mock_db = MagicMock()
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_entities") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_entities") as mock_fn:
                 with pytest.raises(SystemExit) as exc_info:
                     _cmd_analytics(args, retriever)
                 assert exc_info.value.code == 0
@@ -111,8 +104,8 @@ class TestCmdAnalytics:
         retriever = _make_retriever()
         args = argparse.Namespace(analytics_action="heatmap")
         mock_db = MagicMock()
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_heatmap") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_heatmap") as mock_fn:
                 with pytest.raises(SystemExit) as exc_info:
                     _cmd_analytics(args, retriever)
                 assert exc_info.value.code == 0
@@ -122,8 +115,8 @@ class TestCmdAnalytics:
         retriever = _make_retriever()
         args = argparse.Namespace(analytics_action="response-times")
         mock_db = MagicMock()
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_response_times") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_response_times") as mock_fn:
                 with pytest.raises(SystemExit) as exc_info:
                     _cmd_analytics(args, retriever)
                 assert exc_info.value.code == 0
@@ -141,7 +134,7 @@ class TestCmdAnalytics:
 
 class TestRunAnalyticsCommand:
     def test_legacy_top_contacts(self):
-        from src.cli import _run_analytics_command
+        from mailarium.cli import _run_analytics_command
 
         mock_db = MagicMock()
         args = argparse.Namespace(
@@ -151,13 +144,13 @@ class TestRunAnalyticsCommand:
             heatmap=False,
             response_times=False,
         )
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_top_contacts") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_top_contacts") as mock_fn:
                 _run_analytics_command(args)
                 mock_fn.assert_called_once_with(mock_db, "employee@example.test")
 
     def test_legacy_volume(self):
-        from src.cli import _run_analytics_command
+        from mailarium.cli import _run_analytics_command
 
         mock_db = MagicMock()
         args = argparse.Namespace(
@@ -167,13 +160,13 @@ class TestRunAnalyticsCommand:
             heatmap=False,
             response_times=False,
         )
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_volume") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_volume") as mock_fn:
                 _run_analytics_command(args)
                 mock_fn.assert_called_once_with(mock_db, "week")
 
     def test_legacy_entities_all(self):
-        from src.cli import _run_analytics_command
+        from mailarium.cli import _run_analytics_command
 
         mock_db = MagicMock()
         args = argparse.Namespace(
@@ -183,13 +176,13 @@ class TestRunAnalyticsCommand:
             heatmap=False,
             response_times=False,
         )
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_entities") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_entities") as mock_fn:
                 _run_analytics_command(args)
                 mock_fn.assert_called_once_with(mock_db, None)
 
     def test_legacy_entities_with_type(self):
-        from src.cli import _run_analytics_command
+        from mailarium.cli import _run_analytics_command
 
         mock_db = MagicMock()
         args = argparse.Namespace(
@@ -199,13 +192,13 @@ class TestRunAnalyticsCommand:
             heatmap=False,
             response_times=False,
         )
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_entities") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_entities") as mock_fn:
                 _run_analytics_command(args)
                 mock_fn.assert_called_once_with(mock_db, "organization")
 
     def test_legacy_heatmap(self):
-        from src.cli import _run_analytics_command
+        from mailarium.cli import _run_analytics_command
 
         mock_db = MagicMock()
         args = argparse.Namespace(
@@ -215,13 +208,13 @@ class TestRunAnalyticsCommand:
             heatmap=True,
             response_times=False,
         )
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_heatmap") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_heatmap") as mock_fn:
                 _run_analytics_command(args)
                 mock_fn.assert_called_once_with(mock_db)
 
     def test_legacy_response_times(self):
-        from src.cli import _run_analytics_command
+        from mailarium.cli import _run_analytics_command
 
         mock_db = MagicMock()
         args = argparse.Namespace(
@@ -231,7 +224,7 @@ class TestRunAnalyticsCommand:
             heatmap=False,
             response_times=True,
         )
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.cli_commands._run_response_times") as mock_fn:
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.cli_commands._run_response_times") as mock_fn:
                 _run_analytics_command(args)
                 mock_fn.assert_called_once_with(mock_db)

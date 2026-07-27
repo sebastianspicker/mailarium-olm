@@ -1,13 +1,13 @@
-"""Extended tests for src/parse_olm.py — targeting uncovered lines."""
+"""OLM body normalization for signatures, reply headers, disclaimers, and multilingual mail."""
 
 from __future__ import annotations
 
 import time
 
-from src.parse_olm import (
+from mailarium.parse_olm import (
     Email,
 )
-from src.parse_olm_normalization import (
+from mailarium.parse_olm_normalization import (
     BODY_NORMALIZATION_VERSION,
     _has_newsletter_hint,
     _has_normalized_quoted_separator,
@@ -17,6 +17,24 @@ from src.parse_olm_normalization import (
     _is_outlook_separator_line,
     _normalized_body_noise_score,
 )
+
+
+def _email_with_body(*, body_text, body_html=""):
+    """Create a minimal inbox email for body-normalization cases."""
+    return Email(
+        message_id="<m@test>",
+        subject="Test",
+        sender_name="",
+        sender_email="",
+        to=[],
+        cc=[],
+        bcc=[],
+        date="",
+        body_text=body_text,
+        body_html=body_html,
+        folder="Inbox",
+        has_attachments=False,
+    )
 
 
 def test_normalization_line_parsers_preserve_regex_parity() -> None:
@@ -49,20 +67,7 @@ def test_normalization_line_parsers_are_linear_on_adversarial_input() -> None:
 class TestCleanBodyHtml:
     def test_clean_body_html_in_body_text_field(self):
         """When body_text contains HTML, clean_body strips HTML tags."""
-        email = Email(
-            message_id="<m@test>",
-            subject="Test",
-            sender_name="",
-            sender_email="",
-            to=[],
-            cc=[],
-            bcc=[],
-            date="",
-            body_text="<html><body><p>Hello</p></body></html>",
-            body_html="",
-            folder="Inbox",
-            has_attachments=False,
-        )
+        email = _email_with_body(body_text="<html><body><p>Hello</p></body></html>")
         result = email.clean_body
         assert "Hello" in result
         assert "<html>" not in result
@@ -96,20 +101,7 @@ class TestCleanBodyHtml:
         assert email.body_normalization_version == BODY_NORMALIZATION_VERSION
 
     def test_clean_body_tracks_html_in_body_text_source(self):
-        email = Email(
-            message_id="<m@test>",
-            subject="Test",
-            sender_name="",
-            sender_email="",
-            to=[],
-            cc=[],
-            bcc=[],
-            date="",
-            body_text="<html><body><p>Hello</p></body></html>",
-            body_html="",
-            folder="Inbox",
-            has_attachments=False,
-        )
+        email = _email_with_body(body_text="<html><body><p>Hello</p></body></html>")
         assert email.clean_body == "Hello"
         assert email.clean_body_source == "body_text_html"
 

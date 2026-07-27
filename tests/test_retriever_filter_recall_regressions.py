@@ -1,6 +1,8 @@
+"""Ensures combined recipient, attachment, and priority filters preserve the intended matching result."""
+
 from __future__ import annotations
 
-from src.retriever import EmailRetriever, SearchResult
+from mailarium.retriever import EmailRetriever, SearchResult
 
 
 def test_search_filtered_combined_new_filters() -> None:

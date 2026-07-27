@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.cli import parse_args
+from mailarium.cli import parse_args
 
 
 class TestAnalyticsSubcommand:

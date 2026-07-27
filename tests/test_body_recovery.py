@@ -1,8 +1,8 @@
-"""Tests for empty/near-empty normalized body classification and recovery."""
+"""Verifies empty normalized bodies are classified and recovered through safe fallbacks."""
 
 from __future__ import annotations
 
-from src.body_recovery import classify_body_state
+from mailarium.body_recovery import classify_body_state
 
 
 def test_classify_body_state_recovers_image_only_html_from_preview():

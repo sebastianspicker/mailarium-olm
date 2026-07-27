@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.retriever import SearchResult
+from mailarium.retriever import SearchResult
 
 from ._bugfix_regression_cases import bare_retriever, make_result
 
@@ -77,36 +77,34 @@ class TestP1MinScoreDeferredAfterReranking:
         assert len(results) == 0
 
 
-class TestP1ColBERTRerankerCached:
-    """P1 fix #7: ColBERTReranker cached."""
+class TestP1LateInteractionBackendCached:
+    """The local late-interaction backend is reused across calls."""
 
-    def test_colbert_reranker_reused_across_calls(self):
+    def test_late_interaction_backend_reused_across_calls(self):
         retriever = bare_retriever()
         settings = MagicMock()
-        settings.colbert_rerank_enabled = True
+        settings.late_interaction_enabled = True
+        settings.late_interaction_runner = "/runner"
+        settings.late_interaction_model_path = "/model"
         retriever.settings = settings
 
-        mock_embedder = MagicMock()
-        mock_embedder.has_colbert = True
-        retriever._embedder = mock_embedder
-        retriever._colbert_reranker = None
+        retriever._late_interaction_backend = None
 
         results = [make_result("c1")]
-        mock_reranker = MagicMock()
-        mock_reranker.rerank.return_value = results
+        backend = MagicMock()
+        backend.rerank.return_value = results
 
         construction_count = {"n": 0}
 
-        def counting_constructor(embedder):
+        def counting_constructor(**_kwargs):
             construction_count["n"] += 1
-            return mock_reranker
+            return backend
 
-        with patch.dict("sys.modules", {"src.colbert_reranker": MagicMock(ColBERTReranker=counting_constructor)}):
-            with patch("src.colbert_reranker.ColBERTReranker", side_effect=counting_constructor):
-                retriever._apply_rerank("query1", results, top_k=1)
-                retriever._apply_rerank("query2", results, top_k=1)
+        with patch("mailarium.late_interaction_backend.LocalLateInteractionBackend", side_effect=counting_constructor):
+            retriever._apply_rerank("query1", results, top_k=1)
+            retriever._apply_rerank("query2", results, top_k=1)
 
-        assert retriever._colbert_reranker is not None
+        assert construction_count["n"] == 1
 
 
 class TestP1StalenessCheck:
@@ -148,7 +146,7 @@ class TestP1KeywordOnlyScoreHalf:
 
         retriever.search = search
 
-        def mock_merge(self, query, results, fetch_size):
+        def mock_merge(self, query, results, fetch_size, **_kwargs):
             keyword_only = SearchResult(
                 chunk_id="c2",
                 text="keyword match",
@@ -177,7 +175,7 @@ class TestP1KeywordOnlyScoreHalf:
         assert result.score_calibration == "synthetic"
 
     def test_synthetic_keyword_score_is_not_filtered_by_min_score(self):
-        from src.result_filters import apply_metadata_filters
+        from mailarium.result_filters import apply_metadata_filters
 
         result = SearchResult(
             chunk_id="c2",

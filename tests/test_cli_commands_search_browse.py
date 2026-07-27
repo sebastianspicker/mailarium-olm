@@ -1,3 +1,5 @@
+"""Exercises CLI search, browsing, and export routes with their requested output representations."""
+
 from ._cli_commands_cases import (
     TestCmdBrowse,
     TestCmdExport,

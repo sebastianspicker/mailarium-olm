@@ -1,20 +1,55 @@
-# Test Layout Contract
+# Test structure
 
-Purpose:
+Pytest collects the complete suite from `tests/`, as configured in
+`pyproject.toml`.
 
-- keep future tests easier to audit by component and workflow
-- avoid adding more permanent ambiguity to the flat `tests/` root
+## Layout
 
-Rules for new tests:
+```text
+tests/
+├── test_*.py              Collected component and contract tests
+├── _*_cases.py            Active split case modules imported by collected tests
+├── conftest.py            Shared fixtures and offline dependency stubs
+├── helpers/               Reusable builders and test doubles
+├── fixtures/              Tracked static and golden fixtures
+└── mailbox/               Optional EWS and mailbox tests with XML fixtures
+```
 
-1. new tests should go in a component-aligned subdirectory when a stable family exists
-2. keep the `tests/` root for legacy files and compatibility cases that have not been reorganized yet
-3. add new helper utilities under `tests/helpers/`
-4. add new static fixtures under `tests/fixtures/`
+The underscore-prefixed case modules are active test source. They partition
+large suites while the corresponding `test_*.py` modules provide stable
+collection paths. Do not ignore or archive them.
 
-Current reality:
+New standalone tests should use a descriptive `test_*.py` module. Add shared
+utilities to `helpers/`, static inputs and expected outputs to `fixtures/`, and
+mailbox protocol cases to `mailbox/`.
 
-- the historical suite is still root-heavy
-- the first migrated workflow slice now lives under `tests/case_workflows/`
-- `tests/case_workflows/` currently owns case-intake, full-pack, case-CLI, and campaign-workflow slices
-- the remaining root-level files are still legacy and should only move when a bounded workflow family is ready
+## Fixture policy
+
+- `fixtures/html_normalization/` contains tracked input and expected-output
+  pairs.
+- `fixtures/qa_eval/` contains tracked synthetic questions and captured golden
+  results. The refresh script must reproduce the captured files exactly.
+- `mailbox/fixtures/` contains tracked synthetic EWS XML responses.
+- Local runtime data belongs under ignored temporary paths, not in the tracked
+  fixture directories.
+
+## Running tests
+
+Run the complete suite:
+
+```bash
+uv run pytest -q
+```
+
+Run the CI coverage gate:
+
+```bash
+uv run pytest -q --cov=mailarium --cov-report=term-missing --cov-fail-under=80
+```
+
+Run one component while developing:
+
+```bash
+uv run pytest -q tests/test_storage.py
+uv run pytest -q tests/mailbox
+```

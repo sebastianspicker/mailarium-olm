@@ -3,6 +3,8 @@
 # pylint: disable=unused-wildcard-import,wildcard-import
 
 
+"""Aggregates ingestion workflow behavior cases for the parent test suite."""
+
 from .helpers.ingest_fixtures import *
 from ._ingest_cli_cases import *
 from ._ingest_pipeline_cases import *

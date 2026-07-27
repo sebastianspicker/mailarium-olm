@@ -1,7 +1,7 @@
-"""Tests for relationship analysis features (Phase 2)."""
+"""Verifies relationship analysis derives communication patterns and comparative network signals."""
 
 # pylint: disable=redefined-outer-name
-# W0621: pytest fixture injection — test functions receive ``db`` fixture as a parameter,
+# W0621: pytest fixture injection - test functions receive ``db`` fixture as a parameter,
 # which pylint misidentifies as shadowing the module-level fixture definition.
 
 import os
@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
 
 @pytest.fixture()
@@ -127,7 +127,7 @@ def test_shared_recipients_finds_common_recipients(db):
 def test_shared_recipients_empty_for_no_overlap(db):
     """Should return empty when senders have no common recipients."""
     results = db.shared_recipients_query(["alice@example.test", "dave@example.test"])
-    # alice sends to bob, carol, dave; dave sends to eve — minimal overlap
+    # alice sends to bob, carol, dave; dave sends to eve - minimal overlap
     assert isinstance(results, list)
 
 
@@ -173,7 +173,7 @@ def test_sender_activity_timeline_empty_list(db):
 
 def test_find_paths_direct_connection(db):
     """Should find a direct path between connected nodes."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     paths = net.find_paths("alice@example.test", "bob@example.test")
@@ -185,7 +185,7 @@ def test_find_paths_direct_connection(db):
 
 def test_find_paths_multi_hop(db):
     """Should find multi-hop paths."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     paths = net.find_paths("alice@example.test", "eve@example.test", max_hops=4)
@@ -196,7 +196,7 @@ def test_find_paths_multi_hop(db):
 
 def test_find_paths_respects_max_hops(db):
     """Should not return paths exceeding max_hops."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     paths = net.find_paths("alice@example.test", "eve@example.test", max_hops=1)
@@ -206,7 +206,7 @@ def test_find_paths_respects_max_hops(db):
 
 def test_find_paths_no_path(db):
     """Should return empty for disconnected nodes."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     paths = net.find_paths("alice@example.test", "unknown@example.test")
@@ -215,7 +215,7 @@ def test_find_paths_no_path(db):
 
 def test_find_paths_respects_top_k(db):
     """Should not return more than top_k paths."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     paths = net.find_paths("alice@example.test", "eve@example.test", max_hops=5, top_k=1)
@@ -224,7 +224,7 @@ def test_find_paths_respects_top_k(db):
 
 def test_find_paths_source_equals_target(db):
     """Should return error when source and target are the same."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     result = net.find_paths("alice@example.test", "alice@example.test")
@@ -238,7 +238,7 @@ def test_find_paths_source_equals_target(db):
 
 def test_shared_recipients_via_network(db):
     """CommunicationNetwork.shared_recipients should delegate to DB."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     results = net.shared_recipients(["alice@example.test", "bob@example.test"])
@@ -250,7 +250,7 @@ def test_shared_recipients_via_network(db):
 
 def test_coordinated_timing_detects_overlap(db):
     """Should detect windows where multiple senders are active."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     # alice and bob both email on 2024-01-01 (3 total: uid-1, uid-2, uid-6)
@@ -265,7 +265,7 @@ def test_coordinated_timing_detects_overlap(db):
 
 def test_coordinated_timing_empty_for_non_overlapping(db):
     """Should return empty when senders have no overlapping activity."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     # alice (Jan 1, Jan 2) and dave (Jan 3) with 1-hour window
@@ -279,7 +279,7 @@ def test_coordinated_timing_empty_for_non_overlapping(db):
 
 def test_coordinated_timing_single_sender_returns_empty(db):
     """Should return empty for a single sender."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     windows = net.coordinated_timing(["alice@example.test"])
@@ -291,7 +291,7 @@ def test_coordinated_timing_single_sender_returns_empty(db):
 
 def test_relationship_summary_returns_profile(db):
     """Should return a full contact profile with send/receive counts."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     profile = net.relationship_summary("alice@example.test")
@@ -306,7 +306,7 @@ def test_relationship_summary_returns_profile(db):
 
 def test_relationship_summary_has_send_receive(db):
     """Send/receive counts should reflect the graph edges."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     profile = net.relationship_summary("alice@example.test")
@@ -319,7 +319,7 @@ def test_relationship_summary_has_send_receive(db):
 
 def test_relationship_summary_unknown_email(db):
     """Should handle unknown email gracefully."""
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     profile = net.relationship_summary("unknown@example.test")

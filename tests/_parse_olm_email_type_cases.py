@@ -1,8 +1,8 @@
-"""Extended tests for src/parse_olm.py — targeting uncovered lines."""
+"""OLM implicit-reply email-type classification from message references."""
 
 from __future__ import annotations
 
-from src.parse_olm import (
+from mailarium.parse_olm import (
     Email,
 )
 

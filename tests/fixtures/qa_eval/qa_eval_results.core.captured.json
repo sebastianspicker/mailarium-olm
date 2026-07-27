@@ -1,0 +1,180 @@
+{
+  "fact-101": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "005b2c5800576a50804dd2386cfe34db",
+        "score": 0.96
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "005b2c5800576a50804dd2386cfe34db",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  },
+  "fact-102": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "d5107d207f3e1d1116b2b44da9bfb988",
+        "score": 0.95
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "d5107d207f3e1d1116b2b44da9bfb988",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  },
+  "fact-103": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "aef4a326f6c1ed3eedc8a581df44758d",
+        "score": 0.93
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "aef4a326f6c1ed3eedc8a581df44758d",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  },
+  "fact-104": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "98c0bae9983e80c6f47b9b7b79e923f0",
+        "score": 0.94
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "98c0bae9983e80c6f47b9b7b79e923f0",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  },
+  "thread-101": {
+    "count": 3,
+    "candidates": [
+      {
+        "uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+        "score": 0.88
+      },
+      {
+        "uid": "f92eaf35f4835e00d9b1654be3278fc6",
+        "score": 0.84
+      },
+      {
+        "uid": "e6514e80b738ffb65b0ae04ae145f341",
+        "score": 0.81
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+      "confidence_label": "medium",
+      "ambiguity_reason": null
+    }
+  },
+  "thread-102": {
+    "count": 6,
+    "candidates": [
+      {
+        "uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+        "score": 0.89
+      },
+      {
+        "uid": "f92eaf35f4835e00d9b1654be3278fc6",
+        "score": 0.87
+      },
+      {
+        "uid": "e6514e80b738ffb65b0ae04ae145f341",
+        "score": 0.85
+      },
+      {
+        "uid": "2d73505bc9cef54edac87e70c40300d0",
+        "score": 0.83
+      },
+      {
+        "uid": "6ae9876961887270022789e4a8494df6",
+        "score": 0.82
+      },
+      {
+        "uid": "621d9915cc49205a3c95662278f111e3",
+        "score": 0.8
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+      "confidence_label": "medium",
+      "ambiguity_reason": null
+    }
+  },
+  "attach-101": {
+    "count": 1,
+    "candidates": [],
+    "attachment_candidates": [
+      {
+        "uid": "da21e4bea566d96d85df6c16eb09905f",
+        "score": 0.9
+      }
+    ],
+    "answer_quality": {
+      "top_candidate_uid": "da21e4bea566d96d85df6c16eb09905f",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  },
+  "attach-102": {
+    "count": 1,
+    "candidates": [],
+    "attachment_candidates": [
+      {
+        "uid": "505f1f8bb5cd2bb7124e2e663aad0edf",
+        "score": 0.88
+      }
+    ],
+    "answer_quality": {
+      "top_candidate_uid": "505f1f8bb5cd2bb7124e2e663aad0edf",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  },
+  "ambig-101": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "453e93aca3de57990d7e638c641ba54f",
+        "score": 0.71
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "453e93aca3de57990d7e638c641ba54f",
+      "confidence_label": "low",
+      "ambiguity_reason": "weak_scan_body"
+    }
+  },
+  "ambig-102": {
+    "count": 1,
+    "candidates": [
+      {
+        "uid": "361f3000a6733d28653ea98e1858e774",
+        "score": 0.72
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "361f3000a6733d28653ea98e1858e774",
+      "confidence_label": "low",
+      "ambiguity_reason": "source_shell_only"
+    }
+  }
+}

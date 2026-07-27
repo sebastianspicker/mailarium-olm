@@ -1,8 +1,10 @@
+"""Extracts event signals from authored and attachment text while limiting quoted-history evidence to a weak fallback."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.event_extractor import extract_event_rows_from_email
+from mailarium.event_extractor import extract_event_rows_from_email
 
 
 def test_extract_event_rows_from_email_emits_authored_and_attachment_events() -> None:

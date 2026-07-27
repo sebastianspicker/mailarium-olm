@@ -1,19 +1,14 @@
-"""Tests for src/tools/network.py — network analysis tools.
-
-Covers: email_contacts, email_network_analysis, relationship_paths,
-shared_recipients, coordinated_timing, relationship_summary.
-"""
+"""Verifies network tools expose contacts, paths, shared recipients, timing, and relationship summaries."""
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from unittest.mock import MagicMock
 
 import pytest
 
-from src.mcp_server import _offload
-from src.sanitization import sanitize_untrusted_text
+from .helpers.mcp_tool_extended_fakes import FakeMCP, close_sqlite_connection
+from .helpers.mcp_tool_extended_fakes import MockDeps as SharedMockDeps
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
@@ -43,9 +38,7 @@ class MockEmailDB:
         }
 
     def close(self) -> None:
-        if self.conn is not None:
-            self.conn.close()
-            self.conn = None
+        close_sqlite_connection(self)
 
     def __del__(self) -> None:
         try:
@@ -96,48 +89,12 @@ class MockCommunicationNetwork:
         }
 
 
-class MockDeps:
+class MockDeps(SharedMockDeps):
     _email_db = MockEmailDB()
-
-    @staticmethod
-    def get_retriever():
-        return MagicMock()
-
-    @staticmethod
-    def get_email_db():
-        return MockDeps._email_db
-
-    offload = staticmethod(_offload)
-    DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-    sanitize = staticmethod(sanitize_untrusted_text)
-
-    @staticmethod
-    def tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def write_tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def idempotent_write_annotations(title):
-        return {"title": title}
-
-
-class FakeMCP:
-    def __init__(self):
-        self._tools = {}
-
-    def tool(self, name=None, annotations=None):
-        def decorator(fn):
-            self._tools[name] = fn
-            return fn
-
-        return decorator
 
 
 def _register():
-    from src.tools import network
+    from mailarium.tools import network
 
     fake_mcp = FakeMCP()
     # Pre-cache the mock network on the DB to skip CommunicationNetwork init
@@ -154,7 +111,7 @@ class TestEmailContacts:
     async def test_top_contacts(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_contacts"]
-        from src.mcp_models import EmailContactsInput
+        from mailarium.mcp_models import EmailContactsInput
 
         params = EmailContactsInput(email_address="employee@example.test", limit=10)
         result = await fn(params)
@@ -166,7 +123,7 @@ class TestEmailContacts:
     async def test_compare_with_bidirectional(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_contacts"]
-        from src.mcp_models import EmailContactsInput
+        from mailarium.mcp_models import EmailContactsInput
 
         params = EmailContactsInput(
             email_address="employee@example.test",
@@ -187,7 +144,7 @@ class TestNetworkAnalysis:
     async def test_network_analysis(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_network_analysis"]
-        from src.mcp_models import NetworkAnalysisInput
+        from mailarium.mcp_models import NetworkAnalysisInput
 
         params = NetworkAnalysisInput(top_n=10)
         result = await fn(params)
@@ -203,7 +160,7 @@ class TestNetworkAnalysis:
         old_db = MockDeps._email_db
         MockDeps._email_db = None
         try:
-            from src.mcp_models import NetworkAnalysisInput
+            from mailarium.mcp_models import NetworkAnalysisInput
 
             params = NetworkAnalysisInput(top_n=10)
             result = await fn(params)
@@ -221,7 +178,7 @@ class TestRelationshipPaths:
     async def test_find_paths(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["relationship_paths"]
-        from src.mcp_models import RelationshipPathsInput
+        from mailarium.mcp_models import RelationshipPathsInput
 
         params = RelationshipPathsInput(
             source="employee@example.test",
@@ -245,7 +202,7 @@ class TestSharedRecipients:
     async def test_shared_recipients(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["shared_recipients"]
-        from src.mcp_models import SharedRecipientsInput
+        from mailarium.mcp_models import SharedRecipientsInput
 
         params = SharedRecipientsInput(
             email_addresses=["employee@example.test", "bob@example.com"],
@@ -264,7 +221,7 @@ class TestSharedRecipients:
         """Limit should cap the number of returned results."""
         fake_mcp = _register()
         fn = fake_mcp._tools["shared_recipients"]
-        from src.mcp_models import SharedRecipientsInput
+        from mailarium.mcp_models import SharedRecipientsInput
 
         params = SharedRecipientsInput(
             email_addresses=["employee@example.test", "bob@example.com"],
@@ -284,7 +241,7 @@ class TestCoordinatedTiming:
     async def test_coordinated_timing(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["coordinated_timing"]
-        from src.mcp_models import CoordinatedTimingInput
+        from mailarium.mcp_models import CoordinatedTimingInput
 
         params = CoordinatedTimingInput(
             email_addresses=["employee@example.test", "bob@example.com"],
@@ -303,7 +260,7 @@ class TestCoordinatedTiming:
         """Limit caps the number of returned windows."""
         fake_mcp = _register()
         fn = fake_mcp._tools["coordinated_timing"]
-        from src.mcp_models import CoordinatedTimingInput
+        from mailarium.mcp_models import CoordinatedTimingInput
 
         params = CoordinatedTimingInput(
             email_addresses=["employee@example.test", "bob@example.com"],
@@ -322,7 +279,7 @@ class TestRelationshipSummary:
     async def test_relationship_summary(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["relationship_summary"]
-        from src.mcp_models import RelationshipSummaryInput
+        from mailarium.mcp_models import RelationshipSummaryInput
 
         params = RelationshipSummaryInput(
             email_address="employee@example.test",
@@ -346,7 +303,7 @@ class TestNetworkDBUnavailable:
         old_db = MockDeps._email_db
         MockDeps._email_db = None
         try:
-            from src.mcp_models import EmailContactsInput
+            from mailarium.mcp_models import EmailContactsInput
 
             params = EmailContactsInput(email_address="employee@example.test")
             result = await fn(params)
@@ -362,7 +319,7 @@ class TestNetworkDBUnavailable:
         old_db = MockDeps._email_db
         MockDeps._email_db = None
         try:
-            from src.mcp_models import RelationshipPathsInput
+            from mailarium.mcp_models import RelationshipPathsInput
 
             params = RelationshipPathsInput(
                 source="a@example.test",

@@ -1,20 +1,20 @@
-"""Tests for src/tools/entities.py — covers all four tool handlers (lines 22, 28, 34, 52)."""
+"""MCP entity listing, search, timeline, and relationship-network tool behavior."""
 
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
 
 import pytest
 
-from src.mcp_models import (
+from mailarium.mcp_models import (
     EntityNetworkInput,
     EntitySearchInput,
     EntityTimelineInput,
     ListEntitiesInput,
 )
-from src.mcp_server import _offload
-from src.sanitization import sanitize_untrusted_text
+
+from .helpers.mcp_tool_extended_fakes import FakeMCP
+from .helpers.mcp_tool_extended_fakes import MockDeps as SharedMockDeps
 
 # ── Test Infrastructure ──────────────────────────────────────────────
 
@@ -45,53 +45,15 @@ class MockEmailDB:
         ]
 
 
-class MockDeps:
+class MockDeps(SharedMockDeps):
     """Dependency injection matching ToolDepsProto."""
 
     _email_db = MockEmailDB()
 
-    @staticmethod
-    def get_retriever():
-        return MagicMock()
-
-    @staticmethod
-    def get_email_db():
-        return MockDeps._email_db
-
-    offload = staticmethod(_offload)
-    DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-    sanitize = staticmethod(sanitize_untrusted_text)
-
-    @staticmethod
-    def tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def write_tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def idempotent_write_annotations(title):
-        return {"title": title}
-
-
-class FakeMCP:
-    """Minimal MCP stub that captures tool registrations."""
-
-    def __init__(self):
-        self._tools = {}
-
-    def tool(self, name=None, annotations=None):
-        def decorator(fn):
-            self._tools[name] = fn
-            return fn
-
-        return decorator
-
 
 def _register():
     """Register the entities module and return the FakeMCP with captured tools."""
-    from src.tools import entities
+    from mailarium.tools import entities
 
     fake_mcp = FakeMCP()
     entities.register(fake_mcp, MockDeps)
@@ -131,7 +93,7 @@ class TestEntitySearchByEntity:
     @pytest.mark.asyncio
     async def test_db_unavailable(self):
         fake_mcp = FakeMCP()
-        from src.tools import entities
+        from mailarium.tools import entities
 
         class NullDbDeps(MockDeps):
             @staticmethod

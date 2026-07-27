@@ -1,3 +1,5 @@
+"""Backfills archive analytics and metadata idempotently without promoting incomplete attachment recovery to success."""
+
 from ._ingest_cases import (
     test_reextract_entities_preserves_exchange_only_entities,
     test_reingest_analytics_backfills_missing,

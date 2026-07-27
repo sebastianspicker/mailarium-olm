@@ -1,8 +1,8 @@
-"""Extended tests for src/rfc2822.py — targets lines missed by existing tests."""
+"""Extended tests for mailarium/rfc2822.py - targets lines missed by existing tests."""
 
 from __future__ import annotations
 
-from src.rfc2822 import (
+from mailarium.rfc2822 import (
     _calendar_to_text,
     _decode_mime_words,
     _extract_body_from_source,
@@ -140,7 +140,7 @@ class TestExtractBodyFromSource:
         assert "Standup" in body
 
     def test_fallback_on_malformed_source(self):
-        # Extremely malformed input — not valid RFC 2822 at all.
+        # Extremely malformed input - not valid RFC 2822 at all.
         # The email parser may still parse it, but we test the simple
         # header/body split fallback behavior when we have a blank line.
         raw = "Some garbage header\n\nBody content here"

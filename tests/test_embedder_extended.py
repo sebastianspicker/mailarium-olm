@@ -1,11 +1,11 @@
-"""Extended tests for src/embedder.py beyond the basic guards."""
+"""Extended tests for mailarium/embedder.py beyond the basic guards."""
 
 from __future__ import annotations
 
 import pytest
 
-from src.chunker import EmailChunk
-from src.embedder import EmailEmbedder
+from mailarium.chunker import EmailChunk
+from mailarium.embedder import EmailEmbedder
 
 
 def _make_chunk(uid: str = "uid1", index: int = 0, text: str = "Hello world") -> EmailChunk:
@@ -17,10 +17,25 @@ def _make_chunk(uid: str = "uid1", index: int = 0, text: str = "Hello world") ->
     )
 
 
-@pytest.fixture(autouse=True)
-def _stub_multi_vector_embedder(stub_multi_vector_embedder):
-    import src.embedder as embedder_mod
+def _count_encode_calls(monkeypatch, embedder):
+    """Wrap encode_all and return a reader for the number of invocations."""
+    call_count = 0
+    original_encode_all = embedder.embedder.encode_all
 
+    def _counting_encode(texts):
+        nonlocal call_count
+        call_count += 1
+        return original_encode_all(texts)
+
+    monkeypatch.setattr(embedder.embedder, "encode_all", _counting_encode)
+    return lambda: call_count
+
+
+@pytest.fixture(autouse=True)
+def _stub_multi_vector_embedder(stub_multi_vector_embedder, monkeypatch, tmp_path):
+    import mailarium.embedder as embedder_mod
+
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "email_metadata.db"))
     stub_multi_vector_embedder(embedder_mod)
 
 
@@ -28,14 +43,14 @@ def _stub_multi_vector_embedder(stub_multi_vector_embedder):
 
 
 def test_add_chunks_empty_list(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     result = embedder.add_chunks([])
     assert result == 0
     assert embedder.count() == 0
 
 
 def test_add_chunks_single_chunk(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     chunks = [_make_chunk()]
     added = embedder.add_chunks(chunks, batch_size=100)
     assert added == 1
@@ -43,7 +58,7 @@ def test_add_chunks_single_chunk(tmp_path):
 
 
 def test_add_chunks_skips_existing(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     chunk = _make_chunk()
     embedder.add_chunks([chunk], batch_size=100)
     assert embedder.count() == 1
@@ -55,7 +70,7 @@ def test_add_chunks_skips_existing(tmp_path):
 
 
 def test_add_chunks_multiple_batches(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     chunks = [_make_chunk(uid=f"uid{i}", index=0) for i in range(5)]
 
     # batch_size=2 means 3 batches: [2, 2, 1]
@@ -76,13 +91,13 @@ def test_add_chunks_rejects_non_positive_batch_size():
 
 
 def test_get_existing_ids_empty(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     ids = embedder.get_existing_ids()
     assert ids == set()
 
 
 def test_get_existing_ids_after_insert(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     embedder.add_chunks([_make_chunk(uid="a"), _make_chunk(uid="b")], batch_size=100)
 
     ids = embedder.get_existing_ids(refresh=True)
@@ -92,7 +107,7 @@ def test_get_existing_ids_after_insert(tmp_path):
 
 
 def test_get_existing_ids_cached(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     ids1 = embedder.get_existing_ids()
     ids2 = embedder.get_existing_ids()
     # Should return the same set object (cached)
@@ -100,7 +115,7 @@ def test_get_existing_ids_cached(tmp_path):
 
 
 def test_get_existing_ids_refresh(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     ids1 = embedder.get_existing_ids()
     ids2 = embedder.get_existing_ids(refresh=True)
     # refresh=True creates a new set
@@ -111,16 +126,16 @@ def test_get_existing_ids_refresh(tmp_path):
 
 
 def test_get_existing_ids_skips_scan_for_empty_collection(tmp_path, monkeypatch):
-    """When collection is empty, iter_collection_ids should not be called."""
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    """When both spaces are empty, their ID iterators should not be called."""
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     assert embedder.collection.count() == 0
 
-    import src.embedder as embedder_mod
+    import mailarium.embedder as embedder_mod
 
     def _should_not_be_called(*_a, **_kw):
-        raise AssertionError("iter_collection_ids should not be called for empty collection")
+        raise AssertionError("iter_vector_ids should not be called for empty collections")
 
-    monkeypatch.setattr(embedder_mod, "iter_collection_ids", _should_not_be_called)
+    monkeypatch.setattr(embedder_mod, "iter_vector_ids", _should_not_be_called)
 
     ids = embedder.get_existing_ids()
     assert ids == set()
@@ -130,12 +145,12 @@ def test_get_existing_ids_skips_scan_for_empty_collection(tmp_path, monkeypatch)
 
 
 def test_count_empty(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     assert embedder.count() == 0
 
 
 def test_count_after_inserts(tmp_path):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     embedder.add_chunks([_make_chunk(uid="x", index=0), _make_chunk(uid="y", index=0)], batch_size=100)
     assert embedder.count() == 2
 
@@ -147,20 +162,25 @@ def test_set_sparse_db_is_used_by_store_sparse(tmp_path):
     """set_sparse_db() should be used instead of creating new connections."""
     from unittest.mock import MagicMock
 
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     mock_db = MagicMock()
     mock_db.insert_sparse_batch = MagicMock(return_value=2)
     embedder.set_sparse_db(mock_db)
 
     embedder._store_sparse(["id1", "id2"], [{1: 0.5}, {2: 0.3}])
-    mock_db.insert_sparse_batch.assert_called_once_with(["id1", "id2"], [{1: 0.5}, {2: 0.3}])
+    mock_db.insert_sparse_batch.assert_called_once_with(
+        ["id1", "id2"],
+        [{1: 0.5}, {2: 0.3}],
+        model_id=embedder.settings.sparse_model,
+        model_revision=embedder.settings.sparse_model_revision,
+    )
 
 
 def test_store_sparse_fallback_creates_one_connection(tmp_path):
     """Without set_sparse_db, fallback should create only one connection."""
     import dataclasses
 
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     sqlite_path = str(tmp_path / "test.db")
     # Create the DB file so the path check passes (access conn to trigger lazy init)
@@ -168,7 +188,7 @@ def test_store_sparse_fallback_creates_one_connection(tmp_path):
     _ = db.conn  # force file creation
     db.close()
 
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     embedder.settings = dataclasses.replace(embedder.settings, sqlite_path=sqlite_path)
 
     embedder._store_sparse(["id1"], [{1: 0.5}])
@@ -187,7 +207,7 @@ def test_store_sparse_fallback_creates_one_connection(tmp_path):
 
 def test_warmup_forces_model_load(tmp_path):
     """warmup() should trigger model loading and a test encode."""
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
     assert embedder._embedder is None  # not yet loaded
     embedder.warmup()
     assert embedder._embedder is not None  # now loaded
@@ -198,28 +218,20 @@ def test_warmup_forces_model_load(tmp_path):
 
 def test_add_chunks_encodes_all_at_once(tmp_path, monkeypatch):
     """add_chunks() should call encode_all() exactly once regardless of storage batch_size."""
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
 
-    encode_call_count = 0
-    original_encode_all = embedder.embedder.encode_all
-
-    def _counting_encode(texts):
-        nonlocal encode_call_count
-        encode_call_count += 1
-        return original_encode_all(texts)
-
-    monkeypatch.setattr(embedder.embedder, "encode_all", _counting_encode)
+    encode_call_count = _count_encode_calls(monkeypatch, embedder)
 
     chunks = [_make_chunk(uid=f"uid{i}", index=0) for i in range(10)]
-    # storage batch_size=3 means 4 ChromaDB writes, but only 1 encode call
+    # storage batch_size=3 means 4 vector-store writes, but only 1 encode call
     added = embedder.add_chunks(chunks, batch_size=3)
     assert added == 10
-    assert encode_call_count == 1
+    assert encode_call_count() == 1
 
 
 def test_add_chunks_handles_pre_embedded_chunks(tmp_path):
     """Pre-embedded chunks should be stored without re-encoding."""
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
 
     pre_embedded = EmailChunk(
         uid="img1",
@@ -236,7 +248,7 @@ def test_add_chunks_handles_pre_embedded_chunks(tmp_path):
 
 
 def test_add_chunks_skip_existing_check_avoids_existing_id_scan(tmp_path, monkeypatch):
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
 
     def _should_not_be_called(*_args, **_kwargs):
         raise AssertionError("get_existing_ids should not be called when skip_existing_check=True")
@@ -249,19 +261,11 @@ def test_add_chunks_skip_existing_check_avoids_existing_id_scan(tmp_path, monkey
 
 def test_upsert_chunks_encodes_all_at_once(tmp_path, monkeypatch):
     """upsert_chunks() should call encode_all() exactly once."""
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
 
-    encode_call_count = 0
-    original_encode_all = embedder.embedder.encode_all
-
-    def _counting_encode(texts):
-        nonlocal encode_call_count
-        encode_call_count += 1
-        return original_encode_all(texts)
-
-    monkeypatch.setattr(embedder.embedder, "encode_all", _counting_encode)
+    encode_call_count = _count_encode_calls(monkeypatch, embedder)
 
     chunks = [_make_chunk(uid=f"uid{i}", index=0) for i in range(5)]
     added = embedder.upsert_chunks(chunks, batch_size=2)
     assert added == 5
-    assert encode_call_count == 1
+    assert encode_call_count() == 1

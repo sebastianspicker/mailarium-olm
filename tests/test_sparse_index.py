@@ -1,9 +1,9 @@
-"""Tests for src/sparse_index.py and sparse vector storage in email_db."""
+"""Verifies sparse-vector indexing persists and retrieves email features with database storage."""
 
 from __future__ import annotations
 
-from src.email_db import EmailDatabase
-from src.sparse_index import SparseIndex
+from mailarium.email_db import EmailDatabase
+from mailarium.sparse_index import SparseIndex
 
 # ── SparseIndex ──────────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ def test_sparse_index_multi_token_query():
     idx = SparseIndex()
     idx.build_from_vectors(vectors)
 
-    # Query both token 10 and 20 — doc1 has both
+    # Query both token 10 and 20 - doc1 has both
     results = idx.search({10: 1.0, 20: 1.0}, top_k=10)
     # doc1 should be first (matches both tokens)
     assert results[0][0] == "doc1"
@@ -184,7 +184,7 @@ def test_sparse_search_with_normalization():
 
     # Without normalization, long_diluted has a lower raw score but still token 1
     results_raw = idx.search({1: 1.0}, top_k=10, normalize=False)
-    # short_focused: 0.9, long_diluted: 0.5 — short wins in raw too
+    # short_focused: 0.9, long_diluted: 0.5 - short wins in raw too
     assert results_raw[0][0] == "short_focused"
 
     # Now give long_diluted a higher raw dot product on query token

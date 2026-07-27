@@ -1,3 +1,8 @@
+"""Exercises OLM body normalization, HTML extraction, header-name parsing, and reference/date cleanup.
+
+It retains meaningful mail structure while normalizing malformed or incomplete source fields.
+"""
+
 from ._parse_olm_cases import (
     test_clean_text_collapses_blank_lines,
     test_clean_text_preserves_leading_indentation,

@@ -1,8 +1,8 @@
-"""Tests for near-duplicate email detection."""
+"""Verifies near-duplicate detection identifies related content without collapsing distinct messages."""
 
 from unittest.mock import MagicMock
 
-from src.dedup_detector import DuplicateDetector, _char_ngrams, _jaccard_similarity
+from mailarium.dedup_detector import DuplicateDetector, _char_ngrams, _jaccard_similarity
 
 
 def test_char_ngrams_basic():

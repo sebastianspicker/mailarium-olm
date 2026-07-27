@@ -9,8 +9,8 @@ def test_generate_includes_evidence_items(gen):
     result = gen.generate()
 
     assert result["evidence_count"] == 3
-    assert "harassment" in result["html"]
-    assert "discrimination" in result["html"]
+    assert "fact" in result["html"]
+    assert "action_item" in result["html"]
 
 
 def test_generate_includes_source_emails(gen):

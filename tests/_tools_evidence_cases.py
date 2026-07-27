@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from unittest.mock import MagicMock
 
-from src.mcp_server import _offload
-from src.sanitization import sanitize_untrusted_text
+from .helpers.mcp_tool_extended_fakes import FakeMCP, close_sqlite_connection
+from .helpers.mcp_tool_extended_fakes import MockDeps as SharedMockDeps
 
 
 class MockEmailDB:
@@ -127,9 +126,7 @@ class MockEmailDB:
         return [{"email": "bob@example.com", "count": 5}]
 
     def close(self) -> None:
-        if self.conn is not None:
-            self.conn.close()
-            self.conn = None
+        close_sqlite_connection(self)
 
     def __del__(self) -> None:
         try:
@@ -138,48 +135,13 @@ class MockEmailDB:
             pass
 
 
-class MockDeps:
+class MockDeps(SharedMockDeps):
     _email_db = MockEmailDB()
-
-    @staticmethod
-    def get_retriever():
-        return MagicMock()
-
-    @staticmethod
-    def get_email_db():
-        return MockDeps._email_db
-
-    offload = staticmethod(_offload)
-    DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-    sanitize = staticmethod(sanitize_untrusted_text)
-
-    @staticmethod
-    def tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def write_tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def idempotent_write_annotations(title):
-        return {"title": title}
-
-
-class FakeMCP:
-    def __init__(self):
-        self._tools = {}
-
-    def tool(self, name=None, annotations=None):
-        def decorator(fn):
-            self._tools[name] = fn
-            return fn
-
-        return decorator
+    _retriever = MagicMock()
 
 
 def register_tools():
-    from src.tools import evidence
+    from mailarium.tools import evidence
 
     fake_mcp = FakeMCP()
     evidence.register(fake_mcp, MockDeps)

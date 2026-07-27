@@ -1,4 +1,4 @@
-"""Data integrity tests: schema idempotency, SQLite/ChromaDB consistency,
+"""Data integrity tests: schema idempotency, SQLite/vector-index consistency,
 SQL injection surface, data type contracts, and foreign key enforcement."""
 
 import json
@@ -6,29 +6,10 @@ import sqlite3
 
 import pytest
 
-from src.db_schema import _SCHEMA_VERSION, _escape_like, _table_columns, init_schema
-from src.email_db import EmailDatabase
-from src.parse_olm import Email
+from mailarium.db_schema import _SCHEMA_VERSION, _escape_like, _table_columns, init_schema
+from mailarium.email_db import EmailDatabase
 
-
-def _make_email(**overrides) -> Email:
-    defaults = {
-        "message_id": "<msg1@example.com>",
-        "subject": "Hello",
-        "sender_name": "Alice",
-        "sender_email": "employee@example.test",
-        "to": ["Bob <bob@example.com>"],
-        "cc": [],
-        "bcc": [],
-        "date": "2024-01-15T10:30:00",
-        "body_text": "Test body text for integrity checking",
-        "body_html": "",
-        "folder": "Inbox",
-        "has_attachments": False,
-    }
-    defaults.update(overrides)
-    return Email(**defaults)
-
+from .helpers.email_db_builders import _make_email
 
 # =====================================================================
 # 1. Schema migration idempotency
@@ -139,7 +120,7 @@ class TestSchemaIdempotency:
 
 
 # =====================================================================
-# 2. SQLite/ChromaDB consistency
+# 2. SQLite/vector-index consistency
 # =====================================================================
 
 
@@ -150,47 +131,47 @@ class TestConsistencyCheck:
         db = EmailDatabase(":memory:")
         db.insert_email(_make_email())
         uid = _make_email().uid
-        chromadb_ids = {f"{uid}__0", f"{uid}__1"}
-        result = db.consistency_check(chromadb_ids)
+        vector_ids = {f"{uid}__0", f"{uid}__1"}
+        result = db.consistency_check(vector_ids)
         assert result["is_consistent"] is True
         assert result["sqlite_only_count"] == 0
-        assert result["chromadb_only_count"] == 0
+        assert result["vector_only_count"] == 0
         db.close()
 
     def test_sqlite_only(self):
-        """Email in SQLite but no chunks in ChromaDB."""
+        """Email in SQLite but no chunks in the vector index."""
         db = EmailDatabase(":memory:")
         db.insert_email(_make_email())
         result = db.consistency_check(set())
         assert result["sqlite_only_count"] == 1
-        assert result["chromadb_only_count"] == 0
+        assert result["vector_only_count"] == 0
         assert result["is_consistent"] is False
         db.close()
 
-    def test_chromadb_only(self):
-        """Chunks in ChromaDB but no matching email in SQLite."""
+    def test_vector_index_only(self):
+        """Chunks in the vector index but no matching email in SQLite."""
         db = EmailDatabase(":memory:")
         orphan_uid = "deadbeef1234"
-        chromadb_ids = {f"{orphan_uid}__0"}
-        result = db.consistency_check(chromadb_ids)
-        assert result["chromadb_only_count"] == 1
+        vector_ids = {f"{orphan_uid}__0"}
+        result = db.consistency_check(vector_ids)
+        assert result["vector_only_count"] == 1
         assert result["is_consistent"] is False
-        assert orphan_uid in result["chromadb_only"]
+        assert orphan_uid in result["vector_only"]
         db.close()
 
     def test_mixed_consistency(self):
-        """Both SQLite-only and ChromaDB-only orphans."""
+        """Both SQLite-only and vector-index-only orphans."""
         db = EmailDatabase(":memory:")
         email = _make_email()
         db.insert_email(email)
         # Add a different email to DB only
         db.insert_email(_make_email(message_id="<msg2@example.com>"))
-        # ChromaDB has only email1's chunks + an orphan
+        # The vector index has only email1's chunks plus an orphan.
         uid1 = _make_email(message_id="<msg1@example.com>").uid
-        chromadb_ids = {f"{uid1}__0", "orphan_uid__0"}
-        result = db.consistency_check(chromadb_ids)
-        assert result["chromadb_only_count"] >= 1
-        assert "orphan_uid" in result["chromadb_only"]
+        vector_ids = {f"{uid1}__0", "orphan_uid__0"}
+        result = db.consistency_check(vector_ids)
+        assert result["vector_only_count"] >= 1
+        assert "orphan_uid" in result["vector_only"]
         db.close()
 
 
@@ -229,7 +210,7 @@ class TestSqlInjectionSurface:
                 sender_email="alicexadmin@example.com",
             )
         )
-        # Search for literal underscore — should match only alice_admin
+        # Search for literal underscore - should match only alice_admin
         results = db.emails_by_sender("alice_admin")
         emails = [r["sender_email"] for r in results]
         assert "alice_admin@example.com" in emails
@@ -420,15 +401,15 @@ class TestForeignKeys:
 
 
 class TestPipelineWriteOrdering:
-    """Verify SQLite is written before ChromaDB in _process_batch."""
+    """Verify SQLite is written before vector storage in _process_batch."""
 
-    def test_sqlite_before_chromadb(self):
-        """If SQLite insert fails, ChromaDB add_chunks should not be called."""
+    def test_sqlite_before_vector_storage(self):
+        """If SQLite insertion fails, vector storage should not receive chunks."""
         call_order = []
 
         class FakeEmbedder:
             def add_chunks(self, chunks, batch_size=500):
-                call_order.append("chromadb")
+                call_order.append("vector_index")
                 return len(chunks)
 
         class FakeDB:
@@ -438,7 +419,7 @@ class TestPipelineWriteOrdering:
                 call_order.append("sqlite")
                 raise RuntimeError("SQLite failure")
 
-        from src.ingest import _EmbedPipeline
+        from mailarium.ingest import _EmbedPipeline
 
         pipeline = _EmbedPipeline(
             embedder=FakeEmbedder(),
@@ -449,5 +430,5 @@ class TestPipelineWriteOrdering:
         with pytest.raises(RuntimeError, match="SQLite failure"):
             pipeline._process_batch(["chunk1"], ["email1"])
 
-        # SQLite was attempted, but ChromaDB was NOT called
+        # SQLite was attempted, but vector storage was not called.
         assert call_order == ["sqlite"]

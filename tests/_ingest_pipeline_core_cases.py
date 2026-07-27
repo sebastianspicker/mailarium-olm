@@ -1,15 +1,26 @@
 # ruff: noqa: I001
+"""Ingestion persistence, attachment handling, idempotency, recovery, and pipeline-abort behavior."""
+
 from typing import Any
 
 import pytest
 
-from src.ingest import _EmbedPipeline
+from mailarium.ingest import _EmbedPipeline
 
-from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
+from .helpers.ingest_fixtures import (
+    _MockEmbedder,
+    _configure_ocr_reparse,
+    _make_header_email,
+    _make_mock_email,
+    _make_mock_image_email,
+    _make_reembed_embedder,
+    _seed_degraded_image_ingest,
+    _seed_ingest_database,
+)
 
 
 def test_ingest_dry_run_reports_qol_stats(monkeypatch):
-    import src.ingest as ingest_mod
+    import mailarium.ingest as ingest_mod
 
     class _Email:
         def __init__(self, idx):
@@ -35,26 +46,12 @@ def test_ingest_dry_run_reports_qol_stats(monkeypatch):
 
 
 def test_ingest_populates_sqlite(monkeypatch, tmp_path):
-    import src.ingest as ingest_mod
-
     emails = [_make_mock_email(i) for i in range(1, 4)]
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email: [{"chunk_id": f"{email.get('uid', 'x')}-a"}],
-    )
-
-    import src.embedder as embedder_mod
-
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    stats = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    _, sqlite_file, stats = _seed_ingest_database(monkeypatch, tmp_path, emails, return_stats=True)
 
     assert stats["sqlite_inserted"] == 3
 
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     db = EmailDatabase(sqlite_file)
     assert db.email_count() == 3
@@ -62,9 +59,7 @@ def test_ingest_populates_sqlite(monkeypatch, tmp_path):
 
 
 def test_ingest_persists_attachment_evidence_metadata(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     email = _make_mock_email(1)
     email.has_attachments = True
@@ -80,17 +75,14 @@ def test_ingest_persists_attachment_evidence_metadata(monkeypatch, tmp_path):
     ]
     email.attachment_contents = [("notes.txt", b"hello from attachment")]
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
+    monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: False)
+    _, sqlite_file, stats = _seed_ingest_database(
+        monkeypatch,
+        tmp_path,
+        [email],
+        extract_attachments=True,
+        return_stats=True,
     )
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    stats = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
 
     assert stats["sqlite_inserted"] == 1
 
@@ -122,7 +114,7 @@ def test_ingest_persists_attachment_evidence_metadata(monkeypatch, tmp_path):
 
 
 def test_mailbox_attachment_locator_extracts_rich_subdocument_hints() -> None:
-    import src.ingest_pipeline as ingest_pipeline
+    import mailarium.ingest_pipeline as ingest_pipeline
 
     locator = ingest_pipeline._mailbox_attachment_locator(
         email_uid="uid-locator",
@@ -142,9 +134,9 @@ def test_mailbox_attachment_locator_extracts_rich_subdocument_hints() -> None:
 
 
 def test_ingest_zero_chunk_email_marks_ledger_completed(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    import mailarium.embedder as embedder_mod
+    import mailarium.ingest as ingest_mod
+    from mailarium.email_db import EmailDatabase
 
     email = _make_mock_email(1)
 
@@ -171,35 +163,18 @@ def test_ingest_zero_chunk_email_marks_ledger_completed(monkeypatch, tmp_path):
 
 
 def test_ingest_binary_only_attachment_stays_degraded_in_ledger(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
-    email = _make_mock_email(1)
-    email.has_attachments = True
-    email.attachment_names = ["photo.png"]
-    email.attachments = [
-        {
-            "name": "photo.png",
-            "mime_type": "image/png",
-            "size": 128,
-            "content_id": "",
-            "is_inline": False,
-        }
-    ]
-    email.attachment_contents = [("photo.png", b"fake-image")]
+    email = _make_mock_image_email(filename="photo.png")
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
+    monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: False)
+    _, sqlite_file, stats = _seed_ingest_database(
+        monkeypatch,
+        tmp_path,
+        [email],
+        extract_attachments=True,
+        return_stats=True,
     )
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    stats = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
 
     assert stats["sqlite_inserted"] == 1
 
@@ -218,9 +193,7 @@ def test_ingest_binary_only_attachment_stays_degraded_in_ledger(monkeypatch, tmp
 
 
 def test_attachment_payload_failure_marks_degraded_not_completed(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     email = _make_mock_email(1)
     email.has_attachments = True
@@ -237,16 +210,13 @@ def test_attachment_payload_failure_marks_degraded_not_completed(monkeypatch, tm
     email.attachment_contents = []
     email.__dict__["_attachment_payload_extraction_failed"] = True
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
+    _, sqlite_file, stats = _seed_ingest_database(
+        monkeypatch,
+        tmp_path,
+        [email],
+        extract_attachments=True,
+        return_stats=True,
     )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    stats = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
 
     assert stats["sqlite_inserted"] == 1
 
@@ -265,38 +235,15 @@ def test_attachment_payload_failure_marks_degraded_not_completed(monkeypatch, tm
 
 
 def test_ingest_image_attachment_uses_ocr_when_available(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
-    email = _make_mock_email(1)
-    email.has_attachments = True
-    email.attachment_names = ["photo.png"]
-    email.attachments = [
-        {
-            "name": "photo.png",
-            "mime_type": "image/png",
-            "size": 128,
-            "content_id": "",
-            "is_inline": False,
-        }
-    ]
-    email.attachment_contents = [("photo.png", b"fake-image")]
+    email = _make_mock_image_email(filename="photo.png")
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
     monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(
-        "src.attachment_extractor.extract_image_text_ocr",
+        "mailarium.attachment_extractor.extract_image_text_ocr",
         lambda filename, content, **_kw: "Recovered screenshot text",
     )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
+    _, sqlite_file = _seed_ingest_database(monkeypatch, tmp_path, [email], extract_attachments=True)
 
     db = EmailDatabase(sqlite_file)
     row = db.conn.execute(
@@ -313,11 +260,11 @@ def test_ingest_image_attachment_uses_ocr_when_available(monkeypatch, tmp_path):
 
 
 def test_textless_pdf_ocr_state_requires_pdf_tooling(monkeypatch):
-    from src.attachment_extractor import attachment_ocr_available_for
-    from src.ingest_pipeline import _textless_attachment_state_with_ocr
+    from mailarium.attachment_extractor import attachment_ocr_available_for
+    from mailarium.ingest_pipeline import _textless_attachment_state_with_ocr
 
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
-    monkeypatch.setattr("src.attachment_extractor.pdf_ocr_available", lambda: False)
+    monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: True)
+    monkeypatch.setattr("mailarium.attachment_extractor.pdf_ocr_available", lambda: False)
 
     state, reason = _textless_attachment_state_with_ocr(
         filename="scan.pdf",
@@ -331,27 +278,15 @@ def test_textless_pdf_ocr_state_requires_pdf_tooling(monkeypatch):
 
 
 def test_ingest_image_chunks_use_normalized_attachment_metadata(monkeypatch, tmp_path):
-    import src.ingest as ingest_mod
+    import mailarium.ingest as ingest_mod
 
-    email = _make_mock_email(1)
-    email.has_attachments = True
-    email.attachment_names = ["photo.png"]
-    email.attachments = [
-        {
-            "name": "photo.png",
-            "mime_type": "image/png",
-            "size": 128,
-            "content_id": "",
-            "is_inline": False,
-        }
-    ]
-    email.attachment_contents = [("photo.png", b"fake-image")]
+    email = _make_mock_image_email(filename="photo.png")
 
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
     monkeypatch.setattr(ingest_mod, "chunk_email", lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}])
     monkeypatch.setattr(ingest_mod, "should_enable_image_embedding", lambda: True)
-    monkeypatch.setattr("src.attachment_extractor._get_image_embedder", lambda: type("Probe", (), {"is_available": True})())
-    monkeypatch.setattr("src.attachment_extractor.extract_image_embedding", lambda *_args, **_kwargs: [0.1, 0.2, 0.3])
+    monkeypatch.setattr("mailarium.attachment_extractor._get_image_embedder", lambda: type("Probe", (), {"is_available": True})())
+    monkeypatch.setattr("mailarium.attachment_extractor.extract_image_embedding", lambda *_args, **_kwargs: [0.1, 0.2, 0.3])
 
     class _TrackingEmbedder:
         last_instance: Any | None = None
@@ -375,7 +310,7 @@ def test_ingest_image_chunks_use_normalized_attachment_metadata(monkeypatch, tmp
         def warmup(self):
             return None
 
-    monkeypatch.setattr("src.embedder.EmailEmbedder", _TrackingEmbedder)
+    monkeypatch.setattr("mailarium.embedder.EmailEmbedder", _TrackingEmbedder)
 
     sqlite_file = str(tmp_path / "test.db")
     ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, embed_images=True)
@@ -393,7 +328,7 @@ def test_ingest_image_chunks_use_normalized_attachment_metadata(monkeypatch, tmp
 
 
 def test_ingest_surfaces_sparse_storage_diagnostics_in_stats(monkeypatch, tmp_path):
-    import src.ingest as ingest_mod
+    import mailarium.ingest as ingest_mod
 
     email = _make_mock_email(1)
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
@@ -418,7 +353,7 @@ def test_ingest_surfaces_sparse_storage_diagnostics_in_stats(monkeypatch, tmp_pa
         def warmup(self):
             return None
 
-    monkeypatch.setattr("src.embedder.EmailEmbedder", _SparseDiagnosticsEmbedder)
+    monkeypatch.setattr("mailarium.embedder.EmailEmbedder", _SparseDiagnosticsEmbedder)
 
     sqlite_file = str(tmp_path / "test.db")
     stats = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
@@ -428,46 +363,11 @@ def test_ingest_surfaces_sparse_storage_diagnostics_in_stats(monkeypatch, tmp_pa
 
 
 def test_reprocess_degraded_attachments_recovers_image_text(tmp_path, monkeypatch):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
-    def _make_image_email():
-        email = _make_mock_email(1)
-        email.has_attachments = True
-        email.attachment_names = ["photo.png"]
-        email.attachments = [
-            {
-                "name": "photo.png",
-                "mime_type": "image/png",
-                "size": 128,
-                "content_id": "",
-                "is_inline": False,
-            }
-        ]
-        email.attachment_contents = [("photo.png", b"fake-image")]
-        return email
-
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    email_uid = _make_image_email().uid
-    sqlite_file = str(tmp_path / "test.db")
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [_make_image_email()])
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
-    monkeypatch.setattr("src.attachment_extractor.extract_image_text_ocr", lambda filename, content, **_kw: None)
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
-
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [_make_image_email()])
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
-    monkeypatch.setattr(
-        "src.attachment_extractor.extract_image_text_ocr",
-        lambda filename, content, **_kw: "Recovered screenshot text",
-    )
+    ingest_mod, sqlite_file, image_email = _seed_degraded_image_ingest(monkeypatch, tmp_path)
+    email_uid = image_email.uid
+    _configure_ocr_reparse(monkeypatch, ingest_mod)
     result = ingest_mod.reprocess_degraded_attachments(
         "mock.olm",
         sqlite_path=sqlite_file,
@@ -489,70 +389,22 @@ def test_reprocess_degraded_attachments_recovers_image_text(tmp_path, monkeypatc
 
 
 def test_reprocess_degraded_attachments_deletes_stale_attachment_chunks(tmp_path, monkeypatch):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.ingest_reingest import _attachment_chunk_prefix
+    from mailarium.ingest_reingest import _attachment_chunk_prefix
 
-    def _make_image_email():
-        email = _make_mock_email(1)
-        email.has_attachments = True
-        email.attachment_names = ["photo.png"]
-        email.attachments = [
-            {
-                "name": "photo.png",
-                "mime_type": "image/png",
-                "size": 128,
-                "content_id": "",
-                "is_inline": False,
-            }
-        ]
-        email.attachment_contents = [("photo.png", b"fake-image")]
-        return email
-
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    email_uid = _make_image_email().uid
-    sqlite_file = str(tmp_path / "test.db")
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [_make_image_email()])
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
-    monkeypatch.setattr("src.attachment_extractor.extract_image_text_ocr", lambda filename, content, **_kw: None)
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
+    ingest_mod, sqlite_file, image_email = _seed_degraded_image_ingest(monkeypatch, tmp_path)
+    email_uid = image_email.uid
 
     stale_prefix = _attachment_chunk_prefix(email_uid, "photo.png", 0)
     delete_calls = []
 
-    class _TrackingEmbedder:
-        def __init__(self, **_kw):
-            class _Collection:
-                def delete(self, ids=None, **_kw):
-                    delete_calls.append(list(ids))
-
-            self.collection = _Collection()
-
-        def set_sparse_db(self, db):
-            pass
-
-        def close(self):
-            pass
-
-        def get_existing_ids(self, refresh=False):
-            return {f"{stale_prefix}0", f"{stale_prefix}1", f"{stale_prefix}2"}
-
-        def upsert_chunks(self, chunks, batch_size=100):
-            return len(chunks)
-
-    monkeypatch.setattr("src.embedder.EmailEmbedder", _TrackingEmbedder)
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [_make_image_email()])
-    monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
     monkeypatch.setattr(
-        "src.attachment_extractor.extract_image_text_ocr",
-        lambda filename, content, **_kw: "Recovered screenshot text",
+        "mailarium.embedder.EmailEmbedder",
+        _make_reembed_embedder(
+            existing_ids={f"{stale_prefix}0", f"{stale_prefix}1", f"{stale_prefix}2"},
+            delete_calls=delete_calls,
+        ),
     )
+    _configure_ocr_reparse(monkeypatch, ingest_mod)
 
     result = ingest_mod.reprocess_degraded_attachments(
         "mock.olm",
@@ -566,7 +418,7 @@ def test_reprocess_degraded_attachments_deletes_stale_attachment_chunks(tmp_path
 
 
 def test_ingest_dry_run_skips_sqlite(monkeypatch, tmp_path):
-    import src.ingest as ingest_mod
+    import mailarium.ingest as ingest_mod
 
     emails = [_make_mock_email(1)]
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
@@ -586,26 +438,14 @@ def test_ingest_dry_run_skips_sqlite(monkeypatch, tmp_path):
 
 
 def test_reingest_is_idempotent(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-
     emails = [_make_mock_email(i) for i in range(1, 3)]
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email: [{"chunk_id": f"{email.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    stats1 = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    ingest_mod, sqlite_file, stats1 = _seed_ingest_database(monkeypatch, tmp_path, emails, return_stats=True)
     assert stats1["sqlite_inserted"] == 2
 
     stats2 = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
     assert stats2["sqlite_inserted"] == 0
 
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     db = EmailDatabase(sqlite_file)
     assert db.email_count() == 2
@@ -613,9 +453,9 @@ def test_reingest_is_idempotent(monkeypatch, tmp_path):
 
 
 def test_ingest_resume_skips_previously_parsed_emails(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    import mailarium.embedder as embedder_mod
+    import mailarium.ingest as ingest_mod
+    from mailarium.email_db import EmailDatabase
 
     emails = [_make_mock_email(i) for i in range(1, 4)]
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
@@ -658,7 +498,7 @@ def test_update_ingest_checkpoint_safe_skips_locked_checkpoint(monkeypatch):
     import logging
     import sqlite3
 
-    import src.ingest_pipeline as ingest_pipeline_mod
+    import mailarium.ingest_pipeline as ingest_pipeline_mod
 
     class _CheckpointStore:
         def update_ingest_checkpoint(self, **_kwargs):
@@ -699,7 +539,7 @@ def test_update_ingest_checkpoint_safe_skips_locked_checkpoint(monkeypatch):
 def test_embed_pipeline_subbatches_large_chunk_groups():
     from typing import cast
 
-    from src.chunker import EmailChunk
+    from mailarium.chunker import EmailChunk
 
     calls: list[int] = []
 
@@ -722,66 +562,76 @@ def test_embed_pipeline_subbatches_large_chunk_groups():
     assert pipeline.chunks_added == 25
 
 
-def _build_abort_pipeline_fakes(
-    events: list[str],
-) -> tuple:
-    class _FakeEmbedder:
-        def count(self):
-            return 0
+class _AbortFakeEmbedder:
+    def count(self):
+        return 0
 
-        def set_sparse_db(self, _db):
-            return None
+    def set_sparse_db(self, _db):
+        return None
 
-        def warmup(self):
-            return None
+    def warmup(self):
+        return None
 
-    class _FakeEmailDB:
-        def record_ingestion_start(self, *_args, **_kwargs):
-            events.append("db.record_start")
-            return 1
 
-        def record_ingestion_failure(self, *_args, **_kwargs):
-            events.append("db.record_failure")
+class _AbortFakeEmailDB:
+    def __init__(self, events: list[str]):
+        self.events = events
 
-        def close(self):
-            events.append("db.close")
+    def record_ingestion_start(self, *_args, **_kwargs):
+        self.events.append("db.record_start")
+        return 1
 
-    class _FakePipeline:
-        def __init__(self, **_kwargs):
-            self.chunks_added = 0
-            self.batches_written = 0
-            self.sqlite_inserted = 0
-            self._timing = {
-                "embed_seconds": 0.0,
-                "write_seconds": 0.0,
-                "sqlite_seconds": 0.0,
-                "entity_seconds": 0.0,
-                "analytics_seconds": 0.0,
-            }
+    def record_ingestion_failure(self, *_args, **_kwargs):
+        self.events.append("db.record_failure")
 
-        def start(self):
-            events.append("pipeline.start")
+    def close(self):
+        self.events.append("db.close")
 
-        def submit(self, _chunks, _emails):
-            events.append("pipeline.submit")
 
-        def finish(self):
-            events.append("pipeline.finish")
+class _AbortFakePipeline:
+    def __init__(self, *, events: list[str], **_kwargs):
+        self.events = events
+        self.chunks_added = 0
+        self.batches_written = 0
+        self.sqlite_inserted = 0
+        self._timing = {
+            "embed_seconds": 0.0,
+            "write_seconds": 0.0,
+            "sqlite_seconds": 0.0,
+            "entity_seconds": 0.0,
+            "analytics_seconds": 0.0,
+        }
 
-        def abort(self):
-            events.append("pipeline.abort")
-            return None
+    def start(self):
+        self.events.append("pipeline.start")
 
-    def _parse_then_fail(_path, **_kwargs):
-        yield _make_mock_email(1)
-        raise RuntimeError("parse exploded")
+    def submit(self, _chunks, _emails):
+        self.events.append("pipeline.submit")
 
-    return _FakeEmbedder, _FakeEmailDB, _FakePipeline, _parse_then_fail
+    def finish(self):
+        self.events.append("pipeline.finish")
+
+    def abort(self):
+        self.events.append("pipeline.abort")
+        return None
+
+
+def _parse_then_fail(_path, **_kwargs):
+    yield _make_mock_email(1)
+    raise RuntimeError("parse exploded")
+
+
+def _build_abort_pipeline_fakes(events: list[str]) -> tuple:
+    class _BoundAbortFakePipeline(_AbortFakePipeline):
+        def __init__(self, **kwargs):
+            super().__init__(events=events, **kwargs)
+
+    return _AbortFakeEmbedder, lambda: _AbortFakeEmailDB(events), _BoundAbortFakePipeline, _parse_then_fail
 
 
 def test_producer_parse_exception_aborts_pipeline_before_db_close(monkeypatch, tmp_path):
-    import src.ingest as ingest_mod
-    import src.ingest_pipeline as ingest_pipeline_mod
+    import mailarium.ingest as ingest_mod
+    import mailarium.ingest_pipeline as ingest_pipeline_mod
 
     events: list[str] = []
     _FakeEmbedder, _FakeEmailDB, _FakePipeline, _parse_then_fail = _build_abort_pipeline_fakes(events)
@@ -805,10 +655,9 @@ def test_producer_parse_exception_aborts_pipeline_before_db_close(monkeypatch, t
 
 def test_reingest_force_updates_headers(monkeypatch, tmp_path):
     """--reingest-bodies --force should update subject, sender_name, sender_email."""
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
-    from src.parse_olm import Email
+    import mailarium.ingest as ingest_mod
+    from mailarium.email_db import EmailDatabase
+    from mailarium.parse_olm import Email
 
     # First ingest: store emails with MIME-encoded subject and sender name.
     encoded_emails = [
@@ -827,16 +676,7 @@ def test_reingest_force_updates_headers(monkeypatch, tmp_path):
             has_attachments=False,
         )
     ]
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: encoded_emails)
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email: [{"chunk_id": f"{email.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    _, sqlite_file = _seed_ingest_database(monkeypatch, tmp_path, encoded_emails)
 
     # Verify encoded values were stored as-is (simulating old parser without decode).
     db = EmailDatabase(sqlite_file)
@@ -846,20 +686,7 @@ def test_reingest_force_updates_headers(monkeypatch, tmp_path):
 
     # Now simulate re-parse with decoded values (as the fixed parser would produce).
     decoded_emails = [
-        Email(
-            message_id="<msg1@example.test>",
-            subject="Café",
-            sender_name="Lüder",
-            sender_email="new@example.test",
-            to=["r@example.test"],
-            cc=[],
-            bcc=[],
-            date="2024-01-01T10:00:00",
-            body_text="New body",
-            body_html="",
-            folder="Inbox",
-            has_attachments=False,
-        )
+        _make_header_email(subject="Café", sender_name="Lüder", sender_email="new@example.test", body_text="New body")
     ]
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: decoded_emails)
 
@@ -878,10 +705,9 @@ def test_reingest_force_updates_headers(monkeypatch, tmp_path):
 
 def test_reingest_no_force_skips_headers(monkeypatch, tmp_path):
     """Without --force, reingest should NOT update headers (only missing bodies)."""
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
-    from src.parse_olm import Email
+    import mailarium.ingest as ingest_mod
+    from mailarium.email_db import EmailDatabase
+    from mailarium.parse_olm import Email
 
     emails = [
         Email(
@@ -899,33 +725,11 @@ def test_reingest_no_force_skips_headers(monkeypatch, tmp_path):
             has_attachments=False,
         )
     ]
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email: [{"chunk_id": f"{email.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    _, sqlite_file = _seed_ingest_database(monkeypatch, tmp_path, emails)
 
     # Non-force reingest: all bodies present → nothing to do, headers untouched.
     decoded_emails = [
-        Email(
-            message_id="<msg1@example.test>",
-            subject="decoded",
-            sender_name="New Name",
-            sender_email="new@example.test",
-            to=["r@example.test"],
-            cc=[],
-            bcc=[],
-            date="2024-01-01T10:00:00",
-            body_text="New body",
-            body_html="",
-            folder="Inbox",
-            has_attachments=False,
-        )
+        _make_header_email(subject="decoded", sender_name="New Name", sender_email="new@example.test", body_text="New body")
     ]
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: decoded_emails)
 

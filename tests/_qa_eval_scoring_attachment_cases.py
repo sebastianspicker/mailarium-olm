@@ -1,5 +1,8 @@
+"""QA evaluation scoring for attachment channels, OCR evidence, and weak references."""
+
+
 def test_evaluate_payload_scores_attachment_channel_success():
-    from src.qa_eval import QuestionCase, evaluate_payload
+    from mailarium.qa_eval import QuestionCase, evaluate_payload
 
     case = QuestionCase(
         id="attach-001",
@@ -39,7 +42,7 @@ def test_evaluate_payload_scores_attachment_channel_success():
 
 
 def test_evaluate_payload_scores_ocr_attachment_text_evidence_separately():
-    from src.qa_eval import QuestionCase, evaluate_payload
+    from mailarium.qa_eval import QuestionCase, evaluate_payload
 
     case = QuestionCase(
         id="attach-ocr-001",
@@ -79,7 +82,7 @@ def test_evaluate_payload_scores_ocr_attachment_text_evidence_separately():
 
 
 def test_evaluate_payload_marks_weak_attachment_reference_separately():
-    from src.qa_eval import QuestionCase, evaluate_payload
+    from mailarium.qa_eval import QuestionCase, evaluate_payload
 
     case = QuestionCase(
         id="attach-weak-001",

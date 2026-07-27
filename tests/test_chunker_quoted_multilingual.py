@@ -1,6 +1,8 @@
+"""Removes quoted reply history across multilingual mail-client markers while leaving original messages intact."""
+
 from __future__ import annotations
 
-from src.chunker import strip_quoted_content
+from mailarium.chunker import strip_quoted_content
 
 
 def test_strip_quoted_original_message_separator():

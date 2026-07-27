@@ -1,3 +1,5 @@
+"""Exercises ingestion command edge cases for maintenance modes, argument requirements, progress, and empty archives."""
+
 from ._ingest_extended_cases import (
     TestFormatSummaryEdgeCases,
     TestIngestEdgeCases,

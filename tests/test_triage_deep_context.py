@@ -1,4 +1,4 @@
-"""Tests for email_triage and email_deep_context tools."""
+"""Verifies triage tools classify mailbox items and assemble deeper context for review."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from src.formatting import format_triage_results
-from src.mcp_models import EmailDeepContextInput, EmailTriageInput
-from src.tools.browse import _thread_date_range, _unique_participants
+from mailarium.formatting import format_triage_results
+from mailarium.mcp_models import EmailDeepContextInput, EmailTriageInput
+from mailarium.tools.browse import _thread_date_range, _unique_participants
 
 # ── EmailTriageInput model tests ──────────────────────────────
 
@@ -110,7 +110,7 @@ class TestEmailDeepContextInputDefaults:
 
 class TestEmailProvenanceInputAliases:
     def test_uid_alias_supported(self):
-        from src.mcp_models import EmailProvenanceInput
+        from mailarium.mcp_models import EmailProvenanceInput
 
         m = EmailProvenanceInput.model_validate({"uid": "abc123"})
         assert m.email_uid == "abc123"
@@ -194,7 +194,7 @@ class TestFormatTriageResults:
 
 class TestArchiveStatsHint:
     def test_returns_dict_with_keys(self):
-        from src.tools.search import _archive_stats_hint
+        from mailarium.tools.search import _archive_stats_hint
 
         class FakeRetriever:
             def stats(self):
@@ -210,7 +210,7 @@ class TestArchiveStatsHint:
         assert result["unique_senders"] == 42
 
     def test_returns_empty_on_exception(self):
-        from src.tools.search import _archive_stats_hint
+        from mailarium.tools.search import _archive_stats_hint
 
         class BrokenRetriever:
             def stats(self):

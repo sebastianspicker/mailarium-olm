@@ -1,5 +1,13 @@
+"""Exercises evidence helper selection for inferred threads, attachment strength, and weak message semantics.
+
+It avoids upgrading binary-only or shell-message material into stronger evidence than the source supports.
+"""
+
+from .helpers.mcp_tool_fakes import _assert_source_shell_message_semantics
+
+
 def test_thread_locator_prefers_inferred_thread_when_canonical_missing():
-    from src.tools.search_answer_context import _thread_locator_for_candidate
+    from mailarium.tools.search_answer_context import _thread_locator_for_candidate
 
     locator = _thread_locator_for_candidate(
         {"uid": "u1", "conversation_id": ""},
@@ -17,7 +25,7 @@ def test_thread_locator_prefers_inferred_thread_when_canonical_missing():
 
 
 def test_attachment_evidence_profile_marks_ocr_text_as_strong():
-    from src.tools.search_answer_context import _attachment_evidence_profile
+    from mailarium.tools.search_answer_context import _attachment_evidence_profile
 
     profile = _attachment_evidence_profile(
         {
@@ -35,7 +43,7 @@ def test_attachment_evidence_profile_marks_ocr_text_as_strong():
 
 
 def test_attachment_evidence_profile_marks_binary_only_as_weak():
-    from src.tools.search_answer_context import _attachment_evidence_profile
+    from mailarium.tools.search_answer_context import _attachment_evidence_profile
 
     profile = _attachment_evidence_profile(
         {
@@ -53,18 +61,4 @@ def test_attachment_evidence_profile_marks_binary_only_as_weak():
 
 
 def test_weak_message_semantics_describes_source_shell_message():
-    from src.formatting import weak_message_semantics
-
-    weak_message = weak_message_semantics(
-        {
-            "body_kind": "content",
-            "body_empty_reason": "source_shell_only",
-            "recovery_strategy": "source_shell_summary",
-            "recovery_confidence": 0.2,
-        }
-    )
-
-    assert weak_message is not None
-    assert weak_message["code"] == "source_shell_only"
-    assert weak_message["label"] == "Source-shell message"
-    assert "visible authored text" in weak_message["explanation"]
+    _assert_source_shell_message_semantics()

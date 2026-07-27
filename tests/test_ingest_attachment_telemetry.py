@@ -1,12 +1,11 @@
+"""Reports attachment-surface and duplicate telemetry while preserving distinguishable extraction failure states."""
+
 from __future__ import annotations
 
-from .helpers.ingest_fixtures import _make_mock_email, _MockEmbedder
+from .helpers.ingest_fixtures import _make_mock_email, _seed_ingest_database
 
 
 def test_ingest_reports_attachment_surface_and_duplicate_telemetry(monkeypatch, tmp_path) -> None:
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-
     email = _make_mock_email(1)
     email.has_attachments = True
     email.attachment_names = ["a.txt", "b.txt"]
@@ -29,16 +28,14 @@ def test_ingest_reports_attachment_surface_and_duplicate_telemetry(monkeypatch, 
     payload = b"[Page 2]\nDies ist ein Beleg."
     email.attachment_contents = [("a.txt", payload), ("b.txt", payload)]
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
+    _, _, stats = _seed_ingest_database(
+        monkeypatch,
+        tmp_path,
+        [email],
+        extract_attachments=True,
+        database_name="telemetry.db",
+        return_stats=True,
     )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "telemetry.db")
-    stats = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file, extract_attachments=True)
 
     telemetry = stats["ingest_attachment_telemetry"]
     assert telemetry["attachments_seen"] == 2
@@ -48,17 +45,14 @@ def test_ingest_reports_attachment_surface_and_duplicate_telemetry(monkeypatch, 
     assert telemetry["surface_kind_mix"]["normalized_retrieval"] >= 2
 
 
-def test_ingest_preserves_attachment_extraction_failure_reason(monkeypatch) -> None:
-    import src.attachment_extractor as attachment_mod
-    import src.ingest as ingest_mod
+def test_ingest_preserves_attachment_extraction_failure_reason(monkeypatch, tmp_path) -> None:
+    import mailarium.attachment_extractor as attachment_mod
 
     email = _make_mock_email(1)
     email.has_attachments = True
     email.attachments = [{"name": "broken.pdf", "mime_type": "application/pdf", "size": 4}]
     email.attachment_contents = [("broken.pdf", b"%PDF")]
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(ingest_mod, "chunk_email", lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}])
     monkeypatch.setattr(
         attachment_mod,
         "extract_text_with_reason",
@@ -66,28 +60,25 @@ def test_ingest_preserves_attachment_extraction_failure_reason(monkeypatch) -> N
     )
     monkeypatch.setattr(attachment_mod, "extract_attachment_text_ocr", lambda _name, _content: None)
 
-    ingest_mod.ingest("mock.olm", dry_run=True, extract_attachments=True)
+    _seed_ingest_database(monkeypatch, tmp_path, [email], extract_attachments=True, dry_run=True)
 
     assert email.attachments[0]["extraction_state"] == "extraction_failed"
     assert email.attachments[0]["failure_reason"] == "text_extraction_failed:PDF:RuntimeError"
     assert email.attachments[0]["text_locator"]["extraction_state"] == "extraction_failed"
 
 
-def test_ingest_keeps_textless_attachment_distinct_from_extraction_failure(monkeypatch) -> None:
-    import src.attachment_extractor as attachment_mod
-    import src.ingest as ingest_mod
+def test_ingest_keeps_textless_attachment_distinct_from_extraction_failure(monkeypatch, tmp_path) -> None:
+    import mailarium.attachment_extractor as attachment_mod
 
     email = _make_mock_email(1)
     email.has_attachments = True
     email.attachments = [{"name": "empty.bin", "mime_type": "application/octet-stream", "size": 4}]
     email.attachment_contents = [("empty.bin", b"\x00\x01\x02")]
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(ingest_mod, "chunk_email", lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}])
     monkeypatch.setattr(attachment_mod, "extract_text_with_reason", lambda _name, _content, *, mime_type=None: (None, None))
     monkeypatch.setattr(attachment_mod, "extract_attachment_text_ocr", lambda _name, _content: None)
 
-    ingest_mod.ingest("mock.olm", dry_run=True, extract_attachments=True)
+    _seed_ingest_database(monkeypatch, tmp_path, [email], extract_attachments=True, dry_run=True)
 
     assert email.attachments[0]["extraction_state"] != "extraction_failed"
     assert email.attachments[0]["failure_reason"] != "text_extraction_failed:PDF:RuntimeError"

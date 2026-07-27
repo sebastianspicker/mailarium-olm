@@ -7,8 +7,8 @@ import tempfile
 
 import pytest
 
-from src.dossier_generator import DossierGenerator
-from src.email_db import EmailDatabase
+from mailarium.dossier_generator import DossierGenerator
+from mailarium.email_db import EmailDatabase
 
 
 @pytest.fixture()
@@ -47,9 +47,9 @@ def db():
 
         database.conn.commit()
 
-        database.add_evidence("uid-1", "harassment", "evidence content", "Summary 1", 5)
-        database.add_evidence("uid-2", "discrimination", "evidence content", "Summary 2", 3)
-        database.add_evidence("uid-3", "retaliation", "evidence content", "Summary 3", 4)
+        database.add_evidence("uid-1", "fact", "evidence content", "Summary 1", 5)
+        database.add_evidence("uid-2", "action_item", "evidence content", "Summary 2", 3)
+        database.add_evidence("uid-3", "risk", "evidence content", "Summary 3", 4)
 
         yield database
         database.close()

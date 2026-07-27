@@ -1,4 +1,9 @@
-from src.sanitization import apply_privacy_guardrails, sanitize_untrusted_text
+"""Exercises shared text sanitization and privacy guardrails for terminal controls and sensitive content.
+
+It removes display-manipulation characters and applies stricter redaction according to the selected mode.
+"""
+
+from mailarium.sanitization import apply_privacy_guardrails, sanitize_untrusted_text
 
 
 def test_sanitize_untrusted_text_strips_ansi_and_control_chars():
@@ -48,28 +53,28 @@ def test_sanitize_untrusted_text_strips_bidi_controls():
     assert clean == "abcdefghi"
 
 
-def test_apply_privacy_guardrails_redacts_contact_data_for_external_counsel():
+def test_apply_privacy_guardrails_redacts_contact_data_in_contact_redacted_mode():
     payload = {
         "sender_email": "employee@example.test",
         "summary": "Please contact +49 221 1234567 about the process update.",
     }
 
-    redacted, guardrails = apply_privacy_guardrails(payload, privacy_mode="external_counsel_export")
+    redacted, guardrails = apply_privacy_guardrails(payload, privacy_mode="contact_redacted")
 
     assert redacted["sender_email"] == "[REDACTED: email]"
     assert "[REDACTED: phone]" in redacted["summary"]
-    assert guardrails["privacy_mode"] == "external_counsel_export"
+    assert guardrails["privacy_mode"] == "contact_redacted"
     assert guardrails["redaction_summary"]["category_counts"]["contact"] >= 1
 
 
-def test_apply_privacy_guardrails_redacts_medical_and_privileged_text_for_witness_sharing():
+def test_apply_privacy_guardrails_redacts_medical_and_privileged_text_in_strict_mode():
     payload = {
         "name": "employee",
         "note": "Medical diagnosis from the physician should stay private.",
         "memo": "Privileged attorney-client strategy note.",
     }
 
-    redacted, guardrails = apply_privacy_guardrails(payload, privacy_mode="witness_sharing")
+    redacted, guardrails = apply_privacy_guardrails(payload, privacy_mode="strict_redaction")
 
     assert redacted["name"] == "[REDACTED: participant_identity]"
     assert redacted["note"] == "[REDACTED: sensitive_medical_content]"

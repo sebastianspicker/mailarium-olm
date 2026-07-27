@@ -1,9 +1,5 @@
 # ruff: noqa: I001
-"""Tests for src/tools/diagnostics.py — admin and diagnostic tools.
-
-Covers: email_admin with action='diagnostics', 'reingest_bodies',
-'reembed', 'reingest_metadata', 'reingest_analytics', and invalid actions.
-"""
+"""MCP diagnostics runtime delegation, archive counters, and embedder summaries."""
 
 from __future__ import annotations
 
@@ -16,24 +12,24 @@ import pytest
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
-from .helpers.diagnostics_fakes import MockDeps, _register
+from .helpers.diagnostics_fakes import MockDeps, _register, diagnostics_database
 
 
 class TestDiagnostics:
     def test_answer_task_readiness_summary_delegates_to_summary_module(self):
-        from src.tools import diagnostics
+        from mailarium.tools import diagnostics
 
         expected = {"source_report": "x"}
-        with patch("src.tools.diagnostics_summary.answer_task_readiness_summary_impl", return_value=expected) as mock_impl:
+        with patch("mailarium.tools.diagnostics_summary.answer_task_readiness_summary_impl", return_value=expected) as mock_impl:
             assert diagnostics._answer_task_readiness_summary() == expected
         mock_impl.assert_called_once()
 
     def test_qa_readiness_summary_delegates_to_summary_module(self):
-        from src.tools import diagnostics
+        from mailarium.tools import diagnostics
 
         fake_db = object()
         expected = {"total_emails": 1}
-        with patch("src.tools.diagnostics_summary.qa_readiness_summary_impl", return_value=expected) as mock_impl:
+        with patch("mailarium.tools.diagnostics_summary.qa_readiness_summary_impl", return_value=expected) as mock_impl:
             assert diagnostics._qa_readiness_summary(fake_db) == expected
         mock_impl.assert_called_once_with(
             fake_db,
@@ -46,7 +42,7 @@ class TestDiagnostics:
     def test_diagnostics_docstrings_describe_runtime_summary(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models_analysis import EmailAdminInput
+        from mailarium.mcp_models_analysis import EmailAdminInput
 
         assert "resolved runtime settings" in (fn.__doc__ or "")
         assert "embedder state" in (EmailAdminInput.__doc__ or "")
@@ -55,7 +51,7 @@ class TestDiagnostics:
     async def test_diagnostics_action(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
         params = EmailAdminInput(action="diagnostics")
         result = await fn(params)
@@ -96,7 +92,7 @@ class TestDiagnostics:
         temp_db = MinimalDB()
         MockDeps._email_db = temp_db
         try:
-            from src.mcp_models import EmailAdminInput
+            from mailarium.mcp_models import EmailAdminInput
 
             params = EmailAdminInput(action="diagnostics")
             result = await fn(params)
@@ -110,7 +106,7 @@ class TestDiagnostics:
     async def test_diagnostics_namespaces_embedder_summary(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
         params = EmailAdminInput(action="diagnostics")
         result = await fn(params)
@@ -126,41 +122,18 @@ class TestDiagnostics:
         fn = fake_mcp._tools["email_admin"]
         old_db = MockDeps._email_db
 
-        class RichDB:
-            def __init__(self):
-                self.conn = sqlite3.connect(":memory:", check_same_thread=False)
-                self.conn.row_factory = sqlite3.Row
-                self.conn.execute(
-                    "CREATE TABLE emails ("
-                    "uid TEXT, body_kind TEXT, body_empty_reason TEXT, "
-                    "recipient_identity_source TEXT, reply_context_from TEXT, inferred_parent_uid TEXT)"
-                )
-                self.conn.execute("CREATE TABLE message_segments (email_uid TEXT)")
-                self.conn.executemany(
-                    "INSERT INTO emails VALUES (?, ?, ?, ?, ?, ?)",
-                    [
-                        ("u1", "content", "", "source_header", "employee@example.test", "parent-1"),
-                        ("u2", "metadata_only", "metadata_only_reply", "structured_xml", "", ""),
-                        ("u3", "empty", "html_shell_only", "", "", ""),
-                    ],
-                )
-                self.conn.executemany(
-                    "INSERT INTO message_segments VALUES (?)",
-                    [("u1",), ("u1",), ("u2",)],
-                )
-
-            def sparse_vector_count(self):
-                return 0
-
-            def close(self) -> None:
-                if self.conn is not None:
-                    self.conn.close()
-                    self.conn = None
-
-        temp_db = RichDB()
+        temp_db = diagnostics_database(
+            "uid TEXT, body_kind TEXT, body_empty_reason TEXT, "
+            "recipient_identity_source TEXT, reply_context_from TEXT, inferred_parent_uid TEXT",
+            [
+                ("u1", "content", "", "source_header", "employee@example.test", "parent-1"),
+                ("u2", "metadata_only", "metadata_only_reply", "structured_xml", "", ""),
+                ("u3", "empty", "html_shell_only", "", "", ""),
+            ],
+        )
         MockDeps._email_db = temp_db
         try:
-            from src.mcp_models import EmailAdminInput
+            from mailarium.mcp_models import EmailAdminInput
 
             params = EmailAdminInput(action="diagnostics")
             result = await fn(params)
@@ -183,85 +156,62 @@ class TestDiagnostics:
         fn = fake_mcp._tools["email_admin"]
         old_db = MockDeps._email_db
 
-        class ReadinessDB:
-            def __init__(self):
-                self.conn = sqlite3.connect(":memory:", check_same_thread=False)
-                self.conn.row_factory = sqlite3.Row
-                self.conn.execute(
-                    "CREATE TABLE emails ("
-                    "uid TEXT, email_type TEXT, has_attachments INTEGER, conversation_id TEXT, "
-                    "in_reply_to TEXT, references_json TEXT, raw_source TEXT, "
-                    "forensic_body_text TEXT, body_kind TEXT, body_empty_reason TEXT, "
-                    "recipient_identity_source TEXT, reply_context_from TEXT, inferred_parent_uid TEXT)"
-                )
-                self.conn.execute("CREATE TABLE message_segments (email_uid TEXT)")
-                self.conn.executemany(
-                    "INSERT INTO emails VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [
-                        (
-                            "u1",
-                            "reply",
-                            1,
-                            "thread-1",
-                            "parent-1",
-                            '["ref-1"]',
-                            "raw-source-1",
-                            "forensic-1",
-                            "content",
-                            "",
-                            "source_header",
-                            "employee@example.test",
-                            "parent-1",
-                        ),
-                        (
-                            "u2",
-                            "forward",
-                            0,
-                            "thread-1",
-                            "",
-                            "[]",
-                            "",
-                            "",
-                            "metadata_only",
-                            "metadata_only_reply",
-                            "structured_xml",
-                            "",
-                            "",
-                        ),
-                        (
-                            "u3",
-                            "original",
-                            1,
-                            "",
-                            "",
-                            "[]",
-                            "raw-source-3",
-                            "",
-                            "empty",
-                            "image_only",
-                            "",
-                            "",
-                            "",
-                        ),
-                    ],
-                )
-                self.conn.executemany(
-                    "INSERT INTO message_segments VALUES (?)",
-                    [("u1",), ("u1",), ("u2",)],
-                )
-
-            def sparse_vector_count(self):
-                return 0
-
-            def close(self) -> None:
-                if self.conn is not None:
-                    self.conn.close()
-                    self.conn = None
-
-        temp_db = ReadinessDB()
+        temp_db = diagnostics_database(
+            "uid TEXT, email_type TEXT, has_attachments INTEGER, conversation_id TEXT, "
+            "in_reply_to TEXT, references_json TEXT, raw_source TEXT, "
+            "forensic_body_text TEXT, body_kind TEXT, body_empty_reason TEXT, "
+            "recipient_identity_source TEXT, reply_context_from TEXT, inferred_parent_uid TEXT",
+            [
+                (
+                    "u1",
+                    "reply",
+                    1,
+                    "thread-1",
+                    "parent-1",
+                    '["ref-1"]',
+                    "raw-source-1",
+                    "forensic-1",
+                    "content",
+                    "",
+                    "source_header",
+                    "employee@example.test",
+                    "parent-1",
+                ),
+                (
+                    "u2",
+                    "forward",
+                    0,
+                    "thread-1",
+                    "",
+                    "[]",
+                    "",
+                    "",
+                    "metadata_only",
+                    "metadata_only_reply",
+                    "structured_xml",
+                    "",
+                    "",
+                ),
+                (
+                    "u3",
+                    "original",
+                    1,
+                    "",
+                    "",
+                    "[]",
+                    "raw-source-3",
+                    "",
+                    "empty",
+                    "image_only",
+                    "",
+                    "",
+                    "",
+                ),
+            ],
+        )
         MockDeps._email_db = temp_db
         try:
-            from src.mcp_models import EmailAdminInput
+            from mailarium.mcp_models import EmailAdminInput
 
             params = EmailAdminInput(action="diagnostics")
             result = await fn(params)

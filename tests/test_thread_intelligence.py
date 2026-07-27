@@ -1,6 +1,6 @@
-"""Tests for action item and decision extraction from email threads."""
+"""Verifies thread intelligence extracts action items and decisions from related conversations."""
 
-from src.thread_intelligence import (
+from mailarium.thread_intelligence import (
     ActionItem,
     Decision,
     ThreadAnalysis,
@@ -223,30 +223,20 @@ class TestThreadAnalyzer:
 
 
 class TestMCPThreadTools:
-    def test_thread_summary_tool_importable(self):
-        from src.tools import threads
-
-        assert callable(threads.register)
-
-    def test_action_items_tool_importable(self):
-        from src.tools import threads
-
-        assert callable(threads.register)
-
-    def test_decisions_tool_importable(self):
-        from src.tools import threads
+    def test_thread_tools_registration_importable(self):
+        from mailarium.tools import threads
 
         assert callable(threads.register)
 
     def test_thread_summary_input(self):
-        from src.mcp_models import ThreadSummaryInput
+        from mailarium.mcp_models import ThreadSummaryInput
 
         inp = ThreadSummaryInput(conversation_id="test-thread-123", max_sentences=3)
         assert inp.conversation_id == "test-thread-123"
         assert inp.max_sentences == 3
 
     def test_action_items_input(self):
-        from src.mcp_models import ActionItemsInput
+        from mailarium.mcp_models import ActionItemsInput
 
         inp = ActionItemsInput(conversation_id="abc", days=7, limit=10)
         assert inp.conversation_id == "abc"
@@ -254,7 +244,7 @@ class TestMCPThreadTools:
         assert inp.limit == 10
 
     def test_decisions_input(self):
-        from src.mcp_models import DecisionsInput
+        from mailarium.mcp_models import DecisionsInput
 
         inp = DecisionsInput(conversation_id="xyz", days=30)
         assert inp.conversation_id == "xyz"

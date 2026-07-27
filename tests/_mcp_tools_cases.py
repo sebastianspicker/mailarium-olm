@@ -3,6 +3,8 @@
 # pylint: disable=unused-wildcard-import,wildcard-import
 
 
+"""Aggregates MCP structured-search and answer-context behavior cases for the parent suite."""
+
 from ._mcp_tools_search_answer_context_analysis_cases import *
 from ._mcp_tools_search_answer_context_attachment_cases import *
 from ._mcp_tools_search_answer_context_budget_cases import *

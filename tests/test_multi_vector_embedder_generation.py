@@ -1,159 +1,57 @@
-"""Embedding-generation path tests for the multi-vector embedder."""
+"""Deterministic contracts for the dense and sparse embedding adapters."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 
-from src.multi_vector_embedder import MultiVectorEmbedder, MultiVectorResult
-from tests._multi_vector_embedder_cases import FakeFlagModel
+from mailarium.multi_vector_embedder import MultiVectorEmbedder, MultiVectorResult
 
 
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_embedder_loads_flag_model():
-    import sys
-
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
-
-    emb = MultiVectorEmbedder(
-        model_name="BAAI/bge-m3",
-        device="cpu",
-        sparse_enabled=True,
-        colbert_enabled=True,
-    )
-    assert emb.backend.name == "flag"
-    assert emb.has_sparse is True
-    assert emb.has_colbert is True
+class _DenseModel:
+    def encode(self, texts, **_kwargs):
+        return np.asarray([[float(index), 1.0] for index, _ in enumerate(texts)], dtype=np.float32)
 
 
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_encode_dense_flag():
-    import sys
+class _SparseEncoder:
+    is_available = True
 
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
+    def encode_documents(self, texts):
+        return [{index: 1.0} for index, _ in enumerate(texts)]
 
-    emb = MultiVectorEmbedder(model_name="BAAI/bge-m3", device="cpu")
-    result = emb.encode_dense(["hello", "world"])
-    assert len(result) == 2
-    assert isinstance(result[0], list)
+    def encode_queries(self, texts):
+        return [{index + 10: 0.5} for index, _ in enumerate(texts)]
 
-
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_encode_sparse_flag():
-    import sys
-
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
-
-    emb = MultiVectorEmbedder(
-        model_name="BAAI/bge-m3",
-        device="cpu",
-        sparse_enabled=True,
-    )
-    result = emb.encode_sparse(["hello", "world"])
-    assert result is not None
-    assert len(result) == 2
-    assert isinstance(result[0], dict)
+    def runtime_summary(self):
+        return {"model_name": "sparse-test", "loaded": True}
 
 
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_encode_sparse_disabled():
-    import sys
-
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
-
-    emb = MultiVectorEmbedder(
-        model_name="BAAI/bge-m3",
-        device="cpu",
-        sparse_enabled=False,
-    )
-    assert emb.encode_sparse(["hello"]) is None
+def test_dense_encoding_uses_sentence_transformer_shape():
+    embedder = MultiVectorEmbedder(device="cpu")
+    embedder._model = _DenseModel()
+    assert embedder.encode_dense(["one", "two"]) == [[0.0, 1.0], [1.0, 1.0]]
 
 
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_encode_colbert_flag():
-    import sys
-
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
-
-    emb = MultiVectorEmbedder(
-        model_name="BAAI/bge-m3",
-        device="cpu",
-        colbert_enabled=True,
-    )
-    result = emb.encode_colbert(["hello", "world"])
-    assert result is not None
-    assert len(result) == 2
-    assert isinstance(result[0], np.ndarray)
+def test_sparse_document_and_query_encoders_are_asymmetric():
+    with patch("mailarium.multi_vector_embedder.SparseTextEncoder", return_value=_SparseEncoder()):
+        embedder = MultiVectorEmbedder(device="cpu", sparse_enabled=True)
+    assert embedder.has_sparse is True
+    assert embedder.encode_sparse(["document"]) == [{0: 1.0}]
+    assert embedder.encode_sparse_query(["query"]) == [{10: 0.5}]
 
 
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_encode_colbert_disabled():
-    import sys
-
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
-
-    emb = MultiVectorEmbedder(
-        model_name="BAAI/bge-m3",
-        device="cpu",
-        colbert_enabled=False,
-    )
-    assert emb.encode_colbert(["hello"]) is None
+def test_sparse_disabled_returns_none_without_loading_an_optional_model():
+    embedder = MultiVectorEmbedder(device="cpu", sparse_enabled=False)
+    assert embedder.encode_sparse(["document"]) is None
+    assert embedder.encode_sparse_query(["query"]) is None
 
 
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_encode_all_flag():
-    import sys
-
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
-
-    emb = MultiVectorEmbedder(
-        model_name="BAAI/bge-m3",
-        device="cpu",
-        sparse_enabled=True,
-        colbert_enabled=True,
-    )
-    result = emb.encode_all(["hello", "world"])
+def test_encode_all_keeps_dense_and_optional_sparse_contract():
+    with patch("mailarium.multi_vector_embedder.SparseTextEncoder", return_value=_SparseEncoder()):
+        embedder = MultiVectorEmbedder(device="cpu", sparse_enabled=True)
+    embedder._model = _DenseModel()
+    result = embedder.encode_all(["one", "two"])
     assert isinstance(result, MultiVectorResult)
-    assert len(result.dense) == 2
-    assert result.sparse is not None
-    assert result.colbert is not None
-
-
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_encode_all_flag_dense_only():
-    import sys
-
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
-
-    emb = MultiVectorEmbedder(
-        model_name="BAAI/bge-m3",
-        device="cpu",
-        sparse_enabled=False,
-        colbert_enabled=False,
-    )
-    result = emb.encode_all(["hello"])
-    assert result.sparse is None
-    assert result.colbert is None
-
-
-@patch.dict("sys.modules", {"FlagEmbedding": MagicMock()})
-def test_warmup_loads_model_and_encodes():
-    import sys
-
-    flag_mod = sys.modules["FlagEmbedding"]
-    flag_mod.BGEM3FlagModel = FakeFlagModel
-
-    emb = MultiVectorEmbedder(model_name="BAAI/bge-m3", device="cpu")
-    assert emb._model is None
-    emb.warmup()
-    assert emb._model is not None
-    assert emb._backend is not None
+    assert result.dense == [[0.0, 1.0], [1.0, 1.0]]
+    assert result.sparse == [{0: 1.0}, {1: 1.0}]

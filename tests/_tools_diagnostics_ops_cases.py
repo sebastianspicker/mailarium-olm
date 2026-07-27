@@ -1,14 +1,9 @@
 # ruff: noqa: I001
-"""Tests for src/tools/diagnostics.py — admin and diagnostic tools.
-
-Covers: email_admin with action='diagnostics', 'reingest_bodies',
-'reembed', 'reingest_metadata', 'reingest_analytics', and invalid actions.
-"""
+"""MCP administration actions for reingestion, reembedding, and error responses."""
 
 from __future__ import annotations
 
 import json
-import threading
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +11,7 @@ import pytest
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
-from .helpers.diagnostics_fakes import _register
+from .helpers.diagnostics_fakes import _register, populated_mcp_caches
 
 
 class TestReingestBodies:
@@ -24,20 +19,10 @@ class TestReingestBodies:
     async def test_reingest_bodies_happy_path(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src import mcp_server
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        original_retriever = mcp_server._retriever
-        original_email_db = mcp_server._email_db
-        original_retriever_lock = mcp_server._retriever_lock
-        original_email_db_lock = mcp_server._email_db_lock
-        try:
-            mcp_server._retriever = object()
-            mcp_server._email_db = object()
-            mcp_server._retriever_lock = threading.Lock()
-            mcp_server._email_db_lock = threading.Lock()
-
-            with patch("src.ingest.reingest_bodies") as mock_fn:
+        with populated_mcp_caches() as mcp_server:
+            with patch("mailarium.ingest.reingest_bodies") as mock_fn:
                 mock_fn.return_value = {"updated": 10, "skipped": 5}
                 params = EmailAdminInput(
                     action="reingest_bodies",
@@ -48,17 +33,12 @@ class TestReingestBodies:
                 assert data["updated"] == 10
                 assert mcp_server._retriever is None
                 assert mcp_server._email_db is None
-        finally:
-            mcp_server._retriever = original_retriever
-            mcp_server._email_db = original_email_db
-            mcp_server._retriever_lock = original_retriever_lock
-            mcp_server._email_db_lock = original_email_db_lock
 
     @pytest.mark.asyncio
     async def test_reingest_bodies_missing_olm_path(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
         params = EmailAdminInput(action="reingest_bodies")
         result = await fn(params)
@@ -70,9 +50,9 @@ class TestReingestBodies:
     async def test_reingest_bodies_file_not_found(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        with patch("src.ingest.reingest_bodies", side_effect=FileNotFoundError):
+        with patch("mailarium.ingest.reingest_bodies", side_effect=FileNotFoundError):
             params = EmailAdminInput(
                 action="reingest_bodies",
                 olm_path="/nonexistent.olm",
@@ -85,9 +65,9 @@ class TestReingestBodies:
     async def test_reingest_bodies_generic_error(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        with patch("src.ingest.reingest_bodies", side_effect=RuntimeError("disk full")):
+        with patch("mailarium.ingest.reingest_bodies", side_effect=RuntimeError("disk full")):
             params = EmailAdminInput(
                 action="reingest_bodies",
                 olm_path=str(tmp_path / "test.olm"),
@@ -100,9 +80,9 @@ class TestReingestBodies:
     async def test_reingest_bodies_with_force(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        with patch("src.ingest.reingest_bodies") as mock_fn:
+        with patch("mailarium.ingest.reingest_bodies") as mock_fn:
             mock_fn.return_value = {"updated": 20, "skipped": 0}
             params = EmailAdminInput(
                 action="reingest_bodies",
@@ -120,20 +100,10 @@ class TestReembed:
     async def test_reembed_happy_path(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src import mcp_server
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        original_retriever = mcp_server._retriever
-        original_email_db = mcp_server._email_db
-        original_retriever_lock = mcp_server._retriever_lock
-        original_email_db_lock = mcp_server._email_db_lock
-        try:
-            mcp_server._retriever = object()
-            mcp_server._email_db = object()
-            mcp_server._retriever_lock = threading.Lock()
-            mcp_server._email_db_lock = threading.Lock()
-
-            with patch("src.ingest.reembed") as mock_fn:
+        with populated_mcp_caches() as mcp_server:
+            with patch("mailarium.ingest.reembed") as mock_fn:
                 mock_fn.return_value = {"chunks_embedded": 500}
                 params = EmailAdminInput(action="reembed", batch_size=50)
                 result = await fn(params)
@@ -142,19 +112,14 @@ class TestReembed:
                 mock_fn.assert_called_once_with(batch_size=50)
                 assert mcp_server._retriever is None
                 assert mcp_server._email_db is None
-        finally:
-            mcp_server._retriever = original_retriever
-            mcp_server._email_db = original_email_db
-            mcp_server._retriever_lock = original_retriever_lock
-            mcp_server._email_db_lock = original_email_db_lock
 
     @pytest.mark.asyncio
     async def test_reembed_error(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        with patch("src.ingest.reembed", side_effect=RuntimeError("OOM")):
+        with patch("mailarium.ingest.reembed", side_effect=RuntimeError("OOM")):
             params = EmailAdminInput(action="reembed")
             result = await fn(params)
             data = json.loads(result)
@@ -166,20 +131,10 @@ class TestReingestMetadata:
     async def test_reingest_metadata_happy_path(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src import mcp_server
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        original_retriever = mcp_server._retriever
-        original_email_db = mcp_server._email_db
-        original_retriever_lock = mcp_server._retriever_lock
-        original_email_db_lock = mcp_server._email_db_lock
-        try:
-            mcp_server._retriever = object()
-            mcp_server._email_db = object()
-            mcp_server._retriever_lock = threading.Lock()
-            mcp_server._email_db_lock = threading.Lock()
-
-            with patch("src.ingest.reingest_metadata") as mock_fn:
+        with populated_mcp_caches() as mcp_server:
+            with patch("mailarium.ingest.reingest_metadata") as mock_fn:
                 mock_fn.return_value = {"updated": 15}
                 params = EmailAdminInput(
                     action="reingest_metadata",
@@ -190,17 +145,12 @@ class TestReingestMetadata:
                 assert data["updated"] == 15
                 assert mcp_server._retriever is None
                 assert mcp_server._email_db is None
-        finally:
-            mcp_server._retriever = original_retriever
-            mcp_server._email_db = original_email_db
-            mcp_server._retriever_lock = original_retriever_lock
-            mcp_server._email_db_lock = original_email_db_lock
 
     @pytest.mark.asyncio
     async def test_reingest_metadata_missing_olm_path(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
         params = EmailAdminInput(action="reingest_metadata")
         result = await fn(params)
@@ -212,9 +162,9 @@ class TestReingestMetadata:
     async def test_reingest_metadata_file_not_found(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        with patch("src.ingest.reingest_metadata", side_effect=FileNotFoundError):
+        with patch("mailarium.ingest.reingest_metadata", side_effect=FileNotFoundError):
             params = EmailAdminInput(
                 action="reingest_metadata",
                 olm_path="/nonexistent.olm",
@@ -227,9 +177,9 @@ class TestReingestMetadata:
     async def test_reingest_metadata_generic_error(self, tmp_path):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        with patch("src.ingest.reingest_metadata", side_effect=RuntimeError("bad XML")):
+        with patch("mailarium.ingest.reingest_metadata", side_effect=RuntimeError("bad XML")):
             params = EmailAdminInput(
                 action="reingest_metadata",
                 olm_path=str(tmp_path / "test.olm"),
@@ -244,20 +194,10 @@ class TestReingestAnalytics:
     async def test_reingest_analytics_happy_path(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src import mcp_server
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        original_retriever = mcp_server._retriever
-        original_email_db = mcp_server._email_db
-        original_retriever_lock = mcp_server._retriever_lock
-        original_email_db_lock = mcp_server._email_db_lock
-        try:
-            mcp_server._retriever = object()
-            mcp_server._email_db = object()
-            mcp_server._retriever_lock = threading.Lock()
-            mcp_server._email_db_lock = threading.Lock()
-
-            with patch("src.ingest.reingest_analytics") as mock_fn:
+        with populated_mcp_caches() as mcp_server:
+            with patch("mailarium.ingest.reingest_analytics") as mock_fn:
                 mock_fn.return_value = {"processed": 100}
                 params = EmailAdminInput(action="reingest_analytics")
                 result = await fn(params)
@@ -265,19 +205,14 @@ class TestReingestAnalytics:
                 assert data["processed"] == 100
                 assert mcp_server._retriever is None
                 assert mcp_server._email_db is None
-        finally:
-            mcp_server._retriever = original_retriever
-            mcp_server._email_db = original_email_db
-            mcp_server._retriever_lock = original_retriever_lock
-            mcp_server._email_db_lock = original_email_db_lock
 
     @pytest.mark.asyncio
     async def test_reingest_analytics_error(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_admin"]
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
-        with patch("src.ingest.reingest_analytics", side_effect=RuntimeError("model load failed")):
+        with patch("mailarium.ingest.reingest_analytics", side_effect=RuntimeError("model load failed")):
             params = EmailAdminInput(action="reingest_analytics")
             result = await fn(params)
             data = json.loads(result)
@@ -289,7 +224,7 @@ class TestInvalidAction:
     async def test_invalid_action(self):
         from pydantic import ValidationError
 
-        from src.mcp_models import EmailAdminInput
+        from mailarium.mcp_models import EmailAdminInput
 
         with pytest.raises(ValidationError, match="action"):
             EmailAdminInput(action="destroy_everything")

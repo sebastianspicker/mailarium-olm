@@ -1,10 +1,10 @@
-"""Extended tests for src/training_data_generator.py — targeting uncovered lines."""
+"""Training-data thread loading, negative selection, triplet generation, and truncation behavior."""
 
 from __future__ import annotations
 
-from src.email_db import EmailDatabase
-from src.parse_olm import Email
-from src.training_data_generator import TrainingDataGenerator, _truncate
+from mailarium.email_db import EmailDatabase
+from mailarium.parse_olm import Email
+from mailarium.training_data_generator import TrainingDataGenerator, _truncate
 
 # ── Helpers ──────────────────────────────────────────────────
 
@@ -225,7 +225,7 @@ class TestGenerateTripletsEdgeCases:
     def test_skips_when_no_negative_found(self):
         """When no negative can be found, triplet is skipped."""
         db = EmailDatabase(":memory:")
-        # All emails in same thread, same sender — no negatives possible
+        # All emails in same thread, same sender - no negatives possible
         for i in range(3):
             db.insert_email(
                 _make_email(

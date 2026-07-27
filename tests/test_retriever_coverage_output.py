@@ -1,3 +1,8 @@
+"""Exercises query expansion, semantic UID resolution, result serialization, and bounded output rendering.
+
+It degrades cleanly when SQLite metadata is absent and reports omitted material under response budgets.
+"""
+
 from ._retriever_coverage_cases import (
     TestExpandQuery,
     TestResolveSemanticUids,

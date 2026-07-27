@@ -1,6 +1,8 @@
-"""Tests for BM25 index and reciprocal rank fusion."""
+"""Verifies BM25 ranking and reciprocal-rank fusion combine lexical results deterministically."""
 
-from src.bm25_index import BM25Index, reciprocal_rank_fusion
+import pytest
+
+from mailarium.bm25_index import BM25Index, reciprocal_rank_fusion
 
 
 def test_bm25_build_and_search():
@@ -148,3 +150,28 @@ def test_rrf_empty_lists():
     assert reciprocal_rank_fusion([], []) == []
     assert reciprocal_rank_fusion(["a"], []) == ["a"]
     assert reciprocal_rank_fusion([], ["b"]) == ["b"]
+
+
+def test_rrf_respects_adaptive_weights():
+    semantic = ["semantic-first", "shared"]
+    keyword = ["keyword-first", "shared"]
+
+    semantic_heavy = reciprocal_rank_fusion(semantic, keyword, semantic_weight=0.9, keyword_weight=0.1)
+    keyword_heavy = reciprocal_rank_fusion(semantic, keyword, semantic_weight=0.1, keyword_weight=0.9)
+
+    assert semantic_heavy.index("semantic-first") < semantic_heavy.index("keyword-first")
+    assert keyword_heavy.index("keyword-first") < keyword_heavy.index("semantic-first")
+
+
+@pytest.mark.parametrize(
+    ("semantic_weight", "keyword_weight"),
+    [(-1.0, 1.0), (1.0, -1.0), (0.0, 0.0), (float("nan"), 1.0)],
+)
+def test_rrf_rejects_invalid_weights(semantic_weight, keyword_weight):
+    with pytest.raises(ValueError, match="weight"):
+        reciprocal_rank_fusion(
+            ["semantic"],
+            ["keyword"],
+            semantic_weight=semantic_weight,
+            keyword_weight=keyword_weight,
+        )

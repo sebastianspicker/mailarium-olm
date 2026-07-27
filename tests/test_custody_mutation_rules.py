@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
+import pytest
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
 
 def test_add_evidence_creates_custody_event(db_with_email: EmailDatabase) -> None:
@@ -122,51 +122,68 @@ def test_remove_evidence_logs_custody_event(db_with_email: EmailDatabase) -> Non
     assert event["details"]["relevance"] == 4
 
 
-def test_evidence_categories_match_mcp_tools_doc() -> None:
-    """EVIDENCE_CATEGORIES should match the canonical MCP-doc list."""
+def test_default_evidence_categories_are_domain_neutral() -> None:
+    """Suggested categories should work across arbitrary retrieval scopes."""
     expected = {
-        "bossing",
-        "harassment",
-        "discrimination",
-        "retaliation",
-        "hostile_environment",
-        "micromanagement",
-        "exclusion",
-        "gaslighting",
-        "workload",
+        "general",
+        "fact",
+        "decision",
+        "action_item",
+        "commitment",
         "contradiction",
         "chronology",
         "provenance",
         "quote_repair",
         "omission",
-        "promise",
-        "general",
+        "risk",
+        "requirement",
     }
     assert set(EmailDatabase.EVIDENCE_CATEGORIES) == expected
 
 
-def test_add_evidence_warns_on_nonstandard_category(db_with_email: EmailDatabase, caplog) -> None:
-    """add_evidence should log a warning for non-standard categories."""
-    with caplog.at_level(logging.WARNING, logger="src.db_evidence"):
+def test_add_evidence_accepts_and_normalizes_user_defined_category(db_with_email: EmailDatabase) -> None:
+    """User categories are first-class inputs rather than a fixed domain taxonomy."""
+    item = db_with_email.add_evidence(
+        "test-uid-1",
+        "  migration_blocker  ",
+        "important evidence",
+        "test",
+        3,
+    )
+
+    assert item["category"] == "migration_blocker"
+
+
+@pytest.mark.parametrize("category", ["", "   ", "x" * 81])
+def test_add_evidence_rejects_invalid_user_category(db_with_email: EmailDatabase, category: str) -> None:
+    with pytest.raises(ValueError, match="Evidence category"):
         db_with_email.add_evidence(
             "test-uid-1",
-            "made_up_category",
+            category,
             "important evidence",
             "test",
             3,
         )
-    assert "Non-standard evidence category" in caplog.text
-    assert "made_up_category" in caplog.text
 
 
-def test_add_evidence_no_warning_for_standard_category(db_with_email: EmailDatabase, caplog) -> None:
-    """add_evidence should not warn for standard categories."""
-    with caplog.at_level(logging.WARNING, logger="src.db_evidence"):
-        db_with_email.add_evidence(
-            "test-uid-1",
-            "contradiction",
-            "evidence text",
-            "test",
-            3,
-        )
-    assert "Non-standard evidence category" not in caplog.text
+def test_update_evidence_ignores_unspecified_fields_and_normalizes_category(db_with_email: EmailDatabase) -> None:
+    item = db_with_email.add_evidence(
+        "test-uid-1",
+        "general",
+        "important evidence",
+        "test",
+        3,
+    )
+
+    assert db_with_email.update_evidence(
+        item["id"],
+        category="  migration_blocker  ",
+        key_quote=None,
+        summary=None,
+        relevance=None,
+        notes=None,
+    )
+    updated = db_with_email.get_evidence(item["id"])
+    assert updated is not None
+    assert updated["category"] == "migration_blocker"
+    assert updated["key_quote"] == "important evidence"

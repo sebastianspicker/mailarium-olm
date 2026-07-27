@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
+# Reset private ingestion state while preserving source inputs and requiring explicit confirmation.
 set -euo pipefail
 
 usage() {
 	cat <<'EOF'
 Usage: bash scripts/clean_ingest_reset.sh [--dry-run] [--yes]
 
-Reset the workspace for a fresh private ingestion run while preserving the live
-case source inputs.
+Reset the workspace for a fresh private ingestion run while preserving source
+inputs.
 
 Preserved by default:
   - private/files/
-  - private/matter.md
-  - private/ingest/my-export.olm
+  - private/context.md
+  - private/ingest/
   - private/README.local.md
   - private/tests/materials/
 
@@ -19,7 +20,7 @@ Purged by default:
   - private/runtime/ runtime stores, lock files, ledgers, and run history
   - private/tests/results/
   - private/tests/exports/
-  - stale runtime DB/Chroma leftovers under data/
+  - stale runtime database/vector-index leftovers under data/
   - repo-local scratch files like tmp_*.txt and .DS_Store
   - generic caches handled by scripts/clean_workspace.sh
 
@@ -85,10 +86,10 @@ ensure_dir() {
 	echo "Ensured: $path"
 }
 
-echo "Preserving case inputs:"
+echo "Preserving source inputs:"
 echo "  - ${repo_root}/private/files"
-echo "  - ${repo_root}/private/matter.md"
-echo "  - ${repo_root}/private/ingest/my-export.olm"
+echo "  - ${repo_root}/private/context.md"
+echo "  - ${repo_root}/private/ingest"
 echo "  - ${repo_root}/private/README.local.md"
 echo "  - ${repo_root}/private/tests/materials"
 
@@ -97,8 +98,8 @@ declare -a purge_paths=(
 	"${repo_root}/private/runtime/runs"
 	"${repo_root}/private/runtime/ledgers"
 	"${repo_root}/private/runtime/archive"
-	"${repo_root}/private/runtime/chromadb"
-	"${repo_root}/private/runtime/chromadb_p73"
+	"${repo_root}/private/runtime/vector-index"
+	"${repo_root}/private/runtime/vector-index_p73"
 	"${repo_root}/private/runtime/email_metadata.db"
 	"${repo_root}/private/runtime/email_metadata.db-shm"
 	"${repo_root}/private/runtime/email_metadata.db-wal"
@@ -106,7 +107,7 @@ declare -a purge_paths=(
 	"${repo_root}/private/runtime/mcp_server.lock"
 	"${repo_root}/private/tests/results"
 	"${repo_root}/private/tests/exports"
-	"${repo_root}/data/chromadb"
+	"${repo_root}/data/vector-index"
 	"${repo_root}/data/email_metadata.db"
 	"${repo_root}/data/email_metadata.db-shm"
 	"${repo_root}/data/email_metadata.db-wal"
@@ -147,5 +148,5 @@ ensure_dir "${repo_root}/private/tests/exports"
 if [[ "$dry_run" -eq 1 ]]; then
 	echo "Dry run complete. No files were deleted."
 else
-	echo "Clean-ingest reset complete. Case inputs preserved; runtime and generated artifacts purged."
+	echo "Clean-ingest reset complete. Source inputs preserved; runtime and generated artifacts purged."
 fi

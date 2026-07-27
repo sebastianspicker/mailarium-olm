@@ -1,8 +1,8 @@
-"""Tests for query suggestions module."""
+"""Verifies query suggestions derive useful follow-up searches from corpus and metadata signals."""
 
 from unittest.mock import MagicMock
 
-from src.query_suggestions import QuerySuggester
+from mailarium.query_suggestions import QuerySuggester
 
 
 def _make_mock_db():

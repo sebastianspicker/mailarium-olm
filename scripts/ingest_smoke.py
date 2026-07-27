@@ -6,27 +6,30 @@ from __future__ import annotations
 import json
 import os
 import socket
-import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+try:
+    from scripts._bootstrap import add_repository_root
+except ModuleNotFoundError:  # Direct execution resolves helpers from the script directory.
+    from _bootstrap import add_repository_root
+
+ROOT = add_repository_root(__file__)
 
 _SMOKE_RUNTIME_ROOT = ROOT / "tests" / "private" / "ingest-smoke"
 
 
 def _smoke_runtime_root() -> Path:
-    """Return the allowed runtime root used by this smoke script."""
+    """Create the ignored runtime root used to contain all smoke-test artifacts."""
     _SMOKE_RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
     return _SMOKE_RUNTIME_ROOT
 
 
 def _build_smoke_olm(path: Path) -> None:
+    """Write a minimal OLM archive containing one email and one text attachment."""
     xml_path = "Accounts/test@example.com/com.microsoft.__Messages/Inbox/message-1.xml"
     attachment_path = "Accounts/test@example.com/com.microsoft.__Messages/Inbox/supporting-note.txt"
     xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -53,92 +56,104 @@ def _build_smoke_olm(path: Path) -> None:
 
 @dataclass
 class _FakeEmbedder:
+    """Minimal embedder that records chunk counts while satisfying ingest interfaces."""
+
     chunk_total: int = 0
     collection: SimpleNamespace = field(default_factory=lambda: SimpleNamespace(metadata={"hnsw:space": "cosine"}))
 
     def add_chunks(self, chunks, batch_size=32, skip_existing_check=False):
+        """Count accepted chunks without loading or persisting an embedding model."""
         self.chunk_total += len(chunks)
         return len(chunks)
 
     def count(self) -> int:
+        """Expose the accumulated chunk count for incremental-ingest assertions."""
         return self.chunk_total
 
     def set_sparse_db(self, db) -> None:
-        pass
+        """Accept sparse-index wiring without creating a second persistence layer."""
 
     def warmup(self) -> None:
-        pass
+        """Model successful embedder readiness without loading weights."""
 
     def close(self) -> None:
-        pass
+        """Satisfy pipeline teardown without owning external resources."""
 
 
 @dataclass
 class _FakeEmailDB:
+    """In-memory ingestion ledger used to verify first-run and incremental semantics."""
+
     inserted_uids: set[str] = field(default_factory=set)
     completed_uids: set[str] = field(default_factory=set)
     conn: SimpleNamespace = field(default_factory=lambda: SimpleNamespace(commit=lambda: None))
     run_counter: int = 0
 
     def record_ingestion_start(self, olm_path, olm_sha256=None, file_size_bytes=None):
+        """Allocate a monotonically increasing fake ingestion-run identifier."""
         self.run_counter += 1
         return self.run_counter
 
     def insert_emails_batch(self, emails, ingestion_run_id=None):
+        """Record only previously unseen email UIDs and return the newly inserted set."""
         new_uids = {email.uid for email in emails if email.uid not in self.inserted_uids}
         self.inserted_uids.update(new_uids)
         return new_uids
 
     def completed_ingest_uids(self, attachment_required=False):
+        """Return a copy of completed UIDs so callers cannot mutate fake database state."""
         return set(self.completed_uids)
 
     def mark_ingest_batch_pending(self, rows, commit=True):
-        pass
+        """Accept pending-batch writes; completion state is recorded separately."""
 
     def mark_ingest_batch_completed(self, rows, commit=True):
+        """Promote non-empty batch UIDs into the fake database's completed set."""
         for row in rows:
             email_uid = str(row.get("email_uid") or "")
             if email_uid:
                 self.completed_uids.add(email_uid)
 
     def mark_ingest_batch_failed(self, email_uids, *, error_message, commit=True):
-        pass
+        """Accept failure callbacks without marking affected UIDs complete."""
 
     def update_analytics_batch(self, rows):
+        """Accept analytics writes and report the number of rows processed."""
         return len(rows)
 
     def insert_entities_batch(self, uid, entities, commit=True):
-        pass
+        """Accept entity writes because this smoke test measures ingest flow, not entity storage."""
 
     def record_ingestion_complete(self, ingestion_run_id, details):
-        pass
+        """Accept run-finalization metadata after batch processing succeeds."""
 
     def close(self) -> None:
-        pass
+        """Satisfy database teardown for an object with no external handle."""
 
 
 def _run_ingest_with_fake_runtime(
     *,
     olm_path: Path,
     sqlite_path: Path,
-    chromadb_path: Path,
+    vector_index_path: Path,
     incremental: bool,
 ) -> dict[str, object]:
-    from src import ingest as ingest_module
-    from src import ingest_pipeline as pipeline_family
+    """Run the real ingest pipeline against in-memory storage doubles, restoring runtime construction afterward."""
+    from mailarium import ingest as ingest_module
+    from mailarium import ingest_pipeline as pipeline_family
 
     fake_embedder = _run_ingest_with_fake_runtime.embedder
     fake_email_db = _run_ingest_with_fake_runtime.email_db
     original_build_runtime = pipeline_family._build_runtime
 
-    def _fake_build_runtime(*, settings, dry_run, chromadb_path, sqlite_path):
+    def _fake_build_runtime(*, settings, dry_run, vector_index_path, sqlite_path):
         return fake_embedder, fake_email_db
 
     pipeline_family._build_runtime = _fake_build_runtime
     try:
         return pipeline_family.ingest_impl(
             olm_path=str(olm_path),
-            chromadb_path=str(chromadb_path),
+            vector_index_path=str(vector_index_path),
             sqlite_path=str(sqlite_path),
             batch_size=500,
             max_emails=None,
@@ -171,22 +186,25 @@ _run_ingest_with_fake_runtime.email_db = _FakeEmailDB()
 
 
 def _reset_fake_runtime() -> None:
+    """Replace accumulated fake embedder and database state before an isolated smoke run."""
     _run_ingest_with_fake_runtime.embedder = _FakeEmbedder()
     _run_ingest_with_fake_runtime.email_db = _FakeEmailDB()
 
 
 def _configure_offline_runtime() -> None:
+    """Disable model downloads, force local-only loading, and invalidate cached settings."""
     os.environ["SPACY_AUTO_DOWNLOAD_DURING_INGEST"] = "0"
     os.environ["RUNTIME_PROFILE"] = "offline-test"
     os.environ["EMBEDDING_LOAD_MODE"] = "local_only"
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "1"
 
-    from src.config import get_settings
+    from mailarium.config import get_settings
 
     get_settings.cache_clear()
 
 
 def _exception_chain(exc: BaseException) -> list[BaseException]:
+    """Walk explicit causes and implicit contexts without losing the original exception order."""
     chain: list[BaseException] = []
     current: BaseException | None = exc
     while current is not None:
@@ -196,6 +214,7 @@ def _exception_chain(exc: BaseException) -> list[BaseException]:
 
 
 def _should_fallback_to_fake_runtime(exc: BaseException) -> bool:
+    """Allow the fake backend only for missing models or offline resolution failures."""
     for current in _exception_chain(exc):
         if current.__class__.__name__ == "EmbeddingModelUnavailableError":
             return True
@@ -207,6 +226,7 @@ def _should_fallback_to_fake_runtime(exc: BaseException) -> bool:
 
 
 def _fake_runtime_reason(exc: BaseException) -> str:
+    """Classify model absence and network resolution failures separately from native runtime errors."""
     for current in _exception_chain(exc):
         if current.__class__.__name__ == "EmbeddingModelUnavailableError":
             return "missing_embedding_model"
@@ -218,39 +238,40 @@ def _fake_runtime_reason(exc: BaseException) -> str:
 
 
 def main() -> int:
+    """Ingest the synthetic archive twice, using the native backend when available and a bounded fake fallback offline."""
     _configure_offline_runtime()
-    from src.ingest import ingest
+    from mailarium.ingest import ingest
 
     with tempfile.TemporaryDirectory(prefix="run-", dir=_smoke_runtime_root()) as tmp:
         tmp_path = Path(tmp)
         olm_path = tmp_path / "smoke.olm"
         sqlite_path = tmp_path / "email_metadata.db"
-        chromadb_path = tmp_path / "chromadb"
+        vector_index_path = tmp_path / "vector-index"
         _build_smoke_olm(olm_path)
 
         try:
-            import chromadb  # noqa: F401
+            import usearch  # noqa: F401
         except ModuleNotFoundError:
             _reset_fake_runtime()
             first = _run_ingest_with_fake_runtime(
                 olm_path=olm_path,
                 sqlite_path=sqlite_path,
-                chromadb_path=chromadb_path,
+                vector_index_path=vector_index_path,
                 incremental=False,
             )
             second = _run_ingest_with_fake_runtime(
                 olm_path=olm_path,
                 sqlite_path=sqlite_path,
-                chromadb_path=chromadb_path,
+                vector_index_path=vector_index_path,
                 incremental=True,
             )
-            runtime_mode = "fake_runtime_missing_chromadb"
+            runtime_mode = "fake_runtime_missing_usearch"
         else:
             try:
                 first = ingest(
                     str(olm_path),
                     sqlite_path=str(sqlite_path),
-                    chromadb_path=str(chromadb_path),
+                    vector_index_path=str(vector_index_path),
                     extract_attachments=True,
                     incremental=False,
                     timing=True,
@@ -258,7 +279,7 @@ def main() -> int:
                 second = ingest(
                     str(olm_path),
                     sqlite_path=str(sqlite_path),
-                    chromadb_path=str(chromadb_path),
+                    vector_index_path=str(vector_index_path),
                     extract_attachments=True,
                     incremental=True,
                     timing=True,
@@ -271,13 +292,13 @@ def main() -> int:
                 first = _run_ingest_with_fake_runtime(
                     olm_path=olm_path,
                     sqlite_path=sqlite_path,
-                    chromadb_path=chromadb_path,
+                    vector_index_path=vector_index_path,
                     incremental=False,
                 )
                 second = _run_ingest_with_fake_runtime(
                     olm_path=olm_path,
                     sqlite_path=sqlite_path,
-                    chromadb_path=chromadb_path,
+                    vector_index_path=vector_index_path,
                     incremental=True,
                 )
                 runtime_mode = f"fake_runtime_{_fake_runtime_reason(exc)}"

@@ -1,29 +1,31 @@
+"""Web-app retrieval, session state, CSV export, and filter edge-case behavior."""
+
 from unittest.mock import MagicMock, patch
 
-from .helpers.web_app_fixtures import _columns_side_effect, _result
+from .helpers.web_app_fixtures import _result, _setup_main_session_results
 
 
 class TestGetRetriever:
-    @patch("src.web_app.EmailRetriever")
+    @patch("mailarium.web_app.EmailRetriever")
     def test_get_retriever_creates_instance(self, mock_retriever_cls):
-        from src.web_app import get_retriever
+        from mailarium.web_app import get_retriever
 
         mock_retriever_cls.return_value = MagicMock()
         get_retriever.__wrapped__(None)
-        mock_retriever_cls.assert_called_with(chromadb_path=None)
+        mock_retriever_cls.assert_called_with(vector_index_path=None)
 
-    @patch("src.web_app.EmailRetriever")
+    @patch("mailarium.web_app.EmailRetriever")
     def test_get_retriever_with_path(self, mock_retriever_cls):
-        from src.web_app import get_retriever
+        from mailarium.web_app import get_retriever
 
         mock_retriever_cls.return_value = MagicMock()
         get_retriever.__wrapped__("/custom/path")
-        mock_retriever_cls.assert_called_with(chromadb_path="/custom/path")
+        mock_retriever_cls.assert_called_with(vector_index_path="/custom/path")
 
 
 class TestConstants:
     def test_sort_options(self):
-        from src.web_app import SORT_OPTIONS
+        from mailarium.web_app import SORT_OPTIONS
 
         assert SORT_OPTIONS["Relevance"] == "relevance"
         assert SORT_OPTIONS["Newest first"] == "date_desc"
@@ -31,14 +33,14 @@ class TestConstants:
         assert SORT_OPTIONS["Sender A-Z"] == "sender_asc"
 
     def test_page_size(self):
-        from src.web_app import PAGE_SIZE
+        from mailarium.web_app import PAGE_SIZE
 
         assert PAGE_SIZE == 20
 
 
 class TestBuildCsvExportEdge:
     def test_csv_multiple_results(self):
-        from src.web_app import _build_csv_export
+        from mailarium.web_app import _build_csv_export
 
         results = [_result(chunk_id=f"c{i}") for i in range(5)]
         csv_text = _build_csv_export(results)
@@ -48,38 +50,38 @@ class TestBuildCsvExportEdge:
 
 class TestFilterExtraction:
     def test_as_optional_str_with_bool(self):
-        from src.web_app import _as_optional_str
+        from mailarium.web_app import _as_optional_str
 
         assert _as_optional_str(True) is None
         assert _as_optional_str(False) is None
 
     def test_as_optional_float_with_bool(self):
-        from src.web_app import _as_optional_float
+        from mailarium.web_app import _as_optional_float
 
         assert _as_optional_float(True) == 1.0
         assert _as_optional_float(False) == 0.0
 
     def test_as_optional_str_with_dict(self):
-        from src.web_app import _as_optional_str
+        from mailarium.web_app import _as_optional_str
 
         assert _as_optional_str({"key": "val"}) is None
 
     def test_as_optional_float_with_str(self):
-        from src.web_app import _as_optional_float
+        from mailarium.web_app import _as_optional_float
 
         assert _as_optional_float("3.14") is None
 
 
 class TestMainSessionStateEdges:
-    @patch("src.web_app._build_csv_export")
-    @patch("src.web_app.build_export_payload")
-    @patch("src.web_app.build_active_filter_labels")
-    @patch("src.web_app.render_results")
-    @patch("src.web_app.render_results_summary")
-    @patch("src.web_app.render_sidebar")
-    @patch("src.web_app.inject_styles")
-    @patch("src.web_app.get_retriever")
-    @patch("src.web_app.st")
+    @patch("mailarium.web_app._build_csv_export")
+    @patch("mailarium.web_app.build_export_payload")
+    @patch("mailarium.web_app.build_active_filter_labels")
+    @patch("mailarium.web_app.render_results")
+    @patch("mailarium.web_app.render_results_summary")
+    @patch("mailarium.web_app.render_sidebar")
+    @patch("mailarium.web_app.inject_styles")
+    @patch("mailarium.web_app.get_retriever")
+    @patch("mailarium.web_app.st")
     def test_main_sort_label_from_session(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         mock_st,
@@ -92,35 +94,12 @@ class TestMainSessionStateEdges:
         mock_export,
         mock_csv,
     ):
-        from src.web_app import main
+        from mailarium.web_app import main
 
-        mock_st.sidebar.radio.return_value = "Search"
-        mock_st.sidebar.text_input.return_value = ""
         retriever = MagicMock()
         retriever.collection.count.return_value = 10
         mock_get_retriever.return_value = retriever
-
-        mock_st.session_state = {
-            "web_results": [_result()],
-            "web_query": "query",
-            "web_filters": {},
-            "web_sort": "date_desc",
-            "web_page": 0,
-            "web_thread_id": None,
-        }
-        mock_st.form.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.form.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.columns.side_effect = _columns_side_effect
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.text_input.return_value = ""
-        mock_st.number_input.return_value = 10
-        mock_st.selectbox.return_value = "Relevance"
-        mock_st.slider.side_effect = [0.0, 1200]
-        mock_st.date_input.return_value = None
-        mock_st.checkbox.return_value = False
-        mock_st.form_submit_button.return_value = False
-        mock_st.button.return_value = False
+        _setup_main_session_results(mock_st, results=[_result()], sort="date_desc")
         mock_labels.return_value = []
         mock_export.return_value = {}
         mock_csv.return_value = ""

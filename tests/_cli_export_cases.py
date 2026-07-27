@@ -1,11 +1,4 @@
-"""Tests for CLI command handler functions (_cmd_* and helpers).
-
-These tests exercise the uncovered handler logic in src/cli.py by:
-- Constructing argparse.Namespace objects directly
-- Mocking EmailRetriever and EmailDatabase
-- Capturing stdout/stderr with capsys
-- Verifying that the correct branches execute and produce output
-"""
+"""CLI email and thread export dispatch, paths, notes, and failure handling."""
 
 from __future__ import annotations
 
@@ -14,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import (
+from mailarium.cli import (
     _cmd_export,
     _run_export_email,
     _run_export_thread,
@@ -31,7 +24,7 @@ class TestCmdExport:
             format="html",
             output=None,
         )
-        with patch("src.cli_commands._run_export_thread") as mock_fn:
+        with patch("mailarium.cli_commands._run_export_thread") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_export(args)
             assert exc_info.value.code == 0
@@ -44,7 +37,7 @@ class TestCmdExport:
             format="pdf",
             output=str(tmp_path / "out.pdf"),
         )
-        with patch("src.cli_commands._run_export_email") as mock_fn:
+        with patch("mailarium.cli_commands._run_export_email") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_export(args)
             assert exc_info.value.code == 0
@@ -55,7 +48,7 @@ class TestCmdExport:
             export_action="report",
             output="my_report.html",
         )
-        with patch("src.cli_commands._run_generate_report") as mock_fn:
+        with patch("mailarium.cli_commands._run_generate_report") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_export(args)
             assert exc_info.value.code == 0
@@ -66,7 +59,7 @@ class TestCmdExport:
             export_action="network",
             output="net.graphml",
         )
-        with patch("src.cli_commands._run_export_network") as mock_fn:
+        with patch("mailarium.cli_commands._run_export_network") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_export(args)
             assert exc_info.value.code == 0
@@ -90,8 +83,8 @@ class TestRunExportThread:
             "output_path": thread_path,
             "email_count": 5,
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.email_exporter.EmailExporter", return_value=mock_exporter):
                 _run_export_thread("conv-123", "html", thread_path)
         output = capsys.readouterr().out
         assert thread_path in output
@@ -109,8 +102,8 @@ class TestRunExportThread:
             "output_path": "thread_conv-123.html",
             "email_count": 3,
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.email_exporter.EmailExporter", return_value=mock_exporter):
                 _run_export_thread("conv-123", "html", None)
         output = capsys.readouterr().out
         assert "3 emails" in output
@@ -121,8 +114,8 @@ class TestRunExportThread:
         mock_exporter.export_thread_file.return_value = {
             "error": "Thread not found",
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.email_exporter.EmailExporter", return_value=mock_exporter):
                 with pytest.raises(SystemExit) as exc_info:
                     _run_export_thread("conv-999", "html", None)
                 assert exc_info.value.code == 1
@@ -137,8 +130,8 @@ class TestRunExportThread:
             "email_count": 2,
             "note": "PDF generated via fallback",
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.email_exporter.EmailExporter", return_value=mock_exporter):
                 _run_export_thread("conv-123", "pdf", "thread.pdf")
         output = capsys.readouterr().out
         assert "Note: PDF generated via fallback" in output
@@ -152,8 +145,8 @@ class TestRunExportEmail:
         mock_exporter.export_single_file.return_value = {
             "output_path": email_path,
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.email_exporter.EmailExporter", return_value=mock_exporter):
                 _run_export_email("uid-abc", "html", email_path)
         output = capsys.readouterr().out
         assert email_path in output
@@ -164,12 +157,12 @@ class TestRunExportEmail:
         mock_exporter.export_single_file.return_value = {
             "output_path": "email_uid-abc-long.html",
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.email_exporter.EmailExporter", return_value=mock_exporter):
                 _run_export_email("uid-abc-long-id", "html", None)
         output = capsys.readouterr().out
         assert "email_uid-abc-long.html" in output
-        # Verify default path logic — uid[:12]
+        # Verify default path logic - uid[:12]
         call_args = mock_exporter.export_single_file.call_args
         assert call_args[0][1] == "email_uid-abc-long.html"
 
@@ -179,8 +172,8 @@ class TestRunExportEmail:
         mock_exporter.export_single_file.return_value = {
             "error": "Email not found",
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.email_exporter.EmailExporter", return_value=mock_exporter):
                 with pytest.raises(SystemExit) as exc_info:
                     _run_export_email("uid-999", "html", None)
                 assert exc_info.value.code == 1
@@ -194,8 +187,8 @@ class TestRunExportEmail:
             "output_path": "email.pdf",
             "note": "Converted from HTML",
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.email_exporter.EmailExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.email_exporter.EmailExporter", return_value=mock_exporter):
                 _run_export_email("uid-abc", "pdf", "email.pdf")
         output = capsys.readouterr().out
         assert "Note: Converted from HTML" in output

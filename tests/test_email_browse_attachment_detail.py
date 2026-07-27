@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import struct
 
-from src.email_db import EmailDatabase
-from src.parse_olm import BODY_NORMALIZATION_VERSION
+from mailarium.email_db import EmailDatabase
+from mailarium.parse_olm import BODY_NORMALIZATION_VERSION
 from tests._email_browse_cases import make_email
 
 
@@ -83,73 +83,53 @@ def test_body_recovery_fields_stored_on_insert():
     db.close()
 
 
-def test_body_text_stored_without_reply_quote_tail():
+def _assert_stored_body_without_reply_tail(body_text: str, expected: str, *, subject: str = "RE: Hello") -> None:
     db = EmailDatabase(":memory:")
-    email = make_email(
-        subject="RE: Hello",
-        body_text="Latest answer.\n\nOn Mon, Jan 1, 2025 at 10:00 AM Alice wrote:\n> Older line 1\n> Older line 2",
-        body_html="",
-    )
+    email = make_email(subject=subject, body_text=body_text, body_html="")
     db.insert_email(email)
 
     row = db.conn.execute(
         "SELECT body_text, normalized_body_source, body_normalization_version FROM emails WHERE uid = ?",
         (email.uid,),
     ).fetchone()
-    assert row["body_text"] == "Latest answer."
+    assert row["body_text"] == expected
     assert row["normalized_body_source"] == "body_text"
     assert row["body_normalization_version"] == BODY_NORMALIZATION_VERSION
     db.close()
 
 
+def test_body_text_stored_without_reply_quote_tail():
+    _assert_stored_body_without_reply_tail(
+        "Latest answer.\n\nOn Mon, Jan 1, 2025 at 10:00 AM Alice wrote:\n> Older line 1\n> Older line 2",
+        "Latest answer.",
+    )
+
+
 def test_body_text_stored_without_reply_header_tail():
-    db = EmailDatabase(":memory:")
-    email = make_email(
-        subject="RE: Hello",
-        body_text=(
+    _assert_stored_body_without_reply_tail(
+        (
             "Latest answer.\n\n"
             "From: Alice <employee@example.test>\n"
             "Sent: Monday, January 1, 2025 10:00 AM\n"
             "To: Bob <bob@example.com>\n"
             "Subject: Hello"
         ),
-        body_html="",
+        "Latest answer.",
     )
-    db.insert_email(email)
-
-    row = db.conn.execute(
-        "SELECT body_text, normalized_body_source, body_normalization_version FROM emails WHERE uid = ?",
-        (email.uid,),
-    ).fetchone()
-    assert row["body_text"] == "Latest answer."
-    assert row["normalized_body_source"] == "body_text"
-    assert row["body_normalization_version"] == BODY_NORMALIZATION_VERSION
-    db.close()
 
 
 def test_body_text_stored_without_german_reply_header_tail():
-    db = EmailDatabase(":memory:")
-    email = make_email(
-        subject="AW: Hallo",
-        body_text=(
+    _assert_stored_body_without_reply_tail(
+        (
             "Aktuelle Antwort.\n\n"
             "Von: Alice <employee@example.test>\n"
             "Gesendet: Montag, 1. Januar 2025 10:00\n"
             "An: Bob <bob@example.com>\n"
             "Betreff: Hallo"
         ),
-        body_html="",
+        "Aktuelle Antwort.",
+        subject="AW: Hallo",
     )
-    db.insert_email(email)
-
-    row = db.conn.execute(
-        "SELECT body_text, normalized_body_source, body_normalization_version FROM emails WHERE uid = ?",
-        (email.uid,),
-    ).fetchone()
-    assert row["body_text"] == "Aktuelle Antwort."
-    assert row["normalized_body_source"] == "body_text"
-    assert row["body_normalization_version"] == BODY_NORMALIZATION_VERSION
-    db.close()
 
 
 def test_body_text_stored_without_portuguese_reply_header_tail():

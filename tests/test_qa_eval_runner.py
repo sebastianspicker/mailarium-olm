@@ -1,3 +1,8 @@
+"""Exercises QA runner paths, query-term cleanup, reporting, bootstrap, and live-evaluation invocation.
+
+It keeps generated live outputs private and requires an explicit mode when source inputs conflict.
+"""
+
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -5,36 +10,94 @@ from typing import Any, cast
 
 import pytest
 
+from .helpers.mcp_tool_fakes import _tool_deps
 
-def test_default_live_report_path_uses_agent_report_convention():
-    from src.qa_eval import default_live_report_path
 
-    path = default_live_report_path(Path("docs/agent/qa_eval_questions.core.json"))
+class _LiveEvaluationRetriever:
+    def search_filtered(self, query, top_k=10, **kwargs):
+        assert query == "Which message mentioned the budget meeting?"
+        assert top_k == 5
+        assert kwargs == {}
+        return [
+            SimpleNamespace(
+                metadata={
+                    "uid": "uid-live-1",
+                    "subject": "Budget meeting",
+                    "sender_email": "manager@example.org",
+                    "sender_name": "Morgan Manager",
+                    "date": "2026-02-12T10:00:00",
+                    "conversation_id": "conv-live-1",
+                },
+                chunk_id="chunk-live-1",
+                text="Please prepare for the budget meeting tomorrow.",
+                score=0.93,
+            )
+        ]
+
+
+class _LiveEvaluationDB:
+    conn = None
+
+    def get_emails_full_batch(self, uids):
+        assert uids == ["uid-live-1"]
+        return {
+            "uid-live-1": {
+                "uid": "uid-live-1",
+                "body_text": "Please prepare for the budget meeting tomorrow.",
+                "normalized_body_source": "body_text_html",
+                "conversation_id": "conv-live-1",
+                "to": ["alex@example.org"],
+                "cc": [],
+                "bcc": [],
+                "reply_context_from": "manager@example.org",
+                "reply_context_to_json": "[]",
+            }
+        }
+
+    def get_thread_emails(self, conversation_id):
+        assert conversation_id == "conv-live-1"
+        return [
+            {
+                "uid": "uid-live-1",
+                "sender_email": "manager@example.org",
+                "date": "2026-02-12T10:00:00",
+            }
+        ]
+
+    def attachments_for_email(self, uid):
+        assert uid == "uid-live-1"
+        return []
+
+
+def test_default_live_report_path_uses_private_result_convention():
+    from mailarium.qa_eval import default_live_report_path
+
+    path = default_live_report_path(Path("tests/fixtures/qa_eval/qa_eval_questions.core.json"))
 
     assert path.name == "qa_eval_report.core.live.json"
     assert str(path).endswith("private/tests/results/qa_eval/qa_eval_report.core.live.json")
 
 
 def test_default_live_report_path_uses_backend_specific_suffix():
-    from src.qa_eval import default_live_report_path
+    from mailarium.qa_eval import default_live_report_path
 
-    path = default_live_report_path(Path("docs/agent/qa_eval_questions.live_expanded.json"), backend="embedding")
+    path = default_live_report_path(Path("qa_eval_questions.expanded.json"), backend="embedding")
 
-    assert path.name == "qa_eval_report.live_expanded.embedding.live.json"
-    assert str(path).endswith("private/tests/results/qa_eval/qa_eval_report.live_expanded.embedding.live.json")
+    assert path.name == "qa_eval_report.expanded.embedding.live.json"
+    assert str(path).endswith("private/tests/results/qa_eval/qa_eval_report.expanded.embedding.live.json")
 
 
-def test_default_remediation_report_path_uses_agent_report_convention():
-    from src.qa_eval import default_remediation_report_path
+def test_default_remediation_report_path_uses_private_result_convention():
+    from mailarium.qa_eval import default_remediation_report_path
 
-    path = default_remediation_report_path(Path("docs/agent/qa_eval_report.live_expanded.live.json"))
+    path = default_remediation_report_path(Path("qa_eval_report.expanded.live.json"))
 
-    assert path.name == "qa_eval_remediation.live_expanded.live.json"
-    assert str(path).endswith("private/tests/results/qa_eval/qa_eval_remediation.live_expanded.live.json")
+    assert path.name == "qa_eval_remediation.expanded.live.json"
+    assert str(path).endswith("private/tests/results/qa_eval/qa_eval_remediation.expanded.live.json")
 
 
 def test_query_terms_extracts_lowercase_natural_language_tokens():
-    from src.qa_eval import _query_terms
+    from mailarium.qa_eval import _query_terms
 
     terms = _query_terms("Which email had attachments and discussed Configurator 2 Blueprints?")
 
@@ -45,7 +108,7 @@ def test_query_terms_extracts_lowercase_natural_language_tokens():
 
 
 def test_query_terms_drop_mailbox_noise_but_keep_topic_words():
-    from src.qa_eval import _query_terms
+    from mailarium.qa_eval import _query_terms
 
     terms = _query_terms("Which image-only message was titled Manual and who sent the HARICA certificate mail?")
 
@@ -84,9 +147,9 @@ def test_run_qa_eval_live_defaults_to_persistent_report(monkeypatch, tmp_path: P
         assert source_mode == "auto"
         return {"summary": {"total_cases": 0}, "results": []}
 
-    monkeypatch.setattr("src.qa_eval.resolve_live_deps", fake_resolve_live_deps)
-    monkeypatch.setattr("src.qa_eval.default_live_report_path", fake_default_live_report_path)
-    monkeypatch.setattr("src.qa_eval.run_evaluation_sync", fake_run_evaluation_sync)
+    monkeypatch.setattr("mailarium.qa_eval.resolve_live_deps", fake_resolve_live_deps)
+    monkeypatch.setattr("mailarium.qa_eval.default_live_report_path", fake_default_live_report_path)
+    monkeypatch.setattr("mailarium.qa_eval.run_evaluation_sync", fake_run_evaluation_sync)
 
     exit_code = runner.main(["--questions", str(questions_path), "--live"])
 
@@ -105,7 +168,7 @@ def test_run_qa_eval_live_defaults_to_persistent_report(monkeypatch, tmp_path: P
 def test_run_qa_eval_check_thresholds_returns_nonzero_on_threshold_failure(monkeypatch, tmp_path: Path):
     import scripts.run_qa_eval as runner
 
-    questions_path = tmp_path / "qa_eval_questions.legal_support.captured.json"
+    questions_path = tmp_path / "qa_eval_questions.core.json"
     questions_path.write_text(json.dumps({"cases": []}), encoding="utf-8")
 
     def fake_run_evaluation_sync(*, questions_path, results_path=None, live_deps=None, limit=None, source_mode="auto"):
@@ -120,13 +183,13 @@ def test_run_qa_eval_check_thresholds_returns_nonzero_on_threshold_failure(monke
             "source_mode": "captured_only",
             "summary": {
                 "total_cases": 1,
-                "legal_support_product_completeness": {"scorable": 1, "passed": 0, "failed": 1},
+                "support_source_id_hit": {"scorable": 1, "passed": 0, "failed": 1},
             },
             "failure_taxonomy": {"total_flagged_cases": 1, "categories": {}, "ranked_categories": []},
             "source_counts": {"captured": 1},
         }
 
-    monkeypatch.setattr("src.qa_eval.run_evaluation_sync", fake_run_evaluation_sync)
+    monkeypatch.setattr("mailarium.qa_eval.run_evaluation_sync", fake_run_evaluation_sync)
 
     exit_code = runner.main(
         ["--questions", str(questions_path), "--results", str(tmp_path / "results.json"), "--check-thresholds"]
@@ -184,15 +247,15 @@ def test_run_qa_eval_live_writes_blocked_report(monkeypatch, tmp_path: Path, cap
 
     def fake_resolve_live_deps(*, preferred_backend="auto"):
         assert preferred_backend == "auto"
-        raise ModuleNotFoundError("No module named 'chromadb'")
+        raise ModuleNotFoundError("No module named 'usearch'")
 
     def fake_default_live_report_path(path: Path, *, backend=None) -> Path:
         assert path == questions_path
         assert backend is None
         return output_path
 
-    monkeypatch.setattr("src.qa_eval.resolve_live_deps", fake_resolve_live_deps)
-    monkeypatch.setattr("src.qa_eval.default_live_report_path", fake_default_live_report_path)
+    monkeypatch.setattr("mailarium.qa_eval.resolve_live_deps", fake_resolve_live_deps)
+    monkeypatch.setattr("mailarium.qa_eval.default_live_report_path", fake_default_live_report_path)
 
     exit_code = runner.main(["--questions", str(questions_path), "--live"])
 
@@ -204,7 +267,7 @@ def test_run_qa_eval_live_writes_blocked_report(monkeypatch, tmp_path: Path, cap
     persisted = json.loads(output_path.read_text(encoding="utf-8"))
     assert persisted["live_status"]["status"] == "blocked"
     assert persisted["live_status"]["error_type"] == "ModuleNotFoundError"
-    assert "chromadb" in persisted["live_status"]["error"]
+    assert "usearch" in persisted["live_status"]["error"]
     assert persisted["threshold_verdict"]["status"] == "fail"
 
 
@@ -327,7 +390,7 @@ def test_run_qa_eval_requires_explicit_source_mode_when_results_and_live_are_com
 
 
 def test_run_evaluation_live_uses_real_answer_context_with_deterministic_deps(tmp_path: Path):
-    from src.qa_eval import run_evaluation_sync
+    from mailarium.qa_eval import run_evaluation_sync
 
     questions_path = tmp_path / "qa_eval_questions.live.json"
     questions_path.write_text(
@@ -348,93 +411,17 @@ def test_run_evaluation_live_uses_real_answer_context_with_deterministic_deps(tm
         encoding="utf-8",
     )
 
-    class _Retriever:
-        def search_filtered(self, query, top_k=10, **kwargs):
-            assert query == "Which message mentioned the budget meeting?"
-            assert top_k == 5
-            assert kwargs == {}
-            return [
-                SimpleNamespace(
-                    metadata={
-                        "uid": "uid-live-1",
-                        "subject": "Budget meeting",
-                        "sender_email": "manager@example.org",
-                        "sender_name": "Morgan Manager",
-                        "date": "2026-02-12T10:00:00",
-                        "conversation_id": "conv-live-1",
-                    },
-                    chunk_id="chunk-live-1",
-                    text="Please prepare for the budget meeting tomorrow.",
-                    score=0.93,
-                )
-            ]
-
-    class _DB:
-        conn = None
-
-        def get_emails_full_batch(self, uids):
-            assert uids == ["uid-live-1"]
-            return {
-                "uid-live-1": {
-                    "uid": "uid-live-1",
-                    "body_text": "Please prepare for the budget meeting tomorrow.",
-                    "normalized_body_source": "body_text_html",
-                    "conversation_id": "conv-live-1",
-                    "to": ["alex@example.org"],
-                    "cc": [],
-                    "bcc": [],
-                    "reply_context_from": "manager@example.org",
-                    "reply_context_to_json": "[]",
-                }
-            }
-
-        def get_thread_emails(self, conversation_id):
-            assert conversation_id == "conv-live-1"
-            return [
-                {
-                    "uid": "uid-live-1",
-                    "sender_email": "manager@example.org",
-                    "date": "2026-02-12T10:00:00",
-                }
-            ]
-
-        def attachments_for_email(self, uid):
-            assert uid == "uid-live-1"
-            return []
-
-    class _Deps:
-        live_backend = "deterministic_fixture"
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def get_retriever():
-            return _Retriever()
-
-        @staticmethod
-        def get_email_db():
-            return _DB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    report = run_evaluation_sync(questions_path=questions_path, live_deps=cast(Any, _Deps()))
+    report = run_evaluation_sync(
+        questions_path=questions_path,
+        live_deps=cast(
+            Any,
+            _tool_deps(
+                retriever=_LiveEvaluationRetriever(),
+                email_db=_LiveEvaluationDB(),
+                live_backend="deterministic_fixture",
+            ),
+        ),
+    )
 
     assert report["source_counts"] == {"live": 1}
     assert report["results"][0]["top_uid"] == "uid-live-1"

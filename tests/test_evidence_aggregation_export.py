@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from src.db_evidence_queries import evidence_stats_impl, evidence_timeline_impl, list_evidence_impl, search_evidence_impl
-from src.email_db import EmailDatabase
+from mailarium.db_evidence_queries import evidence_stats_impl, evidence_timeline_impl, list_evidence_impl, search_evidence_impl
+from mailarium.email_db import EmailDatabase
 from tests._evidence_cases import make_email, seed_evidence
 
 

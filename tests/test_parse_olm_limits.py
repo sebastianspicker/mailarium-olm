@@ -1,15 +1,20 @@
 # pylint: disable=no-member,c-extension-no-member
 
 
+"""Enforces OLM archive and XML resource limits, including bounded reads and file-count accounting.
+
+It rejects deeply nested or external-entity XML before untrusted content can exhaust parser resources.
+"""
+
 import io
 import zipfile
 from pathlib import Path
 
 import pytest
 
-import src.parse_olm as parse_olm_mod
-from src.olm_xml_helpers import _new_xml_parser
-from src.olm_xml_helpers import _read_limited_bytes as helper_read_limited_bytes
+import mailarium.parse_olm as parse_olm_mod
+from mailarium.olm_xml_helpers import _new_xml_parser
+from mailarium.olm_xml_helpers import _read_limited_bytes as helper_read_limited_bytes
 
 
 def _write_xml_zip(path: Path, count: int) -> None:

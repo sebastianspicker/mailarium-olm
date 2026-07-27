@@ -1,9 +1,9 @@
-"""Tests for entity extraction."""
+"""Verifies entity extraction identifies normalized people, organizations, locations, and dates."""
 
-import src.entity_extractor as entity_extractor_module
-from src.email_db import EmailDatabase
-from src.entity_extractor import extract_entities
-from src.parse_olm import Email
+import mailarium.entity_extractor as entity_extractor_module
+from mailarium.email_db import EmailDatabase
+from mailarium.entity_extractor import extract_entities
+from mailarium.parse_olm import Email
 
 
 class TestExtractEntities:
@@ -143,14 +143,18 @@ class TestEntitySQLiteRoundtrip:
         defaults.update(overrides)
         return Email(**defaults)
 
+    def _insert_extracted_entities(self, db: EmailDatabase, email: Email) -> None:
+        db.insert_email(email)
+        entities = extract_entities(email.clean_body, email.sender_email)
+        db.insert_entities_batch(
+            email.uid,
+            [(entity.text, entity.entity_type, entity.normalized_form) for entity in entities],
+        )
+
     def test_insert_and_search(self):
         db = EmailDatabase(":memory:")
         email = self._make_email()
-        db.insert_email(email)
-
-        entities = extract_entities(email.clean_body, email.sender_email)
-        tuples = [(e.text, e.entity_type, e.normalized_form) for e in entities]
-        db.insert_entities_batch(email.uid, tuples)
+        self._insert_extracted_entities(db, email)
 
         results = db.search_by_entity("example", entity_type="organization")
         assert len(results) >= 1
@@ -159,13 +163,9 @@ class TestEntitySQLiteRoundtrip:
         db = EmailDatabase(":memory:")
         e1 = self._make_email(message_id="<m1@example.test>")
         e2 = self._make_email(message_id="<m2@example.test>")
-        db.insert_email(e1)
-        db.insert_email(e2)
 
         for email in [e1, e2]:
-            entities = extract_entities(email.clean_body, email.sender_email)
-            tuples = [(e.text, e.entity_type, e.normalized_form) for e in entities]
-            db.insert_entities_batch(email.uid, tuples)
+            self._insert_extracted_entities(db, email)
 
         top = db.top_entities(entity_type="url")
         assert len(top) >= 1
@@ -173,11 +173,7 @@ class TestEntitySQLiteRoundtrip:
     def test_co_occurrences(self):
         db = EmailDatabase(":memory:")
         email = self._make_email()
-        db.insert_email(email)
-
-        entities = extract_entities(email.clean_body, email.sender_email)
-        tuples = [(e.text, e.entity_type, e.normalized_form) for e in entities]
-        db.insert_entities_batch(email.uid, tuples)
+        self._insert_extracted_entities(db, email)
 
         co = db.entity_co_occurrences("acme.com")
         assert len(co) >= 1

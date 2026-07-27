@@ -1,6 +1,6 @@
-"""Tests for per-email deduplication and thread-aware formatting."""
+"""Verifies retrieval deduplication keeps one result per email and preserves thread-aware presentation."""
 
-from src.retriever import EmailRetriever, SearchResult, _deduplicate_by_email
+from mailarium.retriever import EmailRetriever, SearchResult, _deduplicate_by_email
 
 # ── _deduplicate_by_email ───────────────────────────────────────
 
@@ -162,7 +162,7 @@ def test_query_cache_hit():
 
 def test_query_cache_eviction():
     """Cache evicts oldest entries when exceeding max size."""
-    from src.retriever import _QUERY_CACHE_MAX
+    from mailarium.retriever import _QUERY_CACHE_MAX
 
     retriever = EmailRetriever.__new__(EmailRetriever)
 

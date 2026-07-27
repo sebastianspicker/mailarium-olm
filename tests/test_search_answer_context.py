@@ -1,28 +1,55 @@
-import json
+"""Exercises answer-context assembly from preloaded and lane-based retrieval evidence.
+
+It preserves evidence provenance, related attachment hits, and support diversity while avoiding redundant searches.
+"""
+
 from typing import Any, cast
 
+from .helpers.mcp_tool_fakes import _lane_retriever, _tool_deps
 
-def test_weak_message_semantics_describes_source_shell_message():
-    from src.formatting import weak_message_semantics
 
-    weak_message = weak_message_semantics(
-        {
-            "body_kind": "content",
-            "body_empty_reason": "source_shell_only",
-            "recovery_strategy": "source_shell_summary",
-            "recovery_confidence": 0.2,
+class _PreloadedEvidenceRetriever:
+    email_db = None
+
+    @staticmethod
+    def search_filtered(**kwargs):
+        raise AssertionError(f"search_filtered should not run when preloaded evidence rows exist: {kwargs}")
+
+
+class _PreloadedEvidenceDB:
+    conn = None
+
+    @staticmethod
+    def get_emails_full_batch(uids):
+        assert uids == ["uid-preloaded", "uid-preloaded"]
+        return {
+            "uid-preloaded": {
+                "uid": "uid-preloaded",
+                "body_text": "Preloaded answer-bearing body text.",
+                "normalized_body_source": "body_text_html",
+                "conversation_id": "conv-preloaded",
+                "to": ["alex@example.org"],
+                "cc": [],
+                "bcc": [],
+                "reply_context_from": "manager@example.org",
+                "reply_context_to_json": "[]",
+            }
         }
-    )
 
-    assert weak_message is not None
-    assert weak_message["code"] == "source_shell_only"
-    assert weak_message["label"] == "Source-shell message"
-    assert "visible authored text" in weak_message["explanation"]
+    @staticmethod
+    def get_thread_emails(conversation_id):
+        assert conversation_id == "conv-preloaded"
+        return []
+
+    @staticmethod
+    def attachments_for_email(uid):
+        assert uid == "uid-preloaded"
+        return []
 
 
 def test_search_across_query_lanes_preserves_lane_provenance_after_scan_dedupe(monkeypatch):
-    from src.retriever_models import SearchResult
-    from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
+    from mailarium.retriever_models import SearchResult
+    from mailarium.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
     result = SearchResult(
         chunk_id="chunk-1",
@@ -58,7 +85,7 @@ def test_search_across_query_lanes_preserves_lane_provenance_after_scan_dedupe(m
             return results, {"excluded_count": 0}
         return [], {"excluded_count": len(results)}
 
-    monkeypatch.setattr("src.scan_session.filter_seen", fake_filter_seen)
+    monkeypatch.setattr("mailarium.scan_session.filter_seen", fake_filter_seen)
 
     merged, _lane_diagnostics, summary = _search_across_query_lanes(
         retriever=_Retriever(),
@@ -78,8 +105,8 @@ def test_search_across_query_lanes_preserves_lane_provenance_after_scan_dedupe(m
 
 
 def test_search_across_query_lanes_keeps_body_and_attachment_hits_from_same_uid():
-    from src.retriever_models import SearchResult
-    from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
+    from mailarium.retriever_models import SearchResult
+    from mailarium.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
     body_result = SearchResult(
         chunk_id="chunk-body",
@@ -109,20 +136,13 @@ def test_search_across_query_lanes_keeps_body_and_attachment_hits_from_same_uid(
         distance=0.12,
     )
 
-    class _Retriever:
-        def __init__(self):
-            self.last_search_debug = {"used_query_expansion": False}
-
-        def search_filtered(self, **kwargs):
-            self.last_search_debug = {"executed_query": kwargs["query"], "used_query_expansion": False}
-            if kwargs["query"] == "restriction note":
-                return [body_result]
-            return [attachment_result]
-
-        email_db = None
-
     merged, _lane_diagnostics, summary = _search_across_query_lanes(
-        retriever=_Retriever(),
+        retriever=_lane_retriever(
+            {
+                "restriction note": [body_result],
+                "protocol attachment": [attachment_result],
+            }
+        ),
         search_kwargs={"query": "restriction note"},
         query_lanes=["restriction note", "protocol attachment"],
         top_k=5,
@@ -137,8 +157,8 @@ def test_search_across_query_lanes_keeps_body_and_attachment_hits_from_same_uid(
 
 
 def test_search_across_query_lanes_applies_lane_diversity_to_evidence_bank():
-    from src.retriever_models import SearchResult
-    from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
+    from mailarium.retriever_models import SearchResult
+    from mailarium.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
     lane_1_results = [
         SearchResult(
@@ -168,20 +188,13 @@ def test_search_across_query_lanes_applies_lane_diversity_to_evidence_bank():
         distance=0.2,
     )
 
-    class _Retriever:
-        def __init__(self):
-            self.last_search_debug = {"used_query_expansion": False}
-
-        def search_filtered(self, **kwargs):
-            self.last_search_debug = {"executed_query": kwargs["query"], "used_query_expansion": False}
-            if kwargs["query"] == "lane one":
-                return lane_1_results
-            return [lane_2_result]
-
-        email_db = None
-
     _merged, _lane_diagnostics, summary = _search_across_query_lanes(
-        retriever=_Retriever(),
+        retriever=_lane_retriever(
+            {
+                "lane one": lane_1_results,
+                "lane two": [lane_2_result],
+            }
+        ),
         search_kwargs={"query": "lane one"},
         query_lanes=["lane one", "lane two"],
         top_k=2,
@@ -195,79 +208,17 @@ def test_search_across_query_lanes_applies_lane_diversity_to_evidence_bank():
 
 
 async def test_build_answer_context_payload_uses_preloaded_evidence_rows() -> None:
-    from src.mcp_models import EmailAnswerContextInput
-    from src.tools.search_answer_context import build_answer_context_payload
-
-    class _Retriever:
-        email_db = None
-
-        @staticmethod
-        def search_filtered(**kwargs):
-            raise AssertionError(f"search_filtered should not run when preloaded evidence rows exist: {kwargs}")
-
-    class _DB:
-        conn = None
-
-        @staticmethod
-        def get_emails_full_batch(uids):
-            assert uids == ["uid-preloaded", "uid-preloaded"]
-            return {
-                "uid-preloaded": {
-                    "uid": "uid-preloaded",
-                    "body_text": "Preloaded answer-bearing body text.",
-                    "normalized_body_source": "body_text_html",
-                    "conversation_id": "conv-preloaded",
-                    "to": ["alex@example.org"],
-                    "cc": [],
-                    "bcc": [],
-                    "reply_context_from": "manager@example.org",
-                    "reply_context_to_json": "[]",
-                }
-            }
-
-        @staticmethod
-        def get_thread_emails(conversation_id):
-            assert conversation_id == "conv-preloaded"
-            return []
-
-        @staticmethod
-        def attachments_for_email(uid):
-            assert uid == "uid-preloaded"
-            return []
-
-    class _Deps:
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def get_retriever():
-            return _Retriever()
-
-        @staticmethod
-        def get_email_db():
-            return _DB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
+    from mailarium.mcp_models import EmailAnswerContextInput
+    from mailarium.tools.search_answer_context import build_answer_context_payload
 
     payload = await build_answer_context_payload(
-        cast(Any, _Deps()),
+        cast(
+            Any,
+            _tool_deps(
+                retriever=_PreloadedEvidenceRetriever(),
+                email_db=_PreloadedEvidenceDB(),
+            ),
+        ),
         EmailAnswerContextInput(question="Which record is strongest?", max_results=2),
         preloaded_evidence_rows=[
             {

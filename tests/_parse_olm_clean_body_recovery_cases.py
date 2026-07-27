@@ -1,8 +1,8 @@
-"""Extended tests for src/parse_olm.py — targeting uncovered lines."""
+"""OLM body recovery fallbacks and body-kind classification behavior."""
 
 from __future__ import annotations
 
-from src.parse_olm import (
+from mailarium.parse_olm import (
     Email,
     _parse_email_xml,
 )

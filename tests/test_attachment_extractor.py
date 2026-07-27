@@ -1,8 +1,8 @@
-"""Tests for attachment text extraction."""
+"""Verifies attachment extraction returns usable text and handles malformed inputs safely."""
 
 import subprocess  # nosec B404
 
-from src.attachment_extractor import (
+from mailarium.attachment_extractor import (
     attachment_format_profile,
     extract_image_text_ocr,
     extract_text,
@@ -66,14 +66,14 @@ def test_extract_empty_returns_none():
 
 
 def test_extract_image_text_ocr_uses_tesseract_when_available(monkeypatch):
-    monkeypatch.setattr("src.attachment_extractor.shutil.which", lambda _name: "/opt/homebrew/bin/tesseract")
+    monkeypatch.setattr("mailarium.attachment_extractor.shutil.which", lambda _name: "/opt/homebrew/bin/tesseract")
 
     def _fake_run(cmd, check, capture_output, text, timeout):
         assert cmd[0] == "/opt/homebrew/bin/tesseract"
         assert cmd[2] == "stdout"
         return subprocess.CompletedProcess(cmd, 0, stdout="Recovered screenshot text", stderr="")
 
-    monkeypatch.setattr("src.attachment_extractor.subprocess.run", _fake_run)
+    monkeypatch.setattr("mailarium.attachment_extractor.subprocess.run", _fake_run)
 
     result = extract_image_text_ocr("scan.png", b"fake-image-bytes")
     assert result == "Recovered screenshot text"
@@ -104,6 +104,24 @@ def test_attachment_format_profile_marks_scanned_pdf_as_degraded_supported():
     assert profile["support_level"] == "degraded_supported"
     assert quality["quality_label"] == "ocr_text_recovered"
     assert quality["manual_review_required"] is True
+
+
+def test_attachment_format_profile_marks_failed_pdf_ocr_as_reference_only():
+    profile = attachment_format_profile(
+        filename="scan.pdf",
+        mime_type="application/pdf",
+        extraction_state="ocr_failed",
+        evidence_strength="weak_reference",
+        ocr_used=False,
+        text_available=False,
+    )
+
+    assert profile["format_id"] == "ocr_poor_pdf"
+    assert profile["handling_mode"] == "reference_only_after_ocr_failure"
+    assert profile["support_level"] == "reference_only"
+    assert profile["lossiness"] == "high"
+    assert profile["manual_review_required"] is True
+    assert profile["degrade_reason"] == "ocr_failed_for_pdf"
 
 
 def test_attachment_format_profile_marks_archive_bundles_as_unsupported():
@@ -159,7 +177,7 @@ def test_attachment_format_profile_marks_legacy_word_processing_docs_as_degraded
 
 
 def test_extract_text_truncation():
-    from src.attachment_extractor import MAX_EXTRACTED_CHARS
+    from mailarium.attachment_extractor import MAX_EXTRACTED_CHARS
 
     long_content = ("x" * (MAX_EXTRACTED_CHARS + 1000)).encode()
     result = extract_text("large.txt", long_content)

@@ -1,9 +1,11 @@
 [theme]
-primaryColor = "#2563eb"
-backgroundColor = "#f8fafc"
-secondaryBackgroundColor = "#eef2f7"
-textColor = "#0f172a"
+base = "light"
+primaryColor = "#0B63CE"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F7FA"
+textColor = "#172331"
 font = "sans serif"
 
 [server]
 headless = true
+address = "127.0.0.1"

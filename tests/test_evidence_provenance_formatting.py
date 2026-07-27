@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from src.db_evidence import EvidenceMixin
-from src.email_db import EmailDatabase
+from mailarium.db_evidence import EvidenceMixin
+from mailarium.email_db import EmailDatabase
 from tests._evidence_cases import make_email, seed_evidence
 
 
@@ -169,7 +169,7 @@ def test_verify_evidence_quotes_empty():
     db.close()
 
 
-def test_evidence_categories_all_canonical():
+def test_evidence_categories_include_all_suggested_categories():
     db = EmailDatabase(":memory:")
     categories = db.evidence_categories()
     names = [category["category"] for category in categories]
@@ -188,7 +188,7 @@ def test_evidence_categories_with_counts():
     assert cat_map["bossing"] == 1
     assert cat_map["harassment"] == 1
     assert cat_map["discrimination"] == 1
-    assert cat_map["micromanagement"] == 0
+    assert cat_map["general"] == 0
     db.close()
 
 

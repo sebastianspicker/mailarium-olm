@@ -1,6 +1,13 @@
+"""Exercises filtered retrieval statistics, sender and folder aggregation, score limits, and result formatting.
+
+It deduplicates paginated chunk rows and marks untrusted rendered content for consumers.
+"""
+
 import pytest
 
-from src.retriever import EmailRetriever, SearchResult
+from mailarium.retriever import EmailRetriever, SearchResult
+
+from .helpers.retriever_cases import _paged_metadata_collection
 
 
 def _build_result(sender_email: str, sender_name: str, date: str) -> SearchResult:
@@ -44,43 +51,13 @@ def test_search_filtered_combines_sender_and_date():
 
 def test_stats_aggregates_paginated_metadata():
     retriever = EmailRetriever.__new__(EmailRetriever)
-
-    class DummyCollection:
-        def count(self):
-            return 3
-
-        def get(self, include, limit, offset):
-            if offset == 0:
-                return {
-                    "metadatas": [
-                        {
-                            "uid": "1",
-                            "sender_email": "a@example.com",
-                            "date": "2023-01-01T00:00:00Z",
-                            "folder": "Inbox",
-                        },
-                        {
-                            "uid": "2",
-                            "sender_email": "b@example.com",
-                            "date": "2023-02-01T00:00:00Z",
-                            "folder": "Inbox",
-                        },
-                    ]
-                }
-            if offset == 2:
-                return {
-                    "metadatas": [
-                        {
-                            "uid": "3",
-                            "sender_email": "a@example.com",
-                            "date": "2023-03-01T00:00:00Z",
-                            "folder": "Archive",
-                        }
-                    ]
-                }
-            return {"metadatas": []}
-
-    retriever.collection = DummyCollection()
+    retriever.collection = _paged_metadata_collection(
+        [
+            {"uid": "1", "sender_email": "a@example.com", "date": "2023-01-01T00:00:00Z", "folder": "Inbox"},
+            {"uid": "2", "sender_email": "b@example.com", "date": "2023-02-01T00:00:00Z", "folder": "Inbox"},
+        ],
+        [{"uid": "3", "sender_email": "a@example.com", "date": "2023-03-01T00:00:00Z", "folder": "Archive"}],
+    )
 
     stats = retriever.stats()
     assert stats["total_chunks"] == 3
@@ -89,10 +66,10 @@ def test_stats_aggregates_paginated_metadata():
     assert stats["date_range"]["earliest"] == "2023-01-01"
     assert stats["date_range"]["latest"] == "2023-03-01"
     assert stats["folders"]["Inbox"] == 2
-    assert stats["metadata_source"] == "chromadb_fallback"
+    assert stats["metadata_source"] == "vector_collection_fallback"
 
 
-def test_stats_sqlite_failure_reports_chromadb_fallback_warning() -> None:
+def test_stats_sqlite_failure_reports_vector_collection_fallback_warning() -> None:
     retriever = EmailRetriever.__new__(EmailRetriever)
 
     class FailingEmailDB:
@@ -124,8 +101,8 @@ def test_stats_sqlite_failure_reports_chromadb_fallback_warning() -> None:
     stats = retriever.stats()
 
     assert stats["total_emails"] == 1
-    assert stats["metadata_source"] == "chromadb_fallback"
-    assert stats["metadata_warning"] == "sqlite_stats_failed_chromadb_fallback"
+    assert stats["metadata_source"] == "vector_collection_fallback"
+    assert stats["metadata_warning"] == "sqlite_stats_failed_vector_collection_fallback"
     assert stats["metadata_error_type"] == "RuntimeError"
 
 
@@ -291,23 +268,13 @@ def test_stats_folder_counts_deduplicate_chunk_rows():
 
 def test_stats_unique_senders_ignores_blank_and_trims():
     retriever = EmailRetriever.__new__(EmailRetriever)
-
-    class DummyCollection:
-        def count(self):
-            return 3
-
-        def get(self, include, limit, offset):
-            if offset == 0:
-                return {
-                    "metadatas": [
-                        {"uid": "1", "sender_email": " Employee@Example.TEST ", "folder": "Inbox"},
-                        {"uid": "2", "sender_email": "employee@example.test", "folder": "Inbox"},
-                        {"uid": "3", "sender_email": "   ", "folder": "Inbox"},
-                    ]
-                }
-            return {"metadatas": []}
-
-    retriever.collection = DummyCollection()
+    retriever.collection = _paged_metadata_collection(
+        [
+            {"uid": "1", "sender_email": " Employee@Example.TEST ", "folder": "Inbox"},
+            {"uid": "2", "sender_email": "employee@example.test", "folder": "Inbox"},
+            {"uid": "3", "sender_email": "   ", "folder": "Inbox"},
+        ]
+    )
     stats = retriever.stats()
 
     assert stats["unique_senders"] == 1

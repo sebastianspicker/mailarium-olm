@@ -1,8 +1,13 @@
+"""Exercises runtime query lanes and support-type classification for answer-context retrieval.
+
+It reports diversity and expansion attribution from result content instead of trusting lane hints alone.
+"""
+
 from __future__ import annotations
 
-from src.retriever_models import SearchResult
-from src.tools.search_answer_context_runtime_ranking import _support_type_for_result
-from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
+from mailarium.retriever_models import SearchResult
+from mailarium.tools.search_answer_context_runtime_ranking import _support_type_for_result
+from mailarium.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
 
 class _FakeRetriever:
@@ -91,21 +96,3 @@ def test_support_type_uses_content_not_only_query_lane_hints() -> None:
     support_type = _support_type_for_result(result, matched_queries=["vergleich peer comparator"])
 
     assert support_type == "body"
-
-
-def test_support_type_detects_comparator_and_counterevidence_from_content() -> None:
-    comparator_result = SearchResult(
-        chunk_id="uid-6__0",
-        text="Vergleich mit Kollegin zeigt ungleiche Behandlung bei derselben Aufgabe.",
-        metadata={"uid": "uid-6", "subject": "Vergleich"},
-        distance=0.05,
-    )
-    counterevidence_result = SearchResult(
-        chunk_id="uid-7__0",
-        text="Widerspruch zur frueheren Zusage und dokumentierte Unterlassung der Antwort.",
-        metadata={"uid": "uid-7", "subject": "Widerspruch"},
-        distance=0.05,
-    )
-
-    assert _support_type_for_result(comparator_result, matched_queries=[]) == "comparator"
-    assert _support_type_for_result(counterevidence_result, matched_queries=[]) == "counterevidence"

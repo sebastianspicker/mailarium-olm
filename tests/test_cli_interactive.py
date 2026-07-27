@@ -1,4 +1,6 @@
-from src.cli import _interactive_action
+"""Classifies interactive input into explicit commands while treating ordinary text as a search query."""
+
+from mailarium.cli import _interactive_action
 
 
 def test_interactive_action_classifies_quit_aliases():

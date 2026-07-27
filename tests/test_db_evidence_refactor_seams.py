@@ -1,6 +1,8 @@
+"""Keeps evidence-query mixin calls delegated to the extracted persistence helpers with their original arguments."""
+
 from __future__ import annotations
 
-from src.db_evidence import EvidenceMixin
+from mailarium.db_evidence import EvidenceMixin
 
 
 def _make_mixin():
@@ -41,13 +43,13 @@ def test_evidence_query_helpers_delegate_to_extracted_module(monkeypatch):
         calls.append(("categories", (db,), {}))
         return [{"category": "general", "count": 0}]
 
-    monkeypatch.setattr("src.db_evidence.list_evidence_impl", fake_list)
-    monkeypatch.setattr("src.db_evidence.get_evidence_impl", fake_get)
-    monkeypatch.setattr("src.db_evidence.verify_evidence_quotes_impl", fake_verify)
-    monkeypatch.setattr("src.db_evidence.evidence_stats_impl", fake_stats)
-    monkeypatch.setattr("src.db_evidence.search_evidence_impl", fake_search)
-    monkeypatch.setattr("src.db_evidence.evidence_timeline_impl", fake_timeline)
-    monkeypatch.setattr("src.db_evidence.evidence_categories_impl", fake_categories)
+    monkeypatch.setattr("mailarium.db_evidence.list_evidence_impl", fake_list)
+    monkeypatch.setattr("mailarium.db_evidence.get_evidence_impl", fake_get)
+    monkeypatch.setattr("mailarium.db_evidence.verify_evidence_quotes_impl", fake_verify)
+    monkeypatch.setattr("mailarium.db_evidence.evidence_stats_impl", fake_stats)
+    monkeypatch.setattr("mailarium.db_evidence.search_evidence_impl", fake_search)
+    monkeypatch.setattr("mailarium.db_evidence.evidence_timeline_impl", fake_timeline)
+    monkeypatch.setattr("mailarium.db_evidence.evidence_categories_impl", fake_categories)
 
     assert mixin.list_evidence(category="harassment", limit=5)["total"] == 0
     assert mixin.get_evidence(7) == {"id": 7}

@@ -1,3 +1,5 @@
+"""Exercises evidence-oriented CLI routes for provenance, custody checks, and exportable audit material."""
+
 from ._cli_commands_cases import (
     TestCmdEvidence,
     TestRunCustodyChain,

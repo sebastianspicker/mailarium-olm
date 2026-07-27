@@ -3,6 +3,8 @@
 # pylint: disable=unused-wildcard-import,wildcard-import
 
 
+"""Aggregates SQLite archive behavior cases for the parent test suite."""
+
 from .helpers.email_db_builders import *
 from .helpers.email_db_builders import _make_email  # noqa: F401
 from ._email_db_core_cases import *

@@ -1,8 +1,10 @@
+"""Creates attachment chunks with rename-stable identity and extraction, OCR, and surface provenance."""
+
 from __future__ import annotations
 
 import json
 
-from src.chunker import EmailChunk, chunk_attachment
+from mailarium.chunker import EmailChunk, chunk_attachment
 
 
 def test_chunk_attachment_short():
@@ -101,7 +103,7 @@ def test_chunk_attachment_uses_attachment_id_for_rename_continuity():
     assert chunks_old[0].metadata["attachment_id"] == "sha256:deadbeef"
 
 
-def test_chunk_attachment_normalizes_parent_metadata_for_chroma():
+def test_chunk_attachment_normalizes_parent_metadata_for_vector_storage():
     parent_meta = {
         "uid": "e1",
         "subject": "Report",

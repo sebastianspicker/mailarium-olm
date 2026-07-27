@@ -1,9 +1,9 @@
-"""Tests for formatting module (Phase 4)."""
+"""Verifies result formatting preserves readable email fields and safe presentation conventions."""
 
 import time
 
-from src.formatting import build_result_header, estimate_tokens, format_triage_results
-from src.sanitization import csv_safe_cell
+from mailarium.formatting import build_result_header, estimate_tokens, format_triage_results
+from mailarium.sanitization import csv_safe_cell
 
 
 def test_result_header_truncates_date_to_date_only():
@@ -74,8 +74,8 @@ def test_csv_safe_cell_neutralizes_formula_prefixes_without_changing_plain_value
 
 
 def test_rewritten_regex_helpers_preserve_token_and_sentence_parity():
-    from src.thread_summarizer import _split_sentences
-    from src.writing_analyzer import _get_words
+    from mailarium.thread_summarizer import _split_sentences
+    from mailarium.writing_analyzer import _get_words
 
     assert _get_words("Jean-Luc's well–formed words") == ["jean-luc's", "well", "formed", "words"]
     assert _split_sentences("First sentence. Second sentence! Third sentence?") == [
@@ -86,21 +86,23 @@ def test_rewritten_regex_helpers_preserve_token_and_sentence_parity():
 
 
 def test_rewritten_regex_helpers_are_linear_on_adversarial_input():
-    from src.thread_summarizer import _split_sentences
-    from src.writing_analyzer import _get_words
+    from mailarium.thread_summarizer import _split_sentences
+    from mailarium.writing_analyzer import _get_words
 
     adversarial = ("a'" * 50_000) + "! " + ("A" * 50_000)
-    started = time.perf_counter()
+    # CPU time measures regex work without failing when the full suite is
+    # descheduled by unrelated system load.
+    started = time.process_time()
     _get_words(adversarial)
     _split_sentences(adversarial)
-    assert time.perf_counter() - started < 1.0
+    assert time.process_time() - started < 1.0
 
 
 # ── Categories and calendar in headers ──────────────────────
 
 
 def test_email_header_shows_categories():
-    from src.formatting import build_email_header
+    from mailarium.formatting import build_email_header
 
     header = build_email_header(
         {
@@ -112,7 +114,7 @@ def test_email_header_shows_categories():
 
 
 def test_email_header_shows_calendar_tag():
-    from src.formatting import build_email_header
+    from mailarium.formatting import build_email_header
 
     header = build_email_header(
         {
@@ -145,22 +147,22 @@ class TestTruncateBodyNone:
     """
 
     def test_truncate_body_none_returns_empty(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         assert truncate_body(None, 500) == ""
 
     def test_truncate_body_none_unlimited(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         assert truncate_body(None, 0) == ""
 
     def test_truncate_body_normal_string(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         assert truncate_body("hello", 500) == "hello"
 
     def test_truncate_body_truncates(self):
-        from src.formatting import truncate_body
+        from mailarium.formatting import truncate_body
 
         result = truncate_body("x" * 1000, 100)
         assert len(result) < 300  # body (100) + truncation notice with char counts

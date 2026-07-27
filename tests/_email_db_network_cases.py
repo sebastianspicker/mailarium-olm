@@ -1,16 +1,13 @@
-"""Tests for the SQLite EmailDatabase."""
+"""SQLite contact-network, temporal, and entity-query behavior."""
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
-from .helpers.email_db_builders import _make_email
+from .helpers.email_db_builders import _make_email, insert_response_pair, make_network_db
 
 
 class TestNetworkQueries:
     def test_top_contacts(self):
-        db = EmailDatabase(":memory:")
-        db.insert_email(_make_email(message_id="<m1@example.test>", to=["Bob <bob@example.com>"]))
-        db.insert_email(_make_email(message_id="<m2@example.test>", to=["Bob <bob@example.com>"]))
-        db.insert_email(_make_email(message_id="<m3@example.test>", to=["Carol <carol@example.com>"]))
+        db = make_network_db(include_reply=False)
         contacts = db.top_contacts("employee@example.test", limit=10)
         assert contacts[0]["partner"] == "bob@example.com"
         assert contacts[0]["total"] == 2
@@ -95,23 +92,7 @@ class TestTemporalQueries:
 
     def test_response_pairs(self):
         db = EmailDatabase(":memory:")
-        db.insert_email(
-            _make_email(
-                message_id="<orig@example.test>",
-                date="2024-01-01T10:00:00",
-            )
-        )
-        db.insert_email(
-            _make_email(
-                message_id="<reply@example.test>",
-                subject="RE: Hello",
-                sender_email="bob@example.com",
-                sender_name="Bob",
-                to=["Alice <employee@example.test>"],
-                in_reply_to="<orig@example.test>",
-                date="2024-01-01T11:00:00",
-            )
-        )
+        insert_response_pair(db)
         pairs = db.response_pairs()
         assert len(pairs) == 1
         assert pairs[0]["reply_sender"] == "bob@example.com"
@@ -121,23 +102,7 @@ class TestTemporalQueries:
     def test_response_pairs_with_limit(self):
         """response_pairs should accept int limit without type error."""
         db = EmailDatabase(":memory:")
-        db.insert_email(
-            _make_email(
-                message_id="<orig@example.test>",
-                date="2024-01-01T10:00:00",
-            )
-        )
-        db.insert_email(
-            _make_email(
-                message_id="<reply@example.test>",
-                subject="RE: Hello",
-                sender_email="bob@example.com",
-                sender_name="Bob",
-                to=["Alice <employee@example.test>"],
-                in_reply_to="<orig@example.test>",
-                date="2024-01-01T11:00:00",
-            )
-        )
+        insert_response_pair(db)
         pairs = db.response_pairs(limit=5)
         assert len(pairs) == 1
         db.close()

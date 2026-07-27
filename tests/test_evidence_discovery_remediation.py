@@ -1,15 +1,16 @@
+"""Recovers discoverable evidence from enrichment, attachments, and re-ingestion when ordinary body text is sparse."""
+
 from __future__ import annotations
 
 import io
 import zipfile
 
-from src.attachment_extractor import classify_text_extraction_state, extract_text
-from src.conversation_segments import ConversationSegment
-from src.email_db import EmailDatabase
-from src.evidence_harvest import harvest_wave_payload
-from src.ingest_reingest import reextract_entities_impl, reingest_analytics_impl
-from src.parse_olm import Email
-from src.parse_olm_postprocess import ParsedEmailParts, derive_email_enrichments
+from mailarium.attachment_extractor import classify_text_extraction_state, extract_text
+from mailarium.conversation_segments import ConversationSegment
+from mailarium.email_db import EmailDatabase
+from mailarium.ingest_reingest import reextract_entities_impl, reingest_analytics_impl
+from mailarium.parse_olm import Email
+from mailarium.parse_olm_postprocess import ParsedEmailParts, derive_email_enrichments
 
 
 def _email(**overrides) -> Email:
@@ -145,7 +146,7 @@ def test_reingest_analytics_uses_attachment_text_for_body_poor_rows(tmp_path) ->
 
 
 def test_reextract_entities_uses_attachment_text_when_body_is_empty(tmp_path) -> None:
-    from src.entity_extractor import extract_entities
+    from mailarium.entity_extractor import extract_entities
 
     db_path = tmp_path / "entities.db"
     db = EmailDatabase(str(db_path))
@@ -233,67 +234,3 @@ def test_extract_text_reads_attached_email_and_zip_member_text() -> None:
     assert "[Archive extracted member text]" in zip_text
     assert "BEM-Protokoll" in zip_text
     assert classify_text_extraction_state("bundle.zip", zip_text) == "archive_contents_extracted"
-
-
-def test_harvest_wave_payload_promotes_attachment_exact_quotes() -> None:
-    db = EmailDatabase(":memory:")
-    email = _email(
-        body_text="Kurznotiz",
-        has_attachments=True,
-        attachments=[
-            {
-                "name": "protokoll.txt",
-                "mime_type": "text/plain",
-                "size": 40,
-                "is_inline": False,
-                "extracted_text": "Wir bestätigen die mobile Arbeit für medizinisch notwendige Termine.",
-                "text_preview": "Wir bestätigen die mobile Arbeit für medizinisch notwendige Termine.",
-                "extraction_state": "text_extracted",
-                "evidence_strength": "strong_text",
-            }
-        ],
-    )
-    db.insert_email(email)
-
-    payload = {
-        "wave_execution": {
-            "wave_id": "wave_1",
-            "label": "Dossier Reconciliation",
-            "questions": ["Q34"],
-            "scan_id": "scan:test:wave_1",
-        },
-        "archive_harvest": {
-            "evidence_bank": [
-                {
-                    "uid": email.uid,
-                    "candidate_kind": "attachment",
-                    "rank": 1,
-                    "score": 0.8,
-                    "subject": "BEM",
-                    "sender_email": "employee@example.test",
-                    "sender_name": "employee",
-                    "date": "2025-01-15T10:00:00",
-                    "conversation_id": "conv-1",
-                    "snippet": "Wir bestätigen die mobile Arbeit für medizinisch notwendige Termine.",
-                    "verification_status": "attachment_reference",
-                    "attachment": {"filename": "protokoll.txt", "mime_type": "text/plain"},
-                    "provenance": {"evidence_handle": f"attachment:{email.uid}:protokoll.txt"},
-                }
-            ]
-        },
-    }
-
-    result = harvest_wave_payload(
-        db,
-        payload=payload,
-        run_id="investigation_2026-04-16_P80",
-        phase_id="P80",
-        harvest_limit_per_wave=10,
-        promote_limit_per_wave=5,
-    )
-
-    assert result["candidate_count"] == 1
-    assert result["attachment_candidate_count"] == 1
-    assert result["promoted_count"] == 1
-    assert db.evidence_stats()["total"] == 1
-    db.close()

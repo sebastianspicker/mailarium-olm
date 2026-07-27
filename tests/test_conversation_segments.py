@@ -1,7 +1,7 @@
-"""Tests for conversation segmentation."""
+"""Verifies conversation segmentation separates authored, quoted, forwarded, signature, and footer content."""
 
-from src.conversation_segments import extract_segments
-from src.parse_olm import _parse_email_xml
+from mailarium.conversation_segments import extract_segments
+from mailarium.parse_olm import _parse_email_xml
 
 
 def _segment_summary(segments):

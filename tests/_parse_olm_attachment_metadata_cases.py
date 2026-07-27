@@ -1,4 +1,6 @@
-from src.parse_olm import (
+"""OLM email serialization, attachments, recipient metadata, categories, threading, and calendar data."""
+
+from mailarium.parse_olm import (
     Email,
     _parse_email_xml,
 )

@@ -1,15 +1,15 @@
+"""Validates MCP payload models, date ranges, readable inputs, and export destinations against local path policy."""
+
 from __future__ import annotations
 
 import json
 
 import pytest
 
-from src.mcp_models import EmailCaseAnalysisInput, EvidenceUpdateInput
-from src.mcp_models_evidence import EvidenceExportInput
-from src.mcp_models_search import EmailExportInput, EmailIngestInput, EmailSearchStructuredInput
-from src.repo_paths import repo_root
-
-from .helpers.case_analysis_fixtures import case_payload
+from mailarium.mcp_models import EvidenceUpdateInput
+from mailarium.mcp_models_evidence import EvidenceExportInput
+from mailarium.mcp_models_search import EmailExportInput, EmailIngestInput, EmailSearchStructuredInput
+from mailarium.repo_paths import repo_root
 
 
 def test_evidence_update_input_accepts_json_object_string() -> None:
@@ -28,27 +28,6 @@ def test_evidence_update_input_accepts_json_object_string() -> None:
     assert params.relevance == 4
 
 
-def test_email_case_analysis_input_accepts_json_object_string() -> None:
-    payload = case_payload()
-    payload["source_scope"] = "mixed_case_file"
-    payload["matter_manifest"] = {
-        "manifest_id": "matter-1",
-        "artifacts": [
-            {
-                "source_id": "manifest:calendar:1",
-                "source_class": "calendar_export",
-                "title": "Meeting invite",
-                "text": "SUMMARY: BEM review DTSTART:2025-03-10T10:00:00",
-            }
-        ],
-    }
-
-    params = EmailCaseAnalysisInput.model_validate(json.dumps(payload))
-
-    assert params.source_scope == "mixed_case_file"
-    assert params.matter_manifest is not None
-
-
 def test_email_export_input_rejects_pdf_without_output_path() -> None:
     with pytest.raises(ValueError, match="pdf export requires output_path"):
         EmailExportInput.model_validate({"uid": "uid-1", "format": "pdf"})
@@ -61,7 +40,7 @@ def test_email_export_input_rejects_output_paths_outside_allowed_roots() -> None
 
 def test_email_export_input_rejects_tracked_repo_output_paths() -> None:
     with pytest.raises(ValueError, match="allowed output roots"):
-        EmailExportInput.model_validate({"uid": "uid-1", "output_path": "src/config.py"})
+        EmailExportInput.model_validate({"uid": "uid-1", "output_path": "mailarium/config.py"})
 
 
 def test_evidence_export_input_rejects_tracked_repo_output_paths() -> None:
@@ -77,7 +56,7 @@ def test_evidence_export_input_rejects_tracked_repo_output_paths() -> None:
     ],
 )
 def test_export_inputs_reject_publicish_default_output_roots(output_path: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", raising=False)
+    monkeypatch.delenv("MAILARIUM_ALLOWED_OUTPUT_ROOTS", raising=False)
 
     with pytest.raises(ValueError, match="allowed output roots"):
         EmailExportInput.model_validate({"uid": "uid-1", "output_path": output_path})

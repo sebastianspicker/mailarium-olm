@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 from tests._evidence_cases import make_email
 
 

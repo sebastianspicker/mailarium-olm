@@ -3,6 +3,8 @@
 # pylint: disable=unused-wildcard-import,wildcard-import
 
 
+"""Aggregates CLI command behavior cases for the parent test suite."""
+
 from .helpers.cli_fakes import *
 from ._cli_search_cases import *
 from ._cli_browse_cases import *
@@ -11,4 +13,3 @@ from ._cli_evidence_cases import *
 from ._cli_analytics_cases import *
 from ._cli_training_admin_cases import *
 from ._cli_interactive_cases import *
-from ._cli_legacy_cases import *

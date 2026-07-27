@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mailarium — Search (proposed refinement)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /*
+      Proposed refinement of the CURRENT light archive instrument
+      (see mailarium/web_app_rendering.py light layer + docs/screenshots).
+      Same structure, palette, and labels — polish only.
+    */
+    :root {
+      --navy: #073760;
+      --navy-deep: #052a4a;
+      --accent: #0b63ce;
+      --accent-soft: rgba(11, 99, 206, 0.08);
+      --accent-mid: rgba(11, 99, 206, 0.14);
+      --sky: #35a2ff;
+      --ink: #172331;
+      --ink-2: #475466;
+      --ink-3: #6f7a88;
+      --line: #e2e6eb;
+      --line-2: #cbd2da;
+      --surface: #f7f9fc;
+      --muted: #f2f5f8;
+      --white: #ffffff;
+      --ok: #166e4f;
+      --ok-soft: rgba(22, 110, 79, 0.08);
+      --amber: #e86e19;
+      --rail: 11rem;
+      --font: Inter, "Avenir Next", ui-sans-serif, -apple-system, system-ui, sans-serif;
+      --display: "Avenir Next Condensed", "Arial Narrow", Inter, sans-serif;
+      --mono: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 1440px;
+      height: 900px;
+      overflow: hidden;
+      background: var(--white);
+      color: var(--ink);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+
+    .app {
+      display: grid;
+      grid-template-columns: var(--rail) 1fr;
+      height: 900px; width: 1440px;
+    }
+
+    /* —— Sidebar (current navy instrument) —— */
+    .rail {
+      background: var(--navy);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      padding: 1.35rem 0 1.1rem;
+    }
+    .lockup {
+      padding: 0.2rem 1.25rem 1.35rem;
+      margin: 0 0 0.35rem;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+      font-family: var(--display);
+      font-size: 1.15rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .nav { display: flex; flex-direction: column; }
+    .nav button {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      width: 100%;
+      min-height: 3.35rem;
+      padding: 0.65rem 1.15rem;
+      border: 0;
+      border-left: 3px solid transparent;
+      background: transparent;
+      color: rgba(255,255,255,0.88);
+      font-size: 0.9rem;
+      text-align: left;
+    }
+    .nav button::before {
+      content: "—";
+      width: 0.85rem;
+      color: rgba(255,255,255,0.55);
+      font-size: 0.8rem;
+    }
+    .nav button:hover { background: rgba(255,255,255,0.07); }
+    .nav button[aria-current="page"] {
+      background: rgba(11, 99, 206, 0.55);
+      border-left-color: var(--sky);
+      color: #fff;
+    }
+    .nav button[aria-current="page"]::before { color: var(--sky); }
+
+    .runtime {
+      margin-top: auto;
+      padding: 1rem 1.2rem 0.25rem;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.2rem 0.55rem;
+      align-items: center;
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.92);
+    }
+    .runtime i {
+      width: 0.48rem;
+      height: 0.48rem;
+      border-radius: 50%;
+      background: #f47a20;
+      font-style: normal;
+    }
+    .runtime small {
+      grid-column: 2;
+      color: rgba(255,255,255,0.58);
+      font-size: 0.68rem;
+    }
+
+    /* —— Main —— */
+    .main {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      min-width: 0;
+      background: var(--white);
+    }
+
+    .heading {
+      padding: 1.1rem 1.75rem 0.35rem;
+    }
+    .heading h1 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(2.1rem, 3vw, 2.75rem);
+      font-weight: 500;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      color: var(--ink);
+    }
+
+    .query {
+      padding: 0.55rem 1.75rem 0.85rem;
+      border-bottom: 1px solid var(--line-2);
+      display: grid;
+      gap: 0.55rem;
+    }
+    .query-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.65rem;
+      align-items: stretch;
+    }
+    .field {
+      display: flex;
+      align-items: center;
+      min-height: 3rem;
+      padding: 0 0.9rem;
+      border: 2px solid var(--accent);
+      border-radius: 5px;
+      background: var(--white);
+    }
+    .field input {
+      width: 100%;
+      border: 0;
+      outline: none;
+      background: transparent;
+      font-size: 0.98rem;
+      color: var(--ink);
+    }
+    .field input::placeholder { color: var(--ink-3); }
+    .btn {
+      border: 0;
+      border-radius: 5px;
+      font-weight: 550;
+      font-size: 0.92rem;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      min-height: 3rem;
+      padding: 0 1.35rem;
+    }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-secondary {
+      background: var(--white);
+      color: var(--ink);
+      border: 1px solid var(--line-2);
+      min-height: 2.4rem;
+      padding: 0 0.9rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+    .btn-block { width: 100%; }
+    .btn-primary.btn-block { min-height: 2.5rem; }
+
+    .query-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 2rem;
+      padding: 0.25rem 0.7rem;
+      border: 1px solid var(--line-2);
+      border-radius: 5px;
+      background: var(--white);
+      color: var(--ink-2);
+      font-size: 0.75rem;
+    }
+    .chip[data-on="1"] {
+      border-color: rgba(11, 99, 206, 0.35);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.85rem;
+      min-height: 2.85rem;
+      padding: 0.55rem 1.75rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line-2);
+      color: var(--ink-3);
+      font-size: 0.8rem;
+    }
+    .summary strong { color: var(--ink); font-weight: 600; }
+    .summary .modes {
+      margin-left: auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+    .summary .modes span {
+      border: 1px solid var(--line-2);
+      border-radius: 999px;
+      padding: 0.15rem 0.55rem;
+      background: var(--white);
+      font-size: 0.7rem;
+      color: var(--ink-2);
+    }
+
+    /* Three-pane workspace */
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(15.5rem, 18.5rem) minmax(0, 1.4fr) minmax(15rem, 17.5rem);
+      min-height: 0;
+    }
+    .col {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--white);
+    }
+    .col-list {
+      border-right: 1px solid var(--line);
+      background: var(--white);
+    }
+    .col-doc {
+      background: var(--white);
+    }
+    .col-source {
+      border-left: 1px solid var(--line-2);
+      background: var(--white);
+    }
+    .col-label {
+      padding: 0.85rem 1rem 0.55rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--ink-2);
+    }
+
+    .list { overflow: auto; flex: 1; }
+    .item {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      padding: 0.85rem 1rem 0.95rem;
+      display: grid;
+      gap: 0.28rem;
+    }
+    .item:hover { background: var(--surface); }
+    .item[aria-selected="true"] {
+      background: var(--accent-soft);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .item-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+      color: var(--ink-3);
+      font-variant-numeric: tabular-nums;
+    }
+    .item[aria-selected="true"] .item-top { color: var(--accent); font-weight: 500; }
+    .item h3 {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--ink);
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+    .item-meta {
+      font-size: 0.8rem;
+      color: var(--ink-2);
+    }
+    .item-flags {
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      font-weight: 500;
+    }
+    .item p {
+      margin: 0.15rem 0 0;
+      font-size: 0.8rem;
+      color: var(--ink-2);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .doc-scroll {
+      overflow: auto;
+      flex: 1;
+      padding: 0.35rem 1.25rem 1.75rem;
+    }
+    .doc {
+      max-width: 46rem;
+    }
+    .doc-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .doc-head h2 {
+      margin: 0;
+      font-size: 1.45rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      color: var(--ink);
+      max-width: 28ch;
+    }
+    .more {
+      border: 0;
+      background: transparent;
+      color: var(--ink-3);
+      font-size: 1.25rem;
+      line-height: 1;
+      padding: 0.15rem 0.35rem;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.45rem 1.25rem;
+      padding: 0.85rem 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.8rem;
+    }
+    .meta-grid div {
+      display: grid;
+      grid-template-columns: 3.1rem 1fr;
+      gap: 0.45rem;
+    }
+    .meta-grid b {
+      color: var(--ink-3);
+      font-weight: 500;
+    }
+    .meta-grid span { color: var(--ink); }
+    .meta-grid .sub { color: var(--ink-3); }
+
+    .thread {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.7rem 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink-3);
+      font-size: 0.78rem;
+    }
+    .thread .dots {
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      font-size: 0.75rem;
+    }
+
+    .body {
+      padding: 1rem 0 0.5rem;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      color: var(--ink);
+      max-width: 62ch;
+    }
+    .body p { margin: 0 0 0.85rem; }
+    .body mark {
+      background: transparent;
+      color: inherit;
+      border: 1.5px solid var(--accent);
+      border-radius: 2px;
+      padding: 0 0.12em;
+      box-decoration-break: clone;
+    }
+
+    .atts {
+      margin-top: 0.35rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--line);
+    }
+    .atts > span {
+      display: block;
+      margin-bottom: 0.45rem;
+      font-size: 0.78rem;
+      color: var(--ink-3);
+    }
+    .att {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 0.65rem;
+      align-items: center;
+      padding: 0.55rem 0.7rem;
+      background: var(--surface);
+      border-radius: 5px;
+      font-size: 0.82rem;
+    }
+    .att + .att { margin-top: 0.35rem; }
+    .att i {
+      width: 0.55rem;
+      height: 0.55rem;
+      background: var(--ink-3);
+      border-radius: 1px;
+      font-style: normal;
+    }
+    .att small { color: var(--ink-3); font-size: 0.75rem; }
+
+    /* Source inspector */
+    .source-scroll {
+      overflow: auto;
+      flex: 1;
+      padding: 0.85rem 1.1rem 1.4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.15rem;
+    }
+    .source-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .source-title h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.22rem 0.55rem;
+      border-radius: 999px;
+      background: var(--ok-soft);
+      color: var(--ok);
+      font-size: 0.72rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .block h3 {
+      margin: 0 0 0.45rem;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .quote {
+      background: var(--accent-soft);
+      border: 1px solid rgba(11, 99, 206, 0.18);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 5px 5px 0;
+      padding: 0.75rem 0.85rem;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: var(--ink);
+    }
+
+    .kv { display: grid; }
+    .kv div {
+      padding: 0.55rem 0;
+      border-top: 1px solid var(--line);
+    }
+    .kv div:first-child { border-top: 0; padding-top: 0; }
+    .kv dt {
+      margin: 0 0 0.15rem;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .kv dd {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      color: var(--ink-2);
+      word-break: break-all;
+    }
+
+    .field-label {
+      display: block;
+      margin: 0 0 0.35rem;
+      font-size: 0.78rem;
+      color: var(--ink-2);
+      font-weight: 500;
+    }
+    select, textarea {
+      width: 100%;
+      border: 1px solid var(--line-2);
+      border-radius: 5px;
+      background: var(--white);
+      color: var(--ink);
+      font: inherit;
+      padding: 0.5rem 0.65rem;
+    }
+    textarea {
+      min-height: 4.5rem;
+      resize: vertical;
+      color: var(--ink-3);
+    }
+
+    .actions {
+      display: grid;
+      gap: 0.45rem;
+      margin-top: auto;
+    }
+    .linkish {
+      background: none;
+      border: 0;
+      color: var(--accent);
+      text-align: left;
+      font-size: 0.85rem;
+      padding: 0.25rem 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .note {
+      position: fixed;
+      right: 0.75rem;
+      bottom: 0.75rem;
+      z-index: 10;
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      background: rgba(255,255,255,0.92);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.3rem 0.6rem;
+      pointer-events: none;
+    }
+
+    @media (max-width: 1100px) {
+      .workspace { grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr); }
+      .col-source { display: none; }
+    }
+    @media (max-width: 800px) {
+      .app { grid-template-columns: 1fr; }
+      .rail { display: none; }
+      .workspace { grid-template-columns: 1fr; }
+      .col-list { max-height: 36vh; border-right: 0; border-bottom: 1px solid var(--line); }
+      .heading { padding-left: 1rem; padding-right: 1rem; }
+      .query, .summary { padding-left: 1rem; padding-right: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail" aria-label="Primary">
+      <div class="lockup">Mailarium</div>
+      <nav class="nav">
+        <button type="button" aria-current="page">Search</button>
+        <button type="button">Overview</button>
+        <button type="button">People</button>
+        <button type="button">Connections</button>
+        <button type="button">Evidence</button>
+        <button type="button">Mailbox</button>
+      </nav>
+      <div class="runtime">
+        <i aria-hidden="true"></i>
+        <span>Local archive ready</span>
+        <small>Runtime paths validated</small>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="heading">
+        <h1>Search the archive</h1>
+      </div>
+
+      <section class="query" aria-label="Search">
+        <div class="query-row">
+          <label class="field" for="q">
+            <input id="q" type="search" value="What changed in the Northstar handoff?" autocomplete="off" />
+          </label>
+          <button class="btn btn-primary" type="button">Search</button>
+        </div>
+        <div class="query-tools">
+          <button class="btn btn-secondary" type="button">Search Mode and filters</button>
+          <span class="chip" data-on="1">Hybrid</span>
+          <span class="chip" data-on="1">Reranked</span>
+          <span class="chip">Scope: operations</span>
+          <span class="chip">After 2026-04-01</span>
+        </div>
+      </section>
+
+      <div class="summary">
+        <strong>4 results</strong>
+        <span>96% best · 81% average relevance</span>
+        <span>Sorted by Relevance</span>
+        <div class="modes">
+          <span>hybrid</span>
+          <span>reranked</span>
+          <span>scope:operations</span>
+        </div>
+      </div>
+
+      <section class="workspace" aria-label="Search workspace">
+        <div class="col col-list">
+          <div class="col-label">Ranked correspondence</div>
+          <div class="list" role="listbox">
+            <button class="item" type="button" role="option" aria-selected="true">
+              <div class="item-top"><span>1 · 96%</span></div>
+              <h3>Northstar handoff: revised ownership</h3>
+              <div class="item-meta">Mara Chen · 2026-04-22</div>
+              <div class="item-flags">Thread · 2 att.</div>
+              <p>Team. Following the final readiness review, we are confirming the operating model…</p>
+            </button>
+            <button class="item" type="button" role="option" aria-selected="false">
+              <div class="item-top"><span>2 · 82%</span></div>
+              <h3>Re: Support migration runbook</h3>
+              <div class="item-meta">Daniel Ortiz · 2026-04-21</div>
+              <div class="item-flags">Thread</div>
+              <p>Thanks. I added the rollback steps and updated the validation checklist…</p>
+            </button>
+            <button class="item" type="button" role="option" aria-selected="false">
+              <div class="item-top"><span>3 · 74%</span></div>
+              <h3>Northstar readiness review notes</h3>
+              <div class="item-meta">Priya Nair · 2026-04-18</div>
+              <div class="item-flags">1 att.</div>
+              <p>Action items from Thursday’s review: freeze scope Friday, confirm on-call…</p>
+            </button>
+            <button class="item" type="button" role="option" aria-selected="false">
+              <div class="item-top"><span>4 · 61%</span></div>
+              <h3>FW: Customer support escalation path</h3>
+              <div class="item-meta">Alex Rivera · 2026-04-12</div>
+              <div class="item-flags">Forward</div>
+              <p>Forwarding the interim escalation path until the Northstar operating model…</p>
+            </button>
+          </div>
+        </div>
+
+        <div class="col col-doc">
+          <div class="doc-scroll">
+            <article class="doc">
+              <div class="doc-head">
+                <h2>Northstar handoff: revised ownership</h2>
+                <button class="more" type="button" aria-label="More">⋯</button>
+              </div>
+              <div class="meta-grid">
+                <div><b>From</b><span>Mara Chen <span class="sub">&lt;mara.chen@example.test&gt;</span></span></div>
+                <div><b>Date</b><span>2026-04-22 · 10:14:00</span></div>
+                <div><b>To</b><span>Platform Leadership <span class="sub">&lt;platform@example.test&gt;</span></span></div>
+                <div><b>Source</b><span>Archive / Operations</span></div>
+              </div>
+              <div class="thread">
+                <span class="dots">● — ○ — ○</span>
+                <span>Conversation available</span>
+              </div>
+              <div class="body">
+                <p>Team.</p>
+                <p>
+                  <mark>Following the final readiness review, we are confirming the operating model for Northstar.</mark>
+                  Ownership moves to Platform Operations after the final readiness review. Platform Operations will own day-to-day service delivery, incident response, and future enhancements. Product will remain accountable for roadmap and experience. Please review the attached runbook and provide any feedback by EOD Friday.
+                </p>
+                <p>Thanks, Mara</p>
+              </div>
+              <div class="atts">
+                <span>2 attachments</span>
+                <div class="att"><i></i><span>northstar-handoff-runbook.pdf</span><small>Local attachment</small></div>
+                <div class="att"><i></i><span>ownership-matrix.xlsx</span><small>Local attachment</small></div>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <aside class="col col-source" aria-label="Source">
+          <div class="source-scroll">
+            <div class="source-title">
+              <h2>Source</h2>
+              <span class="badge">✓ Source matched</span>
+            </div>
+
+            <div class="block">
+              <h3>Quoted proof</h3>
+              <div class="quote">Following the final readiness review, we are confirming the operating model for Northstar.</div>
+            </div>
+
+            <dl class="kv">
+              <div>
+                <dt>Message UID</dt>
+                <dd>synthetic-northstar</dd>
+              </div>
+              <div>
+                <dt>Conversation ID</dt>
+                <dd>northstar-thread</dd>
+              </div>
+              <div>
+                <dt>Folder / archive</dt>
+                <dd>Archive / Operations</dd>
+              </div>
+              <div>
+                <dt>Retrieved by</dt>
+                <dd>Hybrid + Rerank</dd>
+              </div>
+            </dl>
+
+            <div>
+              <label class="field-label" for="cat">Category</label>
+              <select id="cat"><option>General</option></select>
+            </div>
+            <div>
+              <label class="field-label" for="notes">Notes</label>
+              <textarea id="notes" placeholder="Optional operator notes"></textarea>
+            </div>
+
+            <div class="actions">
+              <button class="btn btn-primary btn-block" type="button">Add to evidence</button>
+              <button class="linkish" type="button">Export source</button>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+  <div class="note" style="display:none">Proposal · light instrument refinement</div>
+</body>
+</html>

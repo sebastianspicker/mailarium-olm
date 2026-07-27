@@ -1,8 +1,10 @@
+"""Builds language analytics from authored, attachment, and subject surfaces while recording unknown language explicitly."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.language_analytics import (
+from mailarium.language_analytics import (
     build_analytics_update_row,
     build_surface_language_rows_from_email,
     build_surface_language_rows_from_row,

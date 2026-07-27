@@ -1,8 +1,10 @@
+"""Extracts entity occurrences from authored segments and attachment text with source-specific provenance."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.entity_occurrence_extractor import extract_entity_occurrence_rows_from_email
+from mailarium.entity_occurrence_extractor import extract_entity_occurrence_rows_from_email
 
 
 def test_extract_entity_occurrence_rows_from_email_prefers_segment_and_attachment_surfaces() -> None:

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import argparse
 from html import escape as html_escape
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+
+from tests.helpers.web_app_fixtures import _sidebar_retriever
 
 
 class TestP0SidebarHtmlEscape:
@@ -30,23 +31,21 @@ class TestP0SidebarHtmlEscape:
         escaped = html_escape(name)
         assert "&amp;" in escaped
 
-    @patch("src.web_app.st")
+    @patch("mailarium.web_app.st")
     def test_render_sidebar_escapes_folder_in_markdown(self, mock_st):
-        from src.web_app import render_sidebar
+        from mailarium.web_app import render_sidebar
 
-        mock_st.sidebar.expander.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.sidebar.expander.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.sidebar.columns.return_value = [MagicMock(), MagicMock(), MagicMock()]
-
-        retriever = MagicMock()
-        retriever.stats.return_value = {
-            "total_emails": 10,
-            "total_chunks": 20,
-            "unique_senders": 5,
-            "date_range": {"earliest": "2024-01-01", "latest": "2024-12-31"},
-            "folders": {'<script>alert("xss")</script>': 5},
-        }
-        retriever.list_senders.return_value = []
+        retriever = _sidebar_retriever(
+            mock_st,
+            stats={
+                "total_emails": 10,
+                "total_chunks": 20,
+                "unique_senders": 5,
+                "date_range": {"earliest": "2024-01-01", "latest": "2024-12-31"},
+                "folders": {'<script>alert("xss")</script>': 5},
+            },
+            senders=[],
+        )
 
         render_sidebar(retriever)
 
@@ -55,25 +54,21 @@ class TestP0SidebarHtmlEscape:
         for call_str in folder_calls:
             assert "<script>" not in call_str or "&lt;script&gt;" in call_str
 
-    @patch("src.web_app.st")
+    @patch("mailarium.web_app.st")
     def test_render_sidebar_escapes_sender_in_markdown(self, mock_st):
-        from src.web_app import render_sidebar
+        from mailarium.web_app import render_sidebar
 
-        mock_st.sidebar.expander.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.sidebar.expander.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.sidebar.columns.return_value = [MagicMock(), MagicMock(), MagicMock()]
-
-        retriever = MagicMock()
-        retriever.stats.return_value = {
-            "total_emails": 10,
-            "total_chunks": 20,
-            "unique_senders": 5,
-            "date_range": {"earliest": "2024-01-01", "latest": "2024-12-31"},
-            "folders": {},
-        }
-        retriever.list_senders.return_value = [
-            {"name": '<img onerror="alert(1)">', "email": "evil@example.test", "count": 5},
-        ]
+        retriever = _sidebar_retriever(
+            mock_st,
+            stats={
+                "total_emails": 10,
+                "total_chunks": 20,
+                "unique_senders": 5,
+                "date_range": {"earliest": "2024-01-01", "latest": "2024-12-31"},
+                "folders": {},
+            },
+            senders=[{"name": '<img onerror="alert(1)">', "email": "evil@example.test", "count": 5}],
+        )
 
         render_sidebar(retriever)
 
@@ -83,129 +78,21 @@ class TestP0SidebarHtmlEscape:
             assert "<img" not in call_str or "&lt;img" in call_str
 
 
-class TestP1LegacyDossierFormat:
-    """P1 fix #13: legacy --dossier format defaults to 'html'."""
-
-    def test_legacy_dossier_format_default(self):
-        from src.cli import _infer_subcommand
-
-        args = argparse.Namespace(
-            query=None,
-            browse=False,
-            export_thread=None,
-            export_email=None,
-            generate_report=None,
-            export_network=None,
-            evidence_list=False,
-            evidence_export=None,
-            evidence_stats=False,
-            evidence_verify=False,
-            dossier="output.html",
-            dossier_format=None,
-            custody_chain=False,
-            provenance=None,
-        )
-        cmd = _infer_subcommand(args)
-        assert cmd == "evidence"
-        assert args.format == "html"  # pylint: disable=no-member
-
-    def test_legacy_dossier_format_pdf(self):
-        from src.cli import _infer_subcommand
-
-        args = argparse.Namespace(
-            query=None,
-            browse=False,
-            export_thread=None,
-            export_email=None,
-            generate_report=None,
-            export_network=None,
-            evidence_list=False,
-            evidence_export=None,
-            evidence_stats=False,
-            evidence_verify=False,
-            dossier="output.pdf",
-            dossier_format="pdf",
-            custody_chain=False,
-            provenance=None,
-        )
-        cmd = _infer_subcommand(args)
-        assert cmd == "evidence"
-        assert args.format == "pdf"  # pylint: disable=no-member
-
-
-class TestP1LegacyVolumePeriod:
-    """P1 fix #14: legacy --volume period propagated correctly."""
-
-    def test_legacy_volume_period_propagated(self):
-        from src.cli import _infer_subcommand
-
-        args = argparse.Namespace(
-            query=None,
-            browse=False,
-            export_thread=None,
-            export_email=None,
-            generate_report=None,
-            export_network=None,
-            evidence_list=False,
-            evidence_export=None,
-            evidence_stats=False,
-            evidence_verify=False,
-            dossier=None,
-            custody_chain=False,
-            provenance=None,
-            stats=False,
-            list_senders=False,
-            suggest=False,
-            top_contacts=None,
-            volume="week",
-        )
-        cmd = _infer_subcommand(args)
-        assert cmd == "analytics"
-        assert args.period == "week"  # pylint: disable=no-member
-
-    def test_legacy_volume_default_period(self):
-        from src.cli import _infer_subcommand
-
-        args = argparse.Namespace(
-            query=None,
-            browse=False,
-            export_thread=None,
-            export_email=None,
-            generate_report=None,
-            export_network=None,
-            evidence_list=False,
-            evidence_export=None,
-            evidence_stats=False,
-            evidence_verify=False,
-            dossier=None,
-            custody_chain=False,
-            provenance=None,
-            stats=False,
-            list_senders=False,
-            suggest=False,
-            top_contacts=None,
-            volume="month",
-        )
-        cmd = _infer_subcommand(args)
-        assert cmd == "analytics"
-        assert args.period == "month"  # pylint: disable=no-member
-
-
 class TestP2PathContainmentIsRelativeTo:
     """P2: Path containment must use is_relative_to(), not string prefix."""
 
     def test_similar_prefix_directory_rejected(self, monkeypatch):
-        from src.mcp_models_base import _validate_output_path
+        from mailarium.mcp_models_base import _validate_output_path
 
-        monkeypatch.setenv("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", "/home/user/output")
+        monkeypatch.setenv("MAILARIUM_ALLOWED_OUTPUT_ROOTS", "/home/user/output")
 
         with pytest.raises(ValueError, match="allowed output roots"):
             _validate_output_path("/home/user2/evil.html")
 
     def test_valid_subdirectory_accepted(self, monkeypatch):
-        from src.mcp_models_base import _validate_output_path
+        from mailarium.mcp_models_base import _validate_output_path
 
-        monkeypatch.setenv("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", "/home/user/output")
+        monkeypatch.setenv("MAILARIUM_ALLOWED_OUTPUT_ROOTS", "/home/user/output")
         result = _validate_output_path("/home/user/output/report.html")
         assert result == str(Path("/home/user/output/report.html").resolve())
 
@@ -214,13 +101,13 @@ class TestP2TopicModelerPathValidation:
     """P2: TopicModeler.load must validate file extension."""
 
     def test_non_pickle_extension_rejected(self, tmp_path):
-        from src.topic_modeler import TopicModeler
+        from mailarium.topic_modeler import TopicModeler
 
         with pytest.raises(ValueError, match=r"must be \.pkl or \.pickle"):
             TopicModeler.load(str(tmp_path / "evil.bin"))
 
     def test_nonexistent_file_raises(self, tmp_path):
-        from src.topic_modeler import TopicModeler
+        from mailarium.topic_modeler import TopicModeler
 
         with pytest.raises(FileNotFoundError):
             TopicModeler.load(str(tmp_path / "model.pkl"))

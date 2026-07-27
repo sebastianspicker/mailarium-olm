@@ -1,8 +1,10 @@
+"""Matches HTML normalization against mail-client fixtures, removing hidden and quoted tails while retaining visible content."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from src.html_converter import html_to_text
+from mailarium.html_converter import html_to_text
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "html_normalization"
 

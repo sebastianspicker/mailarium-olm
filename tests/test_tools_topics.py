@@ -1,7 +1,4 @@
-"""Tests for src/tools/topics.py — clusters, topics, similarity, discovery tools.
-
-Covers: email_clusters, email_find_similar, email_topics, email_discovery.
-"""
+"""Verifies topic tools expose clustering, similarity, discovery, and topic summaries through MCP."""
 
 from __future__ import annotations
 
@@ -10,35 +7,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.mcp_server import _offload
-from src.retriever import SearchResult
-from src.sanitization import sanitize_untrusted_text
+from .helpers.mcp_tool_extended_fakes import FakeMCP
+from .helpers.mcp_tool_extended_fakes import MockDeps as SharedMockDeps
+from .helpers.mcp_tool_extended_fakes import _make_result as _shared_make_result
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
 
 def _make_result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    uid="uid-1",
-    text="Budget proposal review.",
-    subject="Budget Review",
-    sender="employee@example.test",
-    date="2025-06-01",
-    conversation_id="conv-1",
-    distance=0.2,
+    **overrides,
 ):
-    return SearchResult(
-        chunk_id=f"chunk_{uid}",
-        text=text,
-        metadata={
-            "uid": uid,
-            "subject": subject,
-            "sender_email": sender,
-            "sender_name": sender.split("@")[0].title(),
-            "date": date,
-            "conversation_id": conversation_id,
-        },
-        distance=distance,
-    )
+    defaults = {"text": "Budget proposal review."}
+    defaults.update(overrides)
+    return _shared_make_result(**defaults)
 
 
 class MockRetriever:
@@ -98,49 +79,13 @@ class MockEmailDB:
         return [{"email": "bob@example.com", "count": 5}]
 
 
-class MockDeps:
+class MockDeps(SharedMockDeps):
     _retriever = MockRetriever()
     _email_db = MockEmailDB()
 
-    @staticmethod
-    def get_retriever():
-        return MockDeps._retriever
-
-    @staticmethod
-    def get_email_db():
-        return MockDeps._email_db
-
-    offload = staticmethod(_offload)
-    DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-    sanitize = staticmethod(sanitize_untrusted_text)
-
-    @staticmethod
-    def tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def write_tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def idempotent_write_annotations(title):
-        return {"title": title}
-
-
-class FakeMCP:
-    def __init__(self):
-        self._tools = {}
-
-    def tool(self, name=None, annotations=None):
-        def decorator(fn):
-            self._tools[name] = fn
-            return fn
-
-        return decorator
-
 
 def _register():
-    from src.tools import topics
+    from mailarium.tools import topics
 
     fake_mcp = FakeMCP()
     topics.register(fake_mcp, MockDeps)
@@ -155,7 +100,7 @@ class TestEmailClusters:
     async def test_list_all_clusters(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_clusters"]
-        from src.mcp_models import EmailClustersInput
+        from mailarium.mcp_models import EmailClustersInput
 
         params = EmailClustersInput()
         result = await fn(params)
@@ -168,7 +113,7 @@ class TestEmailClusters:
     async def test_emails_in_cluster(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_clusters"]
-        from src.mcp_models import EmailClustersInput
+        from mailarium.mcp_models import EmailClustersInput
 
         params = EmailClustersInput(cluster_id=0, limit=10)
         result = await fn(params)
@@ -188,7 +133,7 @@ class TestEmailClusters:
 
         MockDeps._email_db = NoClusters()
         try:
-            from src.mcp_models import EmailClustersInput
+            from mailarium.mcp_models import EmailClustersInput
 
             params = EmailClustersInput()
             result = await fn(params)
@@ -204,7 +149,7 @@ class TestEmailFindSimilar:
     async def test_find_similar_by_uid(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_find_similar"]
-        from src.mcp_models import FindSimilarInput
+        from mailarium.mcp_models import FindSimilarInput
 
         params = FindSimilarInput(uid="uid-1", top_k=5)
         result = await fn(params)
@@ -216,7 +161,7 @@ class TestEmailFindSimilar:
     async def test_find_similar_by_query(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_find_similar"]
-        from src.mcp_models import FindSimilarInput
+        from mailarium.mcp_models import FindSimilarInput
 
         params = FindSimilarInput(query="budget review", top_k=5)
         result = await fn(params)
@@ -224,10 +169,32 @@ class TestEmailFindSimilar:
         assert "count" in data
 
     @pytest.mark.asyncio
+    async def test_find_similar_forwards_scope(self):
+        fake_mcp = _register()
+        fn = fake_mcp._tools["email_find_similar"]
+        from mailarium.mcp_models import FindSimilarInput
+
+        retriever = MockDeps.get_retriever()
+        original = retriever.search_filtered
+        captured = {}
+
+        def capture_search(*args, **kwargs):
+            captured.update(kwargs)
+            return original(*args, **kwargs)
+
+        retriever.search_filtered = capture_search
+        try:
+            await fn(FindSimilarInput(query="budget review", scope=" Finance "))
+        finally:
+            retriever.search_filtered = original
+
+        assert captured["scope"] == "finance"
+
+    @pytest.mark.asyncio
     async def test_find_similar_no_params_error(self):
         from pydantic import ValidationError
 
-        from src.mcp_models import FindSimilarInput
+        from mailarium.mcp_models import FindSimilarInput
 
         with pytest.raises(ValidationError):
             FindSimilarInput(top_k=5)
@@ -236,7 +203,7 @@ class TestEmailFindSimilar:
     async def test_find_similar_uid_not_found(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_find_similar"]
-        from src.mcp_models import FindSimilarInput
+        from mailarium.mcp_models import FindSimilarInput
 
         params = FindSimilarInput(uid="nonexistent", top_k=5)
         result = await fn(params)
@@ -248,7 +215,7 @@ class TestEmailFindSimilar:
         """Results should not include the source email UID."""
         fake_mcp = _register()
         fn = fake_mcp._tools["email_find_similar"]
-        from src.mcp_models import FindSimilarInput
+        from mailarium.mcp_models import FindSimilarInput
 
         params = FindSimilarInput(uid="uid-1", top_k=5)
         result = await fn(params)
@@ -258,13 +225,13 @@ class TestEmailFindSimilar:
 
     @pytest.mark.asyncio
     async def test_find_similar_with_scan_id(self):
-        from src import scan_session
+        from mailarium import scan_session
 
         scan_session.reset_all_sessions()
 
         fake_mcp = _register()
         fn = fake_mcp._tools["email_find_similar"]
-        from src.mcp_models import FindSimilarInput
+        from mailarium.mcp_models import FindSimilarInput
 
         params = FindSimilarInput(query="budget", top_k=10, scan_id="test_scan")
         result = await fn(params)
@@ -282,7 +249,7 @@ class TestEmailTopics:
     async def test_list_all_topics(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_topics"]
-        from src.mcp_models import EmailTopicsInput
+        from mailarium.mcp_models import EmailTopicsInput
 
         params = EmailTopicsInput()
         result = await fn(params)
@@ -294,7 +261,7 @@ class TestEmailTopics:
     async def test_emails_by_topic(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_topics"]
-        from src.mcp_models import EmailTopicsInput
+        from mailarium.mcp_models import EmailTopicsInput
 
         params = EmailTopicsInput(topic_id=0, limit=10)
         result = await fn(params)
@@ -314,7 +281,7 @@ class TestEmailTopics:
 
         MockDeps._email_db = NoTopics()
         try:
-            from src.mcp_models import EmailTopicsInput
+            from mailarium.mcp_models import EmailTopicsInput
 
             params = EmailTopicsInput()
             result = await fn(params)
@@ -333,7 +300,7 @@ class TestEmailDiscovery:
     async def test_keywords_mode(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_discovery"]
-        from src.mcp_models import EmailDiscoveryInput
+        from mailarium.mcp_models import EmailDiscoveryInput
 
         params = EmailDiscoveryInput(mode="keywords", limit=10)
         result = await fn(params)
@@ -345,7 +312,7 @@ class TestEmailDiscovery:
     async def test_keywords_with_sender_filter(self):
         fake_mcp = _register()
         fn = fake_mcp._tools["email_discovery"]
-        from src.mcp_models import EmailDiscoveryInput
+        from mailarium.mcp_models import EmailDiscoveryInput
 
         params = EmailDiscoveryInput(mode="keywords", sender="employee@example.test", limit=10)
         result = await fn(params)
@@ -364,7 +331,7 @@ class TestEmailDiscovery:
 
         MockDeps._email_db = NoKeywords()
         try:
-            from src.mcp_models import EmailDiscoveryInput
+            from mailarium.mcp_models import EmailDiscoveryInput
 
             params = EmailDiscoveryInput(mode="keywords", limit=10)
             result = await fn(params)
@@ -379,9 +346,9 @@ class TestEmailDiscovery:
         fn = fake_mcp._tools["email_discovery"]
         from unittest.mock import patch
 
-        from src.mcp_models import EmailDiscoveryInput
+        from mailarium.mcp_models import EmailDiscoveryInput
 
-        with patch("src.query_suggestions.QuerySuggester") as mock_cls:
+        with patch("mailarium.query_suggestions.QuerySuggester") as mock_cls:
             mock_sug = MagicMock()
             mock_sug.suggest.return_value = [
                 {"category": "people", "suggestions": ["alice", "bob"]},
@@ -398,7 +365,7 @@ class TestEmailDiscovery:
     async def test_invalid_mode(self):
         from pydantic import ValidationError
 
-        from src.mcp_models import EmailDiscoveryInput
+        from mailarium.mcp_models import EmailDiscoveryInput
 
         with pytest.raises(ValidationError, match="mode"):
             EmailDiscoveryInput(mode="nonexistent", limit=10)

@@ -12,12 +12,13 @@
 
 ## Verification
 
-- [ ] `ruff check .`
-- [ ] `ruff format --check .`
-- [ ] `pytest -q`
-- [ ] `python scripts/privacy_scan.py --tracked-only --json` when docs, fixtures, exports, or runtime paths changed
-- [ ] `bandit -r src -q -ll -ii` when source security posture changed
-- [ ] `python scripts/dependency_audit.py` when dependencies or lockfiles changed
+- [ ] `uv run ruff check .`
+- [ ] `uv run ruff format --check .`
+- [ ] `uv run mypy mailarium`
+- [ ] `uv run pytest -q`
+- [ ] `uv run python scripts/privacy_scan.py --tracked-only --json` when docs, fixtures, exports, or runtime paths changed
+- [ ] `uv run bandit -r mailarium -q -ll -ii` when source security posture changed
+- [ ] `uv run python scripts/dependency_audit.py` when dependencies or lockfiles changed
 - [ ] Skipped checks are listed with the reason
 
 ## Privacy Boundary
@@ -28,6 +29,6 @@
 
 ## Runtime Boundary
 
-- [ ] No real mailbox exports, SQLite databases, ChromaDB indexes, matter files, or generated counsel artifacts are included
-- [ ] Any UI, CLI, MCP, or legal-support status wording reflects verified runtime state
+- [ ] No real mailbox exports, SQLite databases, USearch indexes, operator context files, or generated exports are included
+- [ ] Any UI, CLI, or MCP status wording reflects verified runtime state
 - [ ] Incomplete evidence, missing OCR/wrappers, and local-only verification are not described as complete success

@@ -1,11 +1,4 @@
-"""Tests for CLI command handler functions (_cmd_* and helpers).
-
-These tests exercise the uncovered handler logic in src/cli.py by:
-- Constructing argparse.Namespace objects directly
-- Mocking EmailRetriever and EmailDatabase
-- Capturing stdout/stderr with capsys
-- Verifying that the correct branches execute and produce output
-"""
+"""CLI evidence listing, custody, export, dossier, verification, and provenance actions."""
 
 from __future__ import annotations
 
@@ -14,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import (
+from mailarium.cli import (
     _cmd_evidence,
     _run_custody_chain,
     _run_dossier,
@@ -35,7 +28,7 @@ class TestCmdEvidence:
             category="harassment",
             min_relevance=3,
         )
-        with patch("src.cli_commands._run_evidence_list") as mock_fn:
+        with patch("mailarium.cli_commands._run_evidence_list") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_evidence(args)
             assert exc_info.value.code == 0
@@ -49,7 +42,7 @@ class TestCmdEvidence:
             category=None,
             min_relevance=None,
         )
-        with patch("src.cli_commands._run_evidence_export") as mock_fn:
+        with patch("mailarium.cli_commands._run_evidence_export") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_evidence(args)
             assert exc_info.value.code == 0
@@ -57,7 +50,7 @@ class TestCmdEvidence:
 
     def test_evidence_stats(self):
         args = argparse.Namespace(evidence_action="stats")
-        with patch("src.cli_commands._run_evidence_stats") as mock_fn:
+        with patch("mailarium.cli_commands._run_evidence_stats") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_evidence(args)
             assert exc_info.value.code == 0
@@ -65,7 +58,7 @@ class TestCmdEvidence:
 
     def test_evidence_verify(self):
         args = argparse.Namespace(evidence_action="verify")
-        with patch("src.cli_commands._run_evidence_verify") as mock_fn:
+        with patch("mailarium.cli_commands._run_evidence_verify") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_evidence(args)
             assert exc_info.value.code == 0
@@ -79,7 +72,7 @@ class TestCmdEvidence:
             category="bossing",
             min_relevance=4,
         )
-        with patch("src.cli_commands._run_dossier") as mock_fn:
+        with patch("mailarium.cli_commands._run_dossier") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_evidence(args)
             assert exc_info.value.code == 0
@@ -87,7 +80,7 @@ class TestCmdEvidence:
 
     def test_evidence_custody(self):
         args = argparse.Namespace(evidence_action="custody")
-        with patch("src.cli_commands._run_custody_chain") as mock_fn:
+        with patch("mailarium.cli_commands._run_custody_chain") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_evidence(args)
             assert exc_info.value.code == 0
@@ -98,7 +91,7 @@ class TestCmdEvidence:
             evidence_action="provenance",
             uid="uid-xyz",
         )
-        with patch("src.cli_commands._run_provenance") as mock_fn:
+        with patch("mailarium.cli_commands._run_provenance") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_evidence(args)
             assert exc_info.value.code == 0
@@ -141,7 +134,7 @@ class TestRunEvidenceList:
                 },
             ],
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_evidence_list(category="harassment", min_relevance=3)
         output = capsys.readouterr().out
         # Works with both rich-formatted and plain-text output
@@ -154,7 +147,7 @@ class TestRunEvidenceList:
     def test_evidence_list_empty(self, capsys):
         mock_db = MagicMock()
         mock_db.list_evidence.return_value = {"total": 0, "items": []}
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_evidence_list(None, None)
         output = capsys.readouterr().out
         assert "No evidence items found" in output
@@ -169,8 +162,8 @@ class TestRunEvidenceExport:
             "item_count": 5,
             "format": "html",
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.evidence_exporter.EvidenceExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.evidence_exporter.EvidenceExporter", return_value=mock_exporter):
                 _run_evidence_export("evidence.html", "html", None, None)
         output = capsys.readouterr().out
         assert "evidence.html" in output
@@ -185,8 +178,8 @@ class TestRunEvidenceExport:
             "format": "csv",
             "note": "PDF not available",
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.evidence_exporter.EvidenceExporter", return_value=mock_exporter):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.evidence_exporter.EvidenceExporter", return_value=mock_exporter):
                 _run_evidence_export("evidence.csv", "csv", "bossing", 4)
         output = capsys.readouterr().out
         assert "Note: PDF not available" in output
@@ -205,7 +198,7 @@ class TestRunEvidenceStats:
             ],
             "by_category": {"harassment": 5, "bossing": 3, "general": 2},
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_evidence_stats()
         output = capsys.readouterr().out
         # Works with both rich Panel output and plain JSON output
@@ -221,7 +214,7 @@ class TestRunEvidenceVerify:
             "failed": 0,
             "failures": [],
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_evidence_verify()
         output = capsys.readouterr().out
         assert "5 verified" in output
@@ -240,7 +233,7 @@ class TestRunEvidenceVerify:
                 },
             ],
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_evidence_verify()
         output = capsys.readouterr().out
         assert "1 failed" in output or "1" in output
@@ -260,8 +253,8 @@ class TestRunDossier:
             "format": "html",
             "dossier_hash": "abc123def456",
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.dossier_generator.DossierGenerator", return_value=mock_gen):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.dossier_generator.DossierGenerator", return_value=mock_gen):
                 _run_dossier("dossier.html", "html", None, None)
         output = capsys.readouterr().out
         assert "dossier.html" in output
@@ -282,7 +275,7 @@ class TestRunCustodyChain:
                 "content_hash": "sha256abcdef1234567890",
             },
         ]
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_custody_chain()
         output = capsys.readouterr().out
         # Works with both rich table and plain-text output (case-insensitive)
@@ -293,7 +286,7 @@ class TestRunCustodyChain:
     def test_custody_empty(self, capsys):
         mock_db = MagicMock()
         mock_db.get_custody_chain.return_value = []
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_custody_chain()
         output = capsys.readouterr().out
         assert "No custody events" in output
@@ -308,7 +301,7 @@ class TestRunProvenance:
             "source": {"olm_source_hash": "sha256:abc", "ingested_at": "2024-01-01"},
             "custody_events": [],
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_provenance("uid-xyz")
         output = capsys.readouterr().out
         # Rich output renders panels instead of raw JSON

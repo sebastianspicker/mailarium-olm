@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
+# Remove generated workspace artifacts, with dry-run output and optional virtualenv cleanup.
 set -euo pipefail
 
 usage() {
 	cat <<'EOF'
 Usage: bash scripts/clean_workspace.sh [--dry-run] [--include-venv]
 
-For a true clean-ingest reset that preserves the case inputs but purges
+For a true clean-ingest reset that preserves source inputs but purges
 private runtime/results artifacts, use `bash scripts/clean_ingest_reset.sh`.
 
 Options:
@@ -68,7 +69,7 @@ declare -a fixed_paths=(
 	".mypy_cache"
 	".pytest_cache"
 	".ruff_cache"
-	"src/__pycache__"
+	"mailarium/__pycache__"
 	"tests/__pycache__"
 	".tmp"
 	"tmp"

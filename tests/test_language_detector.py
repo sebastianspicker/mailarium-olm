@@ -1,6 +1,6 @@
-"""Tests for language detection."""
+"""Verifies language detection identifies supported languages and handles fallback classification."""
 
-from src.language_detector import detect_language, detect_language_details
+from mailarium.language_detector import detect_language, detect_language_details
 
 
 def test_english():

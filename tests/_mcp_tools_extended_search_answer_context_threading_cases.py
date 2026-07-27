@@ -1,10 +1,5 @@
 # ruff: noqa: I001
-"""Extended tests for low-coverage MCP tool modules.
-
-Tests cover: threads.py, reporting.py, temporal.py, data_quality.py,
-browse.py, and scan.py. Each test mocks deps (retriever + email_db),
-calls the async tool function, and asserts valid JSON with expected keys.
-"""
+"""MCP answer-context thread grouping, graph output, and response packing behavior."""
 
 from __future__ import annotations
 
@@ -12,17 +7,17 @@ import json
 
 import pytest
 
-from src.config import get_settings
+from mailarium.config import get_settings
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
-from .helpers.mcp_tool_extended_fakes import FakeMCP, MockDeps, MockRetriever, _make_result
+from .helpers.mcp_tool_extended_fakes import FakeMCP, MockDeps, MockRetriever, _inferred_thread_dependencies, _make_result
 
 
 class TestSearchTools:
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_adds_thread_graph(self):
-        from src.tools import search
+        from mailarium.tools import search
 
         class ThreadGraphRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -44,7 +39,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="How is this thread linked?", max_results=1))
             data = json.loads(result)
@@ -62,88 +57,17 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_groups_by_inferred_thread_when_canonical_missing(self):
-        from src.tools import search
-
-        class InferredThreadRetriever(MockRetriever):
-            def search_filtered(self, query="", top_k=10, **kwargs):
-                return [
-                    _make_result(
-                        uid="uid-inferred-2",
-                        text="Follow-up from the inferred-only thread.",
-                        sender="bob@example.com",
-                        date="2025-06-05",
-                        conversation_id="",
-                        distance=0.07,
-                    ),
-                    _make_result(
-                        uid="uid-inferred-1",
-                        text="Original inferred-only message.",
-                        sender="employee@example.test",
-                        date="2025-06-04",
-                        conversation_id="",
-                        distance=0.09,
-                    ),
-                ]
-
-        class InferredThreadDB:
-            def get_emails_full_batch(self, uids):
-                return {
-                    "uid-inferred-1": {
-                        "uid": "uid-inferred-1",
-                        "body_text": "Original inferred-only message.",
-                        "normalized_body_source": "body_text",
-                        "forensic_body_text": "",
-                        "forensic_body_source": "",
-                        "conversation_id": "",
-                        "inferred_thread_id": "thread-inferred-1",
-                    },
-                    "uid-inferred-2": {
-                        "uid": "uid-inferred-2",
-                        "body_text": "Follow-up from the inferred-only thread.",
-                        "normalized_body_source": "body_text",
-                        "forensic_body_text": "",
-                        "forensic_body_source": "",
-                        "conversation_id": "",
-                        "inferred_thread_id": "thread-inferred-1",
-                        "inferred_parent_uid": "uid-inferred-1",
-                        "inferred_match_reason": "base_subject,participants",
-                        "inferred_match_confidence": 0.87,
-                    },
-                }
-
-            def get_inferred_thread_emails(self, inferred_thread_id):
-                assert inferred_thread_id == "thread-inferred-1"
-                return [
-                    {
-                        "uid": "uid-inferred-1",
-                        "subject": "Budget Review",
-                        "sender_email": "employee@example.test",
-                        "sender_name": "Alice",
-                        "date": "2025-06-04",
-                        "conversation_id": "",
-                        "inferred_thread_id": "thread-inferred-1",
-                    },
-                    {
-                        "uid": "uid-inferred-2",
-                        "subject": "Budget Review",
-                        "sender_email": "bob@example.com",
-                        "sender_name": "Bob",
-                        "date": "2025-06-05",
-                        "conversation_id": "",
-                        "inferred_thread_id": "thread-inferred-1",
-                    },
-                ]
+        from mailarium.tools import search
 
         fake_mcp = FakeMCP()
         old_retriever = MockDeps._retriever
         old_db = MockDeps._email_db
-        MockDeps._retriever = InferredThreadRetriever()
-        MockDeps._email_db = InferredThreadDB()
+        MockDeps._retriever, MockDeps._email_db = _inferred_thread_dependencies()
         try:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="What happened in the inferred thread?", max_results=2))
             data = json.loads(result)
@@ -162,7 +86,7 @@ class TestSearchTools:
 
     @pytest.mark.asyncio
     async def test_email_answer_context_registered_reports_packing(self, monkeypatch):
-        from src.tools import search
+        from mailarium.tools import search
 
         class PackedRetriever(MockRetriever):
             def search_filtered(self, query="", top_k=10, **kwargs):
@@ -188,7 +112,7 @@ class TestSearchTools:
             search.register(fake_mcp, MockDeps)
             fn = fake_mcp._tools["email_answer_context"]
 
-            from src.mcp_models import EmailAnswerContextInput
+            from mailarium.mcp_models import EmailAnswerContextInput
 
             result = await fn(EmailAnswerContextInput(question="Summarize the budget thread compactly.", max_results=3))
             data = json.loads(result)

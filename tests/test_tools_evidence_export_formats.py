@@ -15,9 +15,9 @@ class TestEvidenceExport:
     async def test_export_html(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_export"]
-        from src.mcp_models import EvidenceExportInput
+        from mailarium.mcp_models import EvidenceExportInput
 
-        with patch("src.evidence_exporter.EvidenceExporter") as mock_cls:
+        with patch("mailarium.evidence_exporter.EvidenceExporter") as mock_cls:
             mock_exporter = MagicMock()
             mock_exporter.export_file.return_value = {"path": "private/exports/out.html", "count": 3}
             mock_cls.return_value = mock_exporter
@@ -32,9 +32,9 @@ class TestEmailDossier:
     async def test_dossier_preview(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["email_dossier"]
-        from src.mcp_models import EmailDossierInput
+        from mailarium.mcp_models import EmailDossierInput
 
-        with patch("src.dossier_generator.DossierGenerator") as mock_cls:
+        with patch("mailarium.dossier_generator.DossierGenerator") as mock_cls:
             mock_gen = MagicMock()
             mock_gen.preview.return_value = {"evidence_count": 5, "categories": ["bossing"]}
             mock_cls.return_value = mock_gen
@@ -47,11 +47,11 @@ class TestEmailDossier:
     async def test_dossier_generate(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["email_dossier"]
-        from src.mcp_models import EmailDossierInput
+        from mailarium.mcp_models import EmailDossierInput
 
         with (
-            patch("src.dossier_generator.DossierGenerator") as mock_gen_cls,
-            patch("src.network_analysis.CommunicationNetwork") as mock_net_cls,
+            patch("mailarium.dossier_generator.DossierGenerator") as mock_gen_cls,
+            patch("mailarium.network_analysis.CommunicationNetwork") as mock_net_cls,
         ):
             mock_gen = MagicMock()
             mock_gen.generate_file.return_value = {"path": "private/exports/dossier.html", "status": "ok"}
@@ -61,21 +61,22 @@ class TestEmailDossier:
             params = EmailDossierInput(
                 output_path="private/exports/dossier.html",
                 title="Test Dossier",
-                case_reference="CASE-001",
+                collection_reference="COLLECTION-001",
             )
             result = await fn(params)
             data = json.loads(result)
             assert data["status"] == "ok"
+            assert mock_gen.generate_file.call_args.kwargs["collection_reference"] == "COLLECTION-001"
 
     @pytest.mark.asyncio
     async def test_dossier_generate_without_network(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["email_dossier"]
-        from src.mcp_models import EmailDossierInput
+        from mailarium.mcp_models import EmailDossierInput
 
         with (
-            patch("src.dossier_generator.DossierGenerator") as mock_gen_cls,
-            patch("src.network_analysis.CommunicationNetwork", side_effect=RuntimeError("no graph")),
+            patch("mailarium.dossier_generator.DossierGenerator") as mock_gen_cls,
+            patch("mailarium.network_analysis.CommunicationNetwork", side_effect=RuntimeError("no graph")),
         ):
             mock_gen = MagicMock()
             mock_gen.generate_file.return_value = {"path": "private/exports/dossier.html", "status": "ok"}

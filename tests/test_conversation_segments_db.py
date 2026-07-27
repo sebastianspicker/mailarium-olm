@@ -1,38 +1,15 @@
 """Persistence tests for message conversation segments."""
 
-from src.conversation_segments import extract_segments
-from src.email_db import EmailDatabase
-from src.parse_olm import Email
+from mailarium.conversation_segments import extract_segments
+from mailarium.email_db import EmailDatabase
 
-
-def _make_email(**overrides) -> Email:
-    defaults = {
-        "message_id": "<msg1@example.com>",
-        "subject": "Hello",
-        "sender_name": "Alice",
-        "sender_email": "employee@example.test",
-        "to": ["Bob <bob@example.com>"],
-        "cc": [],
-        "bcc": [],
-        "date": "2024-01-15T10:30:00",
-        "body_text": "Latest answer.\n\nOn Mon, Jan 1, 2025 at 10:00 AM Alice wrote:\n> Older line 1",
-        "body_html": "",
-        "folder": "Inbox",
-        "has_attachments": False,
-        "segments": extract_segments(
-            "Latest answer.\n\nOn Mon, Jan 1, 2025 at 10:00 AM Alice wrote:\n> Older line 1",
-            "",
-            "",
-            "reply",
-        ),
-    }
-    defaults.update(overrides)
-    return Email(**defaults)
+from .helpers.email_db_builders import _make_email
 
 
 def test_insert_email_persists_message_segments():
     db = EmailDatabase(":memory:")
-    email = _make_email()
+    body_text = "Latest answer.\n\nOn Mon, Jan 1, 2025 at 10:00 AM Alice wrote:\n> Older line 1"
+    email = _make_email(body_text=body_text, segments=extract_segments(body_text, "", "", "reply"))
 
     db.insert_email(email)
 

@@ -1,9 +1,17 @@
-"""Tests for the SQLite EmailDatabase."""
+"""SQLite schema migrations and persistence for archive, attachment, analytics, and event data."""
 
-from src.db_schema import init_schema
-from src.email_db import EmailDatabase
+from mailarium.db_schema import init_schema
+from mailarium.email_db import EmailDatabase
 
 from .helpers.email_db_builders import _make_email
+
+
+def _make_report_attachment_email():
+    return _make_email(
+        has_attachments=True,
+        attachment_names=["report.pdf"],
+        attachments=[{"name": "report.pdf", "mime_type": "application/pdf", "size": 2000, "content_id": "", "is_inline": False}],
+    )
 
 
 class TestSchemaV7:
@@ -223,13 +231,7 @@ class TestSchemaV7:
 
     def test_get_email_full_includes_attachments(self):
         db = EmailDatabase(":memory:")
-        email = _make_email(
-            has_attachments=True,
-            attachment_names=["report.pdf"],
-            attachments=[
-                {"name": "report.pdf", "mime_type": "application/pdf", "size": 2000, "content_id": "", "is_inline": False},
-            ],
-        )
+        email = _make_report_attachment_email()
         db.insert_email(email)
         full = db.get_email_full(email.uid)
         assert "attachments" in full
@@ -239,13 +241,7 @@ class TestSchemaV7:
 
     def test_get_email_for_reembed_populates_attachments(self):
         db = EmailDatabase(":memory:")
-        email = _make_email(
-            has_attachments=True,
-            attachment_names=["report.pdf"],
-            attachments=[
-                {"name": "report.pdf", "mime_type": "application/pdf", "size": 2000, "content_id": "", "is_inline": False},
-            ],
-        )
+        email = _make_report_attachment_email()
         db.insert_email(email)
         result = db.get_email_for_reembed(email.uid)
         assert result is not None

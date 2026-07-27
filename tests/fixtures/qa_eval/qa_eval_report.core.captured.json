@@ -1,0 +1,1013 @@
+{
+  "questions_path": "tests/fixtures/qa_eval/qa_eval_questions.core.json",
+  "results_path": "tests/fixtures/qa_eval/qa_eval_results.core.captured.json",
+  "total_cases": 10,
+  "cases": [
+    {
+      "id": "fact-101",
+      "bucket": "fact_lookup",
+      "question": "Who approved the second-quarter equipment budget?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "finance-lead@example.org approved the second-quarter equipment budget.",
+      "expected_answer_terms": [
+        "finance-lead@example.org",
+        "equipment budget"
+      ],
+      "expected_support_uids": [
+        "005b2c5800576a50804dd2386cfe34db"
+      ],
+      "expected_support_source_ids": [
+        "email:005b2c5800576a50804dd2386cfe34db"
+      ],
+      "expected_top_uid": "005b2c5800576a50804dd2386cfe34db",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [
+        "not-returned-negative-control-uid"
+      ],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [],
+      "notes": "Authored synthetic sender-and-subject lookup."
+    },
+    {
+      "id": "fact-102",
+      "bucket": "fact_lookup",
+      "question": "Which folder contains the maintenance-window notice?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The maintenance-window notice is in the Operations folder.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "d5107d207f3e1d1116b2b44da9bfb988"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "d5107d207f3e1d1116b2b44da9bfb988",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [],
+      "notes": "Authored synthetic folder-metadata lookup."
+    },
+    {
+      "id": "fact-103",
+      "bucket": "fact_lookup",
+      "question": "Which message mentioned the accessibility review for the analytics dashboard?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The message titled Accessibility review for the analytics dashboard mentioned the review.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "aef4a326f6c1ed3eedc8a581df44758d"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "aef4a326f6c1ed3eedc8a581df44758d",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [],
+      "notes": "Authored synthetic topic lookup."
+    },
+    {
+      "id": "fact-104",
+      "bucket": "fact_lookup",
+      "question": "Who announced that the inventory-import sandbox was ready?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "operations-coordinator@example.org announced that the inventory-import sandbox was ready.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "98c0bae9983e80c6f47b9b7b79e923f0"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "98c0bae9983e80c6f47b9b7b79e923f0",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [],
+      "notes": "Authored synthetic announcement lookup."
+    },
+    {
+      "id": "thread-101",
+      "bucket": "thread_process",
+      "question": "When did the Project Northstar migration thread begin?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "The earliest labeled message in the Project Northstar migration thread is from 2026-01-12T09:15:00Z.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "37f63450bc3907ca82c9b56b8e4c30f1"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [
+        "retrieval_recall"
+      ],
+      "notes": "Authored synthetic thread anchor."
+    },
+    {
+      "id": "thread-102",
+      "bucket": "thread_process",
+      "question": "Which messages belong to the Project Northstar migration conversation?",
+      "status": "labeled",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "The labeled Project Northstar migration conversation contains the synthetic root and follow-ups from 2026-01-12 through 2026-01-16.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "37f63450bc3907ca82c9b56b8e4c30f1",
+        "f92eaf35f4835e00d9b1654be3278fc6",
+        "e6514e80b738ffb65b0ae04ae145f341",
+        "2d73505bc9cef54edac87e70c40300d0",
+        "6ae9876961887270022789e4a8494df6",
+        "621d9915cc49205a3c95662278f111e3"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Authored synthetic thread-membership set."
+    },
+    {
+      "id": "attach-101",
+      "bucket": "attachment_lookup",
+      "question": "Which email included the remote-office network diagram?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The facilities update from 2026-02-03 included the remote-office network diagram.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "da21e4bea566d96d85df6c16eb09905f"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "da21e4bea566d96d85df6c16eb09905f",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Authored synthetic attachment-bearing message."
+    },
+    {
+      "id": "attach-102",
+      "bucket": "attachment_lookup",
+      "question": "Which email carried the operations handbook attachment?",
+      "status": "labeled",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The onboarding message carried the operations handbook attachment.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "505f1f8bb5cd2bb7124e2e663aad0edf"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "505f1f8bb5cd2bb7124e2e663aad0edf",
+      "expected_ambiguity": "clear",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Authored synthetic attachment lookup."
+    },
+    {
+      "id": "ambig-101",
+      "bucket": "ambiguity_stress",
+      "question": "What did the scanned warehouse checklist attachment say?",
+      "status": "labeled",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The system can identify the checklist message but cannot recover readable text from the scan.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "453e93aca3de57990d7e638c641ba54f"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "453e93aca3de57990d7e638c641ba54f",
+      "expected_ambiguity": "insufficient",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Authored synthetic scan case with intentionally unavailable text."
+    },
+    {
+      "id": "ambig-102",
+      "bucket": "ambiguity_stress",
+      "question": "Which source-shell message mentioned the staging gateway certificate?",
+      "status": "labeled",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The synthetic source-shell reply about the staging gateway certificate matches, but its visible body remains weak.",
+      "expected_answer_terms": [],
+      "expected_support_uids": [
+        "361f3000a6733d28653ea98e1858e774"
+      ],
+      "expected_support_source_ids": [],
+      "expected_top_uid": "361f3000a6733d28653ea98e1858e774",
+      "expected_ambiguity": "insufficient",
+      "expected_quoted_speaker_emails": [],
+      "expected_thread_group_id": null,
+      "expected_thread_group_source": null,
+      "forbidden_support_uids": [],
+      "forbidden_support_source_ids": [],
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Authored synthetic source-shell reply."
+    }
+  ],
+  "source_mode": "captured_only",
+  "live_backend": null,
+  "results": [
+    {
+      "id": "fact-101",
+      "bucket": "fact_lookup",
+      "question": "Who approved the second-quarter equipment budget?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "005b2c5800576a50804dd2386cfe34db",
+      "candidate_uids": [
+        "005b2c5800576a50804dd2386cfe34db"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "005b2c5800576a50804dd2386cfe34db"
+      ],
+      "matched_support_uids_top_3": [
+        "005b2c5800576a50804dd2386cfe34db"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": true,
+      "support_source_id_recall": 1.0,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": true,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "fact-102",
+      "bucket": "fact_lookup",
+      "question": "Which folder contains the maintenance-window notice?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "d5107d207f3e1d1116b2b44da9bfb988",
+      "candidate_uids": [
+        "d5107d207f3e1d1116b2b44da9bfb988"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "d5107d207f3e1d1116b2b44da9bfb988"
+      ],
+      "matched_support_uids_top_3": [
+        "d5107d207f3e1d1116b2b44da9bfb988"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "fact-103",
+      "bucket": "fact_lookup",
+      "question": "Which message mentioned the accessibility review for the analytics dashboard?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "aef4a326f6c1ed3eedc8a581df44758d",
+      "candidate_uids": [
+        "aef4a326f6c1ed3eedc8a581df44758d"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "aef4a326f6c1ed3eedc8a581df44758d"
+      ],
+      "matched_support_uids_top_3": [
+        "aef4a326f6c1ed3eedc8a581df44758d"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "fact-104",
+      "bucket": "fact_lookup",
+      "question": "Who announced that the inventory-import sandbox was ready?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "98c0bae9983e80c6f47b9b7b79e923f0",
+      "candidate_uids": [
+        "98c0bae9983e80c6f47b9b7b79e923f0"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "98c0bae9983e80c6f47b9b7b79e923f0"
+      ],
+      "matched_support_uids_top_3": [
+        "98c0bae9983e80c6f47b9b7b79e923f0"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "thread-101",
+      "bucket": "thread_process",
+      "question": "When did the Project Northstar migration thread begin?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 3,
+      "top_uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+      "candidate_uids": [
+        "37f63450bc3907ca82c9b56b8e4c30f1",
+        "f92eaf35f4835e00d9b1654be3278fc6",
+        "e6514e80b738ffb65b0ae04ae145f341"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "37f63450bc3907ca82c9b56b8e4c30f1"
+      ],
+      "matched_support_uids_top_3": [
+        "37f63450bc3907ca82c9b56b8e4c30f1"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 0.3333333333333333,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "thread-102",
+      "bucket": "thread_process",
+      "question": "Which messages belong to the Project Northstar migration conversation?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 6,
+      "top_uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+      "candidate_uids": [
+        "37f63450bc3907ca82c9b56b8e4c30f1",
+        "f92eaf35f4835e00d9b1654be3278fc6",
+        "e6514e80b738ffb65b0ae04ae145f341",
+        "2d73505bc9cef54edac87e70c40300d0",
+        "6ae9876961887270022789e4a8494df6",
+        "621d9915cc49205a3c95662278f111e3"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "37f63450bc3907ca82c9b56b8e4c30f1",
+        "f92eaf35f4835e00d9b1654be3278fc6",
+        "e6514e80b738ffb65b0ae04ae145f341",
+        "2d73505bc9cef54edac87e70c40300d0",
+        "6ae9876961887270022789e4a8494df6",
+        "621d9915cc49205a3c95662278f111e3"
+      ],
+      "matched_support_uids_top_3": [
+        "37f63450bc3907ca82c9b56b8e4c30f1",
+        "f92eaf35f4835e00d9b1654be3278fc6",
+        "e6514e80b738ffb65b0ae04ae145f341"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "medium",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "attach-101",
+      "bucket": "attachment_lookup",
+      "question": "Which email included the remote-office network diagram?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "da21e4bea566d96d85df6c16eb09905f",
+      "candidate_uids": [
+        "da21e4bea566d96d85df6c16eb09905f"
+      ],
+      "attachment_candidate_uids": [
+        "da21e4bea566d96d85df6c16eb09905f"
+      ],
+      "matched_support_uids": [
+        "da21e4bea566d96d85df6c16eb09905f"
+      ],
+      "matched_support_uids_top_3": [
+        "da21e4bea566d96d85df6c16eb09905f"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": false,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "attach-102",
+      "bucket": "attachment_lookup",
+      "question": "Which email carried the operations handbook attachment?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "505f1f8bb5cd2bb7124e2e663aad0edf",
+      "candidate_uids": [
+        "505f1f8bb5cd2bb7124e2e663aad0edf"
+      ],
+      "attachment_candidate_uids": [
+        "505f1f8bb5cd2bb7124e2e663aad0edf"
+      ],
+      "matched_support_uids": [
+        "505f1f8bb5cd2bb7124e2e663aad0edf"
+      ],
+      "matched_support_uids_top_3": [
+        "505f1f8bb5cd2bb7124e2e663aad0edf"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": true,
+      "attachment_answer_success": true,
+      "attachment_text_evidence_success": false,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": null,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "clear",
+      "observed_confidence_label": "high",
+      "observed_ambiguity_reason": null
+    },
+    {
+      "id": "ambig-101",
+      "bucket": "ambiguity_stress",
+      "question": "What did the scanned warehouse checklist attachment say?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "453e93aca3de57990d7e638c641ba54f",
+      "candidate_uids": [
+        "453e93aca3de57990d7e638c641ba54f"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "453e93aca3de57990d7e638c641ba54f"
+      ],
+      "matched_support_uids_top_3": [
+        "453e93aca3de57990d7e638c641ba54f"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": true,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "insufficient",
+      "observed_confidence_label": "low",
+      "observed_ambiguity_reason": "weak_scan_body"
+    },
+    {
+      "id": "ambig-102",
+      "bucket": "ambiguity_stress",
+      "question": "Which source-shell message mentioned the staging gateway certificate?",
+      "status": "labeled",
+      "source": "captured",
+      "count": 1,
+      "top_uid": "361f3000a6733d28653ea98e1858e774",
+      "candidate_uids": [
+        "361f3000a6733d28653ea98e1858e774"
+      ],
+      "attachment_candidate_uids": [],
+      "matched_support_uids": [
+        "361f3000a6733d28653ea98e1858e774"
+      ],
+      "matched_support_uids_top_3": [
+        "361f3000a6733d28653ea98e1858e774"
+      ],
+      "top_1_correctness": true,
+      "support_uid_hit": true,
+      "support_uid_hit_top_3": true,
+      "support_uid_recall": 1.0,
+      "support_source_id_hit": null,
+      "support_source_id_recall": null,
+      "evidence_precision": 1.0,
+      "top_uid_match": true,
+      "ambiguity_match": true,
+      "confidence_calibration_match": true,
+      "attachment_support_uid_hit": null,
+      "attachment_answer_success": null,
+      "attachment_text_evidence_success": null,
+      "attachment_ocr_text_evidence_success": null,
+      "weak_evidence_explained": true,
+      "long_thread_answer_present": null,
+      "long_thread_structure_preserved": null,
+      "observed_quoted_speaker_emails": [],
+      "matched_quoted_speaker_emails": [],
+      "quote_attribution_precision": null,
+      "quote_attribution_coverage": null,
+      "observed_thread_group_id": "",
+      "observed_thread_group_source": "",
+      "thread_group_id_match": null,
+      "thread_group_source_match": null,
+      "answer_content_match": false,
+      "forbidden_support_ids_excluded": null,
+      "expected_ambiguity": "insufficient",
+      "observed_confidence_label": "low",
+      "observed_ambiguity_reason": "source_shell_only"
+    }
+  ],
+  "summary": {
+    "total_cases": 10,
+    "bucket_counts": {
+      "ambiguity_stress": 2,
+      "attachment_lookup": 2,
+      "fact_lookup": 4,
+      "thread_process": 2
+    },
+    "top_1_correctness": {
+      "scorable": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "support_uid_hit": {
+      "scorable": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "support_uid_hit_top_3": {
+      "scorable": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "support_source_id_hit": {
+      "scorable": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "top_uid_match": {
+      "scorable": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "ambiguity_match": {
+      "scorable": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "confidence_calibration_match": {
+      "scorable": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "attachment_support_uid_hit": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_answer_success": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "attachment_text_evidence_success": {
+      "scorable": 2,
+      "passed": 0,
+      "failed": 2
+    },
+    "attachment_ocr_text_evidence_success": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "weak_evidence_explained": {
+      "scorable": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "thread_group_id_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "thread_group_source_match": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "long_thread_answer_present": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "long_thread_structure_preserved": {
+      "scorable": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "answer_content_match": {
+      "scorable": 10,
+      "passed": 0,
+      "failed": 10
+    },
+    "forbidden_support_ids_excluded": {
+      "scorable": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "support_uid_recall": {
+      "scorable": 10,
+      "average": 1.0
+    },
+    "support_source_id_recall": {
+      "scorable": 1,
+      "average": 1.0
+    },
+    "evidence_precision": {
+      "scorable": 10,
+      "average": 0.933333333333
+    },
+    "quote_attribution_precision": {
+      "scorable": 0,
+      "average": 0.0
+    },
+    "quote_attribution_coverage": {
+      "scorable": 0,
+      "average": 0.0
+    }
+  },
+  "failure_taxonomy": {
+    "total_flagged_cases": 10,
+    "categories": {
+      "answer_quality": {
+        "category": "answer_quality",
+        "flagged_cases": 10,
+        "failed_cases": 10,
+        "weak_cases": 0,
+        "case_ids": [
+          "ambig-101",
+          "ambig-102",
+          "attach-101",
+          "attach-102",
+          "fact-101",
+          "fact-102",
+          "fact-103",
+          "fact-104",
+          "thread-101",
+          "thread-102"
+        ],
+        "drivers": [
+          "answer_content_mismatch"
+        ]
+      },
+      "attachment_extraction": {
+        "category": "attachment_extraction",
+        "flagged_cases": 2,
+        "failed_cases": 0,
+        "weak_cases": 2,
+        "case_ids": [
+          "attach-101",
+          "attach-102"
+        ],
+        "drivers": [
+          "weak_attachment_text_evidence"
+        ]
+      },
+      "retrieval_recall": {
+        "category": "retrieval_recall",
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "thread-101"
+        ],
+        "drivers": [
+          "evidence_precision_below_one"
+        ]
+      }
+    },
+    "ranked_categories": [
+      {
+        "category": "answer_quality",
+        "flagged_cases": 10,
+        "failed_cases": 10,
+        "weak_cases": 0,
+        "case_ids": [
+          "ambig-101",
+          "ambig-102",
+          "attach-101",
+          "attach-102",
+          "fact-101",
+          "fact-102",
+          "fact-103",
+          "fact-104",
+          "thread-101",
+          "thread-102"
+        ],
+        "drivers": [
+          "answer_content_mismatch"
+        ]
+      },
+      {
+        "category": "attachment_extraction",
+        "flagged_cases": 2,
+        "failed_cases": 0,
+        "weak_cases": 2,
+        "case_ids": [
+          "attach-101",
+          "attach-102"
+        ],
+        "drivers": [
+          "weak_attachment_text_evidence"
+        ]
+      },
+      {
+        "category": "retrieval_recall",
+        "flagged_cases": 1,
+        "failed_cases": 0,
+        "weak_cases": 1,
+        "case_ids": [
+          "thread-101"
+        ],
+        "drivers": [
+          "evidence_precision_below_one"
+        ]
+      }
+    ]
+  },
+  "source_counts": {
+    "captured": 10
+  },
+  "threshold_verdict": {
+    "profile": "generic",
+    "status": "fail",
+    "failure_count": 1,
+    "failures": [
+      {
+        "metric": "answer_content_match",
+        "field": "passed",
+        "expected": {
+          "equals_scorable": 10
+        },
+        "actual": 0
+      }
+    ]
+  }
+}

@@ -1,6 +1,8 @@
+"""Ingestion command-line validation, timing flags, and archive-path failure handling."""
+
 import pytest
 
-from src.ingest import main, parse_args
+from mailarium.ingest import main, parse_args
 
 
 def test_parse_args_rejects_non_positive_batch_size():
@@ -35,7 +37,7 @@ def test_main_handles_missing_archive_gracefully(tmp_path, capsys):
 
 
 def test_main_handles_generic_oserror_gracefully(monkeypatch, capsys):
-    import src.ingest as ingest_mod
+    import mailarium.ingest as ingest_mod
 
     def _raise_oserror(*args, **kwargs):
         raise PermissionError("permission denied")

@@ -3,11 +3,11 @@
 # https://docs.codacy.com/repositories-configure/configuring-code-patterns/
 
 skips:
-  # B101: assert_used — pytest relies on `assert` for test assertions.
+  # B101: assert_used; pytest relies on `assert` for test assertions.
   # 6,946 instances in tests/, zero non-test rationale to keep this enabled.
   - B101
 
-  # B608: hardcoded_sql_expressions — all 32 findings across 13 DB/query files
+  # B608: hardcoded_sql_expressions; all 32 findings across 13 DB/query files
   # use f-strings for structural SQL composition (dynamic WHERE clauses with
   # conditional filters, IN-clause placeholder generation, validated ORDER BY
   # columns), but every value is bound via `?` parameters. Validation guards:
@@ -20,7 +20,7 @@ skips:
   # Validated 2026-06-04: fresh code-context review of all 13 files.
   - B608
 
-  # B603 / B607: subprocess safety — 22 B603 + 6 B607 findings across 7
+  # B603 / B607: subprocess safety; 22 B603 + 6 B607 findings across 7
   # runtime/script files.  All subprocess calls use list-form arguments (no
   # shell=True).  Executables resolved via:
   #   - shutil.which() or "git" fallback (privacy_scan.py, repo_paths.py)
@@ -34,7 +34,7 @@ skips:
   - B603
   - B607
 
-  # B110: try_except_pass — 8 findings across email_db.py, ingest_pipeline.py,
+  # B110: try_except_pass; 8 findings across email_db.py, ingest_pipeline.py,
   # mcp_server.py.  Five bare-pass teardown handlers narrowed to specific
   # exception types (OSError, sqlite3.Error, ValueError) on 2026-06-04.
   # Remaining cases already log (ingest_pipeline.py abort fallback with

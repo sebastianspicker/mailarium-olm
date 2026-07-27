@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.dossier_generator import DossierGenerator
+from mailarium.dossier_generator import DossierGenerator
 
 pytest_plugins = ["tests._dossier_cases"]
 
@@ -13,8 +13,8 @@ def test_preview_returns_correct_counts(gen):
     assert result["evidence_count"] == 3
     assert result["email_count"] == 3
     assert result["category_count"] == 3
-    assert "harassment" in result["categories"]
-    assert "discrimination" in result["categories"]
+    assert "fact" in result["categories"]
+    assert "action_item" in result["categories"]
 
 
 def test_preview_filters_by_relevance(gen):
@@ -24,10 +24,10 @@ def test_preview_filters_by_relevance(gen):
 
 
 def test_preview_filters_by_category(gen):
-    result = gen.preview(category="harassment")
+    result = gen.preview(category="fact")
 
     assert result["evidence_count"] == 1
-    assert result["categories"] == ["harassment"]
+    assert result["categories"] == ["fact"]
 
 
 def test_preview_empty_evidence(gen_empty):
@@ -45,10 +45,10 @@ def test_generate_returns_valid_html(gen):
     assert "Test Dossier" in result["html"]
 
 
-def test_generate_includes_case_reference(gen):
-    result = gen.generate(case_reference="CASE-2024-001")
+def test_generate_includes_collection_reference(gen):
+    result = gen.generate(collection_reference="PROJECT-2026-001")
 
-    assert "CASE-2024-001" in result["html"]
+    assert "PROJECT-2026-001" in result["html"]
 
 
 def test_generate_includes_custodian(gen):
@@ -74,7 +74,7 @@ def test_generate_filters_by_relevance(gen):
 
 
 def test_generate_filters_by_category(gen):
-    result = gen.generate(category="harassment")
+    result = gen.generate(category="fact")
 
     assert result["evidence_count"] == 1
 
@@ -107,7 +107,7 @@ def test_generate_has_generated_at(gen):
 
 
 def test_generate_with_network(db):
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     generator = DossierGenerator(db, network=net)
@@ -123,7 +123,7 @@ def test_generate_without_network(gen):
 
 
 def test_generate_with_persons_of_interest(db):
-    from src.network_analysis import CommunicationNetwork
+    from mailarium.network_analysis import CommunicationNetwork
 
     net = CommunicationNetwork(db)
     generator = DossierGenerator(db, network=net)
@@ -153,17 +153,17 @@ def test_category_breakdown_table(gen):
     html = result["html"]
 
     assert "Category Breakdown" in html
-    assert "harassment" in html
-    assert "discrimination" in html
-    assert "retaliation" in html
+    assert "fact" in html
+    assert "action_item" in html
+    assert "risk" in html
 
 
-def test_glossary_present(gen):
+def test_generic_glossary_uses_source_grounded_categories(gen):
     result = gen.generate()
     html = result["html"]
 
     assert "Category Definitions" in html
-    assert "Hostile behavior" in html
+    assert "Source-grounded information" in html
 
 
 def test_prepared_by_on_cover(gen):
@@ -183,15 +183,29 @@ def test_scope_section_no_filters(gen):
 
 
 def test_scope_section_with_filters(gen):
-    result = gen.generate(category="harassment")
+    result = gen.generate(category="fact")
     html = result["html"]
 
-    assert "Category: harassment" in html
+    assert "Category: fact" in html
 
 
-def test_legal_disclaimer_present(gen):
+def test_general_integrity_notice_is_domain_neutral(gen_empty):
+    result = gen_empty.generate()
+    html = result["html"].lower()
+
+    assert "evidence collection" in html
+    assert "verify quotations" in html
+    assert "legal advice" not in html
+    assert "legal counsel" not in html
+    assert "workplace" not in html
+    assert "fact" not in html
+    assert "action_item" not in html
+    assert "risk" not in html
+
+
+def test_integrity_footer_present(gen):
     result = gen.generate()
     html = result["html"]
 
     assert "electronically stored information" in html
-    assert "does not constitute" in html
+    assert "Verify quotations" in html

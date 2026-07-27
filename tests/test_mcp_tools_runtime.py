@@ -1,3 +1,5 @@
+"""Exercises MCP runtime helpers for JSON responses, missing archives, ingest state, and threaded offloading."""
+
 from ._mcp_tools_cases import (
     test_all_tool_modules_importable,
     test_email_diagnostics_returns_json,

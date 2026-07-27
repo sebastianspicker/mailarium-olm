@@ -1,16 +1,12 @@
 # ruff: noqa: I001
-"""Targeted coverage tests for src/retriever.py uncovered lines.
-
-Each test targets a specific branch or code path identified by coverage analysis.
-All tests run without GPU, real models, or network access.
-"""
+"""Retriever validation, semantic filtering, reranking, and query-expansion behavior."""
 
 import types
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.retriever import SearchResult
+from mailarium.retriever import SearchResult
 
 # ── Helpers ────────────────────────────────────────────────────────
 
@@ -72,9 +68,10 @@ class TestSearchValidation:
         with pytest.raises(ValueError, match="1000"):
             r.search("hello", top_k=1001)
 
-    def test_search_uses_settings_top_k_when_none(self):
+    @pytest.mark.parametrize(("configured_top_k", "expected_top_k"), [(5, 5), (0, 10)])
+    def test_search_uses_configured_or_default_top_k(self, configured_top_k, expected_top_k):
         settings = MagicMock()
-        settings.top_k = 5
+        settings.top_k = configured_top_k
         r = _bare_retriever(settings=settings)
         r.collection = MagicMock()
         r.collection.count.return_value = 20
@@ -83,19 +80,7 @@ class TestSearchValidation:
         r._encode_query = MagicMock(return_value=[[0.1]])
         r._query_with_embedding = MagicMock(return_value=[_make_result()])
         r.search("hello")
-        r._query_with_embedding.assert_called_once_with([[0.1]], 5, where=None)
-
-    def test_search_defaults_to_10_when_settings_top_k_zero(self):
-        settings = MagicMock()
-        settings.top_k = 0
-        r = _bare_retriever(settings=settings)
-        r.collection = MagicMock()
-        r.collection.count.return_value = 20
-
-        r._encode_query = MagicMock(return_value=[[0.1]])
-        r._query_with_embedding = MagicMock(return_value=[_make_result()])
-        r.search("hello")
-        r._query_with_embedding.assert_called_once_with([[0.1]], 10, where=None)
+        r._query_with_embedding.assert_called_once_with([[0.1]], expected_top_k, where=None)
 
 
 class TestQueryWithEmbedding:
@@ -126,33 +111,26 @@ class TestQueryWithEmbedding:
         assert len(results) == 1
         assert results[0].text == ""
 
-    def test_missing_metadatas_filled_with_empty_dicts(self):
+    @pytest.mark.parametrize(
+        ("missing_field", "expected_metadata", "expected_distance"),
+        [("metadatas", {}, 0.2), ("distances", {"uid": "u1"}, 1.0)],
+    )
+    def test_missing_query_fields_use_defaults(self, missing_field, expected_metadata, expected_distance):
         r = _bare_retriever()
         r.collection = MagicMock()
         r.collection.count.return_value = 1
-        r.collection.query.return_value = {
+        result_page = {
             "ids": [["id1"]],
             "documents": [["hello"]],
-            "metadatas": None,
+            "metadatas": [[{"uid": "u1"}]],
             "distances": [[0.2]],
         }
+        result_page[missing_field] = None
+        r.collection.query.return_value = result_page
         results = r._query_with_embedding([[0.1]], 1)
         assert len(results) == 1
-        assert results[0].metadata == {}
-
-    def test_missing_distances_filled_with_default(self):
-        r = _bare_retriever()
-        r.collection = MagicMock()
-        r.collection.count.return_value = 1
-        r.collection.query.return_value = {
-            "ids": [["id1"]],
-            "documents": [["hello"]],
-            "metadatas": [[{}]],
-            "distances": None,
-        }
-        results = r._query_with_embedding([[0.1]], 1)
-        assert len(results) == 1
-        assert results[0].distance == 1.0
+        assert results[0].metadata == expected_metadata
+        assert results[0].distance == expected_distance
 
 
 class TestSearchFilteredSemantic:
@@ -243,7 +221,7 @@ def test_search_filtered_calls_merge_hybrid_when_enabled():
 
     r.search = _search
 
-    def _mock_merge(self, query, results, fetch_size):
+    def _mock_merge(self, query, results, fetch_size, **_kwargs):
         call_log.append(True)
         return results
 
@@ -300,46 +278,30 @@ def test_search_filtered_stops_at_max_fetch_size():
     assert len(results) <= 100
 
 
-def test_apply_rerank_colbert_path():
+def test_apply_rerank_uses_configured_late_interaction_backend():
     r = _bare_retriever()
     settings = MagicMock()
-    settings.colbert_rerank_enabled = True
+    settings.late_interaction_enabled = True
+    settings.late_interaction_runner = "/runner"
+    settings.late_interaction_model_path = "/model"
     r.settings = settings
-
-    mock_embedder = MagicMock()
-    mock_embedder.has_colbert = True
-    r._embedder = mock_embedder
 
     results = [_make_result("c1"), _make_result("c2")]
 
-    mock_reranker = MagicMock()
-    mock_reranker.rerank.return_value = results[:1]
-
-    with patch("src.retriever.ColBERTReranker", create=True):
-        # Patch the import target
-        import src.retriever as mod
-
-        getattr(mod, "ColBERTReranker", None)
-        try:
-            # We need to mock the import inside _apply_rerank
-            with patch.dict("sys.modules", {"src.colbert_reranker": MagicMock(ColBERTReranker=lambda embedder: mock_reranker)}):
-                with patch("src.colbert_reranker.ColBERTReranker", return_value=mock_reranker):
-                    r._apply_rerank("test query", results, top_k=1)
-                    assert mock_reranker.rerank.called
-        finally:
-            pass
+    backend = MagicMock()
+    backend.rerank.return_value = results[:1]
+    with patch("mailarium.late_interaction_backend.LocalLateInteractionBackend", return_value=backend):
+        r._apply_rerank("test query", results, top_k=1)
+    backend.rerank.assert_called_once()
 
 
 def test_apply_rerank_cross_encoder_fallback():
     r = _bare_retriever()
     settings = MagicMock()
-    settings.colbert_rerank_enabled = False
+    settings.late_interaction_enabled = False
     settings.rerank_model = "some-model"
     r.settings = settings
 
-    mock_embedder = MagicMock()
-    mock_embedder.has_colbert = False
-    r._embedder = mock_embedder
     r._reranker = None
 
     results = [_make_result("c1"), _make_result("c2")]
@@ -347,11 +309,11 @@ def test_apply_rerank_cross_encoder_fallback():
     mock_reranker_instance = MagicMock()
     mock_reranker_instance.rerank.return_value = results[:1]
 
-    with patch("src.retriever.CrossEncoderReranker", create=True):
+    with patch("mailarium.retriever.CrossEncoderReranker", create=True):
         # Mock the import
-        mock_module = types.ModuleType("src.reranker")
+        mock_module = types.ModuleType("mailarium.reranker")
         mock_module.CrossEncoderReranker = MagicMock(return_value=mock_reranker_instance)
-        with patch.dict("sys.modules", {"src.reranker": mock_module}):
+        with patch.dict("sys.modules", {"mailarium.reranker": mock_module}):
             r._apply_rerank("test query", results, top_k=1)
             assert mock_reranker_instance.rerank.called
 
@@ -444,10 +406,10 @@ class TestExpandQuery:
         mock_expander = MagicMock()
         mock_expander.expand.return_value = "test query budget finance"
 
-        mock_qe_module = types.ModuleType("src.query_expander")
+        mock_qe_module = types.ModuleType("mailarium.query_expander")
         mock_qe_module.QueryExpander = MagicMock(return_value=mock_expander)
 
-        with patch.dict("sys.modules", {"src.query_expander": mock_qe_module}):
+        with patch.dict("sys.modules", {"mailarium.query_expander": mock_qe_module}):
             result = r._expand_query("test query")
             assert result == "test query budget finance"
 
@@ -466,7 +428,7 @@ def test_search_filtered_expand_query_integration():
 
     expand_called = []
 
-    def _mock_expand(query):
+    def _mock_expand(query, **_kwargs):
         expand_called.append(query)
         return query + " expanded"
 

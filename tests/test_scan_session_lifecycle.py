@@ -11,7 +11,7 @@ pytest_plugins = ["tests._scan_session_cases"]
 
 class TestScanSessionCore:
     def test_auto_create_on_first_access(self):
-        from src.scan_session import get_session
+        from mailarium.scan_session import get_session
 
         session = get_session("test1")
         assert session is not None
@@ -20,13 +20,13 @@ class TestScanSessionCore:
         assert len(session.candidates) == 0
 
     def test_get_nonexistent_returns_none_without_auto_create(self):
-        from src.scan_session import get_session
+        from mailarium.scan_session import get_session
 
         session = get_session("nonexistent", auto_create=False)
         assert session is None
 
     def test_same_scan_id_returns_same_session(self):
-        from src.scan_session import get_session
+        from mailarium.scan_session import get_session
 
         session_one = get_session("test")
         session_one.seen_uids.add("uid1")
@@ -34,7 +34,7 @@ class TestScanSessionCore:
         assert "uid1" in session_two.seen_uids
 
     def test_different_scan_ids_are_independent(self):
-        from src.scan_session import get_session
+        from mailarium.scan_session import get_session
 
         session_one = get_session("a")
         session_one.seen_uids.add("uid1")
@@ -52,7 +52,7 @@ class TestFilterSeen:
         return FakeResult(uid, score)
 
     def test_first_call_returns_all(self):
-        from src.scan_session import filter_seen
+        from mailarium.scan_session import filter_seen
 
         results = [self.make_result("uid1"), self.make_result("uid2")]
         new, meta = filter_seen("test", results)
@@ -62,7 +62,7 @@ class TestFilterSeen:
         assert meta["seen_total"] == 2
 
     def test_second_call_excludes_seen(self):
-        from src.scan_session import filter_seen
+        from mailarium.scan_session import filter_seen
 
         results_one = [self.make_result("uid1"), self.make_result("uid2")]
         filter_seen("test", results_one)
@@ -76,7 +76,7 @@ class TestFilterSeen:
         assert meta["seen_total"] == 3
 
     def test_filter_seen_with_dicts(self):
-        from src.scan_session import filter_seen
+        from mailarium.scan_session import filter_seen
 
         results = [{"uid": "uid1", "text": "hello"}, {"uid": "uid2", "text": "world"}]
         new, _meta = filter_seen("test", results)
@@ -88,7 +88,7 @@ class TestFilterSeen:
         assert meta_two["excluded_count"] == 1
 
     def test_filter_seen_handles_missing_uid(self):
-        from src.scan_session import filter_seen
+        from mailarium.scan_session import filter_seen
 
         results = [{"text": "no uid"}, self.make_result("uid1")]
         new, meta = filter_seen("test", results)
@@ -96,7 +96,7 @@ class TestFilterSeen:
         assert meta["new_count"] == 2
 
     def test_scan_metadata_fields(self):
-        from src.scan_session import filter_seen
+        from mailarium.scan_session import filter_seen
 
         results = [self.make_result("uid1")]
         _, meta = filter_seen("test_session", results)
@@ -109,7 +109,7 @@ class TestFilterSeen:
 
 class TestCandidates:
     def test_flag_candidates_basic(self):
-        from src.scan_session import flag_candidates, get_session
+        from mailarium.scan_session import flag_candidates, get_session
 
         added, total = flag_candidates("test", ["uid1", "uid2"], label="bossing", phase=1, score=0.9)
         assert added == 2
@@ -121,14 +121,14 @@ class TestCandidates:
         assert session.candidates["uid1"].score == 0.9
 
     def test_flag_adds_to_seen(self):
-        from src.scan_session import flag_candidates, get_session
+        from mailarium.scan_session import flag_candidates, get_session
 
         flag_candidates("test", ["uid1"], label="relevant")
         session = get_session("test")
         assert "uid1" in session.seen_uids
 
     def test_flag_skips_existing(self):
-        from src.scan_session import flag_candidates, get_session
+        from mailarium.scan_session import flag_candidates, get_session
 
         flag_candidates("test", ["uid1"], label="maybe", phase=1)
         added, total = flag_candidates("test", ["uid1"], label="bossing", phase=2)
@@ -139,7 +139,7 @@ class TestCandidates:
         assert session.candidates["uid1"].phase == 1
 
     def test_get_candidates_unfiltered(self):
-        from src.scan_session import flag_candidates, get_candidates
+        from mailarium.scan_session import flag_candidates, get_candidates
 
         flag_candidates("test", ["uid1"], label="bossing", phase=1)
         flag_candidates("test", ["uid2"], label="harassment", phase=2)
@@ -147,7 +147,7 @@ class TestCandidates:
         assert len(candidates) == 2
 
     def test_get_candidates_filter_by_label(self):
-        from src.scan_session import flag_candidates, get_candidates
+        from mailarium.scan_session import flag_candidates, get_candidates
 
         flag_candidates("test", ["uid1"], label="bossing")
         flag_candidates("test", ["uid2"], label="harassment")
@@ -156,7 +156,7 @@ class TestCandidates:
         assert candidates[0]["uid"] == "uid1"
 
     def test_get_candidates_filter_by_phase(self):
-        from src.scan_session import flag_candidates, get_candidates
+        from mailarium.scan_session import flag_candidates, get_candidates
 
         flag_candidates("test", ["uid1"], label="bossing", phase=1)
         flag_candidates("test", ["uid2"], label="bossing", phase=2)
@@ -165,7 +165,7 @@ class TestCandidates:
         assert candidates[0]["uid"] == "uid2"
 
     def test_get_candidates_empty_session(self):
-        from src.scan_session import get_candidates
+        from mailarium.scan_session import get_candidates
 
         candidates = get_candidates("nonexistent")
         assert candidates == []
@@ -173,7 +173,7 @@ class TestCandidates:
 
 class TestSessionStatus:
     def test_status_fields(self):
-        from src.scan_session import flag_candidates, get_session, session_status
+        from mailarium.scan_session import flag_candidates, get_session, session_status
 
         get_session("test").seen_uids.update(["uid1", "uid2", "uid3"])
         flag_candidates("test", ["uid1"], label="bossing", phase=1)
@@ -187,25 +187,25 @@ class TestSessionStatus:
         assert "age_seconds" in status
 
     def test_status_nonexistent(self):
-        from src.scan_session import session_status
+        from mailarium.scan_session import session_status
 
         assert session_status("nonexistent") is None
 
 
 class TestSessionReset:
     def test_reset_existing(self):
-        from src.scan_session import get_session, reset_session
+        from mailarium.scan_session import get_session, reset_session
 
         get_session("test")
         assert reset_session("test") is True
 
     def test_reset_nonexistent(self):
-        from src.scan_session import reset_session
+        from mailarium.scan_session import reset_session
 
         assert reset_session("nonexistent") is False
 
     def test_reset_all(self):
-        from src.scan_session import get_session, reset_all_sessions
+        from mailarium.scan_session import get_session, reset_all_sessions
 
         get_session("a")
         get_session("b")
@@ -213,7 +213,7 @@ class TestSessionReset:
         assert count == 2
 
     def test_session_expiry(self, monkeypatch):
-        from src.scan_session import _sessions, get_session
+        from mailarium.scan_session import _sessions, get_session
 
         monkeypatch.setenv("SCAN_SESSION_TTL", "1")
         session = get_session("test")
@@ -225,7 +225,7 @@ class TestSessionReset:
 
 class TestEmailScanInputModel:
     def test_defaults(self):
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         model = EmailScanInput(action="status", scan_id="test")
         assert model.action == "status"
@@ -236,19 +236,19 @@ class TestEmailScanInputModel:
         assert model.score is None
 
     def test_scan_id_required(self):
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         with pytest.raises(ValueError):
             EmailScanInput(action="status")
 
     def test_scan_id_max_length(self):
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         with pytest.raises(ValueError):
             EmailScanInput(action="status", scan_id="x" * 101)
 
     def test_uids_max_50(self):
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         with pytest.raises(ValueError):
             EmailScanInput(
@@ -259,7 +259,7 @@ class TestEmailScanInputModel:
             )
 
     def test_phase_bounds(self):
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         with pytest.raises(ValueError):
             EmailScanInput(action="flag", scan_id="test", phase=0)
@@ -267,7 +267,7 @@ class TestEmailScanInputModel:
             EmailScanInput(action="flag", scan_id="test", phase=4)
 
     def test_score_bounds(self):
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         with pytest.raises(ValueError):
             EmailScanInput(action="flag", scan_id="test", score=1.5)
@@ -275,7 +275,7 @@ class TestEmailScanInputModel:
 
 class TestScanIdOnSearchModels:
     def test_triage_scan_id_optional(self):
-        from src.mcp_models import EmailTriageInput
+        from mailarium.mcp_models import EmailTriageInput
 
         model = EmailTriageInput(query="test")
         assert model.scan_id is None
@@ -283,7 +283,7 @@ class TestScanIdOnSearchModels:
         assert model_two.scan_id == "sess1"
 
     def test_structured_scan_id_optional(self):
-        from src.mcp_models import EmailSearchStructuredInput
+        from mailarium.mcp_models import EmailSearchStructuredInput
 
         model = EmailSearchStructuredInput(query="test")
         assert model.scan_id is None
@@ -291,9 +291,10 @@ class TestScanIdOnSearchModels:
         assert model_two.scan_id == "sess1"
 
     def test_find_similar_scan_id_optional(self):
-        from src.mcp_models import FindSimilarInput
+        from mailarium.mcp_models import FindSimilarInput
 
         model = FindSimilarInput(uid="uid1")
         assert model.scan_id is None
         model_two = FindSimilarInput(uid="uid1", scan_id="sess1")
         assert model_two.scan_id == "sess1"
+        assert FindSimilarInput(query="budget", scope=" Finance ").scope == "finance"

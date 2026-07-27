@@ -1,8 +1,10 @@
+"""Rejects invalid embedding batches and deduplicates repeated chunk identifiers before vector writes."""
+
 import pytest
 
-from src.chunker import EmailChunk
-from src.embedder import EmailEmbedder
-from src.multi_vector_embedder import MultiVectorResult
+from mailarium.chunker import EmailChunk
+from mailarium.embedder import EmailEmbedder
+from mailarium.multi_vector_embedder import MultiVectorResult
 
 
 class _FakeMultiVectorEmbedder:
@@ -11,16 +13,17 @@ class _FakeMultiVectorEmbedder:
 
     def encode_all(self, texts):
         dense = [[0.1, 0.2, 0.3] for _ in texts]
-        return MultiVectorResult(dense=dense, sparse=None, colbert=None)
+        return MultiVectorResult(dense=dense, sparse=None)
 
     def warmup(self):
         return None
 
 
 @pytest.fixture(autouse=True)
-def _stub_multi_vector_embedder(monkeypatch):
-    import src.embedder as embedder_mod
+def _stub_multi_vector_embedder(monkeypatch, tmp_path):
+    import mailarium.embedder as embedder_mod
 
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "email_metadata.db"))
     monkeypatch.setattr(embedder_mod, "MultiVectorEmbedder", _FakeMultiVectorEmbedder)
 
 
@@ -33,7 +36,7 @@ def test_add_chunks_rejects_non_positive_batch_size():
 
 def test_add_chunks_deduplicates_within_batch(tmp_path):
     """Duplicate chunk IDs in the same batch must not raise DuplicateIDError."""
-    embedder = EmailEmbedder(chromadb_path=str(tmp_path / "db"))
+    embedder = EmailEmbedder(vector_index_path=str(tmp_path / "vector-index"))
 
     dup_id = "aaaa__0"
     chunks = [

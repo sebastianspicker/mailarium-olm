@@ -1,3 +1,5 @@
+"""Verifies evaluation scoring aggregates attachment, grounding, quote, thread, and summary metrics."""
+
 from types import ModuleType
 
 from . import _qa_eval_scoring_attachment_cases, _qa_eval_scoring_core_cases, _qa_eval_scoring_tail_cases

@@ -1,30 +1,32 @@
+"""MCP search filtering, diagnostics, archive actions, JSON responses, and async-offload behavior."""
+
 import json
 from unittest.mock import patch
 
 import pytest
 
-from src.config import get_settings
+from mailarium.config import get_settings
 
-from .helpers.mcp_tool_fakes import _BasicRetriever, _make_result, _patch_search_deps
+from .helpers.mcp_tool_fakes import (
+    _BasicRetriever,
+    _make_result,
+    _patch_capturing_search_deps,
+    _patch_search_deps,
+    _successful_ingest_runtime_fixture,
+)
 
 
 @pytest.mark.asyncio
 async def test_email_search_structured_forwards_new_filters(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
-    captured = {}
-
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query=None, top_k=10, **kwargs):
-            captured.update({"query": query, "top_k": top_k, **kwargs})
-            return []
-
-    _patch_search_deps(monkeypatch, DummyRetriever())
+    captured = _patch_capturing_search_deps(monkeypatch)
 
     params = EmailSearchStructuredInput(
         query="hello",
         top_k=5,
+        scope="Finance Operations",
         subject="approval",
         folder="inbox",
         cc="finance",
@@ -37,25 +39,20 @@ async def test_email_search_structured_forwards_new_filters(monkeypatch):
     assert captured["folder"] == "inbox"
     assert captured["cc"] == "finance"
     assert captured["min_score"] == 0.8
+    assert captured["scope"] == "finance operations"
     assert data["filters"]["subject"] == "approval"
     assert data["filters"]["folder"] == "inbox"
     assert data["filters"]["cc"] == "finance"
     assert data["filters"]["min_score"] == 0.8
+    assert data["filters"]["scope"] == "finance operations"
 
 
 @pytest.mark.asyncio
 async def test_email_search_structured_accepts_legacy_aliases(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
-    captured = {}
-
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query=None, top_k=10, **kwargs):
-            captured.update({"query": query, "top_k": top_k, **kwargs})
-            return []
-
-    _patch_search_deps(monkeypatch, DummyRetriever())
+    captured = _patch_capturing_search_deps(monkeypatch)
 
     params = EmailSearchStructuredInput.model_validate(
         {
@@ -75,8 +72,8 @@ async def test_email_search_structured_accepts_legacy_aliases(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_search_structured_emits_strict_json(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -93,8 +90,8 @@ async def test_email_search_structured_emits_strict_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_search_structured_exposes_retrieval_diagnostics(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
     class DummyRetriever(_BasicRetriever):
         @property
@@ -105,6 +102,18 @@ async def test_email_search_structured_exposes_retrieval_diagnostics(monkeypatch
                 "expand_query_requested": True,
                 "used_query_expansion": True,
                 "query_expansion_suffix": "sbv timeline",
+                "retrieval_policy": {
+                    "scope": "general",
+                    "semantic_weight": 0.3,
+                    "keyword_weight": 0.7,
+                    "allow_domain_boost": False,
+                    "reason_codes": ["scope_general", "email_token"],
+                },
+                "fusion": {
+                    "method": "weighted_reciprocal_rank_fusion",
+                    "semantic_weight": 0.3,
+                    "keyword_weight": 0.7,
+                },
             }
 
     _patch_search_deps(monkeypatch, DummyRetriever())
@@ -117,12 +126,14 @@ async def test_email_search_structured_exposes_retrieval_diagnostics(monkeypatch
     assert data["retrieval_diagnostics"]["executed_query"].endswith("sbv timeline")
     assert data["retrieval_diagnostics"]["expand_query_requested"] is True
     assert data["retrieval_diagnostics"]["used_query_expansion"] is True
+    assert data["retrieval_diagnostics"]["retrieval_policy"]["scope"] == "general"
+    assert data["retrieval_diagnostics"]["fusion"]["keyword_weight"] == 0.7
 
 
 @pytest.mark.asyncio
 async def test_email_search_structured_exposes_semantic_filter_failure_diagnostics(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
     class DummyRetriever(_BasicRetriever):
         @property
@@ -157,8 +168,8 @@ async def test_email_search_structured_exposes_semantic_filter_failure_diagnosti
 
 @pytest.mark.asyncio
 async def test_email_search_structured_exposes_query_expansion_failure_diagnostics(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
     class DummyRetriever(_BasicRetriever):
         @property
@@ -187,8 +198,8 @@ async def test_email_search_structured_exposes_query_expansion_failure_diagnosti
 
 @pytest.mark.asyncio
 async def test_email_list_senders_returns_json(monkeypatch):
-    from src.mcp_models import ListSendersInput
-    from src.tools.search import email_list_senders
+    from mailarium.mcp_models import ListSendersInput
+    from mailarium.tools.search import email_list_senders
 
     class DummyRetriever:
         def list_senders(self, limit=30):
@@ -211,7 +222,7 @@ async def test_email_list_senders_returns_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_list_folders_returns_json(monkeypatch):
-    from src.tools.search import email_list_folders
+    from mailarium.tools.search import email_list_folders
 
     class DummyRetriever:
         def list_folders(self):
@@ -232,7 +243,7 @@ async def test_email_list_folders_returns_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_list_folders_empty_archive(monkeypatch):
-    from src.tools.search import email_list_folders
+    from mailarium.tools.search import email_list_folders
 
     class DummyRetriever:
         def list_folders(self):
@@ -248,8 +259,8 @@ async def test_email_list_folders_empty_archive(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_ingest_returns_stats_json(monkeypatch, tmp_path):
-    from src.mcp_models import EmailIngestInput
-    from src.tools.search import email_ingest
+    from mailarium.mcp_models import EmailIngestInput
+    from mailarium.tools.search import email_ingest
 
     fake_stats = {
         "emails_parsed": 10,
@@ -262,7 +273,7 @@ async def test_email_ingest_returns_stats_json(monkeypatch, tmp_path):
         "elapsed_seconds": 1.2,
     }
 
-    monkeypatch.setattr("src.ingest.ingest", lambda **kwargs: fake_stats)
+    monkeypatch.setattr("mailarium.ingest.ingest", lambda **kwargs: fake_stats)
 
     olm_path = tmp_path / "test.olm"
     olm_path.write_text("olm", encoding="utf-8")
@@ -276,39 +287,21 @@ async def test_email_ingest_returns_stats_json(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_email_ingest_does_not_mutate_runtime_archive_paths(monkeypatch, tmp_path):
-    from src.mcp_models import EmailIngestInput
-    from src.tools.search import email_ingest
+    from mailarium.mcp_models import EmailIngestInput
+    from mailarium.tools.search import email_ingest
 
-    monkeypatch.setattr(
-        "src.ingest.ingest",
-        lambda **kwargs: {
-            "emails_parsed": 1,
-            "chunks_created": 1,
-            "chunks_added": 1,
-            "chunks_skipped": 0,
-            "batches_written": 1,
-            "total_in_db": 1,
-            "dry_run": False,
-            "elapsed_seconds": 0.1,
-        },
-    )
-
-    olm_path = tmp_path / "test.olm"
-    olm_path.write_text("olm", encoding="utf-8")
-
-    active_chroma = str(tmp_path / "active-chroma")
-    active_db = str(tmp_path / "active.db")
-    custom_chroma = str(tmp_path / "custom-chroma")
+    olm_path, active_vector_index, active_db = _successful_ingest_runtime_fixture(monkeypatch, tmp_path)
+    custom_vector_index = str(tmp_path / "custom-vector-index")
     custom_db = str(tmp_path / "custom-email.db")
 
     with (
-        patch("src.mcp_server.set_runtime_archive_paths") as mock_set_paths,
-        patch("src.mcp_server._resolved_runtime_paths", return_value=(active_chroma, active_db)),
-        patch("src.tools.search.invalidate_mcp_singletons") as mock_invalidate,
+        patch("mailarium.mcp_server.set_runtime_archive_paths") as mock_set_paths,
+        patch("mailarium.mcp_server._resolved_runtime_paths", return_value=(active_vector_index, active_db)),
+        patch("mailarium.tools.search.invalidate_mcp_singletons") as mock_invalidate,
     ):
         params = EmailIngestInput(
             olm_path=str(olm_path),
-            chromadb_path=custom_chroma,
+            vector_index_path=custom_vector_index,
             sqlite_path=custom_db,
         )
         output = await email_ingest(params)
@@ -325,36 +318,18 @@ async def test_email_ingest_does_not_mutate_runtime_archive_paths(monkeypatch, t
 
 @pytest.mark.asyncio
 async def test_email_ingest_invalidates_cache_when_target_matches_active_runtime(monkeypatch, tmp_path):
-    from src.mcp_models import EmailIngestInput
-    from src.tools.search import email_ingest
+    from mailarium.mcp_models import EmailIngestInput
+    from mailarium.tools.search import email_ingest
 
-    monkeypatch.setattr(
-        "src.ingest.ingest",
-        lambda **kwargs: {
-            "emails_parsed": 1,
-            "chunks_created": 1,
-            "chunks_added": 1,
-            "chunks_skipped": 0,
-            "batches_written": 1,
-            "total_in_db": 1,
-            "dry_run": False,
-            "elapsed_seconds": 0.1,
-        },
-    )
-
-    olm_path = tmp_path / "test.olm"
-    olm_path.write_text("olm", encoding="utf-8")
-
-    active_chroma = str(tmp_path / "active-chroma")
-    active_db = str(tmp_path / "active.db")
+    olm_path, active_vector_index, active_db = _successful_ingest_runtime_fixture(monkeypatch, tmp_path)
 
     with (
-        patch("src.mcp_server._resolved_runtime_paths", return_value=(active_chroma, active_db)),
-        patch("src.tools.search.invalidate_mcp_singletons") as mock_invalidate,
+        patch("mailarium.mcp_server._resolved_runtime_paths", return_value=(active_vector_index, active_db)),
+        patch("mailarium.tools.search.invalidate_mcp_singletons") as mock_invalidate,
     ):
         params = EmailIngestInput(
             olm_path=str(olm_path),
-            chromadb_path=active_chroma,
+            vector_index_path=active_vector_index,
             sqlite_path=active_db,
         )
         output = await email_ingest(params)
@@ -368,13 +343,13 @@ async def test_email_ingest_invalidates_cache_when_target_matches_active_runtime
 
 @pytest.mark.asyncio
 async def test_email_ingest_handles_file_not_found(monkeypatch, tmp_path):
-    from src.mcp_models import EmailIngestInput
-    from src.tools.search import email_ingest
+    from mailarium.mcp_models import EmailIngestInput
+    from mailarium.tools.search import email_ingest
 
     def _raise(**kwargs):
         raise FileNotFoundError("not found")
 
-    monkeypatch.setattr("src.ingest.ingest", _raise)
+    monkeypatch.setattr("mailarium.ingest.ingest", _raise)
 
     olm_path = tmp_path / "missing-at-ingest.olm"
     olm_path.write_text("fixture", encoding="utf-8")
@@ -388,17 +363,10 @@ async def test_email_ingest_handles_file_not_found(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_email_search_structured_forwards_email_type(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
-    captured = {}
-
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query=None, top_k=10, **kwargs):
-            captured.update({"query": query, "top_k": top_k, **kwargs})
-            return []
-
-    _patch_search_deps(monkeypatch, DummyRetriever())
+    captured = _patch_capturing_search_deps(monkeypatch)
 
     params = EmailSearchStructuredInput(
         query="hello",
@@ -413,14 +381,13 @@ async def test_email_search_structured_forwards_email_type(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_diagnostics_returns_json(monkeypatch):
-    from src.mcp_server import _offload
-    from src.tools import diagnostics
+    from mailarium.mcp_server import _offload
+    from mailarium.tools import diagnostics
 
     class DummyEmbedder:
         device = "cpu"
         _model = type("Model", (), {"__name__": "StubModel"})()
         has_sparse = False
-        has_colbert = False
 
     class DummyRetriever:
         embedder = DummyEmbedder()
@@ -448,7 +415,7 @@ async def test_email_diagnostics_returns_json(monkeypatch):
         assert "embedder_batch_size" in data
         assert "embedder_backend" in data
         assert "sparse_enabled" in data
-        assert "colbert_rerank_enabled" in data
+        assert "late_interaction_enabled" in data
         assert "sparse_vector_count" in data
         assert "sparse_index_built" in data
     finally:
@@ -458,7 +425,7 @@ async def test_email_diagnostics_returns_json(monkeypatch):
 @pytest.mark.asyncio
 async def test_offload_runs_sync_in_thread():
     """_offload should run a sync function without blocking the event loop."""
-    from src.mcp_server import _offload
+    from mailarium.mcp_server import _offload
 
     result = await _offload(lambda: 42)
     assert result == 42
@@ -466,17 +433,10 @@ async def test_offload_runs_sync_in_thread():
 
 @pytest.mark.asyncio
 async def test_email_search_structured_forwards_attachment_filters(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
-    captured = {}
-
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query=None, top_k=10, **kwargs):
-            captured.update({"query": query, "top_k": top_k, **kwargs})
-            return []
-
-    _patch_search_deps(monkeypatch, DummyRetriever())
+    captured = _patch_capturing_search_deps(monkeypatch)
 
     params = EmailSearchStructuredInput(
         query="hello",
@@ -495,7 +455,7 @@ async def test_email_search_structured_forwards_attachment_filters(monkeypatch):
 @pytest.mark.asyncio
 async def test_offload_with_args():
     """_offload passes positional and keyword arguments through."""
-    from src.mcp_server import _offload
+    from mailarium.mcp_server import _offload
 
     result = await _offload(lambda x, y=0: x + y, 10, y=5)
     assert result == 15

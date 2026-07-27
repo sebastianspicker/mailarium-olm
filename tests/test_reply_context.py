@@ -1,8 +1,8 @@
-"""Tests for extracted quoted reply-context blocks."""
+"""Verifies quoted reply-context extraction separates prior correspondence from authored content."""
 
 from __future__ import annotations
 
-from src.reply_context import extract_reply_context
+from mailarium.reply_context import extract_reply_context
 
 
 def test_extract_reply_context_from_plain_text_block():

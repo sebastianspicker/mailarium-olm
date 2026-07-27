@@ -5,13 +5,15 @@ from __future__ import annotations
 import io
 from unittest.mock import MagicMock
 
-from src.attachment_extractor import (
+from mailarium.attachment_extractor import (
     _extract_html,
     _pdf_extractor,
     _xlsx_extractor,
     extract_image_embedding,
     extract_text,
 )
+
+from .helpers.attachment_extractor_fakes import _xlsx_loader
 
 
 class TestMalformedAndUnsupported:
@@ -54,15 +56,5 @@ class TestExtractorEdgeBehaviors:
         assert result == ""
 
     def test_xlsx_extractor_empty_cells_filtered(self) -> None:
-        mock_ws = MagicMock()
-        mock_ws.iter_rows.return_value = [
-            (None, None, None),
-        ]
-
-        mock_wb = MagicMock()
-        mock_wb.sheetnames = ["Sheet1"]
-        mock_wb.__getitem__ = MagicMock(return_value=mock_ws)
-
-        mock_load_workbook = MagicMock(return_value=mock_wb)
-        result = _xlsx_extractor(mock_load_workbook, io.BytesIO(b"fake"))
+        result = _xlsx_extractor(_xlsx_loader([(None, None, None)]), io.BytesIO(b"fake"))
         assert "[Sheet: Sheet1]" in result

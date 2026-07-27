@@ -1,7 +1,7 @@
-"""Tests for EventMixin in db_events.py (coverage track)."""
+"""Verifies event persistence creates, queries, and maintains event records through the database mixin."""
 
 # pylint: disable=redefined-outer-name
-# W0621: pytest fixture injection — test class methods receive ``db`` fixture as a parameter,
+# W0621: pytest fixture injection - test class methods receive ``db`` fixture as a parameter,
 # which pylint misidentifies as shadowing the module-level fixture definition.
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import tempfile
 
 import pytest
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
 _BODY = "event test email body"
 

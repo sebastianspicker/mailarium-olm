@@ -1,3 +1,8 @@
+"""Exercises QA evaluation summaries for source accounting and explicit source-mode selection.
+
+It refuses ambiguous combinations of captured results and live retrieval inputs.
+"""
+
 import json
 from pathlib import Path
 from typing import Any, cast
@@ -5,9 +10,7 @@ from typing import Any, cast
 import pytest
 
 
-def test_run_evaluation_reports_source_counts(tmp_path: Path):
-    from src.qa_eval import run_evaluation_sync
-
+def _write_captured_evaluation_fixture(tmp_path: Path) -> tuple[Path, Path]:
     questions_path = tmp_path / "questions.json"
     questions_path.write_text(
         json.dumps(
@@ -33,12 +36,23 @@ def test_run_evaluation_reports_source_counts(tmp_path: Path):
                     "count": 1,
                     "candidates": [{"uid": "uid-1", "score": 0.91}],
                     "attachment_candidates": [],
-                    "answer_quality": {"top_candidate_uid": "uid-1", "confidence_label": "high", "ambiguity_reason": ""},
+                    "answer_quality": {
+                        "top_candidate_uid": "uid-1",
+                        "confidence_label": "high",
+                        "ambiguity_reason": "",
+                    },
                 }
             }
         ),
         encoding="utf-8",
     )
+    return questions_path, results_path
+
+
+def test_run_evaluation_reports_source_counts(tmp_path: Path):
+    from mailarium.qa_eval import run_evaluation_sync
+
+    questions_path, results_path = _write_captured_evaluation_fixture(tmp_path)
 
     report = run_evaluation_sync(questions_path=questions_path, results_path=results_path)
 
@@ -48,7 +62,7 @@ def test_run_evaluation_reports_source_counts(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_run_evaluation_uses_results_payloads(tmp_path: Path):
-    from src.qa_eval import run_evaluation
+    from mailarium.qa_eval import run_evaluation
 
     questions_path = tmp_path / "questions.json"
     results_path = tmp_path / "results.json"
@@ -95,39 +109,9 @@ async def test_run_evaluation_uses_results_payloads(tmp_path: Path):
 
 
 def test_run_evaluation_sync_rejects_implicit_mixed_sources(tmp_path: Path):
-    from src.qa_eval import run_evaluation_sync
+    from mailarium.qa_eval import run_evaluation_sync
 
-    questions_path = tmp_path / "questions.json"
-    questions_path.write_text(
-        json.dumps(
-            {
-                "cases": [
-                    {
-                        "id": "fact-001",
-                        "bucket": "fact_lookup",
-                        "question": "Who asked for the updated budget?",
-                        "expected_support_uids": ["uid-1"],
-                        "expected_top_uid": "uid-1",
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    results_path = tmp_path / "results.json"
-    results_path.write_text(
-        json.dumps(
-            {
-                "fact-001": {
-                    "count": 1,
-                    "candidates": [{"uid": "uid-1", "score": 0.91}],
-                    "attachment_candidates": [],
-                    "answer_quality": {"top_candidate_uid": "uid-1", "confidence_label": "high", "ambiguity_reason": ""},
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    questions_path, results_path = _write_captured_evaluation_fixture(tmp_path)
 
     class _Deps:
         live_backend = "deterministic"
@@ -142,7 +126,7 @@ def test_run_evaluation_sync_rejects_implicit_mixed_sources(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_run_evaluation_mixed_mode_builds_comparison_report(tmp_path: Path, monkeypatch):
-    from src.qa_eval import run_evaluation
+    from mailarium.qa_eval import run_evaluation
 
     questions_path = tmp_path / "questions.json"
     results_path = tmp_path / "results.json"
@@ -193,7 +177,7 @@ async def test_run_evaluation_mixed_mode_builds_comparison_report(tmp_path: Path
             },
         }
 
-    monkeypatch.setattr("src.qa_eval_impl._live_payload", fake_live_payload)
+    monkeypatch.setattr("mailarium.qa_eval_impl._live_payload", fake_live_payload)
 
     class _Deps:
         live_backend = "deterministic"

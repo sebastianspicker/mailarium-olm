@@ -1,4 +1,6 @@
-from src.body_forensics import extract_source_headers, render_forensic_text
+"""Preserves raw message headers and deterministic forensic body text without retrieval-oriented stripping."""
+
+from mailarium.body_forensics import extract_source_headers, render_forensic_text
 
 
 def test_extract_source_headers_returns_common_headers():

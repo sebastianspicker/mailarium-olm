@@ -2,6 +2,8 @@
 # pylint: disable=unused-wildcard-import,wildcard-import
 
 
+"""Aggregates extended MCP tool behavior cases for the parent test suite."""
+
 from .helpers.mcp_tool_extended_fakes import *  # noqa
 from ._mcp_tools_extended_thread_search_cases import *  # noqa
 from ._mcp_tools_extended_reporting_cases import *  # noqa

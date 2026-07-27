@@ -7,8 +7,8 @@ import logging
 from dataclasses import replace
 from zipfile import ZipFile
 
-from src.parse_olm import Email, _parse_email_xml, _ParsedEmailEnrichments, parse_olm
-from src.parse_olm_xml_parser import parse_olm_archive_impl
+from mailarium.parse_olm import Email, _parse_email_xml, _ParsedEmailEnrichments, parse_olm
+from mailarium.parse_olm_xml_parser import parse_olm_archive_impl
 
 
 def test_parse_email_xml_delegates_postprocessing_helpers(monkeypatch):
@@ -49,10 +49,10 @@ def test_parse_email_xml_delegates_postprocessing_helpers(monkeypatch):
             forensic_body_source=enrichments.forensic_body_source,
         )
 
-    monkeypatch.setattr("src.parse_olm._apply_source_header_fallbacks", fake_apply_source)
-    monkeypatch.setattr("src.parse_olm._finalize_parsed_email_parts", fake_finalize)
-    monkeypatch.setattr("src.parse_olm._derive_email_enrichments", fake_derive)
-    monkeypatch.setattr("src.parse_olm._build_parsed_email_from_parts", fake_build)
+    monkeypatch.setattr("mailarium.parse_olm._apply_source_header_fallbacks", fake_apply_source)
+    monkeypatch.setattr("mailarium.parse_olm._finalize_parsed_email_parts", fake_finalize)
+    monkeypatch.setattr("mailarium.parse_olm._derive_email_enrichments", fake_derive)
+    monkeypatch.setattr("mailarium.parse_olm._build_parsed_email_from_parts", fake_build)
 
     xml = b"<email><OPFMessageCopySubject>hello</OPFMessageCopySubject></email>"
     parsed = _parse_email_xml(xml, "Accounts/a/com.microsoft.__Messages/Inbox/msg.xml")
@@ -73,7 +73,7 @@ def test_email_normalized_body_base_delegates_normalization_helpers(monkeypatch)
 
     def fake_select(body_text: str, body_html: str):
         calls.append(f"select:{body_text}:{body_html}")
-        from src.parse_olm import NormalizedBody
+        from mailarium.parse_olm import NormalizedBody
 
         return NormalizedBody("normalized", "body_text")
 
@@ -89,10 +89,10 @@ def test_email_normalized_body_base_delegates_normalization_helpers(monkeypatch)
         calls.append(f"forward:{text}:{email_type}")
         return "forward-stripped"
 
-    monkeypatch.setattr("src.parse_olm._select_normalized_body", fake_select)
-    monkeypatch.setattr("src.parse_olm._strip_normalized_quoted_content", fake_strip_quoted)
-    monkeypatch.setattr("src.parse_olm._strip_normalized_reply_header_tail", fake_strip_reply)
-    monkeypatch.setattr("src.parse_olm._strip_normalized_leading_forward_header_block", fake_strip_forward)
+    monkeypatch.setattr("mailarium.parse_olm._select_normalized_body", fake_select)
+    monkeypatch.setattr("mailarium.parse_olm._strip_normalized_quoted_content", fake_strip_quoted)
+    monkeypatch.setattr("mailarium.parse_olm._strip_normalized_reply_header_tail", fake_strip_reply)
+    monkeypatch.setattr("mailarium.parse_olm._strip_normalized_leading_forward_header_block", fake_strip_forward)
 
     email = Email(
         message_id="m1",
@@ -130,7 +130,7 @@ def test_parse_olm_delegates_archive_traversal(monkeypatch, tmp_path):
         calls.append((olm_path_arg, kwargs["extract_attachments"], kwargs["parse_email_xml_fn"].__name__))
         return iter([])
 
-    monkeypatch.setattr("src.parse_olm._parse_olm_archive_impl", fake_archive)
+    monkeypatch.setattr("mailarium.parse_olm._parse_olm_archive_impl", fake_archive)
 
     list(parse_olm(str(olm_path), extract_attachments=True))
 
@@ -166,7 +166,7 @@ def test_parse_archive_keeps_email_when_attachment_extraction_fails(monkeypatch,
     setattr(email, ns_attr, {})
 
     monkeypatch.setattr(
-        "src.parse_olm_xml_parser._extract_attachment_payloads",
+        "mailarium.parse_olm_xml_parser._extract_attachment_payloads",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("payload failure")),
     )
 

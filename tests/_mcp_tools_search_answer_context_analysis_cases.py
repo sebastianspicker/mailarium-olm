@@ -1,134 +1,152 @@
+"""Answer-context timeline, speaker attribution, thread graph, weak evidence, and policy behavior."""
+
 import json
 import sqlite3
 
 import pytest
 
+from .helpers.answer_context_fakes import _AnswerContextDeps
 from .helpers.mcp_tool_fakes import _BasicRetriever, _make_result
+
+
+def _timeline_email(uid: str, body_text: str) -> dict[str, str]:
+    return {
+        "uid": uid,
+        "body_text": body_text,
+        "normalized_body_source": "body_text",
+        "forensic_body_text": "",
+        "forensic_body_source": "",
+    }
+
+
+def _timeline_thread_email(uid: str, sender_email: str, sender_name: str, date: str) -> dict[str, str]:
+    return {
+        "uid": uid,
+        "subject": "Rollout",
+        "sender_email": sender_email,
+        "sender_name": sender_name,
+        "date": date,
+        "conversation_id": "conv-time",
+    }
+
+
+def _speaker_thread_email(uid: str, sender_email: str, sender_name: str, date: str) -> dict[str, str]:
+    return {
+        "uid": uid,
+        "subject": "Figures",
+        "sender_email": sender_email,
+        "sender_name": sender_name,
+        "date": date,
+        "conversation_id": "conv-speak",
+    }
+
+
+class _TimelineRetriever(_BasicRetriever):
+    def search_filtered(self, query, top_k=10, **kwargs):
+        return [
+            _make_result(
+                uid="uid-time-2",
+                chunk_id="chunk-time-2",
+                text="Decision made on the rollout.",
+                distance=0.09,
+                conversation_id="conv-time",
+                date="2025-06-03",
+            ),
+            _make_result(
+                uid="uid-time-1",
+                chunk_id="chunk-time-1",
+                text="Initial request for the rollout.",
+                distance=0.11,
+                conversation_id="conv-time",
+                date="2025-06-01",
+            ),
+            _make_result(
+                uid="uid-time-3",
+                chunk_id="chunk-time-3",
+                text="Follow-up confirmation after rollout.",
+                distance=0.14,
+                conversation_id="conv-time",
+                date="2025-06-05",
+            ),
+        ]
+
+
+class _TimelineDB:
+    conn = None
+
+    def get_emails_full_batch(self, uids):
+        return {
+            "uid-time-1": _timeline_email("uid-time-1", "Initial request for the rollout."),
+            "uid-time-2": _timeline_email("uid-time-2", "Decision made on the rollout."),
+            "uid-time-3": _timeline_email("uid-time-3", "Follow-up confirmation after rollout."),
+        }
+
+    def get_thread_emails(self, conversation_id):
+        assert conversation_id == "conv-time"
+        return [
+            _timeline_thread_email("uid-time-1", "employee@example.test", "Alice", "2025-06-01"),
+            _timeline_thread_email("uid-time-2", "bob@example.com", "Bob", "2025-06-03"),
+            _timeline_thread_email("uid-time-3", "carol@example.com", "Carol", "2025-06-05"),
+        ]
+
+
+class _SpeakerRetriever(_BasicRetriever):
+    def search_filtered(self, query, top_k=10, **kwargs):
+        return [
+            _make_result(
+                uid="uid-speak-1",
+                chunk_id="chunk-speak-1",
+                text="Replying inline to the request.",
+                distance=0.09,
+                conversation_id="conv-speak",
+                date="2025-06-03",
+            )
+        ]
+
+
+class _SpeakerDB:
+    def __init__(self):
+        self.conn = sqlite3.connect(":memory:", check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute(
+            "CREATE TABLE message_segments (email_uid TEXT, ordinal INTEGER, segment_type TEXT, depth INTEGER, "
+            "text TEXT, source_surface TEXT, provenance_json TEXT)"
+        )
+        self.conn.execute(
+            "INSERT INTO message_segments VALUES "
+            "('uid-speak-1', 0, 'authored_body', 0, 'Replying inline to the request.', 'body_text', '{}')"
+        )
+        self.conn.execute(
+            "INSERT INTO message_segments VALUES "
+            "('uid-speak-1', 1, 'quoted_reply', 1, 'Can you send the figures?', 'body_text', '{}')"
+        )
+        self.conn.commit()
+
+    def get_emails_full_batch(self, uids):
+        return {
+            "uid-speak-1": {
+                "uid": "uid-speak-1",
+                "body_text": "Replying inline to the request.\n\n> Can you send the figures?",
+                "normalized_body_source": "body_text",
+                "forensic_body_text": "",
+                "forensic_body_source": "",
+                "reply_context_from": "Bob Example (mailto:bob@example.com)",
+            }
+        }
+
+    def get_thread_emails(self, conversation_id):
+        return [
+            _speaker_thread_email("uid-speak-1", "employee@example.test", "Alice", "2025-06-03"),
+            _speaker_thread_email("uid-speak-0", "bob@example.com", "Bob", "2025-06-02"),
+        ]
 
 
 @pytest.mark.asyncio
 async def test_email_answer_context_adds_timeline_summary(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query, top_k=10, **kwargs):
-            return [
-                _make_result(
-                    uid="uid-time-2",
-                    chunk_id="chunk-time-2",
-                    text="Decision made on the rollout.",
-                    distance=0.09,
-                    conversation_id="conv-time",
-                    date="2025-06-03",
-                ),
-                _make_result(
-                    uid="uid-time-1",
-                    chunk_id="chunk-time-1",
-                    text="Initial request for the rollout.",
-                    distance=0.11,
-                    conversation_id="conv-time",
-                    date="2025-06-01",
-                ),
-                _make_result(
-                    uid="uid-time-3",
-                    chunk_id="chunk-time-3",
-                    text="Follow-up confirmation after rollout.",
-                    distance=0.14,
-                    conversation_id="conv-time",
-                    date="2025-06-05",
-                ),
-            ]
-
-    class DummyDB:
-        def get_emails_full_batch(self, uids):
-            return {
-                "uid-time-1": {
-                    "uid": "uid-time-1",
-                    "body_text": "Initial request for the rollout.",
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                },
-                "uid-time-2": {
-                    "uid": "uid-time-2",
-                    "body_text": "Decision made on the rollout.",
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                },
-                "uid-time-3": {
-                    "uid": "uid-time-3",
-                    "body_text": "Follow-up confirmation after rollout.",
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                },
-            }
-
-        def get_thread_emails(self, conversation_id):
-            assert conversation_id == "conv-time"
-            return [
-                {
-                    "uid": "uid-time-1",
-                    "subject": "Rollout",
-                    "sender_email": "employee@example.test",
-                    "sender_name": "Alice",
-                    "date": "2025-06-01",
-                    "conversation_id": "conv-time",
-                },
-                {
-                    "uid": "uid-time-2",
-                    "subject": "Rollout",
-                    "sender_email": "bob@example.com",
-                    "sender_name": "Bob",
-                    "date": "2025-06-03",
-                    "conversation_id": "conv-time",
-                },
-                {
-                    "uid": "uid-time-3",
-                    "subject": "Rollout",
-                    "sender_email": "carol@example.com",
-                    "sender_name": "Carol",
-                    "date": "2025-06-05",
-                    "conversation_id": "conv-time",
-                },
-            ]
-
-        conn = None
-
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(_TimelineRetriever(), _TimelineDB()))
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(question="How did the rollout evolve?", max_results=3)
     )
@@ -144,107 +162,11 @@ async def test_email_answer_context_adds_timeline_summary(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_answer_context_adds_speaker_attribution(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query, top_k=10, **kwargs):
-            return [
-                _make_result(
-                    uid="uid-speak-1",
-                    chunk_id="chunk-speak-1",
-                    text="Replying inline to the request.",
-                    distance=0.09,
-                    conversation_id="conv-speak",
-                    date="2025-06-03",
-                )
-            ]
-
-    class DummyDB:
-        def __init__(self):
-            self.conn = sqlite3.connect(":memory:", check_same_thread=False)
-            self.conn.row_factory = sqlite3.Row
-            self.conn.execute(
-                "CREATE TABLE message_segments ("
-                "email_uid TEXT, ordinal INTEGER, segment_type TEXT, depth INTEGER, "
-                "text TEXT, source_surface TEXT, provenance_json TEXT)"
-            )
-            self.conn.execute(
-                "INSERT INTO message_segments VALUES "
-                "('uid-speak-1', 0, 'authored_body', 0, 'Replying inline to the request.', 'body_text', '{}')"
-            )
-            self.conn.execute(
-                "INSERT INTO message_segments VALUES "
-                "('uid-speak-1', 1, 'quoted_reply', 1, 'Can you send the figures?', 'body_text', '{}')"
-            )
-            self.conn.commit()
-
-        def get_emails_full_batch(self, uids):
-            return {
-                "uid-speak-1": {
-                    "uid": "uid-speak-1",
-                    "body_text": "Replying inline to the request.\n\n> Can you send the figures?",
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                    "reply_context_from": "Bob Example (mailto:bob@example.com)",
-                }
-            }
-
-        def get_thread_emails(self, conversation_id):
-            return [
-                {
-                    "uid": "uid-speak-1",
-                    "subject": "Figures",
-                    "sender_email": "employee@example.test",
-                    "sender_name": "Alice",
-                    "date": "2025-06-03",
-                    "conversation_id": "conv-speak",
-                },
-                {
-                    "uid": "uid-speak-0",
-                    "subject": "Figures",
-                    "sender_email": "bob@example.com",
-                    "sender_name": "Bob",
-                    "date": "2025-06-02",
-                    "conversation_id": "conv-speak",
-                },
-            ]
-
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        _db = DummyDB()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDeps._db
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    deps = _AnswerContextDeps(_SpeakerRetriever(), _SpeakerDB())
+    monkeypatch.setattr(search_mod, "_deps", deps)
     try:
         payload = await search_mod.email_answer_context(
             EmailAnswerContextInput(question="Who said what about the figures?", max_results=1)
@@ -258,13 +180,13 @@ async def test_email_answer_context_adds_speaker_attribution(monkeypatch):
         assert attribution["quoted_blocks"][0]["source"] == "reply_context_from"
         assert attribution["quoted_blocks"][0]["confidence"] == pytest.approx(0.8)
     finally:
-        DummyDeps._db.conn.close()
+        deps.db.conn.close()
 
 
 @pytest.mark.asyncio
 async def test_email_answer_context_adds_thread_graph(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -298,40 +220,7 @@ async def test_email_answer_context_adds_thread_graph(monkeypatch):
                 }
             }
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        _db = DummyDB()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDeps._db
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
     payload = await search_mod.email_answer_context(EmailAnswerContextInput(question="How is this thread linked?", max_results=1))
     data = json.loads(payload)
 
@@ -349,8 +238,8 @@ async def test_email_answer_context_adds_thread_graph(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_answer_context_adds_weak_message_semantics(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -382,40 +271,7 @@ async def test_email_answer_context_adds_weak_message_semantics(monkeypatch):
                 }
             }
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        _db = DummyDB()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDeps._db
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(question="Which source-shell message discussed the certificate?", max_results=1)
     )
@@ -429,8 +285,8 @@ async def test_email_answer_context_adds_weak_message_semantics(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_answer_context_adds_answer_policy(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -458,40 +314,7 @@ async def test_email_answer_context_adds_answer_policy(monkeypatch):
                 }
             }
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        _db = DummyDB()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDeps._db
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(question="What exactly did Alice write about the budget?", max_results=1)
     )

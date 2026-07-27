@@ -1,6 +1,11 @@
+"""Exercises shared validation for ISO dates, optional date windows, and normalized score bounds.
+
+It rejects malformed inputs and inverted ranges before retrieval filters consume them.
+"""
+
 import pytest
 
-from src.validation import normalize_optional_iso_date, parse_iso_date, score_float, validate_date_window
+from mailarium.validation import normalize_optional_iso_date, parse_iso_date, score_float, validate_date_window
 
 
 def test_parse_iso_date_accepts_valid_date():

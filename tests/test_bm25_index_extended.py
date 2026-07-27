@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from src.bm25_index import BM25Index
+from mailarium.bm25_index import BM25Index
 
 
 def _make_collection(ids: list[str], docs: list[str] | None) -> MagicMock:
-    """Create a mock ChromaDB collection that returns the given data."""
+    """Create a mock vector collection that returns the given data."""
     collection = MagicMock()
     collection.count.return_value = len(ids)
 
@@ -91,7 +91,7 @@ class TestBuildFromCollection:
         def capture_and_delegate(chunk_ids, documents):
             captured["ids"] = chunk_ids
             captured["docs"] = documents
-            # Don't call original — BM25Okapi crashes on all-empty corpora
+            # Don't call original - BM25Okapi crashes on all-empty corpora
 
         idx.build_from_documents = capture_and_delegate
 
@@ -134,10 +134,10 @@ class TestBuildFromCollection:
         assert collection.get.call_count == 1
 
     def test_collection_get_missing_keys(self):
-        """Collection.get returns dicts with missing keys — defaults apply."""
+        """Collection.get returns dicts with missing keys - defaults apply."""
         collection = MagicMock()
         collection.count.return_value = 2
-        # Return empty dict — ids default to [], docs default to []
+        # Return empty dict - ids default to [], docs default to []
         collection.get.return_value = {}
 
         idx = BM25Index()

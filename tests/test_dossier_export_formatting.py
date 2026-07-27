@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 
-from src.formatting import format_file_size, strip_html_tags
+from mailarium.formatting import format_file_size, strip_html_tags
 
 pytest_plugins = ["tests._dossier_cases"]
 

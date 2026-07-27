@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from src.retriever import EmailRetriever, SearchResult
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+import pytest
+
+from mailarium.retriever import EmailRetriever, SearchResult
 
 
 def _bare_retriever() -> EmailRetriever:
@@ -20,6 +25,67 @@ def test_bare_retriever_exposes_stable_last_search_debug_seam():
 
     assert retriever._last_search_debug == {"used_query_expansion": True}
     assert retriever.last_search_debug == {"used_query_expansion": True}
+
+
+def test_search_diagnostics_are_isolated_between_worker_threads():
+    retriever = _bare_retriever()
+    barrier = Barrier(2)
+
+    def write_and_read(scope: str) -> tuple[str, str, str]:
+        retriever._set_last_search_debug({"retrieval_policy": {"scope": scope}})
+        retriever._set_last_query_expansion({"scope": scope})
+        retriever._set_last_semantic_filter_errors([{"message": scope}])
+        barrier.wait(timeout=2)
+        return (
+            str(retriever.last_search_debug["retrieval_policy"]["scope"]),
+            str(retriever.last_query_expansion["scope"]),
+            str(retriever.last_semantic_filter_errors[0]["message"]),
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = set(executor.map(write_and_read, ["finance", "customer support"]))
+
+    assert results == {
+        ("finance", "finance", "finance"),
+        ("customer support", "customer support", "customer support"),
+    }
+
+
+def test_search_filtered_rejects_empty_explicit_scope():
+    retriever = _bare_retriever()
+
+    with pytest.raises(ValueError, match="scope must not be empty"):
+        retriever.search_filtered(query="budget", scope="")
+
+
+def test_scope_context_enriches_semantic_but_not_exact_lexical_query():
+    retriever = _bare_retriever()
+    semantic_queries: list[str] = []
+    lexical_queries: list[str] = []
+
+    def search(query: str, top_k: int = 10, where=None):
+        semantic_queries.append(query)
+        return [
+            SearchResult(
+                chunk_id="match",
+                text="invoice",
+                metadata={"uid": "u1", "date": "2024-01-01"},
+                distance=0.1,
+            )
+        ]
+
+    def merge(query, results, fetch_size, **_kwargs):
+        del fetch_size
+        lexical_queries.append(query)
+        return results
+
+    retriever.search = search
+    retriever._merge_hybrid = merge
+
+    retriever.search_filtered(query='invoice "INV-123456"', top_k=1, scope="finance", hybrid=True)
+
+    assert semantic_queries == ['invoice "INV-123456"\nRetrieval scope: finance']
+    assert lexical_queries == ['invoice "INV-123456"']
 
 
 def test_search_filtered_applies_sender_filter_and_records_behavior_debug():
@@ -58,13 +124,13 @@ def test_search_delegates_to_extracted_helper(monkeypatch):
 
     def fake_search(instance, query, top_k=None, where=None):
         calls.append((query, top_k, where))
-        return ["search"]
+        return [SearchResult("search", "result", {"uid": "search"}, 0.1)]
 
-    monkeypatch.setattr("src.retriever.search_impl", fake_search)
+    monkeypatch.setattr("mailarium.retriever.search_impl", fake_search)
 
     results = retriever.search("budget", top_k=5, where={"folder": "Inbox"})
 
-    assert results == ["search"]
+    assert [result.chunk_id for result in results] == ["search"]
     assert calls == [("budget", 5, {"folder": "Inbox"})]
 
 
@@ -77,7 +143,7 @@ def test_query_with_embedding_delegates_to_extracted_helper(monkeypatch):
         calls.append((query_embedding, n_results, where))
         return ["query"]
 
-    monkeypatch.setattr("src.retriever.query_with_embedding_impl", fake_query)
+    monkeypatch.setattr("mailarium.retriever.query_with_embedding_impl", fake_query)
 
     results = retriever._query_with_embedding([[0.1, 0.2]], 7, where={"folder": "Inbox"})
 
@@ -92,13 +158,13 @@ def test_search_by_thread_delegates_to_extracted_helper(monkeypatch):
 
     def fake_search_by_thread(instance, conversation_id, top_k):
         calls.append((conversation_id, top_k))
-        return ["thread"]
+        return [SearchResult("thread", "result", {"uid": "thread"}, 0.1)]
 
-    monkeypatch.setattr("src.retriever.search_by_thread_impl", fake_search_by_thread)
+    monkeypatch.setattr("mailarium.retriever.search_by_thread_impl", fake_search_by_thread)
 
     results = retriever.search_by_thread("conv-1", top_k=7)
 
-    assert results == ["thread"]
+    assert [result.chunk_id for result in results] == ["thread"]
     assert calls == [("conv-1", 7)]
 
 
@@ -116,8 +182,8 @@ def test_list_senders_and_stats_delegate_to_extracted_helpers(monkeypatch):
         stats_calls.append("stats")
         return {"folders": {"Inbox": 1}}
 
-    monkeypatch.setattr("src.retriever.list_senders_impl", fake_list_senders)
-    monkeypatch.setattr("src.retriever.stats_impl", fake_stats)
+    monkeypatch.setattr("mailarium.retriever.list_senders_impl", fake_list_senders)
+    monkeypatch.setattr("mailarium.retriever.stats_impl", fake_stats)
 
     senders = retriever.list_senders(limit=3)
     stats = retriever.stats()
@@ -139,7 +205,7 @@ def test_format_results_for_llm_delegates_to_extracted_helper(monkeypatch):
         calls.append((results, max_body_chars, max_response_tokens))
         return "formatted"
 
-    monkeypatch.setattr("src.retriever.format_results_for_llm_impl", fake_format)
+    monkeypatch.setattr("mailarium.retriever.format_results_for_llm_impl", fake_format)
 
     output = retriever.format_results_for_llm(["r1"], max_body_chars=123, max_response_tokens=456)
 
@@ -156,7 +222,7 @@ def test_serialize_results_delegates_to_extracted_helper(monkeypatch):
         calls.append((query, results, max_body_chars, max_response_tokens))
         return {"query": query, "results": results}
 
-    monkeypatch.setattr("src.retriever.serialize_results_impl", fake_serialize)
+    monkeypatch.setattr("mailarium.retriever.serialize_results_impl", fake_serialize)
 
     payload = retriever.serialize_results("budget", ["r1"], max_body_chars=50, max_response_tokens=80)
 
@@ -169,11 +235,12 @@ def test_merge_hybrid_delegates_to_extracted_helper(monkeypatch):
     retriever = _bare_retriever()
     calls: list[tuple[str, list[str], int]] = []
 
-    def fake_merge(instance, query, semantic_results, fetch_size):
+    def fake_merge(instance, query, semantic_results, fetch_size, *, retrieval_policy=None):
+        assert retrieval_policy is None
         calls.append((query, semantic_results, fetch_size))
         return ["merged"]
 
-    monkeypatch.setattr("src.retriever.merge_hybrid_impl", fake_merge)
+    monkeypatch.setattr("mailarium.retriever.merge_hybrid_impl", fake_merge)
 
     results = retriever._merge_hybrid("budget", ["semantic"], 25)
 
@@ -190,7 +257,7 @@ def test_get_sparse_results_delegates_to_extracted_helper(monkeypatch):
         calls.append((query, top_k))
         return ["c1"]
 
-    monkeypatch.setattr("src.retriever.get_sparse_results_impl", fake_sparse)
+    monkeypatch.setattr("mailarium.retriever.get_sparse_results_impl", fake_sparse)
 
     results = retriever._get_sparse_results("budget", 7)
 
@@ -207,7 +274,7 @@ def test_get_bm25_results_delegates_to_extracted_helper(monkeypatch):
         calls.append((query, top_k))
         return ["c2"]
 
-    monkeypatch.setattr("src.retriever.get_bm25_results_impl", fake_bm25)
+    monkeypatch.setattr("mailarium.retriever.get_bm25_results_impl", fake_bm25)
 
     results = retriever._get_bm25_results("budget", 9)
 
@@ -225,12 +292,12 @@ def test_semantic_uid_resolution_and_query_expansion_delegate_to_extracted_helpe
         uid_calls.append((topic_id, cluster_id))
         return {"uid-1"}
 
-    def fake_expand(instance, query):
+    def fake_expand(instance, query, **_kwargs):
         expand_calls.append(query)
         return f"expanded:{query}"
 
-    monkeypatch.setattr("src.retriever.resolve_semantic_uids_impl", fake_resolve)
-    monkeypatch.setattr("src.retriever.expand_query_impl", fake_expand)
+    monkeypatch.setattr("mailarium.retriever.resolve_semantic_uids_impl", fake_resolve)
+    monkeypatch.setattr("mailarium.retriever.expand_query_impl", fake_expand)
 
     resolved = retriever._resolve_semantic_uids(topic_id=4, cluster_id=9)
     expanded = retriever._expand_query("budget")

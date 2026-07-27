@@ -1,27 +1,16 @@
 # ruff: noqa: I001
 
 
-from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
+"""Ingestion entity extraction, analytics, provenance, and metadata-reprocessing behavior."""
+
+from .helpers.ingest_fixtures import _MockEmbedder, _make_exchange_email, _make_mock_email, _seed_ingest_database
 
 
 def test_exchange_entities_from_email_extracts_all_types():
     """_exchange_entities_from_email should extract URLs, emails, contacts, meetings."""
-    from src.ingest import _exchange_entities_from_email
-    from src.parse_olm import Email
+    from mailarium.ingest import _exchange_entities_from_email
 
-    email = Email(
-        message_id="<msg@example.test>",
-        subject="Test",
-        sender_name="Sender",
-        sender_email="sender@example.test",
-        to=["r@example.test"],
-        cc=[],
-        bcc=[],
-        date="2024-01-01T10:00:00",
-        body_text="Body",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
+    email = _make_exchange_email(
         exchange_extracted_links=[{"url": "https://example.com", "text": "Example"}],
         exchange_extracted_emails=["alice@example.test"],
         exchange_extracted_contacts=["Bob Smith"],
@@ -41,7 +30,7 @@ def test_exchange_entities_from_email_extracts_all_types():
 
 def test_exchange_entities_from_email_empty():
     """_exchange_entities_from_email returns empty list when no Exchange data."""
-    from src.ingest import _exchange_entities_from_email
+    from mailarium.ingest import _exchange_entities_from_email
 
     email = _make_mock_email(1)
     entities = _exchange_entities_from_email(email)
@@ -50,10 +39,8 @@ def test_exchange_entities_from_email_empty():
 
 def test_ingest_computes_language_and_sentiment(monkeypatch, tmp_path):
     """Ingest should auto-populate detected_language and sentiment columns."""
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
-    from src.parse_olm import Email
+    from mailarium.email_db import EmailDatabase
+    from mailarium.parse_olm import Email
 
     email = Email(
         message_id="<lang1@example.test>",
@@ -71,16 +58,7 @@ def test_ingest_computes_language_and_sentiment(monkeypatch, tmp_path):
         has_attachments=False,
     )
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda e: [{"chunk_id": f"{e.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    _, sqlite_file = _seed_ingest_database(monkeypatch, tmp_path, [email])
 
     db = EmailDatabase(sqlite_file)
     row = db.conn.execute(
@@ -101,7 +79,7 @@ def test_ingest_computes_language_and_sentiment(monkeypatch, tmp_path):
 
 def test_exchange_entities_dedup_with_regex(tmp_path):
     """Exchange and regex entities with the same normalized_form and type should deduplicate."""
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     db = EmailDatabase(":memory:")
     email = _make_mock_email(1)
@@ -116,28 +94,16 @@ def test_exchange_entities_dedup_with_regex(tmp_path):
     )
 
     # Now simulate Exchange extractor inserting the same URL (canonical type)
-    from src.ingest import _exchange_entities_from_email
-    from src.parse_olm import Email
+    from mailarium.ingest import _exchange_entities_from_email
 
-    exchange_email = Email(
+    exchange_email = _make_exchange_email(
         message_id="<msg1@example.test>",
-        subject="Test",
-        sender_name="Sender",
-        sender_email="sender@example.test",
-        to=["r@example.test"],
-        cc=[],
-        bcc=[],
-        date="2024-01-01T10:00:00",
-        body_text="Body",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
         exchange_extracted_links=[{"url": "https://example.com"}],
     )
     exchange_entities = _exchange_entities_from_email(exchange_email)
     assert exchange_entities[0][1] == "url"  # canonical type, not exchange_url
 
-    # Insert exchange entities — ON CONFLICT should deduplicate
+    # Insert exchange entities - ON CONFLICT should deduplicate
     db.insert_entities_batch(email.uid, exchange_entities)
 
     # Should be only ONE entity row for this URL
@@ -147,9 +113,9 @@ def test_exchange_entities_dedup_with_regex(tmp_path):
 
 
 def test_reextract_entities_backfills_provenance_for_existing_archive(tmp_path):
-    from src.email_db import EmailDatabase
-    from src.entity_extractor import ExtractedEntity
-    from src.ingest_reingest import reextract_entities_impl
+    from mailarium.email_db import EmailDatabase
+    from mailarium.entity_extractor import ExtractedEntity
+    from mailarium.ingest_reingest import reextract_entities_impl
 
     sqlite_file = str(tmp_path / "entities.db")
     db = EmailDatabase(sqlite_file)
@@ -178,10 +144,10 @@ def test_reextract_entities_backfills_provenance_for_existing_archive(tmp_path):
 
 
 def test_ingest_persists_body_and_exchange_entity_provenance(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
-    from src.entity_extractor import extract_entities
+    import mailarium.embedder as embedder_mod
+    import mailarium.ingest as ingest_mod
+    from mailarium.email_db import EmailDatabase
+    from mailarium.entity_extractor import extract_entities
 
     email = _make_mock_email(1)
     email.body_text = "Please review https://example.com for details."
@@ -208,8 +174,8 @@ def test_ingest_persists_body_and_exchange_entity_provenance(monkeypatch, tmp_pa
 
 
 def test_reextract_entities_preserves_exchange_only_entities(tmp_path):
-    from src.email_db import EmailDatabase
-    from src.ingest_reingest import reextract_entities_impl
+    from mailarium.email_db import EmailDatabase
+    from mailarium.ingest_reingest import reextract_entities_impl
 
     sqlite_file = str(tmp_path / "entities-preserve.db")
     db = EmailDatabase(sqlite_file)
@@ -252,23 +218,17 @@ def test_reextract_entities_preserves_exchange_only_entities(tmp_path):
 
 
 def test_reingest_metadata_is_idempotent_for_exchange_entities(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     email = _make_mock_email(1)
     email.exchange_extracted_emails = ["idempotent@example.com"]
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda e: [{"chunk_id": f"{e.get('uid', 'x')}-a"}],
+    ingest_mod, sqlite_file = _seed_ingest_database(
+        monkeypatch,
+        tmp_path,
+        [email],
+        database_name="metadata-idempotent.db",
     )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "metadata-idempotent.db")
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
 
     ingest_mod.reingest_metadata("mock.olm", sqlite_path=sqlite_file)
     ingest_mod.reingest_metadata("mock.olm", sqlite_path=sqlite_file)

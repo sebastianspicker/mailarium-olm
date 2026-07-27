@@ -1,29 +1,11 @@
-"""Tests for temporal email analysis."""
+"""Verifies temporal analysis derives activity patterns with timezone-aware dates and intervals."""
 
 from zoneinfo import ZoneInfo
 
-from src.email_db import EmailDatabase
-from src.parse_olm import Email
-from src.temporal_analysis import TemporalAnalyzer
+from mailarium.email_db import EmailDatabase
+from mailarium.temporal_analysis import TemporalAnalyzer
 
-
-def _make_email(**overrides) -> Email:
-    defaults = {
-        "message_id": "<msg1@example.com>",
-        "subject": "Hello",
-        "sender_name": "Alice",
-        "sender_email": "employee@example.test",
-        "to": ["Bob <bob@example.com>"],
-        "cc": [],
-        "bcc": [],
-        "date": "2024-01-15T10:30:00",
-        "body_text": "Test body",
-        "body_html": "",
-        "folder": "Inbox",
-        "has_attachments": False,
-    }
-    defaults.update(overrides)
-    return Email(**defaults)
+from .helpers.email_db_builders import _make_email
 
 
 def _populated_db() -> EmailDatabase:
@@ -176,7 +158,7 @@ class TestActivityHeatmap:
         ]
 
     def test_local_timezone_uses_named_zone_rules(self, monkeypatch):
-        from src.temporal_analysis import _local_display_timezone
+        from mailarium.temporal_analysis import _local_display_timezone
 
         monkeypatch.setenv("TZ", "Europe/Berlin")
 

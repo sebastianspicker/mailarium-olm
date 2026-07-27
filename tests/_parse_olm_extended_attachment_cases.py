@@ -1,7 +1,7 @@
 # pylint: disable=no-member,c-extension-no-member
 
 
-"""Extended tests for src/parse_olm.py — targeting uncovered lines."""
+"""OLM attachment parsing across namespaces, archive paths, and malformed payloads."""
 
 from __future__ import annotations
 
@@ -11,17 +11,29 @@ from pathlib import Path
 
 from lxml import etree
 
-from src.olm_xml_helpers import (
+from mailarium.olm_xml_helpers import (
     _extract_attachment_contents,
     _extract_attachment_field,
 )
-from src.parse_olm import (
+from mailarium.parse_olm import (
     _NS_OUTLOOK,
     _parse_email_xml,
     parse_olm,
 )
 
 # ── Email.uid fallback (lines 98-99) ─────────────────────────
+
+
+def _extract_from_archive(tmp_path: Path, archive_name: str, xml_content: bytes, *, attachments=None):
+    """Write an OLM fixture, then extract attachment content from its message XML."""
+    archive = tmp_path / archive_name
+    xml_path = "Accounts/a/com.microsoft.__Messages/Inbox/msg.xml"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr(xml_path, xml_content)
+        for path, content in ({} if attachments is None else attachments).items():
+            zf.writestr(path, content)
+    with zipfile.ZipFile(archive, "r") as zf:
+        return _extract_attachment_contents(xml_content, xml_path, zf)
 
 
 class TestExtractAttachmentFieldNamespaced:
@@ -128,16 +140,13 @@ class TestExtractAttachmentContents:
     </messageAttachment>
   </OPFMessageCopyAttachmentList>
 </email></emails>"""
-        archive = tmp_path / "attach_url.olm"
-        xml_path = "Accounts/a/com.microsoft.__Messages/Inbox/msg.xml"
         att_path = "Accounts/a/com.microsoft.__Messages/Inbox/data.bin"
-
-        with zipfile.ZipFile(archive, "w") as zf:
-            zf.writestr(xml_path, xml_content)
-            zf.writestr(att_path, b"binary data here")
-
-        with zipfile.ZipFile(archive, "r") as zf:
-            result = _extract_attachment_contents(xml_content, xml_path, zf)
+        result = _extract_from_archive(
+            tmp_path,
+            "attach_url.olm",
+            xml_content,
+            attachments={att_path: b"binary data here"},
+        )
 
         assert len(result) == 1
         assert result[0][0] == "data.bin"
@@ -155,16 +164,13 @@ class TestExtractAttachmentContents:
       OPFAttachmentURL="data.bin" />
   </OPFMessageCopyAttachmentList>
 </email></emails>"""
-        archive = tmp_path / "attach_url_collision.olm"
-        xml_path = "Accounts/a/com.microsoft.__Messages/Inbox/msg.xml"
         att_path = "Accounts/a/com.microsoft.__Messages/Inbox/data.bin"
-
-        with zipfile.ZipFile(archive, "w") as zf:
-            zf.writestr(xml_path, xml_content)
-            zf.writestr(att_path, b"binary data here")
-
-        with zipfile.ZipFile(archive, "r") as zf:
-            result = _extract_attachment_contents(xml_content, xml_path, zf)
+        result = _extract_from_archive(
+            tmp_path,
+            "attach_url_collision.olm",
+            xml_content,
+            attachments={att_path: b"binary data here"},
+        )
 
         assert len(result) == 1
         assert result[0][0] == "data.bin"
@@ -181,22 +187,12 @@ class TestExtractAttachmentContents:
     </messageAttachment>
   </OPFMessageCopyAttachmentList>
 </email></emails>"""
-        archive = tmp_path / "noname.olm"
-        xml_path = "Accounts/a/com.microsoft.__Messages/Inbox/msg.xml"
-        with zipfile.ZipFile(archive, "w") as zf:
-            zf.writestr(xml_path, xml_content)
-        with zipfile.ZipFile(archive, "r") as zf:
-            result = _extract_attachment_contents(xml_content, xml_path, zf)
+        result = _extract_from_archive(tmp_path, "noname.olm", xml_content)
         assert result == []
 
     def test_extract_attachment_invalid_xml(self, tmp_path: Path):
         """Malformed XML returns empty list."""
-        archive = tmp_path / "badxml.olm"
-        xml_path = "Accounts/a/com.microsoft.__Messages/Inbox/msg.xml"
-        with zipfile.ZipFile(archive, "w") as zf:
-            zf.writestr(xml_path, b"<email")
-        with zipfile.ZipFile(archive, "r") as zf:
-            result = _extract_attachment_contents(b"<email", xml_path, zf)
+        result = _extract_from_archive(tmp_path, "badxml.olm", b"<email")
         assert result == []
 
     def test_extract_attachment_invalid_base64(self, tmp_path: Path):
@@ -211,12 +207,7 @@ class TestExtractAttachmentContents:
     </messageAttachment>
   </OPFMessageCopyAttachmentList>
 </email></emails>"""
-        archive = tmp_path / "badb64.olm"
-        xml_path = "Accounts/a/com.microsoft.__Messages/Inbox/msg.xml"
-        with zipfile.ZipFile(archive, "w") as zf:
-            zf.writestr(xml_path, xml_content)
-        with zipfile.ZipFile(archive, "r") as zf:
-            result = _extract_attachment_contents(xml_content, xml_path, zf)
+        result = _extract_from_archive(tmp_path, "badb64.olm", xml_content)
         # Invalid base64 should be logged but not crash; no URL fallback so empty
         assert result == []
 

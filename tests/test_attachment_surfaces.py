@@ -1,8 +1,10 @@
+"""Builds durable attachment evidence surfaces and retains a reference-only record when text is unavailable."""
+
 from __future__ import annotations
 
-from src.attachment_surfaces import build_attachment_surfaces, primary_surface_payload
-from src.email_db import EmailDatabase
-from src.parse_olm import Email
+from mailarium.attachment_surfaces import build_attachment_surfaces, primary_surface_payload
+from mailarium.email_db import EmailDatabase
+from mailarium.parse_olm import Email
 
 
 def test_build_attachment_surfaces_creates_verbatim_normalized_and_alignment_rows() -> None:

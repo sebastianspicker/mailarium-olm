@@ -1,20 +1,20 @@
 # ruff: noqa: I001
+"""Ingestion metadata backfill, analytics, provenance persistence, and consumer-failure behavior."""
+
 import queue
 import threading
 import time
 
 
-from src.ingest import _SENTINEL, _EmbedPipeline
+from mailarium.ingest import _SENTINEL, _EmbedPipeline
 
-from .helpers.ingest_fixtures import _MockEmbedder, _make_mock_email
+from .helpers.ingest_fixtures import _make_mock_email, _seed_ingest_database
 
 
 def test_ingest_inserts_exchange_entities(monkeypatch, tmp_path):
     """Exchange-extracted entities should be inserted into entities table during ingest."""
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
-    from src.parse_olm import Email
+    from mailarium.email_db import EmailDatabase
+    from mailarium.parse_olm import Email
 
     email = Email(
         message_id="<msg1@example.test>",
@@ -33,16 +33,7 @@ def test_ingest_inserts_exchange_entities(monkeypatch, tmp_path):
         exchange_extracted_emails=["contact@example.test"],
     )
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda e: [{"chunk_id": f"{e.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    _, sqlite_file = _seed_ingest_database(monkeypatch, tmp_path, [email])
 
     db = EmailDatabase(sqlite_file)
     entities = db.conn.execute("SELECT entity_text, entity_type FROM entities ORDER BY entity_type").fetchall()
@@ -54,12 +45,12 @@ def test_ingest_inserts_exchange_entities(monkeypatch, tmp_path):
 
 def test_reingest_analytics_backfills_missing(tmp_path):
     """reingest_analytics() should populate language/sentiment for emails missing them."""
-    from src.email_db import EmailDatabase
-    from src.ingest import reingest_analytics
+    from mailarium.email_db import EmailDatabase
+    from mailarium.ingest import reingest_analytics
 
     sqlite_file = str(tmp_path / "test.db")
     db = EmailDatabase(sqlite_file)
-    from src.parse_olm import Email
+    from mailarium.parse_olm import Email
 
     email = Email(
         message_id="<analytics1@example.test>",
@@ -105,9 +96,9 @@ def test_reingest_analytics_backfills_missing(tmp_path):
 
 def test_reingest_analytics_prefers_forensic_text_and_handles_short_german_messages(tmp_path):
     """reingest_analytics() should use the best available text surface and recover short German mails."""
-    from src.email_db import EmailDatabase
-    from src.ingest import reingest_analytics
-    from src.parse_olm import Email
+    from mailarium.email_db import EmailDatabase
+    from mailarium.ingest import reingest_analytics
+    from mailarium.parse_olm import Email
 
     sqlite_file = str(tmp_path / "short-german.db")
     db = EmailDatabase(sqlite_file)
@@ -152,9 +143,9 @@ def test_reingest_analytics_prefers_forensic_text_and_handles_short_german_messa
 
 def test_reingest_analytics_skips_rows_without_usable_text(tmp_path):
     """reingest_analytics() should skip textless rows instead of raising."""
-    from src.email_db import EmailDatabase
-    from src.ingest import reingest_analytics
-    from src.parse_olm import Email
+    from mailarium.email_db import EmailDatabase
+    from mailarium.ingest import reingest_analytics
+    from mailarium.parse_olm import Email
 
     sqlite_file = str(tmp_path / "empty-text.db")
     db = EmailDatabase(sqlite_file)
@@ -183,9 +174,9 @@ def test_reingest_analytics_skips_rows_without_usable_text(tmp_path):
 
 def test_reingest_analytics_persists_unknown_without_reprocessing(tmp_path):
     """Processed unknown-language rows should not reappear as missing analytics."""
-    from src.email_db import EmailDatabase
-    from src.ingest import reingest_analytics
-    from src.parse_olm import Email
+    from mailarium.email_db import EmailDatabase
+    from mailarium.ingest import reingest_analytics
+    from mailarium.parse_olm import Email
 
     sqlite_file = str(tmp_path / "unknown-language.db")
     db = EmailDatabase(sqlite_file)
@@ -225,9 +216,9 @@ def test_reingest_analytics_persists_unknown_without_reprocessing(tmp_path):
 
 def test_reingest_analytics_backfills_surface_rows_for_attachment_only_email(tmp_path):
     """reingest_analytics() should persist per-surface rows even when body text is empty."""
-    from src.email_db import EmailDatabase
-    from src.ingest import reingest_analytics
-    from src.parse_olm import Email
+    from mailarium.email_db import EmailDatabase
+    from mailarium.ingest import reingest_analytics
+    from mailarium.parse_olm import Email
 
     sqlite_file = str(tmp_path / "attachment-surface.db")
     db = EmailDatabase(sqlite_file)
@@ -277,9 +268,9 @@ def test_reingest_analytics_backfills_surface_rows_for_attachment_only_email(tmp
 
 def test_reingest_analytics_surface_backfill_is_idempotent(tmp_path):
     """Rows with existing analytics but missing surface rows should be backfilled once."""
-    from src.email_db import EmailDatabase
-    from src.ingest import reingest_analytics
-    from src.parse_olm import Email
+    from mailarium.email_db import EmailDatabase
+    from mailarium.ingest import reingest_analytics
+    from mailarium.parse_olm import Email
 
     sqlite_file = str(tmp_path / "surface-idempotent.db")
     db = EmailDatabase(sqlite_file)
@@ -346,23 +337,10 @@ def test_reingest_analytics_surface_backfill_is_idempotent(tmp_path):
 
 def test_incremental_skips_existing_emails(monkeypatch, tmp_path):
     """incremental=True should skip emails already in SQLite and not re-extract entities."""
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     emails = [_make_mock_email(i) for i in range(1, 4)]
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: emails)
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email: [{"chunk_id": f"{email.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-
-    # First ingest: all 3 emails inserted
-    stats1 = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    ingest_mod, sqlite_file, stats1 = _seed_ingest_database(monkeypatch, tmp_path, emails, return_stats=True)
     assert stats1["sqlite_inserted"] == 3
     assert stats1["skipped_incremental"] == 0
 
@@ -384,23 +362,10 @@ def test_incremental_skips_existing_emails(monkeypatch, tmp_path):
 
 def test_incremental_processes_new_emails(monkeypatch, tmp_path):
     """incremental=True should process only new emails, skipping existing ones."""
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     first_batch = [_make_mock_email(i) for i in range(1, 3)]
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: first_batch)
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email: [{"chunk_id": f"{email.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-
-    # First ingest: 2 emails
-    stats1 = ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    ingest_mod, sqlite_file, stats1 = _seed_ingest_database(monkeypatch, tmp_path, first_batch, return_stats=True)
     assert stats1["sqlite_inserted"] == 2
 
     # Second ingest with 3 emails (2 old + 1 new), incremental mode
@@ -417,10 +382,9 @@ def test_incremental_processes_new_emails(monkeypatch, tmp_path):
 
 
 def test_ingest_persists_event_records_and_entity_occurrences(monkeypatch, tmp_path):
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.conversation_segments import ConversationSegment
-    from src.email_db import EmailDatabase
+    import mailarium.ingest as ingest_mod
+    from mailarium.conversation_segments import ConversationSegment
+    from mailarium.email_db import EmailDatabase
 
     email = _make_mock_email(1)
     email.body_text = "Bitte um Rueckmeldung bis spaetestens morgen."
@@ -455,22 +419,16 @@ def test_ingest_persists_event_records_and_entity_occurrences(monkeypatch, tmp_p
     def _fake_entity_extractor(_text: str, _sender: str):
         return [_Entity("SBV", "organization", "sbv"), _Entity("Gleichbehandlung", "legal_reference", "gleichbehandlung")]
 
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda email_dict: [{"chunk_id": f"{email_dict.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
     monkeypatch.setattr(ingest_mod, "_resolve_entity_extractor", lambda _extract, _dry: _fake_entity_extractor)
 
-    sqlite_file = str(tmp_path / "event-entity.db")
-    stats = ingest_mod.ingest(
-        "mock.olm",
-        dry_run=False,
-        sqlite_path=sqlite_file,
+    _, sqlite_file, stats = _seed_ingest_database(
+        monkeypatch,
+        tmp_path,
+        [email],
+        database_name="event-entity.db",
         extract_attachments=True,
-        extract_entities=True,
+        ingest_kwargs={"extract_entities": True},
+        return_stats=True,
     )
     assert stats["sqlite_inserted"] == 1
 
@@ -488,10 +446,10 @@ def test_ingest_persists_event_records_and_entity_occurrences(monkeypatch, tmp_p
 
 def test_reingest_metadata_backfills_v7_fields(monkeypatch, tmp_path):
     """reingest_metadata should update categories, thread_topic, etc. for existing emails."""
-    import src.embedder as embedder_mod
-    import src.ingest as ingest_mod
-    from src.email_db import EmailDatabase
-    from src.parse_olm import Email
+    from copy import copy
+
+    from mailarium.email_db import EmailDatabase
+    from mailarium.parse_olm import Email
 
     # First ingest: basic email without v7 metadata
     basic_email = Email(
@@ -508,36 +466,14 @@ def test_reingest_metadata_backfills_v7_fields(monkeypatch, tmp_path):
         folder="Inbox",
         has_attachments=False,
     )
-    monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [basic_email])
-    monkeypatch.setattr(
-        ingest_mod,
-        "chunk_email",
-        lambda e: [{"chunk_id": f"{e.get('uid', 'x')}-a"}],
-    )
-    monkeypatch.setattr(embedder_mod, "EmailEmbedder", _MockEmbedder)
-
-    sqlite_file = str(tmp_path / "test.db")
-    ingest_mod.ingest("mock.olm", dry_run=False, sqlite_path=sqlite_file)
+    ingest_mod, sqlite_file = _seed_ingest_database(monkeypatch, tmp_path, [basic_email])
 
     # Now simulate re-parse with v7 metadata
-    enriched_email = Email(
-        message_id="<msg1@example.test>",
-        subject="Test",
-        sender_name="Sender",
-        sender_email="sender@example.test",
-        to=["r@example.test"],
-        cc=[],
-        bcc=[],
-        date="2024-01-01T10:00:00",
-        body_text="Hello",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
-        categories=["Important", "Project X"],
-        thread_topic="Test Thread",
-        is_calendar_message=True,
-        exchange_extracted_emails=["vendor@example.com"],
-    )
+    enriched_email = copy(basic_email)
+    enriched_email.categories = ["Important", "Project X"]
+    enriched_email.thread_topic = "Test Thread"
+    enriched_email.is_calendar_message = True
+    enriched_email.exchange_extracted_emails = ["vendor@example.com"]
     monkeypatch.setattr(ingest_mod, "parse_olm", lambda _path, **_kw: [enriched_email])
 
     result = ingest_mod.reingest_metadata("mock.olm", sqlite_path=sqlite_file)
@@ -583,7 +519,7 @@ def test_pipeline_consumer_error_does_not_deadlock():
     pipeline._thread = threading.Thread(target=pipeline._run, daemon=True)
     pipeline._thread.start()
 
-    # Submit work — consumer will crash on first batch
+    # Submit work - consumer will crash on first batch
     pipeline._queue.put((["chunk1"], []))
     time.sleep(0.2)
 

@@ -1,11 +1,11 @@
-"""Tests for src/email_exporter.py — thread and single email HTML/PDF export."""
+"""Verifies email export renders thread and single-message evidence into HTML and PDF outputs."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from src.email_exporter import EmailExporter
+from mailarium.email_exporter import EmailExporter
 
 # ── Helpers ──────────────────────────────────────────────────────────
 

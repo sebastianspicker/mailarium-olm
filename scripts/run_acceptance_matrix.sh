@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Run progressively broader local, CI, or release verification gates.
 set -euo pipefail
 
 profile="${1:-local}"
@@ -60,7 +61,7 @@ require_python() {
 require_python
 
 if [[ "$profile" == "ci" ]]; then
-	echo "Running CI profile. Ensure dependencies are installed: pip install -r requirements-dev.txt"
+	echo "Running CI profile. Ensure the lock is current and all declared extras are installed with uv sync --locked."
 elif [[ "$profile" == "release" ]]; then
 	echo "Running release profile. Dependency audit is required and may not be skipped."
 else
@@ -69,25 +70,22 @@ fi
 
 run_step "Lint (python -m ruff check .)" "$python_bin" -m ruff check .
 run_step "Format check (python -m ruff format --check .)" "$python_bin" -m ruff format --check .
-run_step "Type check (python -m mypy src)" "$python_bin" -m mypy src
+run_step "Type check (python -m mypy mailarium)" "$python_bin" -m mypy mailarium
 run_step \
-	"Test suite (python -m pytest -q --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80; local thread caps enabled)" \
+	"Test suite (python -m pytest -q --tb=short --cov=mailarium --cov-report=term-missing --cov-fail-under=80; local thread caps enabled)" \
 	env \
 	OMP_NUM_THREADS=1 \
 	OPENBLAS_NUM_THREADS=1 \
 	MKL_NUM_THREADS=1 \
 	VECLIB_MAXIMUM_THREADS=1 \
 	NUMEXPR_NUM_THREADS=1 \
-	"$python_bin" -m pytest -q --tb=short --cov=src --cov-report=term-missing --cov-fail-under=80
+	"$python_bin" -m pytest -q --tb=short --cov=mailarium --cov-report=term-missing --cov-fail-under=80
 run_step \
 	"BM25 warning gate (PYTHONTRACEMALLOC=1 python -m pytest -q tests/test_bm25_index_extended.py::TestBuildFromCollection::test_multi_batch_collection -W error::ResourceWarning)" \
 	env PYTHONTRACEMALLOC=1 "$python_bin" -m pytest -q tests/test_bm25_index_extended.py::TestBuildFromCollection::test_multi_batch_collection -W error::ResourceWarning
 run_step \
-	"Legal-support captured artifacts contract (python scripts/refresh_qa_eval_captured_reports.py --check --scenario legal_support --scenario legal_support_full_pack_goldens)" \
-	"$python_bin" scripts/refresh_qa_eval_captured_reports.py --check --scenario legal_support --scenario legal_support_full_pack_goldens
-run_step \
-	"Exhaustive legal-support smoke tests (python -m pytest -q tests/test_case_analysis.py tests/test_case_analysis_exhaustive_persistence.py tests/test_matter_file_ingestion.py tests/case_workflows/test_case_full_pack.py tests/case_workflows/test_cli_subcommands_case.py tests/test_matter_snapshot_persistence.py tests/test_mcp_tools_case_full_pack.py tests/test_mcp_tools_legal_support.py tests/test_legal_support_exporter.py tests/test_qa_eval_legal_support_artifacts.py tests/test_qa_eval_legal_support_full_pack_goldens.py)" \
-	"$python_bin" -m pytest -q tests/test_case_analysis.py tests/test_case_analysis_exhaustive_persistence.py tests/test_matter_file_ingestion.py tests/case_workflows/test_case_full_pack.py tests/case_workflows/test_cli_subcommands_case.py tests/test_matter_snapshot_persistence.py tests/test_mcp_tools_case_full_pack.py tests/test_mcp_tools_legal_support.py tests/test_legal_support_exporter.py tests/test_qa_eval_legal_support_artifacts.py tests/test_qa_eval_legal_support_full_pack_goldens.py
+	"Captured QA evaluation contracts" \
+	"$python_bin" scripts/refresh_qa_eval_captured_reports.py --check
 run_step \
 	"Ingest smoke (reports native vs fallback runtime)" \
 	env \
@@ -96,13 +94,8 @@ run_step \
 	DISABLE_SAFETENSORS_CONVERSION=1 \
 	SPACY_AUTO_DOWNLOAD_DURING_INGEST=0 \
 	"$python_bin" scripts/ingest_smoke.py
-run_step "Campaign workflow smoke (python scripts/wave_workflow_smoke.py)" "$python_bin" scripts/wave_workflow_smoke.py
-run_step "Case CLI execute-wave help (python -m src.cli case execute-wave --help)" "$python_bin" -m src.cli case execute-wave --help
-run_step "Case CLI execute-all-waves help (python -m src.cli case execute-all-waves --help)" "$python_bin" -m src.cli case execute-all-waves --help
-run_step "Case CLI counsel-pack help (python -m src.cli case counsel-pack --help)" "$python_bin" -m src.cli case counsel-pack --help
-run_step "Case CLI full-pack help (python -m src.cli case full-pack --help)" "$python_bin" -m src.cli case full-pack --help
 run_step "Streamlit smoke (python scripts/streamlit_smoke.py)" "$python_bin" scripts/streamlit_smoke.py
-run_step "Security scan (python -m bandit -r src -q -ll -ii)" "$python_bin" -m bandit -r src -q -ll -ii
+run_step "Security scan (python -m bandit -r mailarium -q -ll -ii)" "$python_bin" -m bandit -r mailarium -q -ll -ii
 
 audit_cache_dir="$(mktemp -d)"
 trap 'rm -rf "$audit_cache_dir"' EXIT

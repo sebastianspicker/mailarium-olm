@@ -6,7 +6,7 @@ import hashlib
 import os
 import tempfile
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 from tests._custody_cases import FakeEmail
 
 
@@ -153,7 +153,7 @@ def test_insert_emails_batch_computes_content_sha256(db: EmailDatabase) -> None:
 
 def test_hash_file_sha256() -> None:
     """_hash_file_sha256 should compute correct SHA-256 of a file."""
-    from src.ingest import _hash_file_sha256
+    from mailarium.ingest import _hash_file_sha256
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".olm") as file_obj:
         file_obj.write(b"test file content for hashing")
@@ -170,7 +170,7 @@ def test_hash_file_sha256() -> None:
 
 def test_hash_file_sha256_large_file() -> None:
     """_hash_file_sha256 should handle files larger than one read chunk."""
-    from src.ingest import _hash_file_sha256
+    from mailarium.ingest import _hash_file_sha256
 
     data = b"x" * 20000
     with tempfile.NamedTemporaryFile(delete=False, suffix=".olm") as file_obj:

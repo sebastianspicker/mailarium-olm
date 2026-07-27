@@ -1,26 +1,12 @@
+"""Provides deterministic email, result, and bare-retriever builders for cross-module bug regressions."""
+
 from __future__ import annotations
 
-from src.parse_olm import Email
-from src.retriever import EmailRetriever, SearchResult
+from mailarium.retriever import EmailRetriever, SearchResult
 
+from .helpers.email_db_builders import _make_email as make_email
 
-def make_email(**overrides) -> Email:
-    defaults = {
-        "message_id": "<msg1@example.com>",
-        "subject": "Hello",
-        "sender_name": "Alice",
-        "sender_email": "employee@example.test",
-        "to": ["Bob <bob@example.com>"],
-        "cc": [],
-        "bcc": [],
-        "date": "2024-01-15T10:30:00",
-        "body_text": "Test body",
-        "body_html": "",
-        "folder": "Inbox",
-        "has_attachments": False,
-    }
-    defaults.update(overrides)
-    return Email(**defaults)
+__all__ = ["bare_retriever", "make_email", "make_result"]
 
 
 def make_result(

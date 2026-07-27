@@ -1,8 +1,10 @@
+"""Keeps browse-query mixin calls delegated to extracted helpers without changing their database interface."""
+
 from __future__ import annotations
 
 import sqlite3
 
-from src.db_queries import QueryMixin
+from mailarium.db_queries import QueryMixin
 
 
 class _QueryHarness(QueryMixin):
@@ -49,7 +51,18 @@ def test_query_mixin_browse_family_delegates_to_extracted_helpers(monkeypatch):
         calls.append(("inferred", (mixin, inferred_thread_id), {}))
         return []
 
-    def fake_paginated(mixin, **kwargs):
+    def fake_paginated(mixin, request):
+        kwargs = {
+            "offset": request.offset,
+            "limit": request.limit,
+            "sort_by": request.sort_by,
+            "sort_order": request.sort_order,
+            "folder": request.folder,
+            "sender": request.sender,
+            "category": request.category,
+            "date_from": request.date_from,
+            "date_to": request.date_to,
+        }
         calls.append(("paginated", (mixin,), kwargs))
         return {"emails": [], "total": 0, "offset": kwargs["offset"], "limit": kwargs["limit"]}
 
@@ -57,14 +70,14 @@ def test_query_mixin_browse_family_delegates_to_extracted_helpers(monkeypatch):
         calls.append(("reembed", (mixin, uid), {}))
         return {"uid": uid}
 
-    monkeypatch.setattr("src.db_queries.recipients_for_uid_impl", fake_recipients_one)
-    monkeypatch.setattr("src.db_queries.recipients_for_uids_impl", fake_recipients_many)
-    monkeypatch.setattr("src.db_queries.get_email_full_impl", fake_full)
-    monkeypatch.setattr("src.db_queries.get_emails_full_batch_impl", fake_batch)
-    monkeypatch.setattr("src.db_queries.get_thread_emails_impl", fake_thread)
-    monkeypatch.setattr("src.db_queries.get_inferred_thread_emails_impl", fake_inferred)
-    monkeypatch.setattr("src.db_queries.list_emails_paginated_impl", fake_paginated)
-    monkeypatch.setattr("src.db_queries.get_email_for_reembed_impl", fake_reembed)
+    monkeypatch.setattr("mailarium.db_queries.recipients_for_uid_impl", fake_recipients_one)
+    monkeypatch.setattr("mailarium.db_queries.recipients_for_uids_impl", fake_recipients_many)
+    monkeypatch.setattr("mailarium.db_queries.get_email_full_impl", fake_full)
+    monkeypatch.setattr("mailarium.db_queries.get_emails_full_batch_impl", fake_batch)
+    monkeypatch.setattr("mailarium.db_queries.get_thread_emails_impl", fake_thread)
+    monkeypatch.setattr("mailarium.db_queries.get_inferred_thread_emails_impl", fake_inferred)
+    monkeypatch.setattr("mailarium.db_queries.list_emails_paginated_impl", fake_paginated)
+    monkeypatch.setattr("mailarium.db_queries.get_email_for_reembed_impl", fake_reembed)
 
     assert db._recipients_for_uid("uid-1") == {"to": [], "cc": [], "bcc": []}
     assert db._recipients_for_uids(["uid-1", "uid-2"]) == {}

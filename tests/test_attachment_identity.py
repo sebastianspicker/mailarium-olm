@@ -1,6 +1,8 @@
+"""Normalizes attachment search text across German spelling variants and line-break hyphenation."""
+
 from __future__ import annotations
 
-from src.attachment_identity import normalize_attachment_search_text
+from mailarium.attachment_identity import normalize_attachment_search_text
 
 
 def test_normalize_attachment_search_text_handles_umlauts_and_sharp_s() -> None:

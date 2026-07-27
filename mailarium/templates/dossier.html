@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+{% include "dossier/styles.html" %}
+</style>
+</head>
+<body>
+
+{% include "dossier/cover_and_summary.html" %}
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    {% if has_evidence %}<li><a href="#executive-summary">Executive Summary</a></li>{% endif %}
+    {% if has_evidence_index %}<li><a href="#evidence-index">Index of Evidence</a></li>{% endif %}
+    <li><a href="#evidence-timeline">Evidence Timeline</a></li>
+    <li><a href="#source-emails">Source Email Appendix</a></li>
+    {% if include_relationships %}<li><a href="#relationships">Relationship Analysis</a></li>{% endif %}
+    {% if include_custody %}<li><a href="#custody-log">Chain-of-Custody Log</a></li>{% endif %}
+  </ol>
+</div>
+
+{% if has_evidence_index %}
+<!-- Index of Evidence -->
+<h2 id="evidence-index">Index of Evidence</h2>
+<table class="evidence-index-table">
+  <thead>
+    <tr><th>No.</th><th>Category</th><th>Date</th><th>Sender</th><th>Summary</th><th>Rel.</th></tr>
+  </thead>
+  <tbody>
+  {% for ei in evidence_index %}
+  <tr>
+    <td><a href="#evidence-{{ ei.evidence_number }}">{{ ei.evidence_number }}</a></td>
+    <td><span class="badge badge-{{ ei.category }}">{{ ei.category }}</span></td>
+    <td>{{ ei.date_short }}</td>
+    <td>{{ ei.sender_short }}</td>
+    <td>{{ ei.summary_short }}</td>
+    <td class="relevance-stars">{{ ei.relevance_stars }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% include "dossier/evidence_timeline.html" %}
+
+{% include "dossier/source_email_appendix.html" %}
+
+{% if include_relationships %}
+<!-- Relationship Analysis -->
+<div class="page-break"></div>
+<h2 id="relationships">Relationship Analysis</h2>
+{% if relationship_data %}
+{% for person in relationship_data %}
+<div class="relationship-card">
+  <h3>{{ person.email }}</h3>
+  <p><strong>Sent:</strong> {{ person.send_count }} | <strong>Received:</strong> {{ person.receive_count }} | <strong>Bridge Score:</strong> {{ person.bridge_score }}</p>
+  {% if person.top_contacts %}
+  <p><strong>Top Contacts:</strong>
+    {% for c in person.top_contacts[:5] %}
+      {{ c.partner }} ({{ c.total }}{% if not loop.last %}), {% else %}){% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p>No relationship data available for persons of interest.</p>
+{% endif %}
+{% endif %}
+
+{% if include_custody %}
+<!-- Chain-of-Custody Log -->
+<div class="page-break"></div>
+<h2 id="custody-log">Chain-of-Custody Log</h2>
+{% if custody_events %}
+<table class="custody-table">
+  <thead>
+    <tr>
+      <th>Timestamp</th>
+      <th>Action</th>
+      <th>Actor</th>
+      <th>Target</th>
+      <th>Content Hash</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for event in custody_events %}
+    <tr>
+      <td>{{ event.timestamp }}</td>
+      <td>{{ event.action }}</td>
+      <td>{{ event.actor }}</td>
+      <td>{{ event.target_type }}:{{ event.target_id }}</td>
+      <td class="hash">{{ event.content_hash }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No custody events recorded.</p>
+{% endif %}
+{% endif %}
+
+{% include "dossier/footer.html" %}
+
+
+</body>
+</html>

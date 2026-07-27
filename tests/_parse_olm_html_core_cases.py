@@ -1,12 +1,14 @@
 # ruff: noqa: I001
+"""HTML email-body sanitization and XML parsing fallback behavior."""
+
 from pathlib import Path
 
 
-from src.parse_olm import (
+from mailarium.parse_olm import (
     _html_to_text,
     _parse_email_xml,
 )
-from src.olm_xml_helpers import _extract_folder
+from mailarium.olm_xml_helpers import _extract_folder
 
 
 def test_html_to_text_strips_tags_and_scripts():

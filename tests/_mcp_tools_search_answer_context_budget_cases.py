@@ -1,122 +1,120 @@
+"""Answer-context inferred grouping, evidence deduplication, and bounded packing behavior."""
+
 import json
 
 import pytest
 
-from src.config import get_settings
+from mailarium.config import get_settings
 
+from .helpers.answer_context_fakes import _AnswerContextDeps
+from .helpers.mcp_tool_extended_fakes import _inferred_thread_dependencies
 from .helpers.mcp_tool_fakes import _BasicRetriever, _make_result
+
+
+class _BudgetTruncationRetriever(_BasicRetriever):
+    def search_filtered(self, query, top_k=10, **kwargs):
+        return [
+            _make_result(
+                uid="uid-pack-a",
+                chunk_id="chunk-pack-a",
+                text="A" * 240,
+                distance=0.05,
+                conversation_id="conv-pack-a",
+                date="2025-06-01",
+            ),
+            _make_result(
+                uid="uid-pack-b",
+                chunk_id="chunk-pack-b",
+                text="B" * 240,
+                distance=0.07,
+                conversation_id="conv-pack-b",
+                date="2025-06-02",
+            ),
+            _make_result(
+                uid="uid-pack-c",
+                chunk_id="chunk-pack-c",
+                text="C" * 240,
+                distance=0.09,
+                conversation_id="conv-pack-c",
+                date="2025-06-03",
+            ),
+        ]
+
+
+class _BudgetTruncationDB:
+    conn = None
+
+    def get_emails_full_batch(self, uids):
+        return {
+            uid: {
+                "uid": uid,
+                "body_text": f"{uid} " + ("X" * 320),
+                "normalized_body_source": "body_text",
+                "forensic_body_text": "",
+                "forensic_body_source": "",
+                "conversation_id": f"conv-{uid}",
+            }
+            for uid in uids
+        }
+
+
+class _BudgetStrengthRetriever(_BasicRetriever):
+    def search_filtered(self, query, top_k=10, **kwargs):
+        return [
+            _make_result(
+                uid="uid-pack-weak",
+                chunk_id="chunk-pack-weak",
+                text="W" * 260,
+                distance=0.01,
+                conversation_id="conv-pack-weak",
+                date="2025-06-01",
+            ),
+            _make_result(
+                uid="uid-pack-strong",
+                chunk_id="chunk-pack-strong",
+                text="S" * 260,
+                distance=0.22,
+                conversation_id="conv-pack-strong",
+                date="2025-06-02",
+            ),
+        ]
+
+
+class _BudgetStrengthDB:
+    conn = None
+
+    def get_emails_full_batch(self, uids):
+        return {
+            "uid-pack-weak": {
+                "uid": "uid-pack-weak",
+                "body_text": "Source-shell message with no recoverable visible body text." + (" W" * 180),
+                "normalized_body_source": "source_shell_summary",
+                "forensic_body_text": "",
+                "forensic_body_source": "",
+                "conversation_id": "conv-pack-weak",
+                "body_kind": "content",
+                "body_empty_reason": "source_shell_only",
+                "recovery_strategy": "source_shell_summary",
+                "recovery_confidence": 0.2,
+            },
+            "uid-pack-strong": {
+                "uid": "uid-pack-strong",
+                "body_text": "Please approve the updated budget before Friday." + (" S" * 180),
+                "normalized_body_source": "body_text",
+                "forensic_body_text": "Please approve the updated budget before Friday." + (" S" * 220),
+                "forensic_body_source": "raw_body_text",
+                "conversation_id": "conv-pack-strong",
+            },
+        }
 
 
 @pytest.mark.asyncio
 async def test_email_answer_context_groups_by_inferred_thread_when_canonical_missing(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query, top_k=10, **kwargs):
-            return [
-                _make_result(
-                    uid="uid-inferred-2",
-                    chunk_id="chunk-inferred-2",
-                    text="Follow-up from the inferred-only thread.",
-                    distance=0.07,
-                    conversation_id="",
-                    date="2025-06-05",
-                ),
-                _make_result(
-                    uid="uid-inferred-1",
-                    chunk_id="chunk-inferred-1",
-                    text="Original inferred-only message.",
-                    distance=0.09,
-                    conversation_id="",
-                    date="2025-06-04",
-                ),
-            ]
-
-    class DummyDB:
-        def get_emails_full_batch(self, uids):
-            return {
-                "uid-inferred-1": {
-                    "uid": "uid-inferred-1",
-                    "body_text": "Original inferred-only message.",
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                    "conversation_id": "",
-                    "inferred_thread_id": "thread-inferred-1",
-                    "inferred_parent_uid": "",
-                },
-                "uid-inferred-2": {
-                    "uid": "uid-inferred-2",
-                    "body_text": "Follow-up from the inferred-only thread.",
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                    "conversation_id": "",
-                    "inferred_thread_id": "thread-inferred-1",
-                    "inferred_parent_uid": "uid-inferred-1",
-                    "inferred_match_reason": "base_subject,participants",
-                    "inferred_match_confidence": 0.87,
-                },
-            }
-
-        def get_inferred_thread_emails(self, inferred_thread_id):
-            assert inferred_thread_id == "thread-inferred-1"
-            return [
-                {
-                    "uid": "uid-inferred-1",
-                    "subject": "Budget Review",
-                    "sender_email": "employee@example.test",
-                    "sender_name": "Alice",
-                    "date": "2025-06-04",
-                    "conversation_id": "",
-                    "inferred_thread_id": "thread-inferred-1",
-                },
-                {
-                    "uid": "uid-inferred-2",
-                    "subject": "Budget Review",
-                    "sender_email": "bob@example.com",
-                    "sender_name": "Bob",
-                    "date": "2025-06-05",
-                    "conversation_id": "",
-                    "inferred_thread_id": "thread-inferred-1",
-                },
-            ]
-
-        conn = None
-
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    retriever, email_db = _inferred_thread_dependencies()
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(retriever, email_db))
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(question="What happened in the inferred thread?", max_results=2)
     )
@@ -138,8 +136,8 @@ async def test_email_answer_context_groups_by_inferred_thread_when_canonical_mis
 
 @pytest.mark.asyncio
 async def test_email_answer_context_deduplicates_repeated_evidence(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -172,38 +170,7 @@ async def test_email_answer_context_deduplicates_repeated_evidence(monkeypatch):
 
         conn = None
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(question="Who asked for the updated budget?", max_results=2)
     )
@@ -218,88 +185,12 @@ async def test_email_answer_context_deduplicates_repeated_evidence(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_answer_context_explicitly_truncates_to_budget(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
-
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query, top_k=10, **kwargs):
-            return [
-                _make_result(
-                    uid="uid-pack-a",
-                    chunk_id="chunk-pack-a",
-                    text="A" * 240,
-                    distance=0.05,
-                    conversation_id="conv-pack-a",
-                    date="2025-06-01",
-                ),
-                _make_result(
-                    uid="uid-pack-b",
-                    chunk_id="chunk-pack-b",
-                    text="B" * 240,
-                    distance=0.07,
-                    conversation_id="conv-pack-b",
-                    date="2025-06-02",
-                ),
-                _make_result(
-                    uid="uid-pack-c",
-                    chunk_id="chunk-pack-c",
-                    text="C" * 240,
-                    distance=0.09,
-                    conversation_id="conv-pack-c",
-                    date="2025-06-03",
-                ),
-            ]
-
-    class DummyDB:
-        def get_emails_full_batch(self, uids):
-            return {
-                uid: {
-                    "uid": uid,
-                    "body_text": f"{uid} " + ("X" * 320),
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                    "conversation_id": f"conv-{uid}",
-                }
-                for uid in uids
-            }
-
-        conn = None
-
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     monkeypatch.setenv("MCP_MAX_JSON_RESPONSE_CHARS", "3000")
     get_settings.cache_clear()
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(_BudgetTruncationRetriever(), _BudgetTruncationDB()))
     try:
         payload = await search_mod.email_answer_context(
             EmailAnswerContextInput(question="How did the budget discussion evolve?", max_results=3)
@@ -323,91 +214,12 @@ async def test_email_answer_context_explicitly_truncates_to_budget(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_answer_context_packing_keeps_stronger_nonweak_evidence(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
-
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query, top_k=10, **kwargs):
-            return [
-                _make_result(
-                    uid="uid-pack-weak",
-                    chunk_id="chunk-pack-weak",
-                    text="W" * 260,
-                    distance=0.01,
-                    conversation_id="conv-pack-weak",
-                    date="2025-06-01",
-                ),
-                _make_result(
-                    uid="uid-pack-strong",
-                    chunk_id="chunk-pack-strong",
-                    text="S" * 260,
-                    distance=0.22,
-                    conversation_id="conv-pack-strong",
-                    date="2025-06-02",
-                ),
-            ]
-
-    class DummyDB:
-        def get_emails_full_batch(self, uids):
-            return {
-                "uid-pack-weak": {
-                    "uid": "uid-pack-weak",
-                    "body_text": "Source-shell message with no recoverable visible body text." + (" W" * 180),
-                    "normalized_body_source": "source_shell_summary",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                    "conversation_id": "conv-pack-weak",
-                    "body_kind": "content",
-                    "body_empty_reason": "source_shell_only",
-                    "recovery_strategy": "source_shell_summary",
-                    "recovery_confidence": 0.2,
-                },
-                "uid-pack-strong": {
-                    "uid": "uid-pack-strong",
-                    "body_text": "Please approve the updated budget before Friday." + (" S" * 180),
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "Please approve the updated budget before Friday." + (" S" * 220),
-                    "forensic_body_source": "raw_body_text",
-                    "conversation_id": "conv-pack-strong",
-                },
-            }
-
-        conn = None
-
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     monkeypatch.setenv("MCP_MAX_JSON_RESPONSE_CHARS", "1650")
     get_settings.cache_clear()
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(_BudgetStrengthRetriever(), _BudgetStrengthDB()))
     try:
         payload = await search_mod.email_answer_context(
             EmailAnswerContextInput(question="What exactly did the sender write about the budget?", max_results=2)

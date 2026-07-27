@@ -1,8 +1,13 @@
+"""Exercises quoted-speaker attribution from message headers and participant context.
+
+It leaves multi-party or reply-context-only quotations unresolved rather than assigning an unsupported author.
+"""
+
 import pytest
 
 
 def test_infer_quoted_speaker_prefers_quoted_header_context():
-    from src.tools.search_answer_context import _infer_quoted_speaker
+    from mailarium.tools.search_answer_context import _infer_quoted_speaker
 
     speaker_email, source, confidence = _infer_quoted_speaker(
         full_email=None,
@@ -23,7 +28,7 @@ def test_infer_quoted_speaker_prefers_quoted_header_context():
 
 
 def test_infer_quoted_speaker_uses_single_email_in_quoted_block():
-    from src.tools.search_answer_context import _infer_quoted_speaker
+    from mailarium.tools.search_answer_context import _infer_quoted_speaker
 
     speaker_email, source, confidence = _infer_quoted_speaker(
         full_email=None,
@@ -38,7 +43,7 @@ def test_infer_quoted_speaker_uses_single_email_in_quoted_block():
 
 
 def test_infer_quoted_speaker_keeps_multi_party_case_unresolved():
-    from src.tools.search_answer_context import _infer_quoted_speaker
+    from mailarium.tools.search_answer_context import _infer_quoted_speaker
 
     speaker_email, source, confidence = _infer_quoted_speaker(
         full_email=None,
@@ -53,7 +58,7 @@ def test_infer_quoted_speaker_keeps_multi_party_case_unresolved():
 
 
 def test_infer_quoted_speaker_prefers_from_header_in_multi_party_case():
-    from src.tools.search_answer_context import _infer_quoted_speaker
+    from mailarium.tools.search_answer_context import _infer_quoted_speaker
 
     speaker_email, source, confidence = _infer_quoted_speaker(
         full_email=None,
@@ -73,7 +78,7 @@ def test_infer_quoted_speaker_prefers_from_header_in_multi_party_case():
 
 
 def test_infer_quoted_speaker_does_not_overclaim_from_reply_context_only():
-    from src.tools.search_answer_context import _infer_quoted_speaker
+    from mailarium.tools.search_answer_context import _infer_quoted_speaker
 
     speaker_email, source, confidence = _infer_quoted_speaker(
         full_email={

@@ -3,32 +3,48 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
 .venv/
 venv/
 
-# Tooling caches
+# Test artifacts
 .pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
+*.cover
+*.junit.xml
+junit*.xml
+pytest-report*.xml
+test-results/
+playwright-report/
+blob-report/
+cypress/screenshots/
+cypress/videos/
+/tests/.artifacts/
+/tests/.venv*/
+/tests/fixtures/generated/
+/tests/runtime-snapshots/
+
+# Tooling caches
 .ruff_cache/
 .mypy_cache/
 .cache/
 .codegraph/
 .serena/
-.coverage
-.coverage.*
-coverage.xml
-htmlcov/
-*.cover
-*.junit.xml
-.hypothesis/
 .codacy/
 .bandit
 bandit-report.*
 *.sarif
 *.prof
-playwright-report/
-blob-report/
 
-# Agent worktrees and orchestration artifacts
+# Local tool state and internal work artifacts
 .agents/
 .codex/
 .kilo/
@@ -36,29 +52,9 @@ AGENTS.md
 HARNESS_PRINCIPLES.md
 code_review.md
 docs/source-audit/
-docs/agent/Prompt.md
-docs/agent/Implement.md
-docs/agent/AutonomousHardStops.md
-docs/agent/RunModes.md
-docs/agent/AutonomyPolicy.md
-docs/agent/Goals.md
-docs/agent/RepoProfile.md
-docs/agent/Findings.md
-docs/agent/Backlog.md
-docs/agent/Topology.md
-docs/agent/VerificationMatrix.md
-docs/agent/Checkpoint.md
-docs/agent/Decisions.md
-docs/agent/ingestion_optimization_plan.md
-docs/agent/ingestion_optimization_progress.md
-docs/agent/qa_eval_plan.md
-docs/agent/qa_eval_captured_refresh.md
-docs/agent/codacy_*.md
-docs/agent/*_status_*.md
-docs/agent/*_ledger.md
-docs/agent/REMEDIATION_LEDGER_*.md
+docs/agent/
 
-# Stale planning and progress artifacts
+# Internal planning and progress artifacts
 /plans/
 /progress.md
 /plan.md
@@ -95,28 +91,26 @@ data/*.olm
 data/*.pst
 data/*.mbox
 data/chromadb/
+data/vector-index/
 data/email_metadata.db
 data/mcp_server.lock
 .example/
 
-# Private local matter workspaces
+# Private local workspaces
 /private/
 /data/private/
 /tests/private/
 /tests/fixtures/private/
-docs/agent/implementation_log/
-docs/agent/plan_history/
-docs/agent/matter_analysis/
-docs/agent/archive/
-docs/agent/Documentation.md
-docs/archive/
+# Public archive indexes are tracked intentionally. Local working snapshots
+# stay in explicitly ignored lanes instead of hiding the entire public archive.
+docs/archive/local/
 scripts/build_forensic_*.py
 scripts/build_lawyer_*.py
 scripts/reverify_evidence_sources.py
-*handoff*.pdf
-*handoff*.tex
-*handoff*.html
-*handoff*.json
+/*handoff*.pdf
+/*handoff*.tex
+/*handoff*.html
+/*handoff*.json
 
 # Environment & secrets
 .env
@@ -141,3 +135,6 @@ service_account.json
 
 # Local examples/scratch
 /.example/
+
+# Opaque local snapshots retained for manual review.
+/archive/local/

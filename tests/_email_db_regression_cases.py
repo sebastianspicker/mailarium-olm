@@ -1,6 +1,6 @@
-"""Tests for the SQLite EmailDatabase."""
+"""SQLite regression coverage for hashes, LIKE escaping, JSON decoding, and date boundaries."""
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
 from .helpers.email_db_builders import _make_email
 

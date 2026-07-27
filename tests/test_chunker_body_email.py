@@ -1,9 +1,11 @@
+"""Chunks long email bodies without boundary stalls while preserving headers, category metadata, and normalization state."""
+
 from __future__ import annotations
 
 import threading
 
-from src.chunker import _split_text, chunk_email
-from src.parse_olm import BODY_NORMALIZATION_VERSION
+from mailarium.chunker import _split_text, chunk_email
+from mailarium.parse_olm import BODY_NORMALIZATION_VERSION
 
 
 def test_long_header_does_not_break_chunking():

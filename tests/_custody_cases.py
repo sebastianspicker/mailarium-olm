@@ -10,7 +10,7 @@ from dataclasses import field as dataclass_field
 
 import pytest
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
 
 @pytest.fixture()
@@ -61,7 +61,7 @@ def db_with_email(db: EmailDatabase) -> EmailDatabase:  # pylint: disable=redefi
 class FakeEmail:  # pylint: disable=too-many-instance-attributes
     """Minimal fake parsed email payload for custody tests.
 
-    Mirrors Email dataclass structure from src.parse_olm; field count is inherent
+    Mirrors Email dataclass structure from mailarium.parse_olm; field count is inherent
     to the fake's purpose and cannot be reduced without breaking compatibility.
     """
 

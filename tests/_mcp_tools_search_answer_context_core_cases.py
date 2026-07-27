@@ -1,14 +1,51 @@
+"""Structured email search and answer-context evidence, mode, lane, and empty-result behavior."""
+
 import json
 
 import pytest
 
+from .helpers.answer_context_fakes import _AnswerContextDeps
 from .helpers.mcp_tool_fakes import _BasicRetriever, _make_result, _patch_search_deps
+
+
+class _LaneMergeRetriever(_BasicRetriever):
+    def search_filtered(self, query, top_k=10, **kwargs):
+        self._last_search_debug = {  # pylint: disable=attribute-defined-outside-init
+            "executed_query": query,
+            "used_query_expansion": False,
+            "expand_query_requested": False,
+            "use_hybrid": False,
+            "use_rerank": False,
+            "top_k": top_k,
+            "fetch_size": top_k,
+        }
+        if "Protokoll" in query:
+            return [_make_result(uid="uid-wave-1", chunk_id="chunk-wave-1", text="PR-Sitzung mit Protokoll.", distance=0.1)]
+        return [_make_result(uid="uid-wave-2", chunk_id="chunk-wave-2", text="Mobiles Arbeiten wurde gestrichen.", distance=0.12)]
+
+
+class _LaneMergeDB:
+    conn = None
+
+    def get_emails_full_batch(self, uids):
+        return {
+            "uid-wave-1": {
+                "uid": "uid-wave-1",
+                "body_text": "PR-Sitzung mit Protokoll.",
+                "normalized_body_source": "body_text",
+            },
+            "uid-wave-2": {
+                "uid": "uid-wave-2",
+                "body_text": "Mobiles Arbeiten wurde gestrichen.",
+                "normalized_body_source": "body_text",
+            },
+        }
 
 
 @pytest.mark.asyncio
 async def test_email_search_structured_tool_returns_json(monkeypatch):
-    from src.mcp_models import EmailSearchStructuredInput
-    from src.tools.search import email_search_structured
+    from mailarium.mcp_models import EmailSearchStructuredInput
+    from mailarium.tools.search import email_search_structured
 
     _patch_search_deps(monkeypatch, _BasicRetriever())
 
@@ -23,8 +60,8 @@ async def test_email_search_structured_tool_returns_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_answer_context_returns_ranked_evidence_bundle(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -54,38 +91,7 @@ async def test_email_answer_context_returns_ranked_evidence_bundle(monkeypatch):
 
         conn = None
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
 
     params = EmailAnswerContextInput(
         question="Who asked for the updated budget?",
@@ -113,8 +119,8 @@ async def test_email_answer_context_returns_ranked_evidence_bundle(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_answer_context_forensic_mode_uses_forensic_body(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -141,38 +147,7 @@ async def test_email_answer_context_forensic_mode_uses_forensic_body(monkeypatch
 
         conn = None
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
 
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(
@@ -192,91 +167,10 @@ async def test_email_answer_context_forensic_mode_uses_forensic_body(monkeypatch
 
 @pytest.mark.asyncio
 async def test_email_answer_context_merges_query_lanes(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query, top_k=10, **kwargs):
-            if "Protokoll" in query:
-                self._last_search_debug = {  # pylint: disable=attribute-defined-outside-init
-                    "executed_query": query,
-                    "used_query_expansion": False,
-                    "expand_query_requested": False,
-                    "use_hybrid": False,
-                    "use_rerank": False,
-                    "top_k": top_k,
-                    "fetch_size": top_k,
-                    "legal_support_profile": {"is_legal_support": True, "intents": ["chronology"], "suggested_terms": []},
-                }
-                return [_make_result(uid="uid-wave-1", chunk_id="chunk-wave-1", text="PR-Sitzung mit Protokoll.", distance=0.1)]
-            self._last_search_debug = {  # pylint: disable=attribute-defined-outside-init
-                "executed_query": query,
-                "used_query_expansion": False,
-                "expand_query_requested": False,
-                "use_hybrid": False,
-                "use_rerank": False,
-                "top_k": top_k,
-                "fetch_size": top_k,
-                "legal_support_profile": {"is_legal_support": True, "intents": ["chronology"], "suggested_terms": []},
-            }
-            return [
-                _make_result(
-                    uid="uid-wave-2",
-                    chunk_id="chunk-wave-2",
-                    text="Mobiles Arbeiten wurde gestrichen.",
-                    distance=0.12,
-                )
-            ]
-
-    class DummyDB:
-        def get_emails_full_batch(self, uids):
-            return {
-                "uid-wave-1": {
-                    "uid": "uid-wave-1",
-                    "body_text": "PR-Sitzung mit Protokoll.",
-                    "normalized_body_source": "body_text",
-                },
-                "uid-wave-2": {
-                    "uid": "uid-wave-2",
-                    "body_text": "Mobiles Arbeiten wurde gestrichen.",
-                    "normalized_body_source": "body_text",
-                },
-            }
-
-        conn = None
-
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(_LaneMergeRetriever(), _LaneMergeDB()))
 
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(
@@ -293,7 +187,7 @@ async def test_email_answer_context_merges_query_lanes(monkeypatch):
 
 
 def test_search_across_query_lanes_preserves_unique_lane_hits_with_scan_state() -> None:
-    from src.tools.search_answer_context_runtime_search import _search_across_query_lanes
+    from mailarium.tools.search_answer_context_runtime_search import _search_across_query_lanes
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -337,8 +231,8 @@ def test_search_across_query_lanes_preserves_unique_lane_hits_with_scan_state() 
 
 @pytest.mark.asyncio
 async def test_email_answer_context_hybrid_mode_falls_back_explicitly_when_forensic_missing(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -365,38 +259,7 @@ async def test_email_answer_context_hybrid_mode_falls_back_explicitly_when_foren
 
         conn = None
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
 
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(
@@ -414,45 +277,14 @@ async def test_email_answer_context_hybrid_mode_falls_back_explicitly_when_foren
 
 @pytest.mark.asyncio
 async def test_email_answer_context_handles_no_results(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
             return []
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return None
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), None))
 
     params = EmailAnswerContextInput(question="Was there any update on the rack move?")
     payload = await search_mod.email_answer_context(params)

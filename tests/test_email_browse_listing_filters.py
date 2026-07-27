@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 from tests._email_browse_cases import make_email, seed_db
 
 

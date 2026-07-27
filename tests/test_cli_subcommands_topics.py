@@ -1,6 +1,8 @@
+"""Reports an insufficient archive for topic modeling instead of attempting to fit an empty dataset."""
+
 from __future__ import annotations
 
-from src.cli_commands_topics import run_topics_build_impl
+from mailarium.cli_commands_topics import run_topics_build_impl
 
 
 class _EmptyConn:

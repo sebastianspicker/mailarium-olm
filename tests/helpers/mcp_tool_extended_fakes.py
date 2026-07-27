@@ -1,18 +1,12 @@
-"""Extended tests for low-coverage MCP tool modules.
-
-Tests cover: threads.py, reporting.py, temporal.py, data_quality.py,
-browse.py, and scan.py. Each test mocks deps (retriever + email_db),
-calls the async tool function, and asserts valid JSON with expected keys.
-"""
+"""Fake MCP registration and in-memory dependencies for MCP tool tests."""
 
 from __future__ import annotations
 
-import json
 import sqlite3
 
-from src.mcp_server import _offload
-from src.retriever import SearchResult
-from src.sanitization import sanitize_untrusted_text
+from mailarium.retriever import SearchResult
+
+from .diagnostics_fakes import SqliteConnectionOwner, ToolDependencyAnnotations
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
@@ -26,6 +20,7 @@ def _make_result(  # pylint: disable=too-many-arguments,too-many-positional-argu
     conversation_id="conv-1",
     distance=0.2,
 ):
+    """Build deterministic result data without external services."""
     return SearchResult(
         chunk_id=f"chunk_{uid}",
         text=text,
@@ -41,32 +36,45 @@ def _make_result(  # pylint: disable=too-many-arguments,too-many-positional-argu
     )
 
 
+def close_sqlite_connection(owner) -> None:
+    """Close the optional SQLite connection held by an in-memory test double."""
+    if owner.conn is not None:
+        owner.conn.close()
+        owner.conn = None
+
+
 class MockRetriever:
     """Retriever stub supporting the methods used by thread/browse tools."""
 
     def search_by_thread(self, conversation_id=None, top_k=50):
+        """Implement the search by thread behavior exposed by the MockRetriever test double."""
         return [
             _make_result(uid="uid-1", text="We decided to go with vendor A."),
             _make_result(uid="uid-2", text="Please send the updated report by Friday.", sender="bob@example.com"),
         ]
 
     def search_filtered(self, query="", top_k=10, **kwargs):
+        """Implement the search filtered behavior exposed by the MockRetriever test double."""
         return [_make_result()]
 
     def format_results_for_llm(self, results):
+        """Implement the format results for llm behavior exposed by the MockRetriever test double."""
         return "formatted results"
 
     def serialize_results(self, query, results):
+        """Implement the serialize results behavior exposed by the MockRetriever test double."""
         return {"query": query, "count": len(results), "results": []}
 
     def list_senders(self, limit=30):
+        """Implement the list senders behavior exposed by the MockRetriever test double."""
         return [{"name": "Alice", "email": "employee@example.test", "count": 10}]
 
 
-class MockEmailDB:
+class MockEmailDB(SqliteConnectionOwner):
     """Minimal email database stub with an in-memory SQLite connection."""
 
     def __init__(self):
+        """Implement the init behavior exposed by the MockEmailDB test double."""
         self.conn = sqlite3.connect(":memory:", check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute(
@@ -130,12 +138,14 @@ class MockEmailDB:
         self.conn.commit()
 
     def get_email_full(self, uid):
+        """Implement the get email full behavior exposed by the MockEmailDB test double."""
         row = self.conn.execute("SELECT * FROM emails WHERE uid = ?", (uid,)).fetchone()
         if not row:
             return None
         return dict(row)
 
     def get_thread_emails(self, conversation_id):
+        """Implement the get thread emails behavior exposed by the MockEmailDB test double."""
         rows = self.conn.execute(
             "SELECT * FROM emails WHERE conversation_id = ? ORDER BY date",
             (conversation_id,),
@@ -145,6 +155,7 @@ class MockEmailDB:
     def list_emails_paginated(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self, offset=0, limit=10, folder=None, sender=None, category=None, sort_order="DESC", date_from=None, date_to=None
     ):
+        """Implement the list emails paginated behavior exposed by the MockEmailDB test double."""
         return {
             "emails": [
                 {"uid": "uid-1", "subject": "Budget Review", "sender_email": "employee@example.test", "date": "2025-06-01"},
@@ -155,6 +166,7 @@ class MockEmailDB:
         }
 
     def get_emails_full_batch(self, uids):
+        """Implement the get emails full batch behavior exposed by the MockEmailDB test double."""
         result = {}
         for uid in uids:
             full = self.get_email_full(uid)
@@ -163,6 +175,7 @@ class MockEmailDB:
         return result
 
     def attachments_for_email(self, uid):
+        """Implement the attachments for email behavior exposed by the MockEmailDB test double."""
         rows = self.conn.execute(
             "SELECT name, mime_type, size, content_id, is_inline FROM attachments WHERE email_uid = ?",
             (uid,),
@@ -170,73 +183,57 @@ class MockEmailDB:
         return [dict(r) for r in rows]
 
     def list_evidence(self, email_uid=None, limit=50):
+        """Implement the list evidence behavior exposed by the MockEmailDB test double."""
         return {"items": []}
 
     def top_contacts(self, email, limit=5):
+        """Implement the top contacts behavior exposed by the MockEmailDB test double."""
         return [{"email": "bob@example.com", "count": 5}]
 
     def category_counts(self):
+        """Implement the category counts behavior exposed by the MockEmailDB test double."""
         return [{"category": "Meeting", "count": 3}]
 
     def calendar_emails(self, date_from=None, date_to=None, limit=10):
+        """Implement the calendar emails behavior exposed by the MockEmailDB test double."""
         return [{"uid": "uid-1", "subject": "Calendar Invite", "date": "2025-06-01"}]
 
     def thread_by_topic(self, topic, limit=50):
+        """Implement the thread by topic behavior exposed by the MockEmailDB test double."""
         return [{"uid": "uid-1", "subject": "Budget Review", "date": "2025-06-01"}]
 
     def top_senders(self, limit=10):
+        """Implement the top senders behavior exposed by the MockEmailDB test double."""
         return [{"sender_email": "employee@example.test", "count": 10}]
 
-    def close(self) -> None:
-        if self.conn is not None:
-            self.conn.close()
-            self.conn = None
 
-    def __del__(self) -> None:
-        try:
-            self.close()
-        except Exception:  # pylint: disable=broad-exception-caught
-            pass
-
-
-class MockDeps:
+class MockDeps(ToolDependencyAnnotations):
     """Dependency injection for tool modules matching ToolDepsProto."""
 
     _retriever = MockRetriever()
     _email_db = MockEmailDB()
 
-    @staticmethod
-    def get_retriever():
-        return MockDeps._retriever
+    @classmethod
+    def get_retriever(cls):
+        """Implement the get retriever behavior exposed by the MockDeps test double."""
+        return cls._retriever
 
-    @staticmethod
-    def get_email_db():
-        return MockDeps._email_db
-
-    offload = staticmethod(_offload)
-    DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-    sanitize = staticmethod(sanitize_untrusted_text)
-
-    @staticmethod
-    def tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def write_tool_annotations(title):
-        return {"title": title}
-
-    @staticmethod
-    def idempotent_write_annotations(title):
-        return {"title": title}
+    @classmethod
+    def get_email_db(cls):
+        """Implement the get email db behavior exposed by the MockDeps test double."""
+        return cls._email_db
 
 
 class FakeMCP:
     """Minimal MCP stub that captures tool registrations."""
 
     def __init__(self):
+        """Implement the init behavior exposed by the FakeMCP test double."""
         self._tools = {}
 
     def tool(self, name=None, annotations=None):
+        """Implement the tool behavior exposed by the FakeMCP test double."""
+
         def decorator(fn):
             self._tools[name] = fn
             return fn
@@ -249,3 +246,95 @@ def _register_module(module):
     fake_mcp = FakeMCP()
     module.register(fake_mcp, MockDeps)
     return fake_mcp
+
+
+def _inferred_thread_dependencies():
+    """Build retriever/database doubles for a canonical-missing inferred thread."""
+
+    class InferredThreadRetriever(MockRetriever):
+        def search_filtered(self, query="", top_k=10, **kwargs):
+            return [
+                _make_result(
+                    uid="uid-inferred-2",
+                    text="Follow-up from the inferred-only thread.",
+                    sender="bob@example.com",
+                    date="2025-06-05",
+                    conversation_id="",
+                    distance=0.07,
+                ),
+                _make_result(
+                    uid="uid-inferred-1",
+                    text="Original inferred-only message.",
+                    sender="employee@example.test",
+                    date="2025-06-04",
+                    conversation_id="",
+                    distance=0.09,
+                ),
+            ]
+
+    class InferredThreadDB:
+        conn = None
+
+        def get_emails_full_batch(self, uids):
+            return {
+                "uid-inferred-1": {
+                    "uid": "uid-inferred-1",
+                    "body_text": "Original inferred-only message.",
+                    "normalized_body_source": "body_text",
+                    "forensic_body_text": "",
+                    "forensic_body_source": "",
+                    "conversation_id": "",
+                    "inferred_thread_id": "thread-inferred-1",
+                    "inferred_parent_uid": "",
+                },
+                "uid-inferred-2": {
+                    "uid": "uid-inferred-2",
+                    "body_text": "Follow-up from the inferred-only thread.",
+                    "normalized_body_source": "body_text",
+                    "forensic_body_text": "",
+                    "forensic_body_source": "",
+                    "conversation_id": "",
+                    "inferred_thread_id": "thread-inferred-1",
+                    "inferred_parent_uid": "uid-inferred-1",
+                    "inferred_match_reason": "base_subject,participants",
+                    "inferred_match_confidence": 0.87,
+                },
+            }
+
+        def get_inferred_thread_emails(self, inferred_thread_id):
+            assert inferred_thread_id == "thread-inferred-1"
+            return [
+                {
+                    "uid": "uid-inferred-1",
+                    "subject": "Budget Review",
+                    "sender_email": "employee@example.test",
+                    "sender_name": "Alice",
+                    "date": "2025-06-04",
+                    "conversation_id": "",
+                    "inferred_thread_id": "thread-inferred-1",
+                },
+                {
+                    "uid": "uid-inferred-2",
+                    "subject": "Budget Review",
+                    "sender_email": "bob@example.com",
+                    "sender_name": "Bob",
+                    "date": "2025-06-05",
+                    "conversation_id": "",
+                    "inferred_thread_id": "thread-inferred-1",
+                },
+            ]
+
+    return InferredThreadRetriever(), InferredThreadDB()
+
+
+def _assert_strong_attachment_candidate(candidate, *, uid, filename):
+    """Assert the stable evidence fields for a text-extracted attachment candidate."""
+    assert candidate["uid"] == uid
+    assert candidate["attachment"]["filename"] == filename
+    assert candidate["attachment"]["size"] == 2048
+    assert candidate["attachment"]["extraction_state"] == "text_extracted"
+    assert candidate["attachment"]["text_available"] is True
+    assert candidate["attachment"]["ocr_used"] is False
+    assert candidate["attachment"]["failure_reason"] is None
+    assert candidate["attachment"]["evidence_strength"] == "strong_text"
+    assert candidate["attachment"]["is_inline"] is False

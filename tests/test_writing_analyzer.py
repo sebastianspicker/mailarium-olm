@@ -1,10 +1,15 @@
-"""Tests for writing style and readability analysis."""
+"""Verifies writing analysis reports readability and style signals from email content."""
 # pylint: disable=R0401
-# test_writing_analyzer imported in top-level; src.tools.reporting lazily imported below.
-# Codacy/PyLint misdetects a cycle: test → src.tools.reporting → src.writing_analyzer.
-# Both cross-links are lazy imports in function bodies — no runtime cycle.
+# test_writing_analyzer imported in top-level; mailarium.tools.reporting lazily imported below.
+# Codacy/PyLint misdetects a cycle: test → mailarium.tools.reporting → mailarium.writing_analyzer.
+# Both cross-links are lazy imports in function bodies - no runtime cycle.
 
-from src.writing_analyzer import WritingAnalyzer, WritingMetrics, _get_words, _split_sentences  # pylint: disable=cyclic-import
+from mailarium.writing_analyzer import (  # pylint: disable=cyclic-import
+    WritingAnalyzer,
+    WritingMetrics,
+    _get_words,
+    _split_sentences,
+)
 
 
 class TestHelpers:
@@ -188,6 +193,6 @@ class TestSenderProfile:
 
 class TestMCPWritingTool:
     def test_writing_analysis_tool_importable(self):
-        from src.tools import reporting  # pylint: disable=cyclic-import  # email_writing_analysis lives in reporting module
+        from mailarium.tools import reporting  # pylint: disable=cyclic-import  # email_writing_analysis lives in reporting module
 
         assert callable(reporting.register)

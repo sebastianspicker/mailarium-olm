@@ -1,10 +1,10 @@
-"""Tests for Phase 1 features: new filters, CLI analytics, incremental ingestion."""
+"""Verifies retrieval filters, CLI analytics, and incremental ingestion work together."""
 
 import pytest
 
-from src.result_filters import STRING_FILTERS, _matches_string
-from src.retriever import SearchResult
-from src.web_ui import build_active_filter_labels
+from mailarium.result_filters import STRING_FILTERS, _matches_string
+from mailarium.retriever import SearchResult
+from mailarium.web_ui import build_active_filter_labels
 
 # --------------------------------------------------------------------------
 # Phase 1A: email_type filter in retriever
@@ -52,45 +52,45 @@ def test_matches_email_type_rejects_mismatch():
 
 
 def test_parse_args_supports_bcc_flag():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--query", "test", "--bcc", "secret@example.com"])
+    args = parse_args(["search", "--query", "test", "--bcc", "secret@example.com"])
     assert args.bcc == "secret@example.com"
 
 
 def test_parse_args_supports_priority_flag():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--query", "test", "--priority", "3"])
+    args = parse_args(["search", "--query", "test", "--priority", "3"])
     assert args.priority == 3
 
 
 def test_parse_args_supports_email_type_flag():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--query", "test", "--email-type", "reply"])
+    args = parse_args(["search", "--query", "test", "--email-type", "reply"])
     assert args.email_type == "reply"
 
 
 def test_parse_args_bcc_requires_query():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
     with pytest.raises(SystemExit):
-        parse_args(["--bcc", "secret@example.com"])
+        parse_args(["search", "--bcc", "secret@example.com"])
 
 
 def test_parse_args_priority_requires_query():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
     with pytest.raises(SystemExit):
-        parse_args(["--priority", "3"])
+        parse_args(["search", "--priority", "3"])
 
 
 def test_parse_args_email_type_requires_query():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
     with pytest.raises(SystemExit):
-        parse_args(["--email-type", "reply"])
+        parse_args(["search", "--email-type", "reply"])
 
 
 # --------------------------------------------------------------------------
@@ -99,67 +99,27 @@ def test_parse_args_email_type_requires_query():
 
 
 def test_filter_labels_include_bcc():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        bcc="hidden@example.com",
-    )
+    labels = build_active_filter_labels({"bcc": "hidden@example.com"})
     assert "BCC: hidden@example.com" in labels
 
 
 def test_filter_labels_include_priority():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        priority=3,
-    )
+    labels = build_active_filter_labels({"priority": 3})
     assert "Priority ≥ 3" in labels
 
 
 def test_filter_labels_include_email_type():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        email_type="reply",
-    )
+    labels = build_active_filter_labels({"email_type": "reply"})
     assert "Type: reply" in labels
 
 
 def test_filter_labels_priority_zero_not_shown():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        priority=None,
-    )
+    labels = build_active_filter_labels({"priority": None})
     assert not any("Priority" in lbl for lbl in labels)
 
 
 def test_filter_labels_email_type_none_not_shown():
-    labels = build_active_filter_labels(
-        sender=None,
-        subject=None,
-        folder=None,
-        date_from=None,
-        date_to=None,
-        min_score=None,
-        email_type=None,
-    )
+    labels = build_active_filter_labels({"email_type": None})
     assert not any("Type" in lbl for lbl in labels)
 
 
@@ -169,59 +129,63 @@ def test_filter_labels_email_type_none_not_shown():
 
 
 def test_parse_args_top_contacts():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--top-contacts", "me@example.com"])
-    assert args.top_contacts == "me@example.com"
+    args = parse_args(["analytics", "contacts", "me@example.com"])
+    assert args.analytics_action == "contacts"
+    assert args.email_address == "me@example.com"
 
 
 def test_parse_args_volume():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--volume", "month"])
-    assert args.volume == "month"
+    args = parse_args(["analytics", "volume", "month"])
+    assert args.analytics_action == "volume"
+    assert args.period == "month"
 
 
 def test_parse_args_entities():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--entities", "organization"])
-    assert args.entities == "organization"
+    args = parse_args(["analytics", "entities", "--type", "organization"])
+    assert args.analytics_action == "entities"
+    assert args.entity_type == "organization"
 
 
 def test_parse_args_entities_no_type():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--entities"])
-    assert args.entities == "all"
+    args = parse_args(["analytics", "entities"])
+    assert args.analytics_action == "entities"
+    assert args.entity_type is None
 
 
 def test_parse_args_heatmap():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--heatmap"])
-    assert args.heatmap is True
+    args = parse_args(["analytics", "heatmap"])
+    assert args.analytics_action == "heatmap"
 
 
 def test_parse_args_response_times():
-    from src.cli import parse_args
+    from mailarium.cli import parse_args
 
-    args = parse_args(["--response-times"])
-    assert args.response_times is True
-
-
-def test_analytics_and_query_mutually_exclusive():
-    from src.cli import parse_args
-
-    with pytest.raises(SystemExit):
-        parse_args(["--query", "test", "--top-contacts", "me@example.com"])
+    args = parse_args(["analytics", "response-times"])
+    assert args.analytics_action == "response-times"
 
 
-def test_analytics_commands_mutually_exclusive():
-    from src.cli import parse_args
+def test_flat_query_flag_is_rejected():
+    from mailarium.cli import parse_args
 
     with pytest.raises(SystemExit):
-        parse_args(["--top-contacts", "me@example.com", "--heatmap"])
+        parse_args(["--query", "test"])
+
+
+def test_flat_analytics_flag_is_rejected():
+    from mailarium.cli import parse_args
+
+    with pytest.raises(SystemExit):
+        parse_args(["--top-contacts", "me@example.com"])
 
 
 # --------------------------------------------------------------------------
@@ -230,7 +194,7 @@ def test_analytics_commands_mutually_exclusive():
 
 
 def test_ingestion_runs_table_created():
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     db = EmailDatabase(":memory:")
     # Table should exist
@@ -239,7 +203,7 @@ def test_ingestion_runs_table_created():
 
 
 def test_record_ingestion_start_and_complete(tmp_path):
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     db = EmailDatabase(":memory:")
     run_id = db.record_ingestion_start(str(tmp_path / "test.olm"))
@@ -256,7 +220,7 @@ def test_record_ingestion_start_and_complete(tmp_path):
 
 
 def test_last_ingestion_returns_none_when_empty(tmp_path):
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     db = EmailDatabase(":memory:")
     assert db.last_ingestion() is None
@@ -264,7 +228,7 @@ def test_last_ingestion_returns_none_when_empty(tmp_path):
 
 
 def test_last_ingestion_returns_most_recent(tmp_path):
-    from src.email_db import EmailDatabase
+    from mailarium.email_db import EmailDatabase
 
     db = EmailDatabase(":memory:")
     run1 = db.record_ingestion_start(str(tmp_path / "test.olm"))
@@ -278,7 +242,7 @@ def test_last_ingestion_returns_most_recent(tmp_path):
 
 
 def test_ingest_incremental_flag_parsed():
-    from src.ingest import parse_args
+    from mailarium.ingest import parse_args
 
     args = parse_args(["test.olm", "--incremental"])
     assert args.incremental is True

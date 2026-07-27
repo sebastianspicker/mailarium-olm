@@ -1,8 +1,8 @@
-"""Tests for dashboard chart data preparation helpers."""
+"""Verifies dashboard chart helpers aggregate email data into stable presentation series."""
 
 from unittest.mock import MagicMock
 
-from src.dashboard_charts import (
+from mailarium.dashboard_charts import (
     prepare_contacts_chart_data,
     prepare_entity_summary,
     prepare_heatmap_data,

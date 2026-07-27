@@ -1,7 +1,7 @@
 # pylint: disable=no-member,c-extension-no-member
 
 
-"""Extended tests for src/parse_olm.py — targeting uncovered lines."""
+"""OLM metadata parsing for limits, namespaces, Exchange fields, headers, and source bodies."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from pathlib import Path
 import pytest
 from lxml import etree
 
-from src.olm_xml_helpers import (
+from mailarium.olm_xml_helpers import (
     _detect_namespace,
     _extract_html_body,
     _find,
     _find_text,
 )
-from src.parse_olm import (
+from mailarium.parse_olm import (
     _NS_OUTLOOK,
     _parse_email_xml,
     parse_olm,
@@ -29,7 +29,7 @@ from src.parse_olm import (
 class TestParseOlmOversizedXml:
     def test_skip_oversized_xml_file(self, monkeypatch, tmp_path: Path):
         """Files exceeding MAX_XML_BYTES are skipped."""
-        import src.parse_olm as mod
+        import mailarium.parse_olm as mod
 
         archive = tmp_path / "oversized.olm"
         xml_content = (
@@ -54,7 +54,7 @@ class TestParseOlmOversizedXml:
 
     def test_max_total_xml_bytes_mid_stream_break(self, monkeypatch, tmp_path: Path):
         """Stop parsing when cumulative bytes exceed MAX_TOTAL_XML_BYTES (mid-read)."""
-        import src.parse_olm as mod
+        import mailarium.parse_olm as mod
 
         archive = tmp_path / "total_limit.olm"
         xml_template = (

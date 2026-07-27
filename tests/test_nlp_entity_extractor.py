@@ -1,4 +1,4 @@
-"""Tests for NLP entity extraction with spaCy and regex fallback."""
+"""Verifies NLP entity extraction uses spaCy when available and falls back to regex matching."""
 
 
 # ── Extraction logic tests (mock spaCy) ──────────────────────
@@ -36,7 +36,7 @@ def _fake_nlp(text):
 
 def _setup_module_with_fake_nlp():
     """Reset and set up the nlp_entity_extractor module with a fake NLP model."""
-    import src.nlp_entity_extractor as mod
+    import mailarium.nlp_entity_extractor as mod
 
     mod.reset_model_cache()
     mod._nlp_models["en"] = _fake_nlp
@@ -142,7 +142,7 @@ class TestExtractSpacyEntities:
 class TestFallbackToRegex:
     def test_falls_back_when_spacy_unavailable(self):
         """extract_nlp_entities falls back to regex when spaCy is not available."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_models.clear()
@@ -155,7 +155,7 @@ class TestFallbackToRegex:
 
     def test_regex_only_no_person_entities(self):
         """Regex fallback does not produce person entities."""
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_models.clear()
@@ -166,7 +166,7 @@ class TestFallbackToRegex:
         assert len(people) == 0
 
     def test_is_spacy_available_returns_false(self):
-        import src.nlp_entity_extractor as mod
+        import mailarium.nlp_entity_extractor as mod
 
         mod.reset_model_cache()
         mod._nlp_models.clear()
@@ -232,8 +232,8 @@ class TestMergeSpacyAndRegex:
 
 class TestPeopleInEmails:
     def test_find_people(self):
-        from src.email_db import EmailDatabase
-        from src.parse_olm import Email
+        from mailarium.email_db import EmailDatabase
+        from mailarium.parse_olm import Email
 
         db = EmailDatabase(":memory:")
         email = Email(
@@ -264,15 +264,15 @@ class TestPeopleInEmails:
         assert results[0]["subject"] == "Meeting"
 
     def test_find_people_no_match(self):
-        from src.email_db import EmailDatabase
+        from mailarium.email_db import EmailDatabase
 
         db = EmailDatabase(":memory:")
         results = db.people_in_emails("nonexistent")
         assert results == []
 
     def test_find_people_partial_match(self):
-        from src.email_db import EmailDatabase
-        from src.parse_olm import Email
+        from mailarium.email_db import EmailDatabase
+        from mailarium.parse_olm import Email
 
         db = EmailDatabase(":memory:")
         email = Email(
@@ -301,8 +301,8 @@ class TestPeopleInEmails:
         assert len(results) == 1
 
     def test_find_people_respects_limit(self):
-        from src.email_db import EmailDatabase
-        from src.parse_olm import Email
+        from mailarium.email_db import EmailDatabase
+        from mailarium.parse_olm import Email
 
         db = EmailDatabase(":memory:")
         for i in range(5):
@@ -334,8 +334,8 @@ class TestPeopleInEmails:
 
 class TestEntityTimeline:
     def test_timeline_monthly(self):
-        from src.email_db import EmailDatabase
-        from src.parse_olm import Email
+        from mailarium.email_db import EmailDatabase
+        from mailarium.parse_olm import Email
 
         db = EmailDatabase(":memory:")
         dates = ["2024-01-15T10:00:00", "2024-01-20T11:00:00", "2024-02-10T09:00:00"]
@@ -370,8 +370,8 @@ class TestEntityTimeline:
         assert results[1]["count"] == 1
 
     def test_timeline_daily(self):
-        from src.email_db import EmailDatabase
-        from src.parse_olm import Email
+        from mailarium.email_db import EmailDatabase
+        from mailarium.parse_olm import Email
 
         db = EmailDatabase(":memory:")
         email = Email(
@@ -401,15 +401,15 @@ class TestEntityTimeline:
         assert results[0]["period"] == "2024-03-15"
 
     def test_timeline_empty(self):
-        from src.email_db import EmailDatabase
+        from mailarium.email_db import EmailDatabase
 
         db = EmailDatabase(":memory:")
         results = db.entity_timeline("nonexistent")
         assert results == []
 
     def test_timeline_weekly(self):
-        from src.email_db import EmailDatabase
-        from src.parse_olm import Email
+        from mailarium.email_db import EmailDatabase
+        from mailarium.parse_olm import Email
 
         db = EmailDatabase(":memory:")
         email = Email(
@@ -443,25 +443,20 @@ class TestEntityTimeline:
 
 
 class TestMCPTools:
-    def test_find_people_tool_importable(self):
-        from src.tools import entities
-
-        assert callable(entities.register)
-
-    def test_entity_timeline_tool_importable(self):
-        from src.tools import entities
+    def test_entity_tools_registration_importable(self):
+        from mailarium.tools import entities
 
         assert callable(entities.register)
 
     def test_entity_timeline_input_model(self):
-        from src.mcp_models import EntityTimelineInput
+        from mailarium.mcp_models import EntityTimelineInput
 
         inp = EntityTimelineInput(entity="Acme", period="week")
         assert inp.entity == "Acme"
         assert inp.period == "week"
 
     def test_entity_timeline_input_default_period(self):
-        from src.mcp_models import EntityTimelineInput
+        from mailarium.mcp_models import EntityTimelineInput
 
         inp = EntityTimelineInput(entity="Acme")
         assert inp.period == "month"

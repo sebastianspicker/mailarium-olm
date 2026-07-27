@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 
 
 @pytest.fixture(autouse=True)
 def clean_sessions():
     """Ensure scan sessions are clean between tests."""
-    from src.scan_session import _sessions
+    from mailarium.scan_session import _sessions
 
     _sessions.clear()
     yield
@@ -16,7 +18,7 @@ def clean_sessions():
 
 
 def make_search_result(uid: str = "x", text: str = "hello", distance: float = 0.25):
-    from src.retriever import SearchResult
+    from mailarium.retriever import SearchResult
 
     return SearchResult(
         chunk_id=f"chunk_{uid}",
@@ -48,3 +50,18 @@ class ScanRetriever:
 
     def stats(self):
         return {"total_emails": 100, "date_range": {}, "unique_senders": 5}
+
+
+@contextmanager
+def configured_scan_retriever(monkeypatch, uids):
+    """Install a deterministic scan retriever and clear cached settings around one test."""
+    from mailarium import mcp_server
+    from mailarium.config import get_settings
+
+    get_settings.cache_clear()
+    retriever = ScanRetriever([make_search_result(uid) for uid in uids])
+    monkeypatch.setattr(mcp_server, "get_retriever", lambda: retriever)
+    try:
+        yield retriever
+    finally:
+        get_settings.cache_clear()

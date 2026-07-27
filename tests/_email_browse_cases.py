@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from src.email_db import EmailDatabase
-from src.parse_olm import Email
+from mailarium.email_db import EmailDatabase
+from mailarium.parse_olm import Email
 
 
 def make_email(**overrides) -> Email:

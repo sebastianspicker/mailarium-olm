@@ -2,14 +2,16 @@
 # pylint: disable=no-member,c-extension-no-member
 
 
+"""HTML-to-text conversion, text cleanup, date normalization, and calendar-body extraction."""
+
 from lxml import etree
 
-from src.parse_olm import (
+from mailarium.parse_olm import (
     _clean_text,
     _html_to_text,
 )
-from src.olm_xml_helpers import _extract_html_body
-from src.rfc2822 import _normalize_date
+from mailarium.olm_xml_helpers import _extract_html_body
+from mailarium.rfc2822 import _normalize_date
 
 
 def test_html_to_text_preserves_links():
@@ -111,7 +113,7 @@ def test_extract_html_body_mixed_content():
 
 def test_calendar_body_extraction():
     """Calendar-only emails should extract meeting details from ICS content."""
-    from src.parse_olm import _calendar_to_text
+    from mailarium.parse_olm import _calendar_to_text
 
     ical = (
         "BEGIN:VCALENDAR\r\n"
@@ -134,7 +136,7 @@ def test_calendar_body_extraction():
 
 def test_calendar_body_from_source():
     """text/calendar MIME parts should be converted to readable text."""
-    from src.parse_olm import _extract_body_from_source
+    from mailarium.parse_olm import _extract_body_from_source
 
     raw_source = (
         "From: employee@example.test\r\n"
@@ -153,7 +155,7 @@ def test_calendar_body_from_source():
 
 def test_multipart_calendar_fallback():
     """Multipart email with only calendar parts should get placeholder body."""
-    from src.parse_olm import _extract_body_from_source
+    from mailarium.parse_olm import _extract_body_from_source
 
     raw_source = (
         "From: employee@example.test\r\n"
@@ -171,7 +173,7 @@ def test_multipart_calendar_fallback():
 
 
 def test_calendar_to_text_empty():
-    from src.parse_olm import _calendar_to_text
+    from mailarium.parse_olm import _calendar_to_text
 
     assert _calendar_to_text("") == ""
     assert _calendar_to_text("BEGIN:VCALENDAR\nEND:VCALENDAR") == "[Calendar event]"
@@ -190,7 +192,7 @@ def test_extract_html_body_no_duplicate_tail():
 
 def test_html_to_text_strips_comments():
     """HTML comments (especially Outlook conditionals) should be stripped cleanly."""
-    from src.html_converter import html_to_text
+    from mailarium.html_converter import html_to_text
 
     # Outlook conditional comment containing '>'
     html = "<!--[if gte mso 9]><xml>stuff</xml><![endif]-->Real content here"

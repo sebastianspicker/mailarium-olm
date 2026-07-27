@@ -1,4 +1,4 @@
-"""Tests for src/evidence_exporter.py — evidence report HTML/CSV export."""
+"""Verifies evidence export produces reviewable HTML and CSV representations."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 import pytest
 
-from src.email_db import EmailDatabase
-from src.evidence_exporter import EvidenceExporter
-from src.parse_olm import Email
+from mailarium.email_db import EmailDatabase
+from mailarium.evidence_exporter import EvidenceExporter
+from mailarium.parse_olm import Email
 
 
 def _make_email(**overrides) -> Email:

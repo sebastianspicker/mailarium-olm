@@ -1,10 +1,5 @@
 # ruff: noqa: I001
-"""Extended tests for low-coverage MCP tool modules.
-
-Tests cover: threads.py, reporting.py, temporal.py, data_quality.py,
-browse.py, and scan.py. Each test mocks deps (retriever + email_db),
-calls the async tool function, and asserts valid JSON with expected keys.
-"""
+"""MCP browse, deep-context, export, and scan-session tool behavior."""
 
 from __future__ import annotations
 
@@ -13,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.config import get_settings
+from mailarium.config import get_settings
 
 # ── Shared Test Infrastructure ───────────────────────────────
 
@@ -23,12 +18,12 @@ from .helpers.mcp_tool_extended_fakes import FakeMCP, MockDeps, _register_module
 class TestBrowseTools:
     @pytest.mark.asyncio
     async def test_email_browse_default(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_browse"]
 
-        from src.mcp_models import BrowseInput
+        from mailarium.mcp_models import BrowseInput
 
         params = BrowseInput(limit=10)
         result = await fn(params)
@@ -39,12 +34,12 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_browse_list_categories(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_browse"]
 
-        from src.mcp_models import BrowseInput
+        from mailarium.mcp_models import BrowseInput
 
         params = BrowseInput(list_categories=True)
         result = await fn(params)
@@ -54,12 +49,12 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_browse_calendar(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_browse"]
 
-        from src.mcp_models import BrowseInput
+        from mailarium.mcp_models import BrowseInput
 
         params = BrowseInput(is_calendar=True, limit=5)
         result = await fn(params)
@@ -70,12 +65,12 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_browse_forensic_body_mode(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_browse"]
 
-        from src.mcp_models import BrowseInput
+        from mailarium.mcp_models import BrowseInput
 
         params = BrowseInput(limit=10, include_body=True, render_mode="forensic")
         result = await fn(params)
@@ -86,7 +81,7 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_browse_include_body_surfaces_weak_message(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         try:
             MockDeps._email_db.conn.execute(
@@ -102,7 +97,7 @@ class TestBrowseTools:
             fake_mcp = _register_module(browse)
             fn = fake_mcp._tools["email_browse"]
 
-            from src.mcp_models import BrowseInput
+            from mailarium.mcp_models import BrowseInput
 
             params = BrowseInput(limit=10, include_body=True)
             result = await fn(params)
@@ -124,12 +119,12 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_deep_context_basic(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_deep_context"]
 
-        from src.mcp_models import EmailDeepContextInput
+        from mailarium.mcp_models import EmailDeepContextInput
 
         params = EmailDeepContextInput(
             uid="uid-1",
@@ -148,7 +143,7 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_deep_context_surfaces_weak_message(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         try:
             MockDeps._email_db.conn.execute(
@@ -164,7 +159,7 @@ class TestBrowseTools:
             fake_mcp = _register_module(browse)
             fn = fake_mcp._tools["email_deep_context"]
 
-            from src.mcp_models import EmailDeepContextInput
+            from mailarium.mcp_models import EmailDeepContextInput
 
             result = await fn(EmailDeepContextInput(uid="uid-1"))
             data = json.loads(result)
@@ -185,12 +180,12 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_deep_context_not_found(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_deep_context"]
 
-        from src.mcp_models import EmailDeepContextInput
+        from mailarium.mcp_models import EmailDeepContextInput
 
         params = EmailDeepContextInput(uid="nonexistent-uid")
         result = await fn(params)
@@ -200,12 +195,12 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_deep_context_no_thread(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_deep_context"]
 
-        from src.mcp_models import EmailDeepContextInput
+        from mailarium.mcp_models import EmailDeepContextInput
 
         params = EmailDeepContextInput(
             uid="uid-1",
@@ -223,12 +218,12 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_deep_context_conversation_debug(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_deep_context"]
 
-        from src.mcp_models import EmailDeepContextInput
+        from mailarium.mcp_models import EmailDeepContextInput
 
         params = EmailDeepContextInput(
             uid="uid-2",
@@ -255,7 +250,7 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_deep_context_budget_compaction_keeps_body_surface(self, monkeypatch):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         get_settings.cache_clear()
         monkeypatch.setenv("MCP_MAX_JSON_RESPONSE_CHARS", "500")
@@ -268,7 +263,7 @@ class TestBrowseTools:
             fake_mcp = _register_module(browse)
             fn = fake_mcp._tools["email_deep_context"]
 
-            from src.mcp_models import EmailDeepContextInput
+            from mailarium.mcp_models import EmailDeepContextInput
 
             result = await fn(
                 EmailDeepContextInput(
@@ -292,63 +287,44 @@ class TestBrowseTools:
             get_settings.cache_clear()
 
     @pytest.mark.asyncio
-    async def test_email_export_single_html(self):
-        from src.tools import browse
+    @pytest.mark.parametrize(
+        ("render_mode", "export_result"),
+        [
+            (None, {"html": "<html>email</html>", "uid": "uid-1"}),
+            ("forensic", {"html": "<html>forensic</html>", "uid": "uid-1", "render_mode": "forensic"}),
+        ],
+    )
+    async def test_email_export_single_html(self, render_mode, export_result):
+        from mailarium.tools import browse
 
-        fake_mcp = _register_module(browse)
-        fn = fake_mcp._tools["email_export"]
+        fn = _register_module(browse)._tools["email_export"]
 
-        from src.mcp_models import EmailExportInput
+        from mailarium.mcp_models import EmailExportInput
 
-        with patch("src.email_exporter.EmailExporter") as mock_cls:
+        with patch("mailarium.email_exporter.EmailExporter") as mock_cls:
             mock_exporter = MagicMock()
-            mock_exporter.export_single_html.return_value = {
-                "html": "<html>email</html>",
-                "uid": "uid-1",
-            }
+            mock_exporter.export_single_html.return_value = export_result
             mock_cls.return_value = mock_exporter
 
-            params = EmailExportInput(uid="uid-1")
-            result = await fn(params)
-            data = json.loads(result)
+            params = EmailExportInput(uid="uid-1", **({} if render_mode is None else {"render_mode": render_mode}))
+            data = json.loads(await fn(params))
 
+        if render_mode is None:
             assert "uid" in data or "html" in data
-
-    @pytest.mark.asyncio
-    async def test_email_export_forensic_mode(self):
-        from src.tools import browse
-
-        fake_mcp = _register_module(browse)
-        fn = fake_mcp._tools["email_export"]
-
-        from src.mcp_models import EmailExportInput
-
-        with patch("src.email_exporter.EmailExporter") as mock_cls:
-            mock_exporter = MagicMock()
-            mock_exporter.export_single_html.return_value = {
-                "html": "<html>forensic</html>",
-                "uid": "uid-1",
-                "render_mode": "forensic",
-            }
-            mock_cls.return_value = mock_exporter
-
-            params = EmailExportInput(uid="uid-1", render_mode="forensic")
-            result = await fn(params)
-            data = json.loads(result)
-
-            mock_exporter.export_single_html.assert_called_once_with("uid-1", render_mode="forensic")
-            assert data["render_mode"] == "forensic"
+        else:
+            mock_exporter.export_single_html.assert_called_once_with("uid-1", render_mode=render_mode)
+            assert data["render_mode"] == render_mode
 
     @pytest.mark.asyncio
     async def test_email_export_thread_html(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_export"]
 
-        from src.mcp_models import EmailExportInput
+        from mailarium.mcp_models import EmailExportInput
 
-        with patch("src.email_exporter.EmailExporter") as mock_cls:
+        with patch("mailarium.email_exporter.EmailExporter") as mock_cls:
             mock_exporter = MagicMock()
             mock_exporter.export_thread_html.return_value = {
                 "html": "<html>thread</html>",
@@ -365,12 +341,12 @@ class TestBrowseTools:
 
     @pytest.mark.asyncio
     async def test_email_export_rejects_pdf_without_output_path_even_if_validation_is_bypassed(self):
-        from src.tools import browse
+        from mailarium.tools import browse
 
         fake_mcp = _register_module(browse)
         fn = fake_mcp._tools["email_export"]
 
-        from src.mcp_models import EmailExportInput
+        from mailarium.mcp_models import EmailExportInput
 
         params = EmailExportInput.model_construct(uid="uid-1", conversation_id=None, output_path=None, format="pdf")
         result = await fn(params)
@@ -382,19 +358,19 @@ class TestBrowseTools:
 class TestScanTools:
     def setup_method(self):
         """Reset scan sessions between tests."""
-        from src import scan_session
+        from mailarium import scan_session
 
         scan_session.reset_all_sessions()
 
     @pytest.mark.asyncio
     async def test_scan_flag_and_status(self):
-        from src.tools import scan
+        from mailarium.tools import scan
 
         fake_mcp = FakeMCP()
         scan.register(fake_mcp, MockDeps)
         fn = fake_mcp._tools["email_scan"]
 
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         # Flag some candidates
         params = EmailScanInput(
@@ -422,13 +398,13 @@ class TestScanTools:
 
     @pytest.mark.asyncio
     async def test_scan_candidates(self):
-        from src.tools import scan
+        from mailarium.tools import scan
 
         fake_mcp = FakeMCP()
         scan.register(fake_mcp, MockDeps)
         fn = fake_mcp._tools["email_scan"]
 
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         # Flag first
         await fn(
@@ -452,13 +428,13 @@ class TestScanTools:
 
     @pytest.mark.asyncio
     async def test_scan_candidates_filtered_by_label(self):
-        from src.tools import scan
+        from mailarium.tools import scan
 
         fake_mcp = FakeMCP()
         scan.register(fake_mcp, MockDeps)
         fn = fake_mcp._tools["email_scan"]
 
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         await fn(
             EmailScanInput(
@@ -493,13 +469,13 @@ class TestScanTools:
 
     @pytest.mark.asyncio
     async def test_scan_reset(self):
-        from src.tools import scan
+        from mailarium.tools import scan
 
         fake_mcp = FakeMCP()
         scan.register(fake_mcp, MockDeps)
         fn = fake_mcp._tools["email_scan"]
 
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         # Create a session
         await fn(
@@ -528,13 +504,13 @@ class TestScanTools:
 
     @pytest.mark.asyncio
     async def test_scan_reset_all(self):
-        from src.tools import scan
+        from mailarium.tools import scan
 
         fake_mcp = FakeMCP()
         scan.register(fake_mcp, MockDeps)
         fn = fake_mcp._tools["email_scan"]
 
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         # Create sessions
         await fn(
@@ -566,13 +542,13 @@ class TestScanTools:
 
     @pytest.mark.asyncio
     async def test_scan_flag_missing_uids(self):
-        from src.tools import scan
+        from mailarium.tools import scan
 
         fake_mcp = FakeMCP()
         scan.register(fake_mcp, MockDeps)
         fn = fake_mcp._tools["email_scan"]
 
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         params = EmailScanInput(
             action="flag",
@@ -585,13 +561,13 @@ class TestScanTools:
 
     @pytest.mark.asyncio
     async def test_scan_flag_missing_label(self):
-        from src.tools import scan
+        from mailarium.tools import scan
 
         fake_mcp = FakeMCP()
         scan.register(fake_mcp, MockDeps)
         fn = fake_mcp._tools["email_scan"]
 
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         params = EmailScanInput(
             action="flag",
@@ -605,7 +581,7 @@ class TestScanTools:
     def test_scan_invalid_action(self):
         from pydantic import ValidationError
 
-        from src.mcp_models import EmailScanInput
+        from mailarium.mcp_models import EmailScanInput
 
         # Literal validation rejects invalid actions at parse time
         with pytest.raises(ValidationError, match="action"):

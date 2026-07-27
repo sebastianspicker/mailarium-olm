@@ -1,12 +1,5 @@
 # ruff: noqa: I001
-"""Tests for CLI command handler functions (_cmd_* and helpers).
-
-These tests exercise the uncovered handler logic in src/cli.py by:
-- Constructing argparse.Namespace objects directly
-- Mocking EmailRetriever and EmailDatabase
-- Capturing stdout/stderr with capsys
-- Verifying that the correct branches execute and produce output
-"""
+"""CLI training and administration command dispatch with prerequisite validation."""
 
 from __future__ import annotations
 
@@ -15,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import (
+from mailarium.cli import (
     _cmd_admin,
     _cmd_training,
     _run_fine_tune,
@@ -33,7 +26,7 @@ class TestCmdTraining:
             training_action="generate-data",
             output_path="data.jsonl",
         )
-        with patch("src.cli_commands._run_generate_training_data") as mock_fn:
+        with patch("mailarium.cli_commands._run_generate_training_data") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_training(args)
             assert exc_info.value.code == 0
@@ -46,7 +39,7 @@ class TestCmdTraining:
             output_dir="models/custom",
             epochs=5,
         )
-        with patch("src.cli_commands._run_fine_tune") as mock_fn:
+        with patch("mailarium.cli_commands._run_fine_tune") as mock_fn:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_training(args)
             assert exc_info.value.code == 0
@@ -54,6 +47,7 @@ class TestCmdTraining:
                 "train.jsonl",
                 output_dir="models/custom",
                 epochs=5,
+                mode="dense",
             )
 
     def test_training_fine_tune_defaults(self):
@@ -61,7 +55,7 @@ class TestCmdTraining:
             training_action="fine-tune",
             data_path="train.jsonl",
         )
-        with patch("src.cli_commands._run_fine_tune") as mock_fn:
+        with patch("mailarium.cli_commands._run_fine_tune") as mock_fn:
             with pytest.raises(SystemExit):
                 _cmd_training(args)
             call_kwargs = mock_fn.call_args
@@ -113,8 +107,8 @@ class TestRunGenerateTrainingData:
         mock_db = MagicMock()
         mock_gen = MagicMock()
         mock_gen.export_jsonl.return_value = {"triplet_count": 150}
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
-            with patch("src.training_data_generator.TrainingDataGenerator", return_value=mock_gen):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
+            with patch("mailarium.training_data_generator.TrainingDataGenerator", return_value=mock_gen):
                 _run_generate_training_data("train.jsonl")
         output = capsys.readouterr().out
         assert "train.jsonl" in output
@@ -130,7 +124,7 @@ class TestRunFineTune:
             "epochs": 3,
             "config_path": "models/config.json",
         }
-        with patch("src.fine_tuner.FineTuner", return_value=mock_ft):
+        with patch("mailarium.fine_tuner.FineTuner", return_value=mock_ft):
             _run_fine_tune("train.jsonl", output_dir="models/ft", epochs=3)
         output = capsys.readouterr().out
         assert "completed" in output
@@ -145,7 +139,7 @@ class TestRunFineTune:
             "epochs": 5,
             "config_path": None,
         }
-        with patch("src.fine_tuner.FineTuner", return_value=mock_ft):
+        with patch("mailarium.fine_tuner.FineTuner", return_value=mock_ft):
             _run_fine_tune("train.jsonl", output_dir="models/ft", epochs=5)
         output = capsys.readouterr().out
         assert "Config:" not in output
@@ -153,11 +147,11 @@ class TestRunFineTune:
 
 class TestGetEmailDb:
     def test_get_email_db_missing_sqlite(self, capsys):
-        from src.cli import _get_email_db
+        from mailarium.cli import _get_email_db
 
         mock_settings = MagicMock()
         mock_settings.sqlite_path = "/nonexistent/path/db.sqlite"
-        with patch("src.cli_commands.get_settings", return_value=mock_settings):
+        with patch("mailarium.cli_commands.get_settings", return_value=mock_settings):
             with pytest.raises(SystemExit) as exc_info:
                 _get_email_db()
             assert exc_info.value.code == 1
@@ -165,17 +159,17 @@ class TestGetEmailDb:
         assert "SQLite database not found" in output
 
     def test_get_email_db_no_path(self, capsys):
-        from src.cli import _get_email_db
+        from mailarium.cli import _get_email_db
 
         mock_settings = MagicMock()
         mock_settings.sqlite_path = None
-        with patch("src.cli_commands.get_settings", return_value=mock_settings):
+        with patch("mailarium.cli_commands.get_settings", return_value=mock_settings):
             with pytest.raises(SystemExit) as exc_info:
                 _get_email_db()
             assert exc_info.value.code == 1
 
     def test_get_email_db_success(self, tmp_path):
-        from src.cli import _get_email_db
+        from mailarium.cli import _get_email_db
 
         # Create a dummy sqlite file
         db_path = tmp_path / "test.sqlite"
@@ -183,7 +177,7 @@ class TestGetEmailDb:
         mock_settings = MagicMock()
         mock_settings.sqlite_path = str(db_path)
         mock_db = MagicMock()
-        with patch("src.cli_commands.get_settings", return_value=mock_settings):
-            with patch("src.email_db.EmailDatabase", return_value=mock_db):
+        with patch("mailarium.cli_commands.get_settings", return_value=mock_settings):
+            with patch("mailarium.email_db.EmailDatabase", return_value=mock_db):
                 result = _get_email_db()
                 assert result is mock_db

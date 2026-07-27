@@ -1,4 +1,6 @@
-from src.parse_olm import Email
+"""Ensures serialized mail records retain the forensic fields needed to trace parsed message evidence."""
+
+from mailarium.parse_olm import Email
 
 
 def test_to_dict_includes_forensic_fields():

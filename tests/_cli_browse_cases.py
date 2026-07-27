@@ -1,11 +1,4 @@
-"""Tests for CLI command handler functions (_cmd_* and helpers).
-
-These tests exercise the uncovered handler logic in src/cli.py by:
-- Constructing argparse.Namespace objects directly
-- Mocking EmailRetriever and EmailDatabase
-- Capturing stdout/stderr with capsys
-- Verifying that the correct branches execute and produce output
-"""
+"""CLI browse pagination, filtering, and empty-result rendering behavior."""
 
 from __future__ import annotations
 
@@ -14,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import (
+from mailarium.cli import (
     _cmd_browse,
     _run_browse,
 )
@@ -30,7 +23,7 @@ class TestCmdBrowse:
             folder=None,
             sender=None,
         )
-        with patch("src.cli_commands._run_browse") as mock_browse:
+        with patch("mailarium.cli_commands._run_browse") as mock_browse:
             with pytest.raises(SystemExit) as exc_info:
                 _cmd_browse(args)
             assert exc_info.value.code == 0
@@ -48,7 +41,7 @@ class TestCmdBrowse:
             folder="inbox",
             sender="alice",
         )
-        with patch("src.cli_commands._run_browse") as mock_browse:
+        with patch("mailarium.cli_commands._run_browse") as mock_browse:
             with pytest.raises(SystemExit):
                 _cmd_browse(args)
             mock_browse.assert_called_once_with(
@@ -65,7 +58,7 @@ class TestCmdBrowse:
             folder=None,
             sender=None,
         )
-        with patch("src.cli_commands._run_browse") as mock_browse:
+        with patch("mailarium.cli_commands._run_browse") as mock_browse:
             with pytest.raises(SystemExit):
                 _cmd_browse(args)
             mock_browse.assert_called_once_with(
@@ -98,7 +91,7 @@ class TestRunBrowse:
                 },
             ],
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_browse(offset=0, limit=20)
         output = capsys.readouterr().out
         assert "page 1" in output
@@ -112,7 +105,7 @@ class TestRunBrowse:
             "total": 0,
             "emails": [],
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_browse(offset=0, limit=20)
         output = capsys.readouterr().out
         assert "No emails found" in output
@@ -132,7 +125,7 @@ class TestRunBrowse:
                 for i in range(20)
             ],
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_browse(offset=0, limit=20)
         output = capsys.readouterr().out
         assert "Next page:" in output
@@ -143,7 +136,7 @@ class TestRunBrowse:
             "total": 0,
             "emails": [],
         }
-        with patch("src.cli_commands._get_email_db", return_value=mock_db):
+        with patch("mailarium.cli_commands._get_email_db", return_value=mock_db):
             _run_browse(offset=0, limit=10, folder="inbox", sender="alice")
         mock_db.list_emails_paginated.assert_called_once_with(
             offset=0,

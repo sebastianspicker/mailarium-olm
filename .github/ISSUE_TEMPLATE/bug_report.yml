@@ -23,7 +23,7 @@ body:
       description: Provide the smallest command sequence or workflow that reproduces the issue.
       placeholder: |
         1. Create a synthetic .olm fixture.
-        2. Run `python -m src.ingest private/ingest/example-export.olm --max-emails 10`.
+        2. Run `python -m mailarium.ingest private/ingest/example-export.olm --max-emails 10`.
         3. Observe the error.
     validations:
       required: true
@@ -65,7 +65,7 @@ body:
     id: runtime-state
     attributes:
       label: Runtime State
-      description: If the issue involves ingest, search, MCP, Streamlit, export, or legal-support workflows, include sanitized diagnostics and the exact command or tool call.
+      description: If the issue involves ingest, search, MCP, Streamlit, or export, include sanitized diagnostics and the exact command or tool call.
       placeholder: |
         Command/tool:
         Runtime profile:

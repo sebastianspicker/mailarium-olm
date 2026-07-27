@@ -1,6 +1,11 @@
+"""Exercises semantic topic and cluster filters when backing metadata lookups fail.
+
+It distinguishes an empty resolved filter from a resolution error in search diagnostics.
+"""
+
 from __future__ import annotations
 
-from src.retriever import EmailRetriever
+from mailarium.retriever import EmailRetriever
 
 
 class _FailingTopicDB:

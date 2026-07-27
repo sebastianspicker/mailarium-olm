@@ -1,10 +1,12 @@
 # pylint: disable=no-member,c-extension-no-member
 
 
+"""OLM headers, recipients, threading, subject classification, and source-metadata parsing."""
+
 from lxml import etree
 
-from src.olm_xml_helpers import _parse_references
-from src.parse_olm import (
+from mailarium.olm_xml_helpers import _parse_references
+from mailarium.parse_olm import (
     Email,
     _extract_email_from_header,
     _extract_header,
@@ -13,6 +15,24 @@ from src.parse_olm import (
     _parse_address_list,
     _parse_email_xml,
 )
+
+
+def _email_for_subject(message_id: str, subject: str) -> Email:
+    """Create the minimal email used to classify standard reply/forward prefixes."""
+    return Email(
+        message_id=message_id,
+        subject=subject,
+        sender_name="",
+        sender_email="a@example.test",
+        to=[],
+        cc=[],
+        bcc=[],
+        date="",
+        body_text="",
+        body_html="",
+        folder="Inbox",
+        has_attachments=False,
+    )
 
 
 def test_extract_header_simple():
@@ -239,115 +259,37 @@ Body.</OPFMessageCopySource>
 
 
 def test_email_type_original():
-    email = Email(
-        message_id="1",
-        subject="Hello World",
-        sender_name="",
-        sender_email="a@example.test",
-        to=[],
-        cc=[],
-        bcc=[],
-        date="",
-        body_text="",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
-    )
+    email = _email_for_subject("1", "Hello World")
     assert email.email_type == "original"
     assert email.base_subject == "Hello World"
 
 
 def test_email_type_reply_re():
-    email = Email(
-        message_id="2",
-        subject="RE: Hello World",
-        sender_name="",
-        sender_email="a@example.test",
-        to=[],
-        cc=[],
-        bcc=[],
-        date="",
-        body_text="",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
-    )
+    email = _email_for_subject("2", "RE: Hello World")
     assert email.email_type == "reply"
     assert email.base_subject == "Hello World"
 
 
 def test_email_type_reply_aw():
-    email = Email(
-        message_id="3",
-        subject="AW: AW: Betreff",
-        sender_name="",
-        sender_email="a@example.test",
-        to=[],
-        cc=[],
-        bcc=[],
-        date="",
-        body_text="",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
-    )
+    email = _email_for_subject("3", "AW: AW: Betreff")
     assert email.email_type == "reply"
     assert email.base_subject == "Betreff"
 
 
 def test_email_type_forward_fw():
-    email = Email(
-        message_id="4",
-        subject="FW: Some Message",
-        sender_name="",
-        sender_email="a@example.test",
-        to=[],
-        cc=[],
-        bcc=[],
-        date="",
-        body_text="",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
-    )
+    email = _email_for_subject("4", "FW: Some Message")
     assert email.email_type == "forward"
     assert email.base_subject == "Some Message"
 
 
 def test_email_type_forward_wg():
-    email = Email(
-        message_id="5",
-        subject="WG: Weitergeleitete Nachricht",
-        sender_name="",
-        sender_email="a@example.test",
-        to=[],
-        cc=[],
-        bcc=[],
-        date="",
-        body_text="",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
-    )
+    email = _email_for_subject("5", "WG: Weitergeleitete Nachricht")
     assert email.email_type == "forward"
     assert email.base_subject == "Weitergeleitete Nachricht"
 
 
 def test_base_subject_strips_mixed_prefixes():
-    email = Email(
-        message_id="6",
-        subject="RE: FW: AW: WG: Deep Thread",
-        sender_name="",
-        sender_email="a@example.test",
-        to=[],
-        cc=[],
-        bcc=[],
-        date="",
-        body_text="",
-        body_html="",
-        folder="Inbox",
-        has_attachments=False,
-    )
+    email = _email_for_subject("6", "RE: FW: AW: WG: Deep Thread")
     assert email.base_subject == "Deep Thread"
 
 

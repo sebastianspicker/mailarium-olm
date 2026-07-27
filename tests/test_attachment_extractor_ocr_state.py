@@ -6,7 +6,7 @@ import builtins
 import io
 from unittest.mock import MagicMock, patch
 
-from src.attachment_extractor import (
+from mailarium.attachment_extractor import (
     MAX_EXTRACTED_CHARS,
     _optional_extract,
     _pptx_extractor,
@@ -108,7 +108,7 @@ class TestOptionalExtract:
 
 class TestExtractImageEmbedding:
     def test_embedder_unavailable_returns_none(self) -> None:
-        import src.attachment_extractor as mod
+        import mailarium.attachment_extractor as mod
 
         mock_embedder = MagicMock()
         mock_embedder.is_available = False
@@ -122,7 +122,7 @@ class TestExtractImageEmbedding:
             mod._image_embedder = old
 
     def test_embedder_available_returns_embedding(self) -> None:
-        import src.attachment_extractor as mod
+        import mailarium.attachment_extractor as mod
 
         mock_embedder = MagicMock()
         mock_embedder.is_available = True
@@ -138,7 +138,7 @@ class TestExtractImageEmbedding:
             mod._image_embedder = old
 
     def test_embedder_exception_returns_none(self) -> None:
-        import src.attachment_extractor as mod
+        import mailarium.attachment_extractor as mod
 
         mock_embedder = MagicMock()
         mock_embedder.is_available = True
@@ -192,16 +192,16 @@ class TestExtractorStateEdges:
 
 class TestAttachmentOcrAvailability:
     def test_pdf_requires_pdftoppm_even_when_tesseract_exists(self, monkeypatch) -> None:
-        monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
-        monkeypatch.setattr("src.attachment_extractor.pdf_ocr_available", lambda: False)
+        monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: True)
+        monkeypatch.setattr("mailarium.attachment_extractor.pdf_ocr_available", lambda: False)
         assert attachment_ocr_available_for("scan.pdf", mime_type="application/pdf") is False
 
     def test_pdf_available_when_both_tools_exist(self, monkeypatch) -> None:
-        monkeypatch.setattr("src.attachment_extractor.pdf_ocr_available", lambda: True)
+        monkeypatch.setattr("mailarium.attachment_extractor.pdf_ocr_available", lambda: True)
         assert attachment_ocr_available_for("scan.pdf", mime_type="application/pdf") is True
 
     def test_image_ocr_depends_on_tesseract_only(self, monkeypatch) -> None:
-        monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: True)
+        monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: True)
         assert attachment_ocr_available_for("photo.png", mime_type="image/png") is True
-        monkeypatch.setattr("src.attachment_extractor.image_ocr_available", lambda: False)
+        monkeypatch.setattr("mailarium.attachment_extractor.image_ocr_available", lambda: False)
         assert attachment_ocr_available_for("photo.png", mime_type="image/png") is False

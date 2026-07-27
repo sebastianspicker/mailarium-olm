@@ -1,0 +1,64 @@
+{
+  "inferred-301": {
+    "count": 2,
+    "candidates": [
+      {
+        "uid": "uid-inf-2",
+        "score": 0.9,
+        "conversation_context": {
+          "thread_group_id": "thread-inferred-1",
+          "thread_group_source": "inferred",
+          "inferred_thread_id": "thread-inferred-1"
+        }
+      },
+      {
+        "uid": "uid-inf-1",
+        "score": 0.84,
+        "conversation_context": {
+          "thread_group_id": "thread-inferred-1",
+          "thread_group_source": "inferred",
+          "inferred_thread_id": "thread-inferred-1"
+        }
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "uid-inf-2",
+      "top_thread_group_id": "thread-inferred-1",
+      "top_thread_group_source": "inferred",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  },
+  "inferred-302": {
+    "count": 2,
+    "candidates": [
+      {
+        "uid": "uid-inf-2",
+        "score": 0.89,
+        "conversation_context": {
+          "thread_group_id": "thread-inferred-1",
+          "thread_group_source": "inferred",
+          "inferred_thread_id": "thread-inferred-1"
+        }
+      },
+      {
+        "uid": "uid-inf-1",
+        "score": 0.83,
+        "conversation_context": {
+          "thread_group_id": "thread-inferred-1",
+          "thread_group_source": "inferred",
+          "inferred_thread_id": "thread-inferred-1"
+        }
+      }
+    ],
+    "attachment_candidates": [],
+    "answer_quality": {
+      "top_candidate_uid": "uid-inf-2",
+      "top_thread_group_id": "thread-inferred-1",
+      "top_thread_group_source": "inferred",
+      "confidence_label": "high",
+      "ambiguity_reason": null
+    }
+  }
+}

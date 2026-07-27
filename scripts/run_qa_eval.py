@@ -12,12 +12,16 @@ import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+try:
+    from scripts._bootstrap import add_repository_root
+except ModuleNotFoundError:  # Direct execution resolves helpers from the script directory.
+    from _bootstrap import add_repository_root
+
+ROOT = add_repository_root(__file__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Define captured, live, bootstrap, remediation, source-policy, and threshold-check evaluation modes."""
     parser = argparse.ArgumentParser(
         description="Evaluate email_answer_context against labeled question cases.",
     )
@@ -83,7 +87,8 @@ def _blocked_live_report(
     exc: Exception,
     source_mode: str,
 ) -> dict[str, object]:
-    from src.qa_eval_thresholds import infer_threshold_profile
+    """Represent a blocked live evaluation as a fail-closed report with a failing threshold verdict."""
+    from mailarium.qa_eval_thresholds import infer_threshold_profile
 
     report: dict[str, object] = {
         "questions_path": str(questions_path),
@@ -120,18 +125,21 @@ def _blocked_live_report(
 
 
 def _project_venv_python() -> Path:
+    """Return the repository interpreter path used for embedding-backed re-execution."""
     return ROOT / ".venv" / "bin" / "python"
 
 
 def _interpreter_has_module(module_name: str) -> bool:
+    """Probe an optional module without leaking its import failure to CLI selection logic."""
     try:
         __import__(module_name)
-    except (ImportError, ModuleNotFoundError):
+    except ImportError, ModuleNotFoundError:
         return False
     return True
 
 
 def _run_project_reexec(command: list[str]) -> subprocess.CompletedProcess[bytes]:
+    """Re-execute only this QA script from the repository root with an approved interpreter."""
     if len(command) < 2 or Path(command[1]).resolve() != Path(__file__).resolve():
         raise ValueError("QA eval re-exec must target this script")
     return subprocess.run(  # nosemgrep
@@ -142,9 +150,10 @@ def _run_project_reexec(command: list[str]) -> subprocess.CompletedProcess[bytes
 
 
 def _maybe_reexec_embedding(argv: list[str], *, live_backend: str) -> int | None:
+    """Switch embedding runs to the project interpreter only when the current one lacks USearch."""
     if live_backend != "embedding":
         return None
-    if _interpreter_has_module("chromadb"):
+    if _interpreter_has_module("usearch"):
         return None
     venv_python = _project_venv_python()
     if not venv_python.exists():
@@ -154,7 +163,8 @@ def _maybe_reexec_embedding(argv: list[str], *, live_backend: str) -> int | None
 
 
 def main(argv: list[str] | None = None) -> int:
-    from src import qa_eval
+    """Select interpreter, special mode, argument validation, and standard evaluation in a fixed order."""
+    from mailarium import qa_eval
 
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -170,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _write_json(path: Path, payload: object) -> str:
+    """Write stable UTF-8 JSON with parent-directory creation and return the rendered form."""
     rendered = json.dumps(payload, indent=2, ensure_ascii=False)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(rendered + "\n", encoding="utf-8")
@@ -177,6 +188,7 @@ def _write_json(path: Path, payload: object) -> str:
 
 
 def _run_special_mode(args, parser, qa_eval) -> int | None:
+    """Handle bootstrap and remediation generation without entering the scored evaluation path."""
     if args.bootstrap:
         _validate_bootstrap_args(args, parser)
         output = Path(args.output) if args.output else qa_eval.default_bootstrap_questions_path(Path(args.questions))
@@ -198,6 +210,7 @@ def _run_special_mode(args, parser, qa_eval) -> int | None:
 
 
 def _validate_bootstrap_args(args, parser) -> None:
+    """Reject bootstrap mode unless question and result inputs are present and non-live."""
     conflicts = (
         (args.remediation_from, "--bootstrap cannot be combined with --remediation-from"),
         (not args.questions, "--questions is required when --bootstrap is used"),
@@ -210,6 +223,7 @@ def _validate_bootstrap_args(args, parser) -> None:
 
 
 def _validate_evaluation_args(args, parser) -> None:
+    """Enforce explicit captured/live source combinations before scoring begins."""
     errors = (
         (not args.questions, "--questions is required unless --remediation-from is used"),
         (not args.results and not args.live, "provide at least one of --results or --live"),
@@ -230,6 +244,7 @@ def _validate_evaluation_args(args, parser) -> None:
 
 
 def _run_standard_evaluation(args, qa_eval) -> int:
+    """Resolve live dependencies, evaluate cases, apply thresholds, and serialize blocked live runs safely."""
     live_deps = None
     output = Path(args.output) if args.output else None
     if args.live and output is None:
@@ -257,6 +272,7 @@ def _run_standard_evaluation(args, qa_eval) -> int:
 
 
 def _render_successful_evaluation(args, report, verdict, output, live_deps) -> None:
+    """Print a report or persist it and emit concise live-run status metadata."""
     rendered = json.dumps(report, indent=2, ensure_ascii=False)
     if not output:
         print(rendered)
@@ -280,6 +296,7 @@ def _render_successful_evaluation(args, report, verdict, output, live_deps) -> N
 
 
 def _render_blocked_evaluation(args, output, exc) -> int:
+    """Persist or print a fail-closed live report and return a failing exit status."""
     report = _blocked_live_report(questions_path=Path(args.questions), output_path=output, exc=exc, source_mode=args.source_mode)
     rendered = json.dumps(report, indent=2, ensure_ascii=False)
     if output:

@@ -1,3 +1,5 @@
+"""Shared pytest configuration and dependency stubs for deterministic offline tests."""
+
 import os
 import sqlite3
 import sys
@@ -6,6 +8,7 @@ import types
 from pathlib import Path
 from typing import Any
 
+import dotenv
 import pytest
 
 pytest_plugins = ("tests._custody_cases",)
@@ -15,16 +18,29 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+def _skip_repository_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+    """Keep the test process independent of an ignored operator .env file."""
+    return False
+
+
+dotenv.load_dotenv = _skip_repository_dotenv
+
+
 class _DummyCollection:
+    """In-memory vector collection implementing the subset exercised by storage tests."""
+
     def __init__(self) -> None:
+        """Initialize empty item storage and mutable collection metadata."""
         self._items: list[dict[str, Any]] = []
         self.metadata: dict[str, Any] = {}
 
     def modify(self, metadata: dict[str, Any] | None = None, **kwargs: Any) -> None:
+        """Merge supplied metadata like the vector collection adapter."""
         if metadata:
             self.metadata.update(metadata)
 
     def add(self, ids, embeddings, documents, metadatas):
+        """Append aligned identifiers, embeddings, documents, and metadata rows."""
         for idx, chunk_id in enumerate(ids):
             self._items.append(
                 {
@@ -36,6 +52,7 @@ class _DummyCollection:
             )
 
     def upsert(self, ids, embeddings, documents, metadatas):
+        """Replace existing identifiers and append new ones while preserving batch alignment."""
         existing_ids = {item["id"] for item in self._items}
         for idx, chunk_id in enumerate(ids):
             item = {
@@ -50,9 +67,11 @@ class _DummyCollection:
                 self._items.append(item)
 
     def count(self):
+        """Return the number of stored vector records."""
         return len(self._items)
 
     def get(self, include=None, limit=None, offset=0):
+        """Return a paginated projection containing only explicitly requested fields."""
         include = include or []
         limit = len(self._items) if limit is None else limit
         batch = self._items[offset : offset + limit]
@@ -64,6 +83,7 @@ class _DummyCollection:
         return out
 
     def query(self, query_embeddings, n_results, include=None, where=None):
+        """Filter metadata, take the requested prefix, and emit collection-shaped nested results."""
         include = include or []
         candidates = self._items
         if where:
@@ -81,6 +101,7 @@ class _DummyCollection:
 
 
 def _matches_where(metadata: dict[str, Any], where: dict[str, Any]) -> bool:
+    """Evaluate the equality-only metadata predicates supported by the collection fake."""
     for key, value in where.items():
         if isinstance(value, dict) and "$eq" in value:
             if metadata.get(key) != value["$eq"]:
@@ -90,36 +111,8 @@ def _matches_where(metadata: dict[str, Any], where: dict[str, Any]) -> bool:
     return True
 
 
-class _DummyClient:
-    def __init__(self, path=None, settings=None):
-        self._collection = _DummyCollection()
-
-    def get_or_create_collection(self, name, metadata=None):
-        return self._collection
-
-    def delete_collection(self, name):
-        self._collection = _DummyCollection()
-
-
-class _ChromaSettings:
-    def __init__(self, anonymized_telemetry=False):
-        self.anonymized_telemetry = anonymized_telemetry
-
-
-def _ensure_chromadb_stub() -> None:
-    if "chromadb" in sys.modules:
-        return
-
-    chromadb = types.ModuleType("chromadb")
-    chromadb.PersistentClient = _DummyClient
-    sys.modules["chromadb"] = chromadb
-
-    chromadb_config = types.ModuleType("chromadb.config")
-    chromadb_config.Settings = _ChromaSettings
-    sys.modules["chromadb.config"] = chromadb_config
-
-
 def _ensure_sentence_transformers_stub() -> None:
+    """Install the lightweight sentence transformers stub needed for offline imports."""
     if "sentence_transformers" in sys.modules:
         return
 
@@ -146,6 +139,7 @@ def _ensure_sentence_transformers_stub() -> None:
 
 
 def _ensure_mcp_stub() -> None:
+    """Install the lightweight mcp stub needed for offline imports."""
     if "mcp.server.fastmcp" in sys.modules:
         return
 
@@ -190,7 +184,6 @@ def _ensure_mcp_stub() -> None:
     sys.modules["mcp.types"] = mcp_types_mod
 
 
-_ensure_chromadb_stub()
 _ensure_sentence_transformers_stub()
 _ensure_mcp_stub()
 
@@ -199,32 +192,36 @@ class FakeMultiVectorEmbedder:
     """Offline-safe embedder stub for unit tests that do not need live models."""
 
     def __init__(self, **kwargs: Any) -> None:
+        """Capture model settings while avoiding any model or accelerator initialization."""
         self.model_name = kwargs.get("model_name", "fake-bge-m3")
         self.device = kwargs.get("device", "cpu")
         self.batch_size = kwargs.get("batch_size", 16)
         self.load_mode = kwargs.get("load_mode", "local_only")
         self.has_sparse = kwargs.get("sparse_enabled", False)
-        self.has_colbert = kwargs.get("colbert_enabled", False)
         self._model = object()
 
     def encode(self, texts, **kwargs: Any):
+        """Return one stable dense vector per input text."""
         return [[0.1, 0.2, 0.3] for _ in texts]
 
     def encode_dense(self, texts):
+        """Expose the same stable vectors through the dense-only API."""
         return [[0.1, 0.2, 0.3] for _ in texts]
 
     def encode_all(self, texts):
-        from src.multi_vector_embedder import MultiVectorResult
+        """Return aligned dense and optional sparse vectors in the production result type."""
+        from mailarium.multi_vector_embedder import MultiVectorResult
 
         dense = [[0.1, 0.2, 0.3] for _ in texts]
         sparse = [{1: 0.5} for _ in texts] if self.has_sparse else None
-        colbert = [None for _ in texts] if self.has_colbert else None
-        return MultiVectorResult(dense=dense, sparse=sparse, colbert=colbert)
+        return MultiVectorResult(dense=dense, sparse=sparse)
 
     def warmup(self) -> None:
+        """Model successful warmup without loading external model weights."""
         return None
 
     def runtime_summary(self) -> dict[str, Any]:
+        """Expose the configured fake backend and sparse-capability state."""
         return {
             "model_name": self.model_name,
             "device": self.device,
@@ -232,7 +229,6 @@ class FakeMultiVectorEmbedder:
             "load_mode": self.load_mode,
             "backend": "fake",
             "has_sparse": self.has_sparse,
-            "has_colbert": self.has_colbert,
         }
 
 
@@ -248,6 +244,7 @@ def stub_multi_vector_embedder(monkeypatch):
 
 
 def _close_sqlite_handle(candidate: object) -> None:
+    """Close SQLite-like objects during teardown while tolerating already-closed handles."""
     close = getattr(candidate, "close", None)
     if callable(close):
         try:
@@ -294,44 +291,60 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 @pytest.fixture(autouse=True)
+def clear_removed_product_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prevent a caller's removed product variables from contaminating unrelated tests."""
+    for name in (
+        "EMAIL_RAG_RUNTIME_HOME",
+        "EMAIL_RAG_ALLOWED_OUTPUT_ROOTS",
+        "EMAIL_RAG_ALLOWED_LOCAL_READ_ROOTS",
+        "EMAIL_RAG_ALLOWED_RUNTIME_ROOTS",
+        "CHROMADB_PATH",
+        "COLLECTION_NAME",
+        "COLBERT_RERANK_ENABLED",
+        "MPS_FLOAT16",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def allow_tmp_output_roots_for_tests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Allow each test's temp workspace as an explicit output root."""
 
-    existing = os.environ.get("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", "")
+    existing = os.environ.get("MAILARIUM_ALLOWED_OUTPUT_ROOTS", "")
     roots = [str(tmp_path), tempfile.gettempdir()]
     if existing:
         roots.append(existing)
-    monkeypatch.setenv("EMAIL_RAG_ALLOWED_OUTPUT_ROOTS", os.pathsep.join(roots))
+    monkeypatch.setenv("MAILARIUM_ALLOWED_OUTPUT_ROOTS", os.pathsep.join(roots))
 
 
 @pytest.fixture(autouse=True)
 def allow_tmp_local_read_roots_for_tests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Allow temp workspaces as explicit local-read roots during tests."""
 
-    existing = os.environ.get("EMAIL_RAG_ALLOWED_LOCAL_READ_ROOTS", "")
+    existing = os.environ.get("MAILARIUM_ALLOWED_LOCAL_READ_ROOTS", "")
     roots = [str(tmp_path), tempfile.gettempdir()]
     if existing:
         roots.append(existing)
-    monkeypatch.setenv("EMAIL_RAG_ALLOWED_LOCAL_READ_ROOTS", os.pathsep.join(dict.fromkeys(roots)))
+    monkeypatch.setenv("MAILARIUM_ALLOWED_LOCAL_READ_ROOTS", os.pathsep.join(dict.fromkeys(roots)))
 
 
 @pytest.fixture(autouse=True)
 def allow_tmp_runtime_roots_for_tests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Allow temp workspaces as explicit runtime-reset roots during tests."""
 
-    existing = os.environ.get("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", "")
+    existing = os.environ.get("MAILARIUM_ALLOWED_RUNTIME_ROOTS", "")
     roots = [str(tmp_path), tempfile.gettempdir()]
     if existing:
         roots.append(existing)
-    monkeypatch.setenv("EMAIL_RAG_ALLOWED_RUNTIME_ROOTS", os.pathsep.join(dict.fromkeys(roots)))
+    monkeypatch.setenv("MAILARIUM_ALLOWED_RUNTIME_ROOTS", os.pathsep.join(dict.fromkeys(roots)))
 
 
 @pytest.fixture(autouse=True)
 def reset_ephemeral_tool_state():
     """Keep module-level MCP tool state isolated between tests."""
-    from src import mcp_server
-    from src.scan_session import _sessions
-    from src.tools import search as search_tools
+    from mailarium import mcp_server
+    from mailarium.scan_session import _sessions
+    from mailarium.tools import search as search_tools
 
     _close_sqlite_handle(getattr(mcp_server, "_email_db", None))
     mcp_server._email_db = None

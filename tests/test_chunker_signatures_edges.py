@@ -1,6 +1,8 @@
+"""Separates common multilingual signatures from authored email content without discarding unsigned messages."""
+
 from __future__ import annotations
 
-from src.chunker import chunk_email, strip_signature
+from mailarium.chunker import chunk_email, strip_signature
 
 
 def test_strip_signature_rfc_separator():

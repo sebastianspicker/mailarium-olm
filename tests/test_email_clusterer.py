@@ -1,8 +1,8 @@
-"""Tests for email clustering."""
+"""Verifies email clustering groups related messages and exposes stable cluster analysis."""
 
 import numpy as np
 
-from src.email_clusterer import EmailClusterer
+from mailarium.email_clusterer import EmailClusterer
 
 
 def _make_embeddings(n_samples: int = 30, n_features: int = 8, n_groups: int = 3):
@@ -171,8 +171,8 @@ class TestEmailClusterer:
 
 class TestClusterSQLite:
     def _make_db_with_emails(self, n=3):
-        from src.email_db import EmailDatabase
-        from src.parse_olm import Email
+        from mailarium.email_db import EmailDatabase
+        from mailarium.parse_olm import Email
 
         db = EmailDatabase(":memory:")
         uids = []
@@ -195,6 +195,14 @@ class TestClusterSQLite:
             uids.append(email.uid)
         return db, uids
 
+    def _insert_default_cluster_info(self, db, uids):
+        db.insert_cluster_info(
+            [
+                {"cluster_id": 0, "size": 2, "representative_uid": uids[0], "label": "group A"},
+                {"cluster_id": 1, "size": 1, "representative_uid": uids[2], "label": "group B"},
+            ]
+        )
+
     def test_insert_and_query_clusters(self):
         db, uids = self._make_db_with_emails(3)
         db.insert_clusters_batch(
@@ -204,31 +212,21 @@ class TestClusterSQLite:
                 (uids[2], 1, 0.10),
             ]
         )
-        db.insert_cluster_info(
-            [
-                {"cluster_id": 0, "size": 2, "representative_uid": uids[0], "label": "group A"},
-                {"cluster_id": 1, "size": 1, "representative_uid": uids[2], "label": "group B"},
-            ]
-        )
+        self._insert_default_cluster_info(db, uids)
 
         results = db.emails_in_cluster(0)
         assert len(results) == 2
 
     def test_cluster_summary(self):
         db, uids = self._make_db_with_emails(3)
-        db.insert_cluster_info(
-            [
-                {"cluster_id": 0, "size": 2, "representative_uid": uids[0], "label": "group A"},
-                {"cluster_id": 1, "size": 1, "representative_uid": uids[2], "label": "group B"},
-            ]
-        )
+        self._insert_default_cluster_info(db, uids)
         summary = db.cluster_summary()
         assert len(summary) == 2
         assert summary[0]["size"] >= summary[1]["size"]  # Sorted by size desc
         assert summary[0]["representative_subject"] is not None
 
     def test_empty_clusters(self):
-        from src.email_db import EmailDatabase
+        from mailarium.email_db import EmailDatabase
 
         db = EmailDatabase(":memory:")
         assert db.cluster_summary() == []
@@ -246,23 +244,3 @@ class TestClusterSQLite:
         results = db.emails_in_cluster(0)
         distances = [r["distance"] for r in results]
         assert distances == sorted(distances)
-
-
-# ── MCP tool tests ───────────────────────────────────────────
-
-
-class TestMCPClusterTools:
-    def test_clusters_tool_importable(self):
-        from src.tools import topics  # email_clusters lives in topics module
-
-        assert hasattr(topics, "register")
-
-    def test_find_similar_tool_importable(self):
-        from src.tools import topics  # email_find_similar lives in topics module
-
-        assert callable(topics.register)
-
-    def test_cluster_emails_tool_importable(self):
-        from src.tools import topics  # email_cluster_emails lives in topics module
-
-        assert callable(topics.register)

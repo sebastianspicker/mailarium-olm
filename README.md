@@ -1,383 +1,365 @@
-![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![MCP Tools](https://img.shields.io/badge/MCP_tools-68-purple)
-![Tests](https://img.shields.io/badge/tests-pytest-brightgreen)
+# Mailarium
 
-# Email RAG
+Mailarium indexes Outlook `.olm` archives for local search, review, analysis,
+and export. It provides a terminal interface, a Streamlit interface, and an MCP
+server over the same SQLite archive.
 
-Search Outlook `.olm` archives locally with natural language, structured filters, exports, and MCP-native workflows.
+Current package version: `0.5.0a1`. The project is in alpha, so commands,
+storage contracts, and defaults may change within the `0.5.x` line.
 
-> **MCP-native and local-first:** Any compatible MCP client can call the built-in tools directly. Email content stays local on your machine. First-run model loading may still contact Hugging Face to download or validate cached weights unless you explicitly use offline mode.
+## Purpose and scope
 
-## What This Does
+Mailarium is for operators who need to inspect an exported Outlook mailbox
+without uploading the archive to a hosted search service. It parses messages
+and selected attachments, stores searchable records in SQLite, and builds a
+rebuildable USearch index for faster vector lookup.
 
-You export your mailbox from Outlook for Mac once, index it locally, and then use one of three surfaces:
+The project is not a mail client, hosted service, legal case-management system,
+or replacement for reviewing the original message. Optional EWS support can
+read from and submit controlled actions to an explicitly configured
+on-premises mailbox.
 
-- CLI for direct operator workflows, batch exports, diagnostics, and local case-review execution
-- MCP for assistant-driven search, evidence collection, and structured legal-support workflows
-- Streamlit for exploratory browsing, quick inspection, and lightweight archive review
+## Current capabilities
 
-Typical questions and tasks:
+- Ingest Outlook `.olm` archives, including incremental and resumable runs.
+- Search by semantic similarity, BM25, metadata filters, date ranges, topics,
+  clusters, and optional reranking.
+- Browse messages and inspect threads, people, entities, attachments, and
+  archive statistics.
+- Export messages, threads, evidence reports, archive reports, and GraphML
+  communication networks.
+- Use CLI subcommands for repeatable terminal workflows.
+- Use Streamlit for trusted-local review.
+- Expose 54 MCP tools for structured search, evidence, analytics,
+  administration, and optional EWS workflows.
 
-- *"Find emails about the Q3 budget from `finance@example.test`"*
-- *"Summarize the thread about the server migration"*
-- *"Show me my top contacts and communication patterns"*
-- *"Export the conversation about the contract renewal as a PDF"*
-- *"Run a structured workplace case review from a matter prompt and materials directory"*
+SQLite vectors + USearch is the current storage design. SQLite is authoritative
+for messages, metadata, identifiers, and dense vectors. USearch is derived
+acceleration and can be rebuilt from SQLite.
 
-## How It Works
+## Limitations
 
-For the full architecture, retrieval mathematics, evaluation methodology, and
-a synthetic end-to-end example, see
-[docs/ARCHITECTURE_AND_METHODS.md](docs/ARCHITECTURE_AND_METHODS.md).
+- Package metadata requires Python `>=3.14.6,<3.15`; CI uses Python 3.14.6.
+- The supported operator runtime is macOS 14 or later on Apple Silicon. CI also
+  runs source checks on Ubuntu, but that job is not an operator-runtime claim.
+- Streamlit has no authentication and must remain bound to a trusted local
+  interface.
+- First-run model loading may contact Hugging Face. Offline operation requires
+  cached model files and local-only configuration. Entity extraction can
+  separately invoke spaCy's downloader unless it is disabled.
+- Rich attachment extraction depends on optional Python packages and local
+  executables. See [attachment support](docs/ATTACHMENT_SUPPORT.md).
+- PDF export requires the optional `weasyprint` package and falls back to HTML
+  when that package is absent.
+- Live EWS writes have not been verified for the current alpha candidate.
+- Retrieval ranks and derived summaries require review against source messages.
 
-```mermaid
-flowchart LR
-    OLM["Outlook .olm export"] --> PARSE["Parse and normalize mail + attachments"]
-    PARSE --> HASH["SHA-256 provenance"]
-    PARSE --> CHUNK["Chunk text and recover attachment text"]
-    CHUNK --> EMBED["BGE-M3 dense + sparse embedding"]
-    EMBED --> CHROMA[("ChromaDB vectors")]
-    PARSE --> SQLITE[("SQLite metadata, evidence, analytics")]
-    HASH --> SQLITE
+## Requirements
 
-    QUERY["CLI / MCP / Streamlit query"] --> RETRIEVE["Search + filters + reranking"]
-    RETRIEVE --> CHROMA
-    RETRIEVE --> SQLITE
-    RETRIEVE --> ANSWER["Results, exports, or legal-support products"]
-```
+- macOS 14 or later on Apple Silicon
+- Python 3.14.6, matching CI
+- `git`
+- Enough disk space for the `.olm` archive, SQLite database, model cache, and
+  rebuildable vector index
+- Network access for the first model download, unless the required models are
+  already cached
 
-```mermaid
-flowchart LR
-    PROMPT["Matter prompt and materials"] --> PREFLIGHT["prompt-preflight\nbounded intake draft"]
-    PREFLIGHT --> FULLPACK["full-pack\nmanifest-backed exhaustive review"]
-    FULLPACK --> PRODUCTS["evidence index, chronology,\nissue matrix, memo, dashboard"]
-    PRODUCTS --> REVIEW["review governance\nhuman verification"]
-    REVIEW --> EXPORT["counsel-pack / export\nHTML, PDF, JSON, CSV, bundle"]
-```
+Optional features require:
 
-Key properties:
+- `tesseract` and `pdftoppm` for OCR paths
+- `PyPDF2`, `python-docx`, `openpyxl`, and `python-pptx` for richer attachment
+  parsing
+- the `ews` or `ews-ntlm` package extra for EWS
 
-- All processing runs on your Mac. CPU works; Apple Silicon GPU (MPS) accelerates many workloads.
-- Tracked demo/runtime examples can live under sanitized `data/`, but live operator runs should point at `private/runtime/current/chromadb` and `private/runtime/current/email_metadata.db`.
-- Re-indexing is safe and idempotent. Already-indexed emails are skipped automatically.
-- Semantic search works even when you do not remember the exact words.
-- The same local runtime supports evidence, chronology, analytics, export, and legal-support workflows.
+## Installation
 
-## Current Local Checkout State
-
-This checkout is based on the completed whole-corpus local remediation branch.
-The latest full local verification on 2026-07-12 passed 3,402 tests with 4
-skipped and 92.64% coverage. Local Codacy analysis completed with no analyzer
-errors: Lizard, Prospector, Markdown, Ruff, PyLint, Bandit, Checkov, Spectral,
-and ShellCheck were clean; 66 Semgrep findings and 2 no-fix Trivy findings were
-retained only after exact invariant-backed local review.
-
-This is local evidence, not a release, push, pull request, Codacy Cloud result,
-or statement about the remote repository.
-
-Locally visible state:
-
-- MCP currently registers 68 tools.
-- CLI subcommands are the recommended interface; legacy flat flags remain
-  deprecated but supported for the `0.1.x` compatibility window.
-- `case execute-wave`, `case execute-all-waves`, and `case gather-evidence`
-  share the campaign execution contract with matching MCP `email_case_*`
-  campaign tools.
-- Retrieval and archive-harvest payloads expose lane and expansion diagnostics
-  so widened evidence does not look like direct retrieval coverage.
-- Tooling policy treats source Bandit, PyLint/Codacy policy findings, and
-  publication privacy scans as separate gates. Local Codacy or PyLint evidence
-  is not Codacy Cloud closure.
-
-## Choose Your Interface
-
-| Surface | Best use | Avoid when |
-| --- | --- | --- |
-| CLI | Direct operator use, repeatable commands, exports, diagnostics, local campaign/case workflows | You want an assistant to choose tools for you automatically |
-| MCP | Assistant-driven search, evidence collection, structured workflow orchestration, client integrations | You want a human-readable shell workflow first |
-| Streamlit | A visual search interface that runs in your browser. This is the exploratory GUI for browsing, search, analytics, network, and evidence review. | You need authoritative counsel-ready legal-support output |
-
-Best-practice chooser:
-
-- Start with CLI when you want predictable local commands and explicit outputs.
-- Start with MCP when your assistant or MCP client should choose the right tool automatically.
-- Use Streamlit for exploration, not as the authoritative legal-support surface.
-
-## Privacy And First-Run Boundary
-
-- Email content stays local. This repository does not send email bodies to a cloud provider API.
-- No API keys are required for the built-in workflows.
-- First-run model loading may contact Hugging Face to download or validate cached model weights.
-- If you need deterministic offline behavior, use `RUNTIME_PROFILE=offline-test` and `EMBEDDING_LOAD_MODE=local_only`.
-- Exports can contain sensitive content. Review HTML, PDF, CSV, JSON, and bundle outputs before sharing them with third parties.
-- Checked-in examples, fixtures, and documentation scenarios are synthetic and must stay free of personal records or private actor references.
-
-## Runtime Layout
-
-Use one canonical layout for real operator runs:
-
-```text
-<repo-root>/
-├── private/
-│   ├── ingest/
-│   │   └── example-export.olm
-│   ├── runtime/
-│   │   └── current/
-│   │       ├── chromadb/
-│   │       └── email_metadata.db
-│   ├── files/
-│   └── matter.md
-├── data/
-│   └── ... sanitized examples only ...
-└── tests/fixtures/
-    └── ... sanitized fixtures only ...
-```
-
-Best practices:
-
-- `private/` is ignored by Git and is the right place for real mailbox exports, matter files, and live runtime state.
-- Keep tracked `data/` and `tests/fixtures/` content sanitized.
-- Use tracked `data/` only for demos, tests, checked-in examples, or intentionally published artifacts.
-- Write/output paths are validated against allowlisted local roots and must not overwrite existing files. Defaults write below `private/exports/`; extend roots explicitly with `EMAIL_RAG_ALLOWED_OUTPUT_ROOTS` when needed.
-
-## Setup
-
-### Before You Start
-
-You need:
-
-| Requirement | How to check |
-| --- | --- |
-| Mac with Legacy Outlook for Mac export support | Microsoft documents `.olm` export as a Legacy Outlook for Mac feature |
-| Python 3.11 or newer | `python3 --version` |
-| Git | `git --version` |
-
-### Step 1: Get the code
+Clone the repository and create an isolated environment:
 
 ```bash
 git clone https://github.com/sebastianspicker/outlook-email-rag.git
 cd outlook-email-rag
-```
-
-### Step 2: Create a virtual environment and install
-
-```bash
-python3 -m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-After `pip install -e .`, both packaged entry points and module entry points are available:
+For development, install the locked environment used by CI:
 
 ```bash
-email-rag --help
-email-rag-ingest --help
-python -m src.cli --help
-python -m src.ingest --help
+python -m pip install "uv==0.10.7"
+uv lock --check
+uv sync --locked --extra dev --extra nlp --extra image --extra training --extra ews-ntlm
 ```
 
-### Step 3: Create `.env` from the tracked example
+## Configuration
+
+Copy the tracked template:
 
 ```bash
 cp .env.example .env
 ```
 
-Profile-first runtime setup remains `RUNTIME_PROFILE=quality`.
+For a source checkout, the template keeps live state under ignored paths:
 
-Recommended starting point for a normal local workstation:
-
-```bash
-CHROMADB_PATH=private/runtime/current/chromadb
+```dotenv
+VECTOR_INDEX_PATH=private/runtime/current/vector-index
 SQLITE_PATH=private/runtime/current/email_metadata.db
 RUNTIME_PROFILE=quality
 EMBEDDING_LOAD_MODE=auto
-
-# Uncomment only when you intentionally want to override the profile defaults.
-# RERANK_ENABLED=false
-# HYBRID_ENABLED=false
-# SPARSE_ENABLED=false
-# COLBERT_RERANK_ENABLED=false
 ```
 
-### Step 4: Export your mailbox from Outlook
+The main settings are:
 
-1. Open Legacy Outlook for Mac.
-2. In Legacy Outlook for Mac, go to `File > Export...` or `Tools > Export`.
-3. Choose `Outlook for Mac Data File (.olm)`.
-4. Save the export into `private/ingest/`.
-
-```text
-<repo-root>/
-└── private/
-    └── ingest/
-        └── example-export.olm
-```
-
-### Step 5: Ingest the archive
-
-```bash
-email-rag-ingest private/ingest/example-export.olm
-# or: python -m src.ingest private/ingest/example-export.olm
-```
-
-For a short smoke run first:
-
-```bash
-python -m src.ingest private/ingest/example-export.olm --max-emails 200
-```
-
-### Step 6: Verify that the runtime is alive
-
-```bash
-email-rag analytics stats
-email-rag admin diagnostics
-```
-
-`email_admin(action='diagnostics')` shows resolved runtime settings, embedder/backend state, MCP budgets, and sparse-index status.
-
-### First-run expectations
-
-- The first model load may take longer because model weights may be downloaded or validated.
-- Large archives can take hours to ingest on smaller Apple Silicon machines.
-- Re-running ingest is safe and skips already-indexed emails.
-- PDF export may require optional dependencies in your environment; HTML export is the safer baseline.
-
-## Using With An MCP Client
-
-Email RAG exposes 68 MCP tools. Any compatible client can talk to your local email index in plain English.
-
-### MCP server command
-
-```bash
-.venv/bin/python -m src.mcp_server
-```
-
-Example MCP client configuration:
-
-```json
-{
-  "mcpServers": {
-    "email_search": {
-      "command": ".venv/bin/python",
-      "args": ["-m", "src.mcp_server"],
-      "cwd": "."
-    }
-  }
-}
-```
-
-Use absolute paths if your client launches servers from a different working directory.
-
-### Verifying the connection
-
-1. Open the client’s MCP server/status view.
-2. Look for `email_search` in the server list.
-3. You should see all 68 tools listed beneath it.
-
-If it shows as disconnected:
-
-- Make sure `.venv/bin/python` exists.
-- Make sure project dependencies were installed.
-- Restart the client after updating its server command.
-
-### Example prompts
-
-Search and archive understanding:
-
-```text
-Find emails about the annual budget review from Q1 2024.
-```
-
-```text
-Show me my archive statistics and top senders.
-```
-
-Reading and export:
-
-```text
-Get the full text of the email with UID abc123.
-```
-
-```text
-Export the thread about the server migration as an HTML file.
-```
-
-Evidence and workflow:
-
-```text
-Mark this email as evidence of exclusion and keep the exact quote.
-```
-
-```text
-Ingest my new export at private/ingest/latest-export.olm
-```
-
-## Workplace Case And Legal-Support Boundaries
-
-Use the dedicated `email_case_*` workflows when you need a structured review of potentially hostile, exclusionary, retaliatory, discriminatory, manipulative, or mobbing-like communication patterns.
-
-Important boundaries:
-
-- `email_case_analysis` is exploratory and retrieval-bounded.
-- `case execute-wave`, `case execute-all-waves`, and `case gather-evidence` share the campaign execution contract with the corresponding MCP `email_case_*` campaign tools.
-- Dedicated legal-support analytical products remain MCP-governed even where the CLI exposes a local wrapper for operator convenience.
-- Counsel-facing export remains human-gated by persisted review state.
-
-Best-practice escalation path:
-
-1. Start with `case prompt-preflight` or `email_case_prompt_preflight` when you only have a long narrative matter description.
-2. Use wave execution and evidence harvest while you are still stabilizing scope, sources, and anchors.
-3. Promote to `case full-pack` or dedicated `email_case_*` product tools only when the record is ready for manifest-backed exhaustive review.
-4. Review exports manually before external sharing.
-
-## Available MCP Tool Families (68 tools)
-
-For exact parameters, examples, and legal-support refresh behavior, see [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md).
-
-| Family | What it covers |
+| Variable | Purpose |
 | --- | --- |
-| Search and triage | semantic search, fast triage, answer-context assembly, scan sessions, similar-email discovery |
-| Reading and browsing | deep context, browse, export, folder/category/calendar views |
-| Archive understanding | stats, senders, folders, discovery, clusters, conditional topics |
-| Entities and relationships | entity lookup, co-occurrence, timelines, contact/network analysis |
-| Thread intelligence | thread lookup, summaries, action items, decisions |
-| Evidence and custody | evidence CRUD, export, overview, provenance, dossier, custody chain |
-| Admin and diagnostics | ingest, diagnostics, reingest, reembed, runtime inspection |
-| Case and legal-support workflows | prompt preflight, full-pack, wave execution, evidence index, chronology, issue matrix, dashboard, export |
+| `VECTOR_INDEX_PATH` | Rebuildable USearch index directory |
+| `SQLITE_PATH` | SQLite archive path |
+| `RUNTIME_PROFILE` | `balanced`, `quality`, `low-memory`, or `offline-test` |
+| `EMBEDDING_LOAD_MODE` | `auto`, `local_only`, or `download` |
+| `DEVICE` | `auto`, `cpu`, `mps`, or `cuda` |
+| `RAG_SCOPE` | Default explicit retrieval scope |
+| `TOP_K` | Default result count |
+| `LOG_LEVEL` | Python logging level |
+| `MAILARIUM_RUNTIME_HOME` | Absolute runtime root for an installed package |
+| `MAILARIUM_ALLOWED_OUTPUT_ROOTS` | Additional absolute export roots |
+| `MAILARIUM_ALLOWED_LOCAL_READ_ROOTS` | Additional absolute input roots |
+| `MAILARIUM_ALLOWED_RUNTIME_ROOTS` | Additional absolute runtime roots |
 
-Temporal analysis includes recent-sample response times per sender based on canonical reply pairs.
+The `quality` profile enables hybrid retrieval and cross-encoder reranking.
+Learned sparse retrieval, late interaction, and image search remain explicit
+opt-ins. Model identifiers and immutable revisions are documented in
+[runtime tuning](docs/RUNTIME_TUNING.md).
 
-## Best Practices
+Removed variables such as `CHROMADB_PATH`, `COLLECTION_NAME`,
+`COLBERT_RERANK_ENABLED`, and `MPS_FLOAT16` cause startup to fail when they have
+non-empty values. Remove them from the process environment and `.env`.
 
-- Keep real operator data under `private/`, not tracked `data/`.
-- Use `scan_id` with `email_triage`, `email_search_structured`, and `email_find_similar` when you are iteratively scanning a large archive.
-- Use Streamlit for exploration, not as the authoritative legal-support surface.
-- Prefer `email_admin(action='diagnostics')` over guessing runtime state from `.env`.
-- Review every export before sharing; HTML/PDF/CSV/JSON outputs can contain raw source content and sensitive metadata.
-- Use `bash scripts/clean_ingest_reset.sh --dry-run` before destructive cleanup.
-- Keep offline expectations explicit in CI-like or air-gapped environments: `RUNTIME_PROFILE=offline-test` plus `EMBEDDING_LOAD_MODE=local_only`.
+## Usage
 
-## Documentation Map
+For a source checkout, place an Outlook export below the ignored `private/`
+directory, then ingest it:
 
-- [docs/README.md](docs/README.md) for the public docs hub and reading order
-- [docs/ARCHITECTURE_AND_METHODS.md](docs/ARCHITECTURE_AND_METHODS.md) for architecture, retrieval mathematics, evaluation methodology, and a synthetic example
-- [docs/README_USAGE_AND_OPERATIONS.md](docs/README_USAGE_AND_OPERATIONS.md) for configuration, runtime layout, troubleshooting, lifecycle, and go-live practices
-- [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) for terminal usage
-- [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md) for the detailed MCP tool surface
-- [docs/RUNTIME_TUNING.md](docs/RUNTIME_TUNING.md) for performance and model-loading guidance
-- [docs/API_COMPATIBILITY.md](docs/API_COMPATIBILITY.md) for interface-stability expectations
-- [docs/agent/README.md](docs/agent/README.md) for advanced legal-support product docs, operator runbooks, fixtures/goldens, and archive/history surfaces
+```bash
+mkdir -p private/ingest private/runtime/current private/exports
+mailarium-ingest private/ingest/archive.olm
+```
 
-## Additional Guides
+Run a bounded first pass when evaluating a new archive:
 
-- CLI, Streamlit UI, configuration, troubleshooting, architecture, lifecycle, and development details live in `docs/README_USAGE_AND_OPERATIONS.md`.
-- `email_deep_context.max_body_chars` uses `None` as a profile-default sentinel (`MCP_MAX_FULL_BODY_CHARS`), while `0` means unlimited.
-- `email_ingest` ingests into the requested target but does not silently switch the active runtime archive for later searches.
-- Topic contract note: the default ingest workflow does not populate topic tables yet.
-- `topics build` is available as a CLI subcommand, but topic data is still a
-  conditional surface unless the runtime has populated topic tables.
-- Write/output paths are validated against allowlisted local roots and must not overwrite existing files; defaults write below `private/exports/`. Extend roots explicitly with `EMAIL_RAG_ALLOWED_OUTPUT_ROOTS` when needed.
-- Privacy boundary remains unchanged: Email content stays local.
-- First-run model weights are downloaded from Hugging Face when not cached.
+```bash
+mailarium-ingest private/ingest/archive.olm --max-emails 200
+```
+
+Search and inspect the archive:
+
+```bash
+mailarium search "project handoff" --scope customer-support --hybrid
+mailarium browse --page 1 --page-size 20
+mailarium analytics stats
+mailarium export report --output private/exports/report.html
+```
+
+CLI subcommands are the supported command interface. Run these references
+against the installed environment:
+
+```bash
+mailarium --help
+mailarium-ingest --help
+python -m mailarium.cli --help
+python -m mailarium.ingest --help
+```
+
+See the [CLI reference](docs/CLI_REFERENCE.md) for subcommands and options.
+
+### Streamlit
+
+Start the trusted-local interface from a source checkout:
+
+```bash
+python -m streamlit run mailarium/web_app.py --server.address 127.0.0.1
+```
+
+The current pages are Search, Overview, People, Connections, Evidence, and
+Mailbox. The images below are synthetic 1440 by 900 documentation captures
+from maintained HTML fixtures, not live Streamlit sessions.
+
+![Search interface](docs/screenshots/streamlit-search-ui.png)
+
+![Archive overview](docs/screenshots/streamlit-dashboard-ui.png)
+
+![Empty archive](docs/screenshots/streamlit-empty-archive.png)
+
+### MCP
+
+Mailarium exposes 54 MCP tools by default. Start the stdio server with the
+environment’s absolute Python path:
+
+```bash
+.venv/bin/python -m mailarium.mcp_server
+```
+
+`python -m mailarium` starts the same MCP server. Configure an MCP client with
+the absolute interpreter path and repository working directory. See
+[MCP tools](docs/MCP_TOOLS.md) for the registered surface and safety
+boundaries.
+
+## Repository structure
+
+```text
+mailarium/
+├── mailarium/                 Python package
+│   ├── tools/                 MCP tool modules
+│   └── templates/             HTML export templates
+├── tests/                     Unit, integration, contract, and fixture tests
+├── scripts/                   Verification, maintenance, and smoke-test tools
+├── docs/                      Public technical references and images
+├── data/                      Sanitized tracked examples only
+├── private/                   Ignored live inputs, runtime state, and exports
+├── .github/workflows/ci.yml   CI definition
+├── .env.example               Configuration template
+├── pyproject.toml             Package metadata and tool configuration
+└── uv.lock                    Locked dependency graph
+```
+
+The package uses a flat `mailarium/` layout. There is no active `src/`
+namespace.
+
+## Development workflow
+
+Keep changes focused and use synthetic fixtures. Run the narrowest relevant
+test first, then the repository checks:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy mailarium
+uv run pytest -q
+uv run python scripts/privacy_scan.py --tracked-only --json
+```
+
+The broader source, test, runtime-smoke, and security matrix is:
+
+```bash
+bash scripts/run_acceptance_matrix.sh
+```
+
+Run the privacy scan separately. The local matrix may skip its dependency audit
+when PyPI is unreachable.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for review and submission expectations.
+
+## Testing
+
+CI uses Python 3.14.6 and runs:
+
+- lockfile validation
+- Ruff lint and format checks
+- mypy
+- pytest with an 80 percent coverage threshold
+- Streamlit smoke tests
+- Bandit
+- dependency and privacy scans
+- wheel and source distribution builds
+- release-artifact inspection
+- installed-wheel smoke tests
+
+Tests use synthetic mailbox records and fixtures. Live mailbox access is not
+part of the default test suite.
+
+## Deployment and operation
+
+The repository does not contain a container image, hosted-service manifest, or
+public-network deployment configuration. Supported operation is local:
+
+1. Keep the original `.olm` file as the recovery source.
+2. Store live data under `private/` in a source checkout or under an absolute
+   `MAILARIUM_RUNTIME_HOME` for an installed package.
+3. For an installed package, set `MAILARIUM_ALLOWED_OUTPUT_ROOTS` to an
+   absolute writable directory and use absolute export paths inside it.
+4. Back up the SQLite database and original archive.
+5. Treat the USearch directory as rebuildable.
+6. Keep Streamlit on `127.0.0.1`.
+7. Review every export before sharing it.
+
+Installed packages resolve relative runtime paths under the platform user-data
+directory:
+
+| Platform | Default runtime home |
+| --- | --- |
+| macOS | `~/Library/Application Support/mailarium` |
+| Windows | `%LOCALAPPDATA%/mailarium` |
+| Linux | `${XDG_DATA_HOME:-~/.local/share}/mailarium` |
+
+Set `MAILARIUM_RUNTIME_HOME` to an absolute path to override the default.
+Mailarium does not migrate an older runtime automatically. Follow
+[usage and operations](docs/README_USAGE_AND_OPERATIONS.md) before moving an
+existing archive.
+
+## Troubleshooting
+
+### Startup reports removed environment variables
+
+Delete the reported obsolete names from `.env` and the parent process
+environment. Current storage uses `VECTOR_INDEX_PATH` and `SQLITE_PATH`.
+
+### No messages are indexed
+
+Confirm that the `.olm` path exists and is readable, and that `SQLITE_PATH` and
+`VECTOR_INDEX_PATH` are writable. Retry with
+`--max-emails 200` to isolate parsing or model-loading failures.
+
+### Model loading fails
+
+Check `RUNTIME_PROFILE`, `EMBEDDING_LOAD_MODE`, `DEVICE`, and the configured
+model revisions. With `local_only`, all required files must already exist in
+the local model cache.
+
+### MCP does not start
+
+Run `.venv/bin/python -m mailarium.mcp_server --version` in the configured
+working directory. Confirm that the client uses the same absolute interpreter
+path and that no second process holds the archive lock.
+
+### Streamlit is unreachable
+
+Start it from the repository root with the documented command and open the
+loopback URL printed by Streamlit. Do not change the bind address to a public
+interface without adding authentication and transport controls outside this
+project.
+
+### PDF export returns HTML
+
+HTML is the baseline export format. Install WeasyPrint in the active
+environment, verify it, then inspect the returned path and actual format:
+
+```bash
+python -m pip install weasyprint
+weasyprint --version
+```
+
+## Security considerations
+
+Mailbox archives, attachments, SQLite databases, indexes, and exports can
+contain sensitive data. Keep them out of version control. Input parsers treat
+OLM, XML, MIME, and attachment content as untrusted. MCP-provided local read
+paths and all runtime and output paths are checked
+against purpose-specific allowlists. The ingest CLI accepts a direct `.olm`
+path. New exports do not overwrite existing files.
+
+Streamlit and MCP are trust boundaries. They are not unauthenticated public
+services. First-run model resolution can make network requests. EWS credentials
+must remain in environment variables and must not be stored in SQLite or
+documentation.
+
+Report vulnerabilities through [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+Use synthetic data in issues, tests, and screenshots. Include tests for behavior
+changes, update the owning reference when a public contract changes, and list
+checks that were skipped. Do not commit live archives, private paths, databases,
+model caches, exports, or credentials.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[documentation index](docs/README.md).

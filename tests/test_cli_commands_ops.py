@@ -1,7 +1,8 @@
+"""Exercises operational CLI dispatch for archive administration, analytics, training, and interactive terminal actions."""
+
 from ._cli_commands_cases import (
     TestCmdAdmin,
     TestCmdAnalytics,
-    TestCmdLegacy,
     TestCmdTraining,
     TestGetEmailDb,
     TestInteractiveAction,
@@ -16,7 +17,6 @@ from ._cli_commands_cases import (
 _COLLECTED_TESTS = (
     TestCmdAdmin,
     TestCmdAnalytics,
-    TestCmdLegacy,
     TestCmdTraining,
     TestGetEmailDb,
     TestInteractiveAction,

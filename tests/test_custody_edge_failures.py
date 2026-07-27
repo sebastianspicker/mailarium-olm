@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
 
 def test_remove_nonexistent_evidence_no_custody_event(db_with_email: EmailDatabase) -> None:

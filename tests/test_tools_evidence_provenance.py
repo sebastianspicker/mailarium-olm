@@ -14,7 +14,7 @@ class TestCustodyChain:
     async def test_custody_chain_compact(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["custody_chain"]
-        from src.mcp_models import CustodyChainInput
+        from mailarium.mcp_models import CustodyChainInput
 
         params = CustodyChainInput(compact=True, limit=10)
         result = await fn(params)
@@ -29,7 +29,7 @@ class TestCustodyChain:
     async def test_custody_chain_full(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["custody_chain"]
-        from src.mcp_models import CustodyChainInput
+        from mailarium.mcp_models import CustodyChainInput
 
         params = CustodyChainInput(compact=False, limit=10)
         result = await fn(params)
@@ -41,7 +41,7 @@ class TestCustodyChain:
     async def test_custody_chain_with_filters(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["custody_chain"]
-        from src.mcp_models import CustodyChainInput
+        from mailarium.mcp_models import CustodyChainInput
 
         params = CustodyChainInput(target_type="evidence", target_id="1", action="evidence_add")
         result = await fn(params)
@@ -54,7 +54,7 @@ class TestEmailProvenance:
     async def test_provenance_returns_data(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["email_provenance"]
-        from src.mcp_models import EmailProvenanceInput
+        from mailarium.mcp_models import EmailProvenanceInput
 
         params = EmailProvenanceInput(email_uid="uid-1")
         result = await fn(params)
@@ -67,7 +67,7 @@ class TestEvidenceProvenance:
     async def test_evidence_provenance_returns_data(self):
         fake_mcp = register_tools()
         fn = fake_mcp._tools["evidence_provenance"]
-        from src.mcp_models import EvidenceProvenanceInput
+        from mailarium.mcp_models import EvidenceProvenanceInput
 
         params = EvidenceProvenanceInput(evidence_id=1)
         result = await fn(params)

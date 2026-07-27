@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 
-from src.email_db import EmailDatabase
+from mailarium.email_db import EmailDatabase
 
 from ._bugfix_regression_cases import make_email
 

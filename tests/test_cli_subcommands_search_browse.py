@@ -7,7 +7,7 @@ import io
 
 import pytest
 
-from src.cli import main, parse_args
+from mailarium.cli import main, parse_args
 
 
 class TestSearchSubcommand:
@@ -20,7 +20,7 @@ class TestSearchSubcommand:
         output = buffer.getvalue()
         assert "search" in output
         assert "analytics" in output
-        assert "Legacy flat-flag syntax is still supported but deprecated" in output
+        assert "Legacy flat-flag syntax" not in output
 
     def test_search_with_positional_query(self) -> None:
         args = parse_args(["search", "budget review"])

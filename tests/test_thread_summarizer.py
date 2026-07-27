@@ -1,6 +1,6 @@
-"""Tests for extractive thread summarization."""
+"""Verifies extractive thread summarization selects representative messages without inventing content."""
 
-from src.thread_summarizer import _split_sentences, summarize_email, summarize_thread
+from mailarium.thread_summarizer import _split_sentences, summarize_email, summarize_thread
 
 
 class TestSplitSentences:

@@ -1,8 +1,8 @@
-"""Tests for web_app.py helper functions."""
+"""Verifies web application helpers prepare safe, consistent search-interface inputs."""
 
 import io
 
-from src.retriever import SearchResult
+from mailarium.retriever import SearchResult
 
 
 def _result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -31,11 +31,11 @@ def _result(  # pylint: disable=too-many-arguments,too-many-positional-arguments
 
 def test_web_app_imports():
     """Verify the module imports without error."""
-    from src import web_app  # noqa: F401
+    from mailarium import web_app  # noqa: F401
 
 
 def test_build_csv_export_header_and_rows():
-    from src.web_app import _build_csv_export
+    from mailarium.web_app import _build_csv_export
 
     results = [_result("c1", 0.2, "2024-01-01"), _result("c2", 0.3, "2024-06-01")]
     csv_text = _build_csv_export(results)
@@ -45,7 +45,7 @@ def test_build_csv_export_header_and_rows():
 
 
 def test_build_csv_export_empty():
-    from src.web_app import _build_csv_export
+    from mailarium.web_app import _build_csv_export
 
     csv_text = _build_csv_export([])
     lines = csv_text.strip().split("\n")
@@ -53,7 +53,7 @@ def test_build_csv_export_empty():
 
 
 def test_build_csv_export_truncates_preview():
-    from src.web_app import _build_csv_export
+    from mailarium.web_app import _build_csv_export
 
     long_text = "x" * 500
     results = [_result(text=long_text)]
@@ -67,7 +67,7 @@ def test_build_csv_export_truncates_preview():
 
 
 def test_as_optional_str():
-    from src.web_app import _as_optional_str
+    from mailarium.web_app import _as_optional_str
 
     assert _as_optional_str("hello") == "hello"
     assert _as_optional_str("") == ""
@@ -77,7 +77,7 @@ def test_as_optional_str():
 
 
 def test_as_optional_float():
-    from src.web_app import _as_optional_float
+    from mailarium.web_app import _as_optional_float
 
     assert _as_optional_float(3.14) == 3.14
     assert _as_optional_float(42) == 42.0
@@ -88,7 +88,7 @@ def test_as_optional_float():
 
 
 def test_build_csv_export_handles_missing_metadata():
-    from src.web_app import _build_csv_export
+    from mailarium.web_app import _build_csv_export
 
     result = SearchResult(
         chunk_id="bare",
@@ -106,7 +106,7 @@ def test_build_csv_export_handles_missing_metadata():
 
 
 def test_build_csv_export_score_formatting():
-    from src.web_app import _build_csv_export
+    from mailarium.web_app import _build_csv_export
 
     results = [_result(score_distance=0.15)]  # score = 0.85
     csv_text = _build_csv_export(results)

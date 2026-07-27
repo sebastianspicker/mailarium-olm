@@ -1,43 +1,41 @@
 [build-system]
-requires = ["setuptools>=70", "wheel"]
+requires = ["setuptools>=83.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "outlook-email-rag"
-version = "0.2.0"
-description = "Local RAG for Outlook .olm email archives with an MCP server"
+name = "mailarium"
+version = "0.5.0a1"
+description = "Local Outlook .olm indexing and search with CLI, MCP, and Streamlit interfaces"
 readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "MIT" }
-authors = [{ name = "Email RAG contributors" }]
-keywords = ["outlook", "email", "rag", "mcp", "local-first", "ediscovery"]
+requires-python = ">=3.14.6,<3.15"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Mailarium contributors" }]
+keywords = ["mailarium", "outlook", "email", "rag", "mcp", "local-first", "semantic-search", "retrieval"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Communications :: Email",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
-    "sentence-transformers>=2.7.0",
-    "transformers==5.3.0",  # CVE-2026-4372; retain exact pin until FlagEmbedding compatibility is revalidated
-    "FlagEmbedding>=1.3.0",  # unlocks BGE-M3 sparse + ColBERT (dense-only fallback without it)
-    "chromadb>=0.5.0,<1.0.0",  # avoid CVE-2026-45829 in ChromaDB Python server 1.x until a fixed release exists
-    "mcp[cli]>=1.0.0",
+    "usearch==2.26.0",
+    "torch==2.13.0",
+    "sentence-transformers==5.6.0",
+    "transformers==5.13.0",
+    "mcp[cli]>=1.28.1",
     "pydantic>=2.0.0",
     "lxml>=6.1.0",
     "networkx>=3.2",
     "pandas>=2.1.0",
     "rank_bm25>=0.2.2",
     "jinja2>=3.0.0",
-    "spacy>=3.7.0",
     "textstat>=0.7.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
@@ -46,7 +44,7 @@ dependencies = [
     "PyJWT>=2.13.0",  # CVE-2026-48522 through CVE-2026-48526 (required by mcp)
     "tornado>=6.5.7",  # CVE-2026-49853 through CVE-2026-49855 (required by streamlit)
     "cryptography>=48.0.1",  # GHSA-537c-gmf6-5ccf (required by multiple deps)
-    "pillow>=12.2.0",  # CVE-2026-40192 (required by transformers/sentence-transformers)
+    "pillow>=12.3.0",  # PYSEC-2026-2253 to -2257 and -3451 to -3453
     "pygments>=2.20.0",  # CVE-2026-4539 (required by rich)
     "python-multipart>=0.0.31",  # CVE-2026-42561 and CVE-2026-53537 through CVE-2026-53540
     "requests>=2.33.0",  # CVE-2026-25645 (required by multiple deps)
@@ -56,11 +54,28 @@ dependencies = [
 Homepage = "https://github.com/sebastianspicker/outlook-email-rag"
 Repository = "https://github.com/sebastianspicker/outlook-email-rag"
 Issues = "https://github.com/sebastianspicker/outlook-email-rag/issues"
-Documentation = "https://github.com/sebastianspicker/outlook-email-rag/tree/dev/docs"
-Changelog = "https://github.com/sebastianspicker/outlook-email-rag/blob/dev/CHANGELOG.md"
-Security = "https://github.com/sebastianspicker/outlook-email-rag/blob/dev/SECURITY.md"
+Documentation = "https://github.com/sebastianspicker/outlook-email-rag/tree/main/docs"
+Changelog = "https://github.com/sebastianspicker/outlook-email-rag/blob/main/CHANGELOG.md"
+Security = "https://github.com/sebastianspicker/outlook-email-rag/blob/main/SECURITY.md"
 
 [project.optional-dependencies]
+nlp = [
+    "spacy==3.8.13",
+]
+image = [
+    "torchvision==0.28.0",
+]
+training = [
+    "datasets==5.0.0",
+    "accelerate==1.14.0",
+]
+ews = [
+    "defusedxml>=0.7.1,<1",
+]
+ews-ntlm = [
+    "defusedxml>=0.7.1,<1",
+    "requests-ntlm>=1.3.0,<2",
+]
 dev = [
     "pytest>=9.0.3",  # CVE-2025-71176 fixed in 9.0.3
     "pytest-mock>=3.14.0",
@@ -74,40 +89,47 @@ dev = [
 ]
 
 [project.scripts]
-email-rag-ingest = "src.ingest:main"
-email-rag = "src.cli:main"
+mailarium-ingest = "mailarium.ingest:main"
+mailarium = "mailarium.cli:main"
 
 [tool.bandit]
 # Bandit B101 (assert): pytest uses bare assert for test validation.
-# The local bandit run (bandit -r src -q -ll -ii) already excludes tests/.
+# The local bandit run (bandit -r mailarium -q -ll -ii) already excludes tests/.
 # The blanket skip prevents accidental noise if bandit is run on the whole
 # repo. Codacy must exclude tests/ from Bandit_B101 separately.
 skips = ["B101"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["mailarium*"]
+
+[tool.setuptools.package-data]
+mailarium = ["templates/*.html", "templates/dossier/*.html"]
 
 [tool.ruff]
 line-length = 130
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W", "UP", "B", "SIM", "RUF", "C4", "PIE", "T20", "PLC", "PLE"]
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "RUF", "C4", "C90", "PIE", "T20", "PLC", "PLE"]
 ignore = [
-    "SIM102",  # collapsible-if — nested ifs often clearer than combined conditions
-    "SIM105",  # suppressible-exception — contextlib.suppress less explicit than try/except
-    "SIM108",  # if-else-ternary — multi-line ternaries hurt readability
-    "SIM115",  # open-file-with-context — some opens are intentionally long-lived (lock fds)
-    "SIM117",  # multiple-with — combined with-statements reduce readability for complex CMs
-    "PLC0415",  # import-outside-top-level — lazy imports used for optional deps throughout
-    "T201",  # print — CLI uses print for user output intentionally
-    "RUF001",  # ambiguous-unicode — email content contains legitimate non-ASCII chars
+    "SIM102",  # collapsible-if - nested ifs often clearer than combined conditions
+    "SIM105",  # suppressible-exception - contextlib.suppress less explicit than try/except
+    "SIM108",  # if-else-ternary - multi-line ternaries hurt readability
+    "SIM115",  # open-file-with-context - some opens are intentionally long-lived (lock fds)
+    "SIM117",  # multiple-with - combined with-statements reduce readability for complex CMs
+    "PLC0415",  # import-outside-top-level - lazy imports used for optional deps throughout
+    "T201",  # print - CLI uses print for user output intentionally
+    "RUF001",  # ambiguous-unicode - email content contains legitimate non-ASCII chars
     "RUF002",  # ambiguous-unicode-docstring
     "RUF003",  # ambiguous-unicode-comment
 ]
 
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
@@ -121,7 +143,7 @@ filterwarnings = [
 max-line-length = 130
 
 [tool.pylint.main]
-# Defer PyLint stats-cache environment warning — no persistent .pylint.d cache needed.
+# Defer PyLint stats-cache environment warning - no persistent .pylint.d cache needed.
 persistent = false
 
 [tool.pylint."messages control"]
@@ -149,55 +171,55 @@ disable = [
     # Policy: broad duplicate-code detection across unrelated modules is noise.
     "R0801",
     # Policy: too-few-public-methods (R0903) is noise for simple test-double classes,
-    # data holders, and single-method test classes — these are idiomatic Python.
+    # data holders, and single-method test classes - these are idiomatic Python.
     "R0903",
-    # Policy: implicit-booleaness (C1803) — explicit ``len(x) == 0`` can be clearer
+    # Policy: implicit-booleaness (C1803) - explicit ``len(x) == 0`` can be clearer
     # than ``not x`` for collections where truthiness is non-obvious to readers.
     "C1803",
-    # Policy: cyclic-import (R0401) — Codacy does not honour file-level
+    # Policy: cyclic-import (R0401) - Codacy does not honour file-level
     # ``# pylint: disable=R0401`` directives for its built-in cyclic-import
     # graph analysis.  All detected cycles originate from lazy imports inside
     # function bodies (no runtime cycle).  The only "High" cluster was in
     # tests/test_writing_analyzer.py, where the file-level disable is already
     # present.
     "R0401",
-    # Policy: wrong-import-position (C0413) — runtime imports placed after
+    # Policy: wrong-import-position (C0413) - runtime imports placed after
     # TYPE_CHECKING blocks are intentional to avoid circular imports at module
-    # load time.  Used in ~10 files across src/ and tests/.
+    # load time.  Used in ~10 files across mailarium/ and tests/.
     "C0413",
 ]
 
 [tool.mypy]
-python_version = "3.12"
-files = ["src"]
+python_version = "3.14"
+files = ["mailarium"]
 pretty = true
 show_error_codes = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 ignore_missing_imports = true
 
-# Heavy third-party usage (networkx/sklearn/pandas/streamlit) — suppress inference errors
+# Heavy third-party usage (networkx/sklearn/pandas/streamlit) - suppress inference errors
 [[tool.mypy.overrides]]
-module = ["src.attachment_extractor_text"]
+module = ["mailarium.attachment_extractor_text"]
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [
-    "src.network_analysis",
-    "src.email_clusterer",
-    "src.topic_modeler",
-    "src.temporal_analysis",
-    "src.query_expander",
-    "src.thread_summarizer",
-    "src.dossier_generator",
-    "src.web_app",
-    "src.image_embedder",
-    "src.rfc2822",
-    "src.embedder",
-    "src.retriever",
-    "src.parse_olm",
-    "src.olm_xml_helpers",
-    "src.fine_tuner",
+    "mailarium.network_analysis",
+    "mailarium.email_clusterer",
+    "mailarium.topic_modeler",
+    "mailarium.temporal_analysis",
+    "mailarium.query_expander",
+    "mailarium.thread_summarizer",
+    "mailarium.dossier_generator",
+    "mailarium.web_app",
+    "mailarium.image_embedder",
+    "mailarium.rfc2822",
+    "mailarium.embedder",
+    "mailarium.retriever",
+    "mailarium.parse_olm",
+    "mailarium.olm_xml_helpers",
+    "mailarium.fine_tuner",
 ]
 disallow_untyped_defs = false
 disable_error_code = ["index", "assignment", "return-value", "arg-type", "type-var", "call-overload", "operator", "union-attr", "attr-defined", "misc", "no-redef", "var-annotated", "dict-item"]

@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "description": "Authored synthetic core evaluation set for email_answer_context. No mailbox export or private runtime artifact was used.",
+  "uid_seed_manifest": {
+    "budget-approval": "005b2c5800576a50804dd2386cfe34db",
+    "maintenance-window": "d5107d207f3e1d1116b2b44da9bfb988",
+    "accessibility-review": "aef4a326f6c1ed3eedc8a581df44758d",
+    "inventory-import": "98c0bae9983e80c6f47b9b7b79e923f0",
+    "migration-thread-root": "37f63450bc3907ca82c9b56b8e4c30f1",
+    "migration-thread-reply-1": "f92eaf35f4835e00d9b1654be3278fc6",
+    "migration-thread-reply-2": "e6514e80b738ffb65b0ae04ae145f341",
+    "migration-thread-reply-3": "2d73505bc9cef54edac87e70c40300d0",
+    "migration-thread-reply-4": "6ae9876961887270022789e4a8494df6",
+    "migration-thread-reply-5": "621d9915cc49205a3c95662278f111e3",
+    "network-diagram": "da21e4bea566d96d85df6c16eb09905f",
+    "operations-handbook": "505f1f8bb5cd2bb7124e2e663aad0edf",
+    "scan-checklist": "453e93aca3de57990d7e638c641ba54f",
+    "source-shell-gateway": "361f3000a6733d28653ea98e1858e774"
+  },
+  "cases": [
+    {
+      "id": "fact-101",
+      "bucket": "fact_lookup",
+      "status": "labeled",
+      "question": "Who approved the second-quarter equipment budget?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "finance-lead@example.org approved the second-quarter equipment budget.",
+      "expected_answer_terms": [
+        "finance-lead@example.org",
+        "equipment budget"
+      ],
+      "expected_support_uids": [
+        "005b2c5800576a50804dd2386cfe34db"
+      ],
+      "expected_support_source_ids": [
+        "email:005b2c5800576a50804dd2386cfe34db"
+      ],
+      "expected_top_uid": "005b2c5800576a50804dd2386cfe34db",
+      "expected_ambiguity": "clear",
+      "forbidden_support_uids": [
+        "not-returned-negative-control-uid"
+      ],
+      "notes": "Authored synthetic sender-and-subject lookup."
+    },
+    {
+      "id": "fact-102",
+      "bucket": "fact_lookup",
+      "status": "labeled",
+      "question": "Which folder contains the maintenance-window notice?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The maintenance-window notice is in the Operations folder.",
+      "expected_support_uids": [
+        "d5107d207f3e1d1116b2b44da9bfb988"
+      ],
+      "expected_top_uid": "d5107d207f3e1d1116b2b44da9bfb988",
+      "expected_ambiguity": "clear",
+      "notes": "Authored synthetic folder-metadata lookup."
+    },
+    {
+      "id": "fact-103",
+      "bucket": "fact_lookup",
+      "status": "labeled",
+      "question": "Which message mentioned the accessibility review for the analytics dashboard?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "The message titled Accessibility review for the analytics dashboard mentioned the review.",
+      "expected_support_uids": [
+        "aef4a326f6c1ed3eedc8a581df44758d"
+      ],
+      "expected_top_uid": "aef4a326f6c1ed3eedc8a581df44758d",
+      "expected_ambiguity": "clear",
+      "notes": "Authored synthetic topic lookup."
+    },
+    {
+      "id": "fact-104",
+      "bucket": "fact_lookup",
+      "status": "labeled",
+      "question": "Who announced that the inventory-import sandbox was ready?",
+      "evidence_mode": "retrieval",
+      "filters": {},
+      "expected_answer": "operations-coordinator@example.org announced that the inventory-import sandbox was ready.",
+      "expected_support_uids": [
+        "98c0bae9983e80c6f47b9b7b79e923f0"
+      ],
+      "expected_top_uid": "98c0bae9983e80c6f47b9b7b79e923f0",
+      "expected_ambiguity": "clear",
+      "notes": "Authored synthetic announcement lookup."
+    },
+    {
+      "id": "thread-101",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "When did the Project Northstar migration thread begin?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "The earliest labeled message in the Project Northstar migration thread is from 2026-01-12T09:15:00Z.",
+      "expected_support_uids": [
+        "37f63450bc3907ca82c9b56b8e4c30f1"
+      ],
+      "expected_top_uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "retrieval_recall"
+      ],
+      "notes": "Authored synthetic thread anchor."
+    },
+    {
+      "id": "thread-102",
+      "bucket": "thread_process",
+      "status": "labeled",
+      "question": "Which messages belong to the Project Northstar migration conversation?",
+      "evidence_mode": "hybrid",
+      "filters": {},
+      "expected_answer": "The labeled Project Northstar migration conversation contains the synthetic root and follow-ups from 2026-01-12 through 2026-01-16.",
+      "expected_support_uids": [
+        "37f63450bc3907ca82c9b56b8e4c30f1",
+        "f92eaf35f4835e00d9b1654be3278fc6",
+        "e6514e80b738ffb65b0ae04ae145f341",
+        "2d73505bc9cef54edac87e70c40300d0",
+        "6ae9876961887270022789e4a8494df6",
+        "621d9915cc49205a3c95662278f111e3"
+      ],
+      "expected_top_uid": "37f63450bc3907ca82c9b56b8e4c30f1",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "inferred_threading"
+      ],
+      "notes": "Authored synthetic thread-membership set."
+    },
+    {
+      "id": "attach-101",
+      "bucket": "attachment_lookup",
+      "status": "labeled",
+      "question": "Which email included the remote-office network diagram?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The facilities update from 2026-02-03 included the remote-office network diagram.",
+      "expected_support_uids": [
+        "da21e4bea566d96d85df6c16eb09905f"
+      ],
+      "expected_top_uid": "da21e4bea566d96d85df6c16eb09905f",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Authored synthetic attachment-bearing message."
+    },
+    {
+      "id": "attach-102",
+      "bucket": "attachment_lookup",
+      "status": "labeled",
+      "question": "Which email carried the operations handbook attachment?",
+      "evidence_mode": "retrieval",
+      "filters": {
+        "has_attachments": true
+      },
+      "expected_answer": "The onboarding message carried the operations handbook attachment.",
+      "expected_support_uids": [
+        "505f1f8bb5cd2bb7124e2e663aad0edf"
+      ],
+      "expected_top_uid": "505f1f8bb5cd2bb7124e2e663aad0edf",
+      "expected_ambiguity": "clear",
+      "triage_tags": [
+        "attachment_extraction"
+      ],
+      "notes": "Authored synthetic attachment lookup."
+    },
+    {
+      "id": "ambig-101",
+      "bucket": "ambiguity_stress",
+      "status": "labeled",
+      "question": "What did the scanned warehouse checklist attachment say?",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The system can identify the checklist message but cannot recover readable text from the scan.",
+      "expected_support_uids": [
+        "453e93aca3de57990d7e638c641ba54f"
+      ],
+      "expected_top_uid": "453e93aca3de57990d7e638c641ba54f",
+      "expected_ambiguity": "insufficient",
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Authored synthetic scan case with intentionally unavailable text."
+    },
+    {
+      "id": "ambig-102",
+      "bucket": "ambiguity_stress",
+      "status": "labeled",
+      "question": "Which source-shell message mentioned the staging gateway certificate?",
+      "evidence_mode": "forensic",
+      "filters": {},
+      "expected_answer": "The synthetic source-shell reply about the staging gateway certificate matches, but its visible body remains weak.",
+      "expected_support_uids": [
+        "361f3000a6733d28653ea98e1858e774"
+      ],
+      "expected_top_uid": "361f3000a6733d28653ea98e1858e774",
+      "expected_ambiguity": "insufficient",
+      "triage_tags": [
+        "weak_message_handling"
+      ],
+      "notes": "Authored synthetic source-shell reply."
+    }
+  ]
+}

@@ -1,25 +1,26 @@
-"""Tests for the SQLite EmailDatabase."""
+"""SQLite email insertion, identity persistence, batch writes, and core archive queries."""
 
-from src.email_db import EmailDatabase, _parse_address
+from mailarium.email_db import EmailDatabase
+from mailarium.email_db_enrichment import parse_address
 
 from .helpers.email_db_builders import _make_email
 
 
 class TestParseAddress:
     def test_name_and_email(self):
-        assert _parse_address("Alice <employee@example.test>") == ("Alice", "employee@example.test")
+        assert parse_address("Alice <employee@example.test>") == ("Alice", "employee@example.test")
 
     def test_quoted_name(self):
-        assert _parse_address('"Alice B" <employee@example.test>') == ("Alice B", "employee@example.test")
+        assert parse_address('"Alice B" <employee@example.test>') == ("Alice B", "employee@example.test")
 
     def test_bare_email(self):
-        assert _parse_address("employee@example.test") == ("", "employee@example.test")
+        assert parse_address("employee@example.test") == ("", "employee@example.test")
 
     def test_name_only(self):
-        assert _parse_address("Alice") == ("Alice", "")
+        assert parse_address("Alice") == ("Alice", "")
 
     def test_empty(self):
-        assert _parse_address("") == ("", "")
+        assert parse_address("") == ("", "")
 
 
 class TestEmailDatabase:
@@ -380,7 +381,7 @@ class TestGetEmailForReembedNullSafety:
 
     SQLite returns None for NULL columns, and dict.get("key", default)
     returns None (not the default) when the key exists with a None value.
-    chunk_email() and ChromaDB metadata require strings, not None.
+    chunk_email() and vector metadata require strings, not None.
     """
 
     def test_reembed_null_subject_becomes_empty_string(self):

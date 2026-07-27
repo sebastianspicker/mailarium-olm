@@ -1,6 +1,6 @@
-"""Tests for TF-IDF keyword extraction."""
+"""Verifies keyword extraction selects corpus-relevant terms using TF-IDF scoring."""
 
-from src.keyword_extractor import KeywordExtractor
+from mailarium.keyword_extractor import KeywordExtractor
 
 
 class TestKeywordExtractor:

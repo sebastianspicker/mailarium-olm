@@ -1,14 +1,79 @@
+"""Answer-context attachment evidence, thread grouping, confidence, and ambiguity behavior."""
+
 import json
 
 import pytest
 
+from .helpers.answer_context_fakes import _AnswerContextDeps
+from .helpers.mcp_tool_extended_fakes import _assert_strong_attachment_candidate
 from .helpers.mcp_tool_fakes import _BasicRetriever, _make_result
+
+
+class _ConversationGroupRetriever(_BasicRetriever):
+    def search_filtered(self, query, top_k=10, **kwargs):
+        return [
+            _make_result(
+                uid="uid-thread-2",
+                chunk_id="chunk-thread-2",
+                text="Please send the updated report by Friday.",
+                distance=0.10,
+            ),
+            _make_result(
+                uid="uid-thread-1",
+                chunk_id="chunk-thread-1",
+                text="We decided to go with vendor A.",
+                distance=0.15,
+            ),
+        ]
+
+
+class _ConversationGroupDB:
+    conn = None
+
+    def get_emails_full_batch(self, uids):
+        return {
+            "uid-thread-1": {
+                "uid": "uid-thread-1",
+                "body_text": "We decided to go with vendor A.",
+                "normalized_body_source": "body_text",
+                "forensic_body_text": "",
+                "forensic_body_source": "",
+            },
+            "uid-thread-2": {
+                "uid": "uid-thread-2",
+                "body_text": "Please send the updated report by Friday.",
+                "normalized_body_source": "body_text_html",
+                "forensic_body_text": "",
+                "forensic_body_source": "",
+            },
+        }
+
+    def get_thread_emails(self, conversation_id):
+        assert conversation_id == "conv-1"
+        return [
+            {
+                "uid": "uid-thread-1",
+                "subject": "Budget Review",
+                "sender_email": "employee@example.test",
+                "sender_name": "Alice",
+                "date": "2025-06-01",
+                "conversation_id": "conv-1",
+            },
+            {
+                "uid": "uid-thread-2",
+                "subject": "Budget Review",
+                "sender_email": "bob@example.com",
+                "sender_name": "Bob",
+                "date": "2025-06-02",
+                "conversation_id": "conv-1",
+            },
+        ]
 
 
 @pytest.mark.asyncio
 async def test_email_answer_context_separates_attachment_candidates(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -34,38 +99,7 @@ async def test_email_answer_context_separates_attachment_candidates(monkeypatch)
                 }
             ]
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
     payload = await search_mod.email_answer_context(EmailAnswerContextInput(question="What does the budget spreadsheet say?"))
     data = json.loads(payload)
 
@@ -74,23 +108,15 @@ async def test_email_answer_context_separates_attachment_candidates(monkeypatch)
     assert data["counts"] == {"body": 0, "attachments": 1, "total": 1}
     assert len(data["attachment_candidates"]) == 1
     candidate = data["attachment_candidates"][0]
-    assert candidate["uid"] == "uid-att-1"
-    assert candidate["attachment"]["filename"] == "budget.xlsx"
+    _assert_strong_attachment_candidate(candidate, uid="uid-att-1", filename="budget.xlsx")
     assert candidate["attachment"]["mime_type"].startswith("application/vnd.openxmlformats")
-    assert candidate["attachment"]["size"] == 2048
-    assert candidate["attachment"]["extraction_state"] == "text_extracted"
-    assert candidate["attachment"]["text_available"] is True
-    assert candidate["attachment"]["ocr_used"] is False
-    assert candidate["attachment"]["failure_reason"] is None
-    assert candidate["attachment"]["evidence_strength"] == "strong_text"
-    assert candidate["attachment"]["is_inline"] is False
     assert candidate["provenance"]["evidence_handle"].startswith("attachment:uid-att-1:budget.xlsx:")
 
 
 @pytest.mark.asyncio
 async def test_email_answer_context_marks_binary_only_attachment_as_weak(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -116,38 +142,7 @@ async def test_email_answer_context_marks_binary_only_attachment_as_weak(monkeyp
                 }
             ]
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
     payload = await search_mod.email_answer_context(EmailAnswerContextInput(question="What is in the archive attachment?"))
     data = json.loads(payload)
 
@@ -162,100 +157,10 @@ async def test_email_answer_context_marks_binary_only_attachment_as_weak(monkeyp
 
 @pytest.mark.asyncio
 async def test_email_answer_context_adds_conversation_groups(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
-    class DummyRetriever(_BasicRetriever):
-        def search_filtered(self, query, top_k=10, **kwargs):
-            return [
-                _make_result(
-                    uid="uid-thread-2",
-                    chunk_id="chunk-thread-2",
-                    text="Please send the updated report by Friday.",
-                    distance=0.10,
-                ),
-                _make_result(
-                    uid="uid-thread-1",
-                    chunk_id="chunk-thread-1",
-                    text="We decided to go with vendor A.",
-                    distance=0.15,
-                ),
-            ]
-
-    class DummyDB:
-        def get_emails_full_batch(self, uids):
-            return {
-                "uid-thread-1": {
-                    "uid": "uid-thread-1",
-                    "body_text": "We decided to go with vendor A.",
-                    "normalized_body_source": "body_text",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                },
-                "uid-thread-2": {
-                    "uid": "uid-thread-2",
-                    "body_text": "Please send the updated report by Friday.",
-                    "normalized_body_source": "body_text_html",
-                    "forensic_body_text": "",
-                    "forensic_body_source": "",
-                },
-            }
-
-        def get_thread_emails(self, conversation_id):
-            assert conversation_id == "conv-1"
-            return [
-                {
-                    "uid": "uid-thread-1",
-                    "subject": "Budget Review",
-                    "sender_email": "employee@example.test",
-                    "sender_name": "Alice",
-                    "date": "2025-06-01",
-                    "conversation_id": "conv-1",
-                },
-                {
-                    "uid": "uid-thread-2",
-                    "subject": "Budget Review",
-                    "sender_email": "bob@example.com",
-                    "sender_name": "Bob",
-                    "date": "2025-06-02",
-                    "conversation_id": "conv-1",
-                },
-            ]
-
-        conn = None
-
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(_ConversationGroupRetriever(), _ConversationGroupDB()))
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(question="What happened in the budget thread?", max_results=2)
     )
@@ -276,8 +181,8 @@ async def test_email_answer_context_adds_conversation_groups(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_email_answer_context_reports_high_confidence_when_top_hit_is_clear(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -319,42 +224,12 @@ async def test_email_answer_context_reports_high_confidence_when_top_hit_is_clea
 
         conn = None
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
-    payload = await search_mod.email_answer_context(
-        EmailAnswerContextInput(question="Who asked for the updated budget?", max_results=2)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
+    data = json.loads(
+        await search_mod.email_answer_context(
+            EmailAnswerContextInput(question="Who asked for the updated budget?", max_results=2)
+        )
     )
-    data = json.loads(payload)
 
     assert data["answer_quality"]["confidence_label"] == "high"
     assert data["answer_quality"]["ambiguity_reason"] == ""
@@ -365,8 +240,8 @@ async def test_email_answer_context_reports_high_confidence_when_top_hit_is_clea
 
 @pytest.mark.asyncio
 async def test_email_answer_context_reports_ambiguity_when_top_hits_are_close(monkeypatch):
-    import src.tools.search as search_mod
-    from src.mcp_models import EmailAnswerContextInput
+    import mailarium.tools.search as search_mod
+    from mailarium.mcp_models import EmailAnswerContextInput
 
     class DummyRetriever(_BasicRetriever):
         def search_filtered(self, query, top_k=10, **kwargs):
@@ -409,38 +284,7 @@ async def test_email_answer_context_reports_ambiguity_when_top_hits_are_close(mo
 
         conn = None
 
-    class DummyDeps:
-        @staticmethod
-        def get_retriever():
-            return DummyRetriever()
-
-        @staticmethod
-        def get_email_db():
-            return DummyDB()
-
-        @staticmethod
-        async def offload(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        DB_UNAVAILABLE = json.dumps({"error": "SQLite database not available."})
-
-        @staticmethod
-        def sanitize(text: str) -> str:
-            return text
-
-        @staticmethod
-        def tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def write_tool_annotations(title: str):
-            return {"title": title}
-
-        @staticmethod
-        def idempotent_write_annotations(title: str):
-            return {"title": title}
-
-    monkeypatch.setattr(search_mod, "_deps", DummyDeps)
+    monkeypatch.setattr(search_mod, "_deps", _AnswerContextDeps(DummyRetriever(), DummyDB()))
     payload = await search_mod.email_answer_context(
         EmailAnswerContextInput(question="Which budget update matters?", max_results=2)
     )

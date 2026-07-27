@@ -1,19 +1,27 @@
+"""Runs the offline ingestion smoke path with validated runtime locations and an explicit model-unavailable fallback."""
+
 from __future__ import annotations
 
 import json
 import os
+import sys
+import types
 
-import src.ingest as ingest_module
+import mailarium.ingest as ingest_module
+from mailarium.config import get_settings
+from mailarium.multi_vector_embedder import EmbeddingModelUnavailableError
+from mailarium.repo_paths import validate_runtime_path
 from scripts import ingest_smoke as runner
-from src.config import get_settings
-from src.multi_vector_embedder import EmbeddingModelUnavailableError
-from src.repo_paths import validate_runtime_path
 
 
 def _payload_from_stdout(stdout: str) -> dict[str, object]:
     lines = [line for line in stdout.splitlines() if line.strip()]
     assert lines
     return json.loads(lines[-1])
+
+
+def _mark_usearch_available(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "usearch", types.ModuleType("usearch"))
 
 
 def test_configure_offline_runtime_forces_offline_acceptance_profile(monkeypatch) -> None:
@@ -41,16 +49,17 @@ def test_smoke_runtime_root_is_allowed_for_runtime_paths() -> None:
     root = runner._smoke_runtime_root()
 
     sqlite_path = root / "run-test" / "email_metadata.db"
-    chromadb_path = root / "run-test" / "chromadb"
+    vector_index_path = root / "run-test" / "vector-index"
 
     assert validate_runtime_path(str(sqlite_path), field_name="sqlite_path") == sqlite_path.resolve()
-    assert validate_runtime_path(str(chromadb_path), field_name="chromadb_path") == chromadb_path.resolve()
+    assert validate_runtime_path(str(vector_index_path), field_name="vector_index_path") == vector_index_path.resolve()
 
 
 def test_main_falls_back_to_fake_runtime_when_embedding_model_is_unavailable(monkeypatch, capsys) -> None:
     def _raise_model_unavailable(*args, **kwargs):
         raise EmbeddingModelUnavailableError("cache miss")
 
+    _mark_usearch_available(monkeypatch)
     monkeypatch.setattr(ingest_module, "ingest", _raise_model_unavailable)
 
     exit_code = runner.main()
@@ -76,6 +85,7 @@ def test_main_resets_fake_runtime_state_between_runs(monkeypatch, capsys) -> Non
     def _raise_model_unavailable(*args, **kwargs):
         raise EmbeddingModelUnavailableError("cache miss")
 
+    _mark_usearch_available(monkeypatch)
     monkeypatch.setattr(ingest_module, "ingest", _raise_model_unavailable)
 
     assert runner.main() == 0
@@ -98,13 +108,12 @@ def test_main_reports_native_runtime_when_embedding_stack_is_available(monkeypat
         ]
     )
 
-    monkeypatch.setitem(__import__("sys").modules, "chromadb", object())
+    _mark_usearch_available(monkeypatch)
     monkeypatch.setattr(ingest_module, "ingest", lambda *args, **kwargs: next(native_runs))
 
     exit_code = runner.main()
 
     payload = _payload_from_stdout(capsys.readouterr().out)
-    __import__("sys").modules.pop("chromadb", None)
 
     assert exit_code == 0
     assert payload["runtime_kind"] == "native"
