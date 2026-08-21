@@ -12,7 +12,7 @@ are not guaranteed to receive backports.
 Do not disclose a suspected vulnerability in a public issue, discussion, log,
 or pull request.
 
-1. Use [GitHub private vulnerability reporting](https://github.com/sebastianspicker/outlook-email-rag/security/advisories/new).
+1. Use [GitHub private vulnerability reporting](https://github.com/sebastianspicker/mailarium/security/advisories/new).
 2. Include the affected version or commit, a minimal reproduction, impact, and
    sanitized diagnostics. Do not attach real mailbox content.
 3. Allow reasonable time for triage and remediation before disclosure.

@@ -362,7 +362,7 @@ def _add_reprocessing_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--resume",
         action="store_true",
-        help="Resume ingest from the most recent checkpoint for the same OLM path.",
+        help="Resume supported ingest work; with --reembed, skip matching committed body vectors.",
     )
 
 
@@ -448,7 +448,12 @@ def _run_maintenance_command(args: argparse.Namespace) -> bool:
 
     if args.reembed:
         _print_command_completion(
-            reembed(vector_index_path=args.vector_index_path, sqlite_path=args.sqlite_path, batch_size=args.batch_size)
+            reembed(
+                vector_index_path=args.vector_index_path,
+                sqlite_path=args.sqlite_path,
+                batch_size=args.batch_size,
+                resume=args.resume,
+            )
         )
     return False
 
@@ -634,6 +639,7 @@ def reembed(
     vector_index_path: str | None = None,
     sqlite_path: str | None = None,
     batch_size: int = 100,
+    resume: bool = False,
 ) -> dict[str, Any]:
     """Re-chunk and re-embed all emails from SQLite body text into USearch vector index.
 
@@ -644,6 +650,7 @@ def reembed(
         vector_index_path: Custom path for USearch vector index storage. Defaults to None.
         sqlite_path: Custom path for SQLite metadata database. Defaults to None.
         batch_size: Number of chunks per batch (default: 100).
+        resume: Skip body chunks already stored with matching content and model provenance.
 
     Returns:
         Dictionary containing operation results and statistics.
@@ -652,6 +659,7 @@ def reembed(
         vector_index_path=vector_index_path,
         sqlite_path=sqlite_path,
         batch_size=batch_size,
+        resume=resume,
     )
 
 

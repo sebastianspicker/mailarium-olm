@@ -354,6 +354,8 @@ def _reembed_email_payload(full: dict, body: str) -> dict:
         "bcc": _full_value(full, "bcc", []),
         "date": _full_value(full, "date", ""),
         "body": body,
+        "forensic_body_text": _full_value(full, "forensic_body_text", ""),
+        "forensic_body_source": _full_value(full, "forensic_body_source", ""),
         "folder": _full_value(full, "folder", ""),
         "has_attachments": any((full.get("has_attachments"), full.get("attachment_count"))),
         "attachment_names": [a["name"] for a in attachments if a.get("name")],

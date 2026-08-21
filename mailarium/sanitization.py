@@ -169,6 +169,43 @@ def _contains_any_term(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in lowered for term in terms)
 
 
+def _redact_sensitive_content(
+    clean: str,
+    *,
+    rules: dict[str, Any],
+    path: tuple[Any, ...],
+    counters: Counter[str],
+) -> str | None:
+    """Return the first applicable sensitive-content redaction in policy order."""
+    if rules["redact_structured_identity"] and _path_has_identity_key(path):
+        counters["structured_identity"] += 1
+        return "[REDACTED: participant_identity]"
+
+    if rules["redact_privileged"] and _contains_any_term(clean, PRIVILEGED_TERMS):
+        counters["privileged"] += 1
+        return "[REDACTED: privileged_content]"
+
+    if rules["redact_medical"] and _contains_any_term(clean, MEDICAL_TERMS):
+        counters["medical"] += 1
+        return "[REDACTED: sensitive_medical_content]"
+    return None
+
+
+def _redact_contact_data(clean: str, *, rules: dict[str, Any], counters: Counter[str]) -> str:
+    """Redact email before phone data while retaining the per-replacement count."""
+    redacted = clean
+    if rules["redact_contact"]:
+        updated = EMAIL_RE.sub("[REDACTED: email]", redacted)
+        if updated != redacted:
+            counters["contact"] += 1
+        redacted = updated
+        updated = PHONE_RE.sub("[REDACTED: phone]", redacted)
+        if updated != redacted:
+            counters["contact"] += 1
+        redacted = updated
+    return redacted
+
+
 def _redact_string(
     value: str,
     *,
@@ -182,29 +219,10 @@ def _redact_string(
     if not clean:
         return clean
 
-    if rules["redact_structured_identity"] and _path_has_identity_key(path):
-        counters["structured_identity"] += 1
-        return "[REDACTED: participant_identity]"
-
-    if rules["redact_privileged"] and _contains_any_term(clean, PRIVILEGED_TERMS):
-        counters["privileged"] += 1
-        return "[REDACTED: privileged_content]"
-
-    if rules["redact_medical"] and _contains_any_term(clean, MEDICAL_TERMS):
-        counters["medical"] += 1
-        return "[REDACTED: sensitive_medical_content]"
-
-    redacted = clean
-    if rules["redact_contact"]:
-        updated = EMAIL_RE.sub("[REDACTED: email]", redacted)
-        if updated != redacted:
-            counters["contact"] += 1
-        redacted = updated
-        updated = PHONE_RE.sub("[REDACTED: phone]", redacted)
-        if updated != redacted:
-            counters["contact"] += 1
-        redacted = updated
-    return redacted
+    sensitive_redaction = _redact_sensitive_content(clean, rules=rules, path=path, counters=counters)
+    if sensitive_redaction is not None:
+        return sensitive_redaction
+    return _redact_contact_data(clean, rules=rules, counters=counters)
 
 
 def _redact_value(value: Any, *, mode: str, path: tuple[Any, ...], counters: Counter[str]) -> Any:

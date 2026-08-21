@@ -448,6 +448,22 @@ def _add_mailbox_subcommands(subparsers: Any) -> None:
     sync.add_argument("--account", required=True, dest="account_id")
     sync.add_argument("--folder", action="append", default=[], dest="folders")
     sync.add_argument("--include-attachment-content", action="store_true")
+    sync.add_argument(
+        "--until-complete",
+        action="store_true",
+        help="Repeat bounded passes until every selected folder is complete.",
+    )
+    sync.add_argument(
+        "--defer-indexing",
+        action="store_true",
+        help="Persist synchronized mailbox records without creating vectors; re-embed later.",
+    )
+
+    folders = actions.add_parser("folders", help="Discover physical EWS mail folders under the read gate.")
+    folder_actions = folders.add_subparsers(dest="mailbox_folders_action", required=True)
+    discover = folder_actions.add_parser("discover", help="List physical mail folders; selection is explicit.")
+    discover.add_argument("--account", required=True, dest="account_id")
+    discover.add_argument("--select", action="store_true", help="Replace the selected sync allowlist with discovered folders.")
 
     triage = actions.add_parser("triage", help="List deterministic mailbox action candidates.")
     triage.add_argument("--account", required=True, dest="account_id")

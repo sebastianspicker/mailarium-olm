@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # is generous while preventing unbounded growth.
 _ANALYSIS_CACHE_MAX = 16
 _BETWEENNESS_CACHE_MAX = 8
+_DatedSenderEvent = tuple[datetime, str]
 
 
 class CommunicationNetwork:
@@ -259,41 +260,7 @@ class CommunicationNetwork:
         dated_events.sort(key=lambda x: x[0])
         window_delta = timedelta(hours=window_hours)
 
-        results: list[dict[str, Any]] = []
-        # Use a sliding window anchored at each event (step=1) so that
-        # no coordinated activity is missed.  Deduplicate overlapping
-        # windows by skipping if the window_start falls within the
-        # previous emitted window.
-        last_window_end: datetime | None = None
-        for i in range(len(dated_events)):
-            window_start = dated_events[i][0]
-
-            # Skip if this event's start falls within the last emitted window
-            if last_window_end is not None and window_start <= last_window_end:
-                continue
-
-            window_end = window_start + window_delta
-
-            senders_in_window: set[str] = set()
-            count = 0
-            j = i
-            while j < len(dated_events) and dated_events[j][0] <= window_end:
-                senders_in_window.add(dated_events[j][1])
-                count += 1
-                j += 1
-
-            if len(senders_in_window) >= 2 and count >= min_events:
-                results.append(
-                    {
-                        "window_start": window_start.isoformat(),
-                        "window_end": window_end.isoformat(),
-                        "senders": sorted(senders_in_window),
-                        "email_count": count,
-                    }
-                )
-                last_window_end = window_end
-
-        return results
+        return _coordinated_timing_windows(dated_events, window_delta, min_events)
 
     def relationship_summary(self, email_address: str, limit: int = 20) -> dict[str, Any]:
         """Full profile for a single email address.
@@ -369,9 +336,9 @@ class CommunicationNetwork:
         }
 
 
-def _dated_sender_events(timeline):
+def _dated_sender_events(timeline: list[dict[str, Any]]) -> list[_DatedSenderEvent]:
     """Normalize dated sender activity into sortable events for timing analysis."""
-    events = []
+    events: list[_DatedSenderEvent] = []
     for entry in timeline:
         try:
             parsed = datetime.fromisoformat(entry["date"].replace("Z", "+00:00"))
@@ -381,3 +348,48 @@ def _dated_sender_events(timeline):
         except ValueError, TypeError:
             continue
     return events
+
+
+def _coordinated_timing_windows(
+    dated_events: list[_DatedSenderEvent],
+    window_delta: timedelta,
+    min_events: int,
+) -> list[dict[str, Any]]:
+    """Return qualifying non-overlapping sender activity windows."""
+    results: list[dict[str, Any]] = []
+    last_window_end: datetime | None = None
+    for start_index, (window_start, _) in enumerate(dated_events):
+        # Anchors at the prior inclusive endpoint are part of that result.
+        if last_window_end is not None and window_start <= last_window_end:
+            continue
+
+        window_end = window_start + window_delta
+        senders, count = _sender_window_summary(dated_events, start_index, window_end)
+        if len(senders) < 2 or count < min_events:
+            continue
+
+        results.append(
+            {
+                "window_start": window_start.isoformat(),
+                "window_end": window_end.isoformat(),
+                "senders": sorted(senders),
+                "email_count": count,
+            }
+        )
+        last_window_end = window_end
+
+    return results
+
+
+def _sender_window_summary(
+    dated_events: list[_DatedSenderEvent],
+    start_index: int,
+    window_end: datetime,
+) -> tuple[set[str], int]:
+    """Count events and senders from an anchor through its inclusive endpoint."""
+    senders: set[str] = set()
+    end_index = start_index
+    while end_index < len(dated_events) and dated_events[end_index][0] <= window_end:
+        senders.add(dated_events[end_index][1])
+        end_index += 1
+    return senders, end_index - start_index

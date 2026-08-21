@@ -430,6 +430,25 @@ def clear_settings_cache() -> None:
 get_settings.cache_clear = clear_settings_cache  # type: ignore[attr-defined]
 
 
+def _apply_optional_runtime_overrides(
+    *,
+    embedding_model_revision: str | None,
+    sparse_enabled: bool | None,
+    image_search_enabled: bool | None,
+    overrides: dict[str, Any],
+) -> None:
+    """Add validated optional model and boolean overrides in place."""
+    if embedding_model_revision is not None:
+        overrides["embedding_model_revision"] = _require_model_revision(
+            embedding_model_revision,
+            variable_name="embedding_model_revision",
+        )
+    if sparse_enabled is not None:
+        overrides["sparse_enabled"] = sparse_enabled
+    if image_search_enabled is not None:
+        overrides["image_search_enabled"] = image_search_enabled
+
+
 def resolve_runtime_settings(
     vector_index_path: str | None = None,
     embedding_model: str | None = None,
@@ -454,15 +473,12 @@ def resolve_runtime_settings(
         if embedding_model != base.embedding_model and embedding_model_revision is None:
             raise ValueError("embedding_model_revision is required when overriding embedding_model")
         overrides["embedding_model"] = embedding_model
-    if embedding_model_revision is not None:
-        overrides["embedding_model_revision"] = _require_model_revision(
-            embedding_model_revision,
-            variable_name="embedding_model_revision",
-        )
-    if sparse_enabled is not None:
-        overrides["sparse_enabled"] = sparse_enabled
-    if image_search_enabled is not None:
-        overrides["image_search_enabled"] = image_search_enabled
+    _apply_optional_runtime_overrides(
+        embedding_model_revision=embedding_model_revision,
+        sparse_enabled=sparse_enabled,
+        image_search_enabled=image_search_enabled,
+        overrides=overrides,
+    )
     return replace(base, **overrides)
 
 

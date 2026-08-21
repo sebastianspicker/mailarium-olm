@@ -165,60 +165,80 @@ def run_evidence_stats_impl(
     stats = db.evidence_stats()
 
     try:
-        from rich.console import Console
-        from rich.panel import Panel
-        from rich.table import Table
-
-        console = Console()
-        total = stats.get("total", 0)
-        verified = stats.get("verified", 0)
-        unverified = stats.get("unverified", 0)
-        verified_pct = f"{verified / total:.0%}" if total > 0 else "N/A"
-
-        summary = (
-            f"  [bold]{total}[/] total items  |  "
-            f"[green bold]{verified}[/] verified ({verified_pct})  |  "
-            f"[yellow]{unverified}[/] unverified"
-        )
-        console.print(Panel(summary, title="[bold]Evidence Statistics[/]", border_style="blue"))
-
-        relevance_counts = stats.get("by_relevance", {})
-        if relevance_counts:
-            rel_table = Table(title="[bold]By Relevance Level[/]", border_style="dim")
-            rel_table.add_column("Level", width=20, justify="center")
-            rel_table.add_column("Count", justify="right", style="cyan bold")
-            labels = {
-                5: "[green bold]\u2605\u2605\u2605\u2605\u2605[/] Direct proof",
-                4: "[green]\u2605\u2605\u2605\u2605\u2606[/] Strong evidence",
-                3: "[yellow]\u2605\u2605\u2605\u2606\u2606[/] Supporting",
-                2: "[yellow dim]\u2605\u2605\u2606\u2606\u2606[/] Background",
-                1: "[dim]\u2605\u2606\u2606\u2606\u2606[/] Tangential",
-            }
-            normalized_relevance_counts = _normalize_relevance_counts(relevance_counts)
-            for level in (5, 4, 3, 2, 1):
-                count = normalized_relevance_counts.get(level, 0)
-                if count:
-                    rel_table.add_row(labels.get(level, str(level)), str(count))
-            console.print(rel_table)
-
-        categories = stats.get("categories", [])
-        if categories:
-            cat_table = Table(title="[bold]By Category[/]", border_style="dim")
-            cat_table.add_column("Category", min_width=20)
-            cat_table.add_column("Count", justify="right", style="cyan bold")
-            cat_table.add_column("", width=25)
-            cat_pairs = _category_pairs(categories)
-            max_cat_count = max((c for _, c in cat_pairs), default=1)
-            for cat_name, cat_count in cat_pairs:
-                bar_len = int((cat_count / max_cat_count) * 20) if max_cat_count else 0
-                category_bar = "[cyan]" + "\u2588" * bar_len + "[/]"
-                cat_table.add_row(str(cat_name), str(cat_count), category_bar)
-            console.print(cat_table)
+        _render_evidence_stats(stats)
     except ImportError:
         print_rich_or_plain(
             rich_fn=lambda c: c.print_json(data=stats),
             plain_fn=lambda: print(__import__("json").dumps(stats, indent=2)),
         )
+
+
+def _render_evidence_stats(stats: dict) -> None:
+    """Render evidence statistics with Rich when it is available."""
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+    console.print(Panel(_evidence_stats_summary(stats), title="[bold]Evidence Statistics[/]", border_style="blue"))
+    _render_relevance_stats(console, stats.get("by_relevance", {}))
+    _render_category_stats(console, stats.get("categories", []))
+
+
+def _evidence_stats_summary(stats: dict) -> str:
+    """Return the stable Rich summary line for evidence statistics."""
+    total = stats.get("total", 0)
+    verified = stats.get("verified", 0)
+    unverified = stats.get("unverified", 0)
+    verified_pct = f"{verified / total:.0%}" if total > 0 else "N/A"
+    return (
+        f"  [bold]{total}[/] total items  |  "
+        f"[green bold]{verified}[/] verified ({verified_pct})  |  "
+        f"[yellow]{unverified}[/] unverified"
+    )
+
+
+def _render_relevance_stats(console, relevance_counts) -> None:
+    """Render populated relevance-level statistics in their existing order."""
+    if not relevance_counts:
+        return
+
+    from rich.table import Table
+
+    rel_table = Table(title="[bold]By Relevance Level[/]", border_style="dim")
+    rel_table.add_column("Level", width=20, justify="center")
+    rel_table.add_column("Count", justify="right", style="cyan bold")
+    labels = {
+        5: "[green bold]\u2605\u2605\u2605\u2605\u2605[/] Direct proof",
+        4: "[green]\u2605\u2605\u2605\u2605\u2606[/] Strong evidence",
+        3: "[yellow]\u2605\u2605\u2605\u2606\u2606[/] Supporting",
+        2: "[yellow dim]\u2605\u2605\u2606\u2606\u2606[/] Background",
+        1: "[dim]\u2605\u2606\u2606\u2606\u2606[/] Tangential",
+    }
+    normalized_relevance_counts = _normalize_relevance_counts(relevance_counts)
+    for level in (5, 4, 3, 2, 1):
+        count = normalized_relevance_counts.get(level, 0)
+        if count:
+            rel_table.add_row(labels.get(level, str(level)), str(count))
+    console.print(rel_table)
+
+
+def _render_category_stats(console, categories) -> None:
+    """Render populated evidence-category statistics in their existing order."""
+    if not categories:
+        return
+
+    from rich.table import Table
+
+    cat_table = Table(title="[bold]By Category[/]", border_style="dim")
+    cat_table.add_column("Category", min_width=20)
+    cat_table.add_column("Count", justify="right", style="cyan bold")
+    cat_table.add_column("", width=25)
+    cat_pairs = _category_pairs(categories)
+    max_cat_count = max((count for _, count in cat_pairs), default=1)
+    for category_name, category_count in cat_pairs:
+        bar_len = int((category_count / max_cat_count) * 20) if max_cat_count else 0
+        cat_table.add_row(str(category_name), str(category_count), "[cyan]" + "\u2588" * bar_len + "[/]")
+    console.print(cat_table)
 
 
 def _normalize_relevance_counts(counts) -> dict[int, int]:
@@ -249,52 +269,79 @@ def run_evidence_verify_impl(get_email_db: Callable[[], EmailDatabase]) -> None:
     result = db.verify_evidence_quotes()
 
     try:
-        from rich.console import Console
-        from rich.panel import Panel
-        from rich.table import Table
-
-        console = Console()
-        verified = result.get("verified", 0)
-        failed = result.get("failed", 0)
-        total = verified + failed
-
-        status_style = "green" if failed == 0 else "yellow"
-        console.print(
-            Panel(
-                f"  [bold]{total}[/] quotes checked  |  "
-                f"[green bold]{verified}[/] verified  |  "
-                f"[{'red bold' if failed else 'dim'}]{failed}[/] failed",
-                title=(
-                    f"[bold]Quote Verification [{status_style}]{'PASSED' if failed == 0 else 'ISSUES FOUND'}[/{status_style}][/]"
-                ),
-                border_style=status_style,
-            )
-        )
-
-        failures = result.get("failures", [])
-        if failures:
-            table = Table(title="[bold red]Failed Verifications[/]", border_style="red", show_lines=True)
-            table.add_column("Evidence ID", width=12, justify="right")
-            table.add_column("Email UID", width=14, style="dim")
-            table.add_column("Quote Preview", min_width=40)
-
-            for failure in failures:
-                table.add_row(
-                    str(failure.get("evidence_id", "?")),
-                    str(failure.get("email_uid", ""))[:12],
-                    f'[italic]"{sanitize_untrusted_text(failure.get("key_quote_preview", ""))}"[/]',
-                )
-            console.print(table)
-            console.print(
-                "[dim]  Failed quotes may indicate modified source emails or extraction errors.\n"
-                "  Use evidence_update to correct quotes against the current email body.[/]"
-            )
+        _render_evidence_verification(result)
     except ImportError:
-        print(f"\nVerification complete: {result['verified']} verified, {result['failed']} failed")
-        if result.get("failures"):
-            print("\nFailed quotes:")
-            for failure in result["failures"]:
-                print(f'  ID {failure["evidence_id"]}: "{failure["key_quote_preview"]}" (email: {failure["email_uid"][:12]})')
+        _print_evidence_verification_fallback(result)
+
+
+def _render_evidence_verification(result: dict) -> None:
+    """Render evidence-verification results with Rich when it is available."""
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+    verified = result.get("verified", 0)
+    failed = result.get("failed", 0)
+    status_style = "green" if failed == 0 else "yellow"
+    console.print(
+        Panel(
+            _evidence_verification_summary(verified, failed),
+            title=_evidence_verification_title(failed, status_style),
+            border_style=status_style,
+        )
+    )
+    _render_evidence_verification_failures(console, result.get("failures", []))
+
+
+def _evidence_verification_summary(verified: int, failed: int) -> str:
+    """Return the stable Rich verification summary line."""
+    return (
+        f"  [bold]{verified + failed}[/] quotes checked  |  "
+        f"[green bold]{verified}[/] verified  |  "
+        f"[{'red bold' if failed else 'dim'}]{failed}[/] failed"
+    )
+
+
+def _evidence_verification_title(failed: int, status_style: str) -> str:
+    """Return the stable Rich verification panel title."""
+    status = "PASSED" if failed == 0 else "ISSUES FOUND"
+    return f"[bold]Quote Verification [{status_style}]{status}[/{status_style}][/]"
+
+
+def _render_evidence_verification_failures(console, failures) -> None:
+    """Render failed quote verification details when any are present."""
+    if not failures:
+        return
+
+    from rich.table import Table
+
+    table = Table(title="[bold red]Failed Verifications[/]", border_style="red", show_lines=True)
+    table.add_column("Evidence ID", width=12, justify="right")
+    table.add_column("Email UID", width=14, style="dim")
+    table.add_column("Quote Preview", min_width=40)
+    for failure in failures:
+        table.add_row(
+            str(failure.get("evidence_id", "?")),
+            str(failure.get("email_uid", ""))[:12],
+            f'[italic]"{sanitize_untrusted_text(failure.get("key_quote_preview", ""))}"[/]',
+        )
+    console.print(table)
+    console.print(
+        "[dim]  Failed quotes may indicate modified source emails or extraction errors.\n"
+        "  Use evidence_update to correct quotes against the current email body.[/]"
+    )
+
+
+def _print_evidence_verification_fallback(result: dict) -> None:
+    """Print the established plain-text verification result when Rich is unavailable."""
+    print(f"\nVerification complete: {result['verified']} verified, {result['failed']} failed")
+    failures = result.get("failures")
+    if not failures:
+        return
+
+    print("\nFailed quotes:")
+    for failure in failures:
+        print(f'  ID {failure["evidence_id"]}: "{failure["key_quote_preview"]}" (email: {failure["email_uid"][:12]})')
 
 
 def run_dossier_impl(
@@ -425,56 +472,71 @@ def run_provenance_impl(get_email_db: Callable[[], EmailDatabase], email_uid: st
     result = db.email_provenance(email_uid)
 
     try:
-        from rich.console import Console
-        from rich.panel import Panel
-        from rich.table import Table
-
-        console = Console()
-
-        email = result.get("email", {})
-        source = result.get("source", {})
-        custody = result.get("custody_events", [])
-
-        console.print(
-            Panel(
-                f"  [bold]Subject:[/] {email.get('subject', '(unknown)')}\n"
-                f"  [bold]From:[/] {email.get('sender_email', '?')}\n"
-                f"  [bold]Date:[/] {str(email.get('date', '?'))[:10]}\n"
-                f"  [bold]UID:[/] [dim]{email_uid}[/]",
-                title="[bold]Email Provenance[/]",
-                border_style="blue",
-            )
-        )
-
-        if source:
-            olm_hash = source.get("olm_source_hash", "")
-            ingested_at = source.get("ingested_at", "")
-            console.print(
-                Panel(
-                    f"  [bold]OLM Source Hash:[/] [dim]{olm_hash or 'N/A'}[/]\n  [bold]Ingested At:[/] {ingested_at or 'N/A'}",
-                    title="[bold]Source Tracing[/]",
-                    border_style="cyan",
-                )
-            )
-
-        if custody:
-            table = Table(title=f"[bold]Custody Events ({len(custody)})[/]", border_style="dim", show_lines=True)
-            table.add_column("Timestamp", width=20)
-            table.add_column("Action", width=22)
-            table.add_column("Actor", width=12)
-            table.add_column("SHA-256 (prefix)", width=20, style="dim")
-
-            for event in custody:
-                content_hash = event.get("content_hash") or ""
-                hash_display = content_hash[:16] + "..." if content_hash else "[dim]--[/]"
-                table.add_row(
-                    event.get("timestamp", ""),
-                    event.get("action", ""),
-                    event.get("actor", "system"),
-                    hash_display,
-                )
-            console.print(table)
-        else:
-            console.print("[dim]  No custody events recorded for this email.[/]")
+        _render_provenance(result, email_uid)
     except ImportError:
         print(__import__("json").dumps(result, indent=2, default=str))
+
+
+def _render_provenance(result: dict, email_uid: str) -> None:
+    """Render an email provenance result with Rich when it is available."""
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+    email = result.get("email", {})
+    source = result.get("source", {})
+    custody = result.get("custody_events", [])
+    console.print(Panel(_provenance_email_details(email, email_uid), title="[bold]Email Provenance[/]", border_style="blue"))
+    _render_provenance_source(console, Panel, source)
+    _render_provenance_custody(console, custody)
+
+
+def _provenance_email_details(email: dict, email_uid: str) -> str:
+    """Return the stable Rich email-details content for provenance output."""
+    return (
+        f"  [bold]Subject:[/] {email.get('subject', '(unknown)')}\n"
+        f"  [bold]From:[/] {email.get('sender_email', '?')}\n"
+        f"  [bold]Date:[/] {str(email.get('date', '?'))[:10]}\n"
+        f"  [bold]UID:[/] [dim]{email_uid}[/]"
+    )
+
+
+def _render_provenance_source(console, panel_cls, source: dict) -> None:
+    """Render source tracing only when the provenance result contains it."""
+    if not source:
+        return
+
+    olm_hash = source.get("olm_source_hash", "")
+    ingested_at = source.get("ingested_at", "")
+    console.print(
+        panel_cls(
+            f"  [bold]OLM Source Hash:[/] [dim]{olm_hash or 'N/A'}[/]\n  [bold]Ingested At:[/] {ingested_at or 'N/A'}",
+            title="[bold]Source Tracing[/]",
+            border_style="cyan",
+        )
+    )
+
+
+def _render_provenance_custody(console, custody) -> None:
+    """Render custody rows or their established empty-state message."""
+    if not custody:
+        console.print("[dim]  No custody events recorded for this email.[/]")
+        return
+
+    from rich.table import Table
+
+    table = Table(title=f"[bold]Custody Events ({len(custody)})[/]", border_style="dim", show_lines=True)
+    table.add_column("Timestamp", width=20)
+    table.add_column("Action", width=22)
+    table.add_column("Actor", width=12)
+    table.add_column("SHA-256 (prefix)", width=20, style="dim")
+    for event in custody:
+        content_hash = event.get("content_hash") or ""
+        hash_display = content_hash[:16] + "..." if content_hash else "[dim]--[/]"
+        table.add_row(
+            event.get("timestamp", ""),
+            event.get("action", ""),
+            event.get("actor", "system"),
+            hash_display,
+        )
+    console.print(table)

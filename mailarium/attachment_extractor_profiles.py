@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from .image_embedder import _IMAGE_EXTENSIONS
@@ -13,6 +14,162 @@ _ARCHIVE_EXTENSIONS = frozenset({".zip", ".gz", ".tar", ".rar", ".7z"})
 _TRANSCRIPT_TEXT_EXTENSIONS = frozenset({".txt", ".md", ".log", ".json", ".xml", ".yaml", ".yml", ".rst"})
 _SPREADSHEET_EXTENSIONS = frozenset({".csv", ".tsv", ".xlsx", ".xls", ".xlsm", ".ods"})
 _CALENDAR_EXTENSIONS = frozenset({".ics", ".ical", ".vcs"})
+
+
+@dataclass(frozen=True)
+class _ProfileDefinition:
+    """Immutable inputs used to build one stable format-profile payload."""
+
+    format_id: str
+    family: str
+    label: str
+    handling_mode: str
+    support_level: str
+    lossiness: str
+    manual_review_required: bool
+    degrade_reason: str = ""
+    limitations: tuple[str, ...] = ()
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return the public dictionary representation expected by downstream code."""
+        return {
+            "format_id": self.format_id,
+            "format_family": self.family,
+            "format_label": self.label,
+            "handling_mode": self.handling_mode,
+            "support_level": self.support_level,
+            "lossiness": self.lossiness,
+            "manual_review_required": self.manual_review_required,
+            "degrade_reason": self.degrade_reason,
+            "limitations": list(self.limitations),
+        }
+
+
+@dataclass(frozen=True)
+class _DegradableProfileDefinition:
+    """Format-specific defaults and fallback details for degradable formats."""
+
+    profile: _ProfileDefinition
+    degraded_handling_mode: str
+    fallback_reason: str
+    fallback_limitation: str
+
+
+@dataclass(frozen=True)
+class _QualityInputs:
+    """Normalized values used to select one extraction-quality update."""
+
+    strength: str
+    state: str
+    ocr_used: bool
+    manual_review_required: bool
+    support_level: Any
+
+
+_DEGRADABLE_PROFILE_DEFINITIONS = {
+    "docx": _DegradableProfileDefinition(
+        _ProfileDefinition(
+            "docx_document", "word_processing", "DOCX document", "native_docx_text_extraction", "supported", "low", False
+        ),
+        "reference_only_document",
+        "docx_text_not_available",
+        "The DOCX exists, but reliable extracted text is not currently available.",
+    ),
+    "portable": _DegradableProfileDefinition(
+        _ProfileDefinition(
+            "portable_word_processing_document",
+            "word_processing",
+            "Portable word-processing document",
+            "document_text_extraction_or_plain_text_fallback",
+            "degraded_supported",
+            "medium",
+            False,
+            "legacy_or_portable_word_processor_structure_flattened",
+            ("Richer layout and tracked-change context may be flattened during extraction.",),
+        ),
+        "reference_only_document",
+        "portable_document_text_not_available",
+        "The document exists, but reliable extracted text is not currently available.",
+    ),
+    "spreadsheet": _DegradableProfileDefinition(
+        _ProfileDefinition(
+            "spreadsheet_export",
+            "spreadsheet",
+            "Spreadsheet or time export",
+            "flattened_tabular_text",
+            "degraded_supported",
+            "medium",
+            False,
+            "sheet_structure_flattened_to_text",
+            ("Cell formulas, formatting, and workbook structure are flattened into plain text.",),
+        ),
+        "reference_only_spreadsheet",
+        "spreadsheet_text_not_available",
+        "Structured spreadsheet content could not be rendered into usable text.",
+    ),
+    "calendar": _DegradableProfileDefinition(
+        _ProfileDefinition(
+            "calendar_file",
+            "calendar",
+            "Calendar file",
+            "calendar_text_flattened",
+            "degraded_supported",
+            "medium",
+            False,
+            "calendar_structure_flattened_to_text",
+            ("Calendar fields remain readable, but recurrence and richer calendar semantics are flattened.",),
+        ),
+        "reference_only_calendar",
+        "calendar_text_not_available",
+        "Calendar metadata is not currently recoverable as reliable text.",
+    ),
+}
+
+_NATIVE_PDF_PROFILE = _ProfileDefinition(
+    "pdf_document", "pdf", "PDF document", "native_pdf_text_extraction", "supported", "low", False
+)
+_SCANNED_PDF_PROFILE = _ProfileDefinition(
+    "scanned_pdf",
+    "pdf",
+    "Scanned PDF",
+    "ocr_recovered_text",
+    "degraded_supported",
+    "medium",
+    True,
+    "ocr_required_for_scanned_pdf",
+    (
+        "Text depends on OCR recovery rather than native PDF text.",
+        "Fine wording and page placement should be checked against the original PDF.",
+    ),
+)
+_SIDECAR_PDF_PROFILE = _ProfileDefinition(
+    "pdf_sidecar_transcript",
+    "pdf",
+    "PDF with sidecar transcript",
+    "sidecar_transcript_text",
+    "degraded_supported",
+    "medium",
+    True,
+    "pdf_text_recovered_from_sidecar_transcript",
+    (
+        "Text came from a sidecar transcript rather than direct PDF extraction.",
+        "The sidecar transcript should be checked against the original PDF before exact wording is relied on.",
+    ),
+)
+_OCR_POOR_PDF_PROFILE = _ProfileDefinition(
+    "ocr_poor_pdf",
+    "pdf",
+    "OCR-poor PDF",
+    "reference_only_after_ocr_failure",
+    "reference_only",
+    "high",
+    True,
+    "ocr_failed_for_pdf",
+    (
+        "No reliable extracted PDF text is available.",
+        "The original PDF must be reviewed manually before it can support serious legal outputs.",
+    ),
+)
 
 
 def _get_extension(filename: str) -> str:
@@ -153,7 +310,15 @@ def _image_handler(state: str, _strength: str, _ocr_used: bool, text_available: 
 def _text_handler(_state: str, _strength: str, _ocr_used: bool, _text_available: bool) -> dict[str, Any]:
     """Return the native-text profile for directly decodable attachments."""
     return _profile(
-        "transcript_text_bundle", "text_bundle", "Transcript-like text bundle", "plain_text_ingestion", "supported", "low", False
+        _ProfileDefinition(
+            "transcript_text_bundle",
+            "text_bundle",
+            "Transcript-like text bundle",
+            "plain_text_ingestion",
+            "supported",
+            "low",
+            False,
+        )
     )
 
 
@@ -170,56 +335,40 @@ def _email_handler(_state: str, _strength: str, _ocr_used: bool, text_available:
 def _presentation_handler(_state: str, _strength: str, _ocr_used: bool, _text_available: bool) -> dict[str, Any]:
     """Return presentation support details and known extraction losses."""
     return _profile(
-        "presentation_document",
-        "presentation",
-        "Presentation deck",
-        "slide_text_extraction",
-        "degraded_supported",
-        "medium",
-        False,
-        "slide_layout_and_visual_context_flattened",
-        ["Slide layout and visual emphasis are flattened to text."],
+        _ProfileDefinition(
+            "presentation_document",
+            "presentation",
+            "Presentation deck",
+            "slide_text_extraction",
+            "degraded_supported",
+            "medium",
+            False,
+            "slide_layout_and_visual_context_flattened",
+            ("Slide layout and visual emphasis are flattened to text.",),
+        )
     )
 
 
 def _other_handler(_state: str, _strength: str, _ocr_used: bool, _text_available: bool) -> dict[str, Any]:
     """Return an unsupported-format profile that requires manual review."""
     return _profile(
-        "other_attachment",
-        "other",
-        "Other attachment",
-        "unsupported_or_unclassified",
-        "unsupported",
-        "high",
-        True,
-        "unsupported_or_unclassified_format",
-        ["This file type is not explicitly supported by the current extraction matrix."],
+        _ProfileDefinition(
+            "other_attachment",
+            "other",
+            "Other attachment",
+            "unsupported_or_unclassified",
+            "unsupported",
+            "high",
+            True,
+            "unsupported_or_unclassified_format",
+            ("This file type is not explicitly supported by the current extraction matrix.",),
+        )
     )
 
 
-def _profile(
-    format_id: str,
-    family: str,
-    label: str,
-    handling_mode: str,
-    support_level: str,
-    lossiness: str,
-    manual_review_required: bool,
-    degrade_reason: str = "",
-    limitations: list[str] | None = None,
-) -> dict[str, Any]:
+def _profile(definition: _ProfileDefinition) -> dict[str, Any]:
     """Assemble the stable format-profile payload consumed by downstream evidence code."""
-    return {
-        "format_id": format_id,
-        "format_family": family,
-        "format_label": label,
-        "handling_mode": handling_mode,
-        "support_level": support_level,
-        "lossiness": lossiness,
-        "manual_review_required": manual_review_required,
-        "degrade_reason": degrade_reason,
-        "limitations": limitations or [],
-    }
+    return definition.to_payload()
 
 
 def _is_portable_word_format(ext: str, mime_type: str) -> bool:
@@ -246,52 +395,13 @@ _FORMAT_PROFILE_HANDLERS = (
 
 def _pdf_profile(state: str, strength: str, ocr_used: bool) -> dict[str, Any]:
     """Classify PDF extraction quality from state, evidence strength, and OCR use."""
-    profile = _profile("pdf_document", "pdf", "PDF document", "native_pdf_text_extraction", "supported", "low", False)
+    profile = _profile(_NATIVE_PDF_PROFILE)
     if state == "ocr_text_extracted" or ocr_used:
-        return _profile(
-            "scanned_pdf",
-            "pdf",
-            "Scanned PDF",
-            "ocr_recovered_text",
-            "degraded_supported",
-            "medium",
-            True,
-            "ocr_required_for_scanned_pdf",
-            [
-                "Text depends on OCR recovery rather than native PDF text.",
-                "Fine wording and page placement should be checked against the original PDF.",
-            ],
-        )
+        return _profile(_SCANNED_PDF_PROFILE)
     if state == "sidecar_text_extracted":
-        return _profile(
-            "pdf_sidecar_transcript",
-            "pdf",
-            "PDF with sidecar transcript",
-            "sidecar_transcript_text",
-            "degraded_supported",
-            "medium",
-            True,
-            "pdf_text_recovered_from_sidecar_transcript",
-            [
-                "Text came from a sidecar transcript rather than direct PDF extraction.",
-                "The sidecar transcript should be checked against the original PDF before exact wording is relied on.",
-            ],
-        )
+        return _profile(_SIDECAR_PDF_PROFILE)
     if state in {"ocr_failed", "ocr_failure"}:
-        return _profile(
-            "ocr_poor_pdf",
-            "pdf",
-            "OCR-poor PDF",
-            "reference_only_after_ocr_failure",
-            "reference_only",
-            "high",
-            True,
-            "ocr_failed_for_pdf",
-            [
-                "No reliable extracted PDF text is available.",
-                "The original PDF must be reviewed manually before it can support serious legal outputs.",
-            ],
-        )
+        return _profile(_OCR_POOR_PDF_PROFILE)
     if _is_degraded(state, strength):
         _apply_degraded_reference(
             profile,
@@ -304,67 +414,14 @@ def _pdf_profile(state: str, strength: str, ocr_used: bool) -> dict[str, Any]:
 
 def _degradable_profile(kind: str, state: str, strength: str) -> dict[str, Any]:
     """Mark a supported format profile with explicit extraction limits and review guidance."""
-    profiles = {
-        "docx": (
-            "docx_document",
-            "word_processing",
-            "DOCX document",
-            "native_docx_text_extraction",
-            "supported",
-            "low",
-            "",
-            [],
-            "reference_only_document",
-            "docx_text_not_available",
-            "The DOCX exists, but reliable extracted text is not currently available.",
-        ),
-        "portable": (
-            "portable_word_processing_document",
-            "word_processing",
-            "Portable word-processing document",
-            "document_text_extraction_or_plain_text_fallback",
-            "degraded_supported",
-            "medium",
-            "legacy_or_portable_word_processor_structure_flattened",
-            ["Richer layout and tracked-change context may be flattened during extraction."],
-            "reference_only_document",
-            "portable_document_text_not_available",
-            "The document exists, but reliable extracted text is not currently available.",
-        ),
-        "spreadsheet": (
-            "spreadsheet_export",
-            "spreadsheet",
-            "Spreadsheet or time export",
-            "flattened_tabular_text",
-            "degraded_supported",
-            "medium",
-            "sheet_structure_flattened_to_text",
-            ["Cell formulas, formatting, and workbook structure are flattened into plain text."],
-            "reference_only_spreadsheet",
-            "spreadsheet_text_not_available",
-            "Structured spreadsheet content could not be rendered into usable text.",
-        ),
-        "calendar": (
-            "calendar_file",
-            "calendar",
-            "Calendar file",
-            "calendar_text_flattened",
-            "degraded_supported",
-            "medium",
-            "calendar_structure_flattened_to_text",
-            ["Calendar fields remain readable, but recurrence and richer calendar semantics are flattened."],
-            "reference_only_calendar",
-            "calendar_text_not_available",
-            "Calendar metadata is not currently recoverable as reliable text.",
-        ),
-    }
-    format_id, family, label, handling, support, lossiness, reason, limits, degraded_handling, fallback_reason, fallback_limit = (
-        profiles[kind]
-    )
-    profile = _profile(format_id, family, label, handling, support, lossiness, False, reason, limits)
+    definition = _DEGRADABLE_PROFILE_DEFINITIONS[kind]
+    profile = _profile(definition.profile)
     if _is_degraded(state, strength):
         _apply_degraded_reference(
-            profile, handling_mode=degraded_handling, degrade_reason=state or fallback_reason, limitations=[fallback_limit]
+            profile,
+            handling_mode=definition.degraded_handling_mode,
+            degrade_reason=state or definition.fallback_reason,
+            limitations=[definition.fallback_limitation],
         )
     return profile
 
@@ -373,32 +430,36 @@ def _image_profile(state: str, text_available: bool) -> dict[str, Any]:
     """Classify image extraction quality and whether OCR recovery is usable."""
     if state == "sidecar_text_extracted" and text_available:
         return _profile(
-            "image_sidecar_transcript",
-            "image",
-            "Image exhibit with sidecar transcript",
-            "sidecar_transcript_text",
-            "degraded_supported",
-            "medium",
-            True,
-            "image_text_recovered_from_sidecar_transcript",
-            [
-                "Text came from a sidecar transcript rather than direct OCR over the image.",
-                "Visual layout and emphasis still need to be checked against the original image.",
-            ],
+            _ProfileDefinition(
+                "image_sidecar_transcript",
+                "image",
+                "Image exhibit with sidecar transcript",
+                "sidecar_transcript_text",
+                "degraded_supported",
+                "medium",
+                True,
+                "image_text_recovered_from_sidecar_transcript",
+                (
+                    "Text came from a sidecar transcript rather than direct OCR over the image.",
+                    "Visual layout and emphasis still need to be checked against the original image.",
+                ),
+            )
         )
     return _profile(
-        "image_only_exhibit",
-        "image",
-        "Screenshot or image-only exhibit",
-        "image_embedding_or_reference_only",
-        "reference_only",
-        "high",
-        True,
-        state or "image_only_source",
-        [
-            "The current pipeline does not recover full authored text from images by default.",
-            "Image-only exhibits need manual visual review before exact wording is relied on.",
-        ],
+        _ProfileDefinition(
+            "image_only_exhibit",
+            "image",
+            "Screenshot or image-only exhibit",
+            "image_embedding_or_reference_only",
+            "reference_only",
+            "high",
+            True,
+            state or "image_only_source",
+            (
+                "The current pipeline does not recover full authored text from images by default.",
+                "Image-only exhibits need manual visual review before exact wording is relied on.",
+            ),
+        )
     )
 
 
@@ -406,59 +467,67 @@ def _archive_profile(state: str, text_available: bool) -> dict[str, Any]:
     """Describe archive extraction coverage and member-level limitations."""
     if state == "archive_contents_extracted" and text_available:
         return _profile(
-            "archive_bundle_text_recovered",
-            "archive",
-            "Archive bundle with extracted member text",
-            "archive_member_text_recovered",
-            "degraded_supported",
-            "medium",
-            True,
-            "archive_member_text_recovered",
-            [
-                "Only safe and text-like archive members were extracted.",
-                "Nested or binary archive contents may still require manual review.",
-            ],
+            _ProfileDefinition(
+                "archive_bundle_text_recovered",
+                "archive",
+                "Archive bundle with extracted member text",
+                "archive_member_text_recovered",
+                "degraded_supported",
+                "medium",
+                True,
+                "archive_member_text_recovered",
+                (
+                    "Only safe and text-like archive members were extracted.",
+                    "Nested or binary archive contents may still require manual review.",
+                ),
+            )
         )
     if state == "archive_inventory_extracted" and text_available:
         return _profile(
-            "archive_inventory_bundle",
-            "archive",
-            "Archive bundle with member inventory",
-            "archive_member_inventory_only",
-            "degraded_supported",
-            "high",
-            True,
-            "archive_contents_not_extracted_only_inventory_available",
-            [
-                "Only the archive member inventory is available; archive contents were not unpacked into evidence text.",
-                "The original archive contents still need manual extraction or review before serious reliance.",
-            ],
+            _ProfileDefinition(
+                "archive_inventory_bundle",
+                "archive",
+                "Archive bundle with member inventory",
+                "archive_member_inventory_only",
+                "degraded_supported",
+                "high",
+                True,
+                "archive_contents_not_extracted_only_inventory_available",
+                (
+                    "Only the archive member inventory is available; archive contents were not unpacked into evidence text.",
+                    "The original archive contents still need manual extraction or review before serious reliance.",
+                ),
+            )
         )
     return _profile(
-        "archive_bundle",
-        "archive",
-        "Archive bundle",
-        "unsupported_archive_container",
-        "unsupported",
-        "high",
-        True,
-        "archive_contents_not_extracted",
-        ["Archive contents are not unpacked by the current attachment extraction path."],
+        _ProfileDefinition(
+            "archive_bundle",
+            "archive",
+            "Archive bundle",
+            "unsupported_archive_container",
+            "unsupported",
+            "high",
+            True,
+            "archive_contents_not_extracted",
+            ("Archive contents are not unpacked by the current attachment extraction path.",),
+        )
     )
 
 
 def _email_profile(text_available: bool) -> dict[str, Any]:
     """Describe embedded-email extraction coverage and MIME parsing limitations."""
     return _profile(
-        "attached_email",
-        "email",
-        "Attached email message",
-        "embedded_email_text_extraction",
-        "degraded_supported" if text_available else "reference_only",
-        "medium" if text_available else "high",
-        not text_available,
-        "" if text_available else "attached_email_text_not_available",
-        [] if text_available else ["The attached email exists, but its readable content could not be extracted."],
+        _ProfileDefinition(
+            "attached_email",
+            "email",
+            "Attached email message",
+            "embedded_email_text_extraction",
+            "degraded_supported" if text_available else "reference_only",
+            "medium" if text_available else "high",
+            not text_available,
+            "" if text_available else "attached_email_text_not_available",
+            () if text_available else ("The attached email exists, but its readable content could not be extracted.",),
+        )
     )
 
 
@@ -476,19 +545,18 @@ def extraction_quality_profile(
     limitations = [str(item) for item in format_profile.get("limitations", []) if str(item).strip()]
 
     profile = _base_quality_profile(format_profile, limitations)
-
-    if _is_native_text(normalized_strength, normalized_state, ocr_used):
-        profile.update(_quality_update("native_text_extracted", "high", profile["manual_review_required"]))
-        return profile
-
-    if _is_ocr_text(normalized_strength, normalized_state, ocr_used):
-        profile.update(_quality_update("ocr_text_recovered", "medium", True))
-        return profile
-
-    if state_quality := _state_quality(normalized_state):
-        profile.update(_quality_update(*state_quality))
-    elif format_profile.get("support_level") == "unsupported":
-        profile.update(_quality_update("unsupported_format", "low", True))
+    profile.update(
+        _quality_update_for(
+            _QualityInputs(
+                strength=normalized_strength,
+                state=normalized_state,
+                ocr_used=ocr_used,
+                manual_review_required=profile["manual_review_required"],
+                support_level=format_profile.get("support_level"),
+            )
+        )
+        or {}
+    )
     return profile
 
 
@@ -500,6 +568,27 @@ def _is_native_text(strength: str, state: str, ocr_used: bool) -> bool:
 def _is_ocr_text(strength: str, state: str, ocr_used: bool) -> bool:
     """Return whether extraction produced text through OCR."""
     return strength == "strong_text" and (state == "ocr_text_extracted" or ocr_used)
+
+
+def _quality_update_for(inputs: _QualityInputs) -> dict[str, Any] | None:
+    """Return the first matching quality update in existing precedence order."""
+    state_update = _state_quality_update(inputs.state)
+    candidates = (
+        (
+            _is_native_text(inputs.strength, inputs.state, inputs.ocr_used),
+            _quality_update("native_text_extracted", "high", inputs.manual_review_required),
+        ),
+        (_is_ocr_text(inputs.strength, inputs.state, inputs.ocr_used), _quality_update("ocr_text_recovered", "medium", True)),
+        (state_update is not None, state_update),
+        (inputs.support_level == "unsupported", _quality_update("unsupported_format", "low", True)),
+    )
+    return next((update for matches, update in candidates if matches), None)
+
+
+def _state_quality_update(state: str) -> dict[str, Any] | None:
+    """Convert a recognized extraction state into its quality-field update."""
+    state_quality = _state_quality(state)
+    return _quality_update(*state_quality) if state_quality else None
 
 
 def _base_quality_profile(format_profile: dict[str, Any], limitations: list[str]) -> dict[str, Any]:

@@ -101,8 +101,8 @@ done < <(
 		-not -path "./data/*" \
 		-not -path "./private/runtime" \
 		-not -path "./private/runtime/*" \
-		-not -path "./private/tests/results" \
-		-not -path "./private/tests/results/*"
+		-not -path "./private/evaluations/results" \
+		-not -path "./private/evaluations/results/*"
 )
 
 if [[ "$dry_run" -eq 1 ]]; then

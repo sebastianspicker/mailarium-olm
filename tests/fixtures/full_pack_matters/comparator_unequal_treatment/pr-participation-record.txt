@@ -1,3 +1,0 @@
-PR process note:
-- claimant request discussed without PR copy
-- comparator mobile work extension documented as routine

@@ -152,6 +152,26 @@ mailarium mailbox sync --account local-exchange
 mailarium mailbox triage --account local-exchange --create-proposals
 ```
 
+Discovering folders is a read-gated operation. It lists only physical mail
+folders; `--select` explicitly replaces the stored synchronization allowlist:
+
+```bash
+mailarium mailbox folders discover --account local-exchange
+mailarium mailbox folders discover --account local-exchange --select
+```
+
+The default sync remains one bounded pass. Use `--until-complete` to repeat
+bounded passes only for folders that still have a continuation. For a large
+remote harvest, `--defer-indexing` persists canonical records and cursors
+without constructing the embedder; run the existing re-embedding workflow
+afterward to populate vectors. Interrupted re-embedding can be restarted with
+`--resume`; matching committed body vectors are retained instead of recomputed.
+
+```bash
+mailarium mailbox sync --account local-exchange --until-complete --defer-indexing
+mailarium-ingest --sqlite-path data/email_metadata.db --vector-index-path data/vector-index --reembed --resume
+```
+
 Attachment metadata is synchronized by default. Content requires both
 `EWS_ATTACHMENT_CONTENT_ENABLED=true` and
 `--include-attachment-content`, and remains subject to byte limits.

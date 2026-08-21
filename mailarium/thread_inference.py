@@ -29,13 +29,21 @@ def _parse_dt(value: str) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
-        try:
-            parsed = parsedate_to_datetime(value)
-        except TypeError, ValueError:
+        fallback = _parse_rfc2822_dt(value)
+        if fallback is None:
             return None
+        parsed = fallback
     if parsed.tzinfo is not None:
         return parsed.astimezone(UTC).replace(tzinfo=None)
     return parsed
+
+
+def _parse_rfc2822_dt(value: str) -> datetime | None:
+    """Parse the RFC-2822 fallback date format without raising."""
+    try:
+        return parsedate_to_datetime(value)
+    except TypeError, ValueError:
+        return None
 
 
 def _participant_set(email: Email) -> set[str]:
@@ -115,19 +123,39 @@ def _subject_signal(email: Email, candidate: Email) -> tuple[float, list[str]]:
 
 def _participant_signal(email: Email, candidate: Email) -> tuple[float, list[str]]:
     """Score reply-context and cross-message participant overlap signals."""
+    checks = _participant_match_checks(email, candidate)
+    return sum(weight for matched, weight, _ in checks if matched), [reason for matched, _, reason in checks if matched]
+
+
+def _participant_match_checks(email: Email, candidate: Email) -> tuple[tuple[bool, float, str], ...]:
+    """Build ordered participant-match evidence for a parent candidate."""
     context_from = getattr(email, "reply_context_from", "").strip().lower()
     parent_sender = getattr(candidate, "sender_email", "") or ""
     context_to = _reply_context_participants(email)
     parent_participants = _participant_set(candidate)
     child_participants = _participant_set(email)
     child_sender = getattr(email, "sender_email", "") or ""
-    checks = (
-        (context_from and parent_sender and context_from == parent_sender.lower(), 0.25, "reply_context_from"),
-        (context_to and bool(context_to & parent_participants), 0.10, "reply_context_to"),
-        (child_sender and child_sender.lower() in parent_participants, 0.12, "sender_in_parent_participants"),
-        (parent_sender and parent_sender.lower() in child_participants, 0.12, "parent_sender_in_child_participants"),
+    return (
+        (_matches_reply_context_sender(context_from, parent_sender), 0.25, "reply_context_from"),
+        (_matches_reply_context_recipients(context_to, parent_participants), 0.10, "reply_context_to"),
+        (_sender_is_participant(child_sender, parent_participants), 0.12, "sender_in_parent_participants"),
+        (_sender_is_participant(parent_sender, child_participants), 0.12, "parent_sender_in_child_participants"),
     )
-    return sum(weight for matched, weight, _ in checks if matched), [reason for matched, _, reason in checks if matched]
+
+
+def _matches_reply_context_sender(context_from: str, parent_sender: str) -> bool:
+    """Check whether the reply-context sender is the candidate sender."""
+    return bool(context_from and parent_sender and context_from == parent_sender.lower())
+
+
+def _matches_reply_context_recipients(context_to: set[str], parent_participants: set[str]) -> bool:
+    """Check whether reply-context recipients overlap the candidate participants."""
+    return bool(context_to and context_to & parent_participants)
+
+
+def _sender_is_participant(sender: str, participants: set[str]) -> bool:
+    """Check whether a sender appears among normalized participants."""
+    return bool(sender and sender.lower() in participants)
 
 
 def _snippet_signal(email: Email, candidate: Email) -> tuple[float, list[str]]:
@@ -140,32 +168,49 @@ def _snippet_signal(email: Email, candidate: Email) -> tuple[float, list[str]]:
 
 def infer_parent_candidate(email: Email, candidate_messages: list[Email]) -> InferredThreadMatch | None:
     """Infer a likely parent without mutating canonical thread fields."""
-    if getattr(email, "in_reply_to", "") or getattr(email, "references", []):
-        return None
-    if getattr(email, "email_type", "original") == "original":
+    if _is_ineligible_for_inference(email):
         return None
 
-    scored = _scored_parent_candidates(email, candidate_messages)
+    best_candidate = _best_unambiguous_candidate(_scored_parent_candidates(email, candidate_messages))
+    if best_candidate is None:
+        return None
 
+    best_score, best_reasons, best = best_candidate
+    return InferredThreadMatch(
+        parent_uid=getattr(best, "uid", ""),
+        thread_id=_inferred_thread_id(best),
+        reason=",".join(best_reasons),
+        confidence=round(min(best_score, 1.0), 3),
+    )
+
+
+def _is_ineligible_for_inference(email: Email) -> bool:
+    """Return whether canonical headers or type make inference unnecessary."""
+    return (
+        bool(getattr(email, "in_reply_to", "") or getattr(email, "references", []))
+        or getattr(email, "email_type", "original") == "original"
+    )
+
+
+def _best_unambiguous_candidate(
+    scored: list[tuple[float, list[str], Email]],
+) -> tuple[float, list[str], Email] | None:
+    """Return the top scored candidate only when it clears precision thresholds."""
     if not scored:
         return None
-
     scored.sort(key=lambda item: item[0], reverse=True)
-    best_score, best_reasons, best = scored[0]
+    best_score, _, _ = scored[0]
     second_score = scored[1][0] if len(scored) > 1 else 0.0
-
     if best_score < 0.80:
         return None
     if second_score and best_score - second_score < 0.15:
         return None
+    return scored[0]
 
-    thread_id = getattr(best, "conversation_id", "") or getattr(best, "thread_topic", "") or getattr(best, "uid", "")
-    return InferredThreadMatch(
-        parent_uid=getattr(best, "uid", ""),
-        thread_id=thread_id,
-        reason=",".join(best_reasons),
-        confidence=round(min(best_score, 1.0), 3),
-    )
+
+def _inferred_thread_id(email: Email) -> str:
+    """Choose the inferred thread identifier using the established fallback order."""
+    return getattr(email, "conversation_id", "") or getattr(email, "thread_topic", "") or getattr(email, "uid", "")
 
 
 def _scored_parent_candidates(email: Email, candidates: list[Email]) -> list[tuple[float, list[str], Email]]:

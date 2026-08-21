@@ -339,6 +339,46 @@ class MailboxStore:
 
     upsert_source = upsert_message
 
+    def finalize_source_projection(self, record: MailboxMessageRecord) -> None:
+        """Refresh a pending source row without recording a second observation."""
+        remote_item_id = record.remote_item_id or record.source_identity
+        metadata = dict(record.metadata)
+        with self._write() as cur:
+            row = cur.execute(
+                "SELECT canonical_preexisting,metadata_json FROM email_sources "
+                "WHERE account_id=? AND source=? AND remote_item_id=?",
+                (record.account_id, record.source, remote_item_id),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("pending mailbox source disappeared before projection completion")
+            previous_metadata = json.loads(row["metadata_json"])
+            if not previous_metadata.get("projection_pending"):
+                raise RuntimeError("mailbox source is not pending projection completion")
+            cur.execute(
+                """
+                UPDATE email_sources SET
+                    folder_id=?, source_identity=?, canonical_email_uid=?, change_key=?,
+                    is_tombstone=?, canonical_preexisting=?, metadata_json=?, updated_at=?
+                WHERE account_id=? AND source=? AND remote_item_id=?
+                """,
+                (
+                    record.folder_id,
+                    record.source_identity,
+                    record.canonical_email_uid or remote_item_id,
+                    record.change_key,
+                    int(record.is_tombstone),
+                    max(
+                        int(row["canonical_preexisting"]),
+                        int(bool(metadata.get("canonical_preexisting", False))),
+                    ),
+                    _redacted(metadata),
+                    _stamp(),
+                    record.account_id,
+                    record.source,
+                    remote_item_id,
+                ),
+            )
+
     def record_remote_identity_change(
         self,
         *,

@@ -151,14 +151,31 @@ class MailboxService:
             problems,
         )
 
+    def discover_folders(self, account_id: str, *, select: bool = False) -> dict[str, Any]:
+        """Discover physical mail folders and optionally replace the sync allowlist."""
+        account = self._remote_account(account_id, require_write=False)
+        gateway = self.gateway_factory(account, self.policy)
+        folders = _discovered_mail_folders(gateway.find_mail_folders())
+        if select:
+            if not folders:
+                raise ValueError("No physical mail folders were discovered; the selected allowlist was not changed.")
+            self.store.replace_selected_folders(
+                account_id,
+                {folder["folder_id"]: folder["display_name"] for folder in folders},
+                source="ews",
+            )
+        return {"account_id": account_id, "selected": select, "folders": folders}
+
     def sync(
         self,
         account_id: str,
         *,
         folders: Iterable[str] = (),
         include_attachment_content: bool = False,
+        until_complete: bool = False,
+        defer_indexing: bool = False,
     ) -> dict[str, Any]:
-        """Synchronize selected folders and then advance each durable watermark."""
+        """Synchronize selected folders in one bounded pass or until complete when explicitly requested."""
         account = self._remote_account(account_id, require_write=False)
         selected = self._selected_folders(account_id, folders)
         if include_attachment_content and not self.policy.attachment_content_enabled:
@@ -167,29 +184,79 @@ class MailboxService:
             raise RuntimeError("Mailbox synchronization requires the canonical EmailDatabase.")
 
         gateway = self.gateway_factory(account, self.policy)
-        embedder = self.embedder_factory() if self.embedder_factory is not None else None
+        embedder = self.embedder_factory() if not defer_indexing and self.embedder_factory is not None else None
         attachment_budget = (
             _AttachmentContentBudget(self.policy.max_attachment_total_bytes_per_sync) if include_attachment_content else None
         )
         totals = {"created": 0, "updated": 0, "deleted": 0, "indexed_chunks": 0}
         folder_totals: dict[str, dict[str, Any]] = {}
+        pending = selected
+        passes = 0
         try:
-            for folder_id in selected:
-                folder_totals[folder_id] = self._sync_folder(
+            while pending:
+                passes += 1
+                next_pending, cursor_before = self._sync_pass(
                     account_id,
-                    folder_id,
+                    pending,
                     gateway,
                     embedder,
                     include_attachment_content=include_attachment_content,
                     attachment_budget=attachment_budget,
+                    folder_totals=folder_totals,
+                    totals=totals,
                 )
-                for name in ("created", "updated", "deleted", "indexed_chunks"):
-                    totals[name] += int(folder_totals[folder_id][name])
+                if not until_complete or not next_pending:
+                    pending = tuple(next_pending)
+                    break
+                if not any(
+                    cursor_before[folder_id] != _cursor_progress_state(self.store, account_id, folder_id)
+                    for folder_id in next_pending
+                ):
+                    raise RuntimeError("EWS sync made no cursor progress while incomplete folders remain.")
+                pending = tuple(next_pending)
         finally:
             close = getattr(embedder, "close", None)
             if callable(close):
                 close()
-        return {"account_id": account_id, **totals, "folders": folder_totals}
+        result = {"account_id": account_id, **totals, "folders": folder_totals}
+        if until_complete:
+            result.update({"passes": passes, "complete": not pending})
+        return result
+
+    def _sync_pass(
+        self,
+        account_id: str,
+        pending: Iterable[str],
+        gateway: Any,
+        embedder: Any | None,
+        *,
+        include_attachment_content: bool,
+        attachment_budget: _AttachmentContentBudget | None,
+        folder_totals: dict[str, dict[str, Any]],
+        totals: dict[str, int],
+    ) -> tuple[list[str], dict[str, tuple[int, str, str]]]:
+        cursor_before = {folder_id: _cursor_progress_state(self.store, account_id, folder_id) for folder_id in pending}
+        next_pending: list[str] = []
+        for folder_id in pending:
+            pass_totals = self._sync_folder(
+                account_id,
+                folder_id,
+                gateway,
+                embedder,
+                include_attachment_content=include_attachment_content,
+                attachment_budget=attachment_budget,
+            )
+            aggregate = folder_totals.setdefault(
+                folder_id,
+                {"created": 0, "updated": 0, "deleted": 0, "indexed_chunks": 0, "complete": False},
+            )
+            for name in ("created", "updated", "deleted", "indexed_chunks"):
+                aggregate[name] += int(pass_totals[name])
+                totals[name] += int(pass_totals[name])
+            aggregate["complete"] = bool(pass_totals["complete"])
+            if not aggregate["complete"]:
+                next_pending.append(folder_id)
+        return next_pending, cursor_before
 
     def _sync_folder(
         self,
@@ -917,6 +984,35 @@ def _credential_environment_available(credential_ref: str) -> bool:
 
 def _sync_processed_count(result: Mapping[str, Any]) -> int:
     return sum(int(result[name]) for name in ("created", "updated", "deleted"))
+
+
+def _cursor_progress_state(store: MailboxStore, account_id: str, folder_id: str) -> tuple[int, str, str]:
+    generation, watermark = store.get_cursor(account_id, folder_id, scope="items")
+    return generation, watermark, store.cursor_state(account_id, folder_id)
+
+
+def _discovered_mail_folders(values: Iterable[Any]) -> list[dict[str, Any]]:
+    """Normalize gateway discovery output without broadening it beyond physical mail folders."""
+    discovered: dict[str, dict[str, Any]] = {}
+    for value in values:
+        folder_id = str(getattr(value, "folder_id", "")).strip()
+        display_name = str(getattr(value, "display_name", "")).strip()
+        folder_class = str(getattr(value, "folder_class", "")).strip()
+        if not folder_id or not folder_class.casefold().startswith("ipf.note"):
+            continue
+        try:
+            total_count = int(value.total_count)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(f"Discovered folder {folder_id!r} has an invalid message count.") from exc
+        if total_count < 0:
+            raise ValueError(f"Discovered folder {folder_id!r} has a negative message count.")
+        discovered[folder_id] = {
+            "folder_id": folder_id,
+            "display_name": display_name or folder_id,
+            "folder_class": folder_class,
+            "total_count": total_count,
+        }
+    return [discovered[folder_id] for folder_id in sorted(discovered)]
 
 
 def _validate_sync_delta(delta: Any, watermark: str, remaining: int) -> str:

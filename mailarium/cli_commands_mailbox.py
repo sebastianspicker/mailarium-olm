@@ -36,24 +36,18 @@ def cmd_mailbox(args: argparse.Namespace) -> None:
 
 def _run(args: argparse.Namespace, service: Any) -> Any:
     action = args.mailbox_action
-    if action == "accounts":
-        return _accounts(args, service)
+    if action in {"accounts", "folders", "proposals"}:
+        return _nested_action(args, service)
     if action == "readiness":
         return service.readiness(args.account_id)
     if action == "sync":
-        return service.sync(
-            args.account_id,
-            folders=args.folders,
-            include_attachment_content=args.include_attachment_content,
-        )
+        return _sync(args, service)
     if action == "triage":
         return service.triage(
             args.account_id,
             folders=args.folders,
             create_proposals=args.create_proposals,
         )
-    if action == "proposals":
-        return _proposals(args, service)
     if action == "approve":
         proposal = service.proposal(args.proposal_id)
         _confirm_approval(proposal)
@@ -68,10 +62,34 @@ def _run(args: argparse.Namespace, service: Any) -> Any:
     raise ValueError(f"Unknown mailbox action: {action}")
 
 
+def _nested_action(args: argparse.Namespace, service: Any) -> Any:
+    if args.mailbox_action == "accounts":
+        return _accounts(args, service)
+    if args.mailbox_action == "folders":
+        return _folders(args, service)
+    return _proposals(args, service)
+
+
 def _proposals(args: argparse.Namespace, service: Any) -> Any:
     if args.mailbox_proposals_action == "list":
         return service.proposals(state=args.state)
     return service.proposal(args.proposal_id)
+
+
+def _sync(args: argparse.Namespace, service: Any) -> Any:
+    return service.sync(
+        args.account_id,
+        folders=args.folders,
+        include_attachment_content=args.include_attachment_content,
+        until_complete=bool(getattr(args, "until_complete", False)),
+        defer_indexing=bool(getattr(args, "defer_indexing", False)),
+    )
+
+
+def _folders(args: argparse.Namespace, service: Any) -> Any:
+    if args.mailbox_folders_action == "discover":
+        return service.discover_folders(args.account_id, select=args.select)
+    raise ValueError(f"Unknown folders action: {args.mailbox_folders_action}")
 
 
 def _accounts(args: argparse.Namespace, service: Any) -> Any:

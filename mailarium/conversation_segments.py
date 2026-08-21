@@ -442,18 +442,8 @@ def _extract_html_blockquote_segments(body_html: str) -> list[ConversationSegmen
     return segments
 
 
-def extract_segments(body_text: str, body_html: str, raw_source: str, email_type: str) -> list[ConversationSegment]:
-    """Split an email body into authored, quoted, and structural segments."""
-    if body_html.strip():
-        html_segments = _extract_html_blockquote_segments(body_html)
-        if html_segments:
-            return html_segments
-
-    text, source_surface = _select_visible_surface(body_text, body_html, raw_source)
-    core = text.strip()
-    if not core:
-        return []
-
+def _extract_text_segments(core: str, source_surface: str) -> list[ConversationSegment]:
+    """Extract segments from a non-empty visible text surface."""
     core, signature, legal_footer = _split_signature_and_footer(core)
     core = core.strip()
     segments: list[ConversationSegment] = []
@@ -501,3 +491,17 @@ def extract_segments(body_text: str, body_html: str, raw_source: str, email_type
     _append_segment(segments, "signature", 0, signature, source_surface, {"kind": "signature"})
     _append_segment(segments, "legal_footer", 0, legal_footer, source_surface, {"kind": "legal-footer"})
     return segments
+
+
+def extract_segments(body_text: str, body_html: str, raw_source: str, email_type: str) -> list[ConversationSegment]:
+    """Split an email body into authored, quoted, and structural segments."""
+    if body_html.strip():
+        html_segments = _extract_html_blockquote_segments(body_html)
+        if html_segments:
+            return html_segments
+
+    text, source_surface = _select_visible_surface(body_text, body_html, raw_source)
+    core = text.strip()
+    if not core:
+        return []
+    return _extract_text_segments(core, source_surface)

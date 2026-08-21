@@ -121,17 +121,7 @@ def summarize_email(text: str, max_sentences: int = 3) -> str:
     # Score sentences using TF-IDF
     scores = _score_sentences(sentences)
 
-    # Position bias: first and last sentences get a boost
-    n = len(sentences)
-    for i in range(n):
-        position_weight = 1.0
-        if i == 0:
-            position_weight = 1.5
-        elif i == n - 1:
-            position_weight = 1.3
-        elif i == 1:
-            position_weight = 1.2
-        scores[i] *= position_weight
+    _apply_email_position_bias(scores)
 
     # Select top sentences
     ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
@@ -173,17 +163,35 @@ def summarize_thread(emails: list[dict], max_sentences: int = 5) -> str:
     # Score all sentences
     scores = _score_sentences(all_sentences)
 
-    # Position bias within thread: first and last emails are important
-    n = len(all_sentences)
+    _apply_thread_position_bias(scores)
+
+    # Diversity: penalize consecutive sentences from same sender
+    selected = _diverse_sentence_indices(scores, max_sentences)
+    return " ".join(all_sentences[i] for i in selected)
+
+
+def _apply_email_position_bias(scores: list[float]) -> None:
+    """Boost scores by their sentence position in a single email."""
+    n = len(scores)
+    for i in range(n):
+        position_weight = 1.0
+        if i == 0:
+            position_weight = 1.5
+        elif i == n - 1:
+            position_weight = 1.3
+        elif i == 1:
+            position_weight = 1.2
+        scores[i] *= position_weight
+
+
+def _apply_thread_position_bias(scores: list[float]) -> None:
+    """Boost scores from the opening and latest portions of a thread."""
+    n = len(scores)
     for i in range(n):
         if i < 3:  # First few sentences (thread opener)
             scores[i] *= 1.4
         elif i >= n - 3:  # Last few sentences (latest reply)
             scores[i] *= 1.3
-
-    # Diversity: penalize consecutive sentences from same sender
-    selected = _diverse_sentence_indices(scores, max_sentences)
-    return " ".join(all_sentences[i] for i in selected)
 
 
 def _thread_sentences(emails: list[dict]) -> list[str]:

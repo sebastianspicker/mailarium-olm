@@ -35,6 +35,7 @@ from .email_db_enrichment import (
     upsert_contact as _upsert_contact_impl,
 )
 from .email_db_persistence import (
+    build_v7_email_update_row,
     insert_email_impl,
     insert_emails_batch_impl,
 )
@@ -288,19 +289,7 @@ def _update_v7_email_row(cur: sqlite3.Cursor, email: Email) -> bool:
                exchange_extracted_links_json = ?, exchange_extracted_emails_json = ?,
                exchange_extracted_contacts_json = ?, exchange_extracted_meetings_json = ?
          WHERE uid = ?""",
-        (
-            json.dumps(getattr(email, "categories", []) or []),
-            getattr(email, "thread_topic", "") or "",
-            getattr(email, "inference_classification", "") or "",
-            int(getattr(email, "is_calendar_message", False)),
-            json.dumps(getattr(email, "references", []) or []),
-            json.dumps(getattr(email, "meeting_data", {}) or {}, ensure_ascii=False),
-            json.dumps(getattr(email, "exchange_extracted_links", []) or [], ensure_ascii=False),
-            json.dumps(getattr(email, "exchange_extracted_emails", []) or [], ensure_ascii=False),
-            json.dumps(getattr(email, "exchange_extracted_contacts", []) or [], ensure_ascii=False),
-            json.dumps(getattr(email, "exchange_extracted_meetings", []) or [], ensure_ascii=False),
-            email.uid,
-        ),
+        build_v7_email_update_row(email),
     )
     return cur.rowcount > 0
 

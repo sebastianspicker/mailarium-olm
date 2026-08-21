@@ -6,6 +6,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 
 from .language_detector import detect_language_details
@@ -15,6 +17,9 @@ from .surface_candidates import segment_surface_candidates as _segment_surface_c
 
 EVENT_EXTRACTOR_VERSION = "de_event_rule_v1"
 _LOW_SIGNAL_EVENT_CONFIDENCE = "low"
+_EventRow = tuple[object, ...]
+_Candidate = tuple[str, str, int | None, str]
+_PreparedCandidate = tuple[str, str, int | None, str, str, str, str]
 
 _FOOTER_PATTERN = re.compile(
     r"(?i)(confidential|vertraulich|disclaimer|haftungsausschluss|do not print|"
@@ -61,38 +66,93 @@ _EVENT_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+@dataclass(frozen=True)
+class _EventMatch:
+    """Immutable identity and persistence representation for one rule match."""
+
+    uid: str
+    event_kind: str
+    source_scope: str
+    surface_scope: str
+    segment_ordinal: int | None
+    char_start: int
+    char_end: int
+    trigger_text: str
+    event_date: str
+    surface_hash: str
+
+    @property
+    def event_key(self) -> str:
+        """Return the stable event-record key for this exact match."""
+        seed = "|".join(
+            (
+                self.uid,
+                self.event_kind,
+                self.source_scope,
+                self.surface_scope,
+                str(self.segment_ordinal if self.segment_ordinal is not None else ""),
+                str(self.char_start),
+                str(self.char_end),
+                self.trigger_text.casefold(),
+                self.event_date,
+            )
+        )
+        return hashlib.sha256(seed.encode("utf-8", errors="ignore")).hexdigest()
+
+    def provenance_json(self, *, quoted_guardrail_fallback: bool) -> str:
+        """Serialize the stable evidence provenance for this exact match."""
+        provenance = {
+            "source_scope": self.source_scope,
+            "surface_scope": self.surface_scope,
+            "segment_ordinal": self.segment_ordinal,
+            "char_start": self.char_start,
+            "char_end": self.char_end,
+            "surface_hash": self.surface_hash,
+            "quoted_guardrail_fallback": quoted_guardrail_fallback,
+        }
+        return json.dumps(provenance, ensure_ascii=True)
+
+    def row(
+        self,
+        *,
+        detected_language: str,
+        confidence: str,
+        quoted_guardrail_fallback: bool,
+    ) -> _EventRow:
+        """Return the event-record upsert tuple for this exact match."""
+        return (
+            self.event_key,
+            self.uid,
+            self.event_kind,
+            self.source_scope,
+            self.surface_scope,
+            self.segment_ordinal,
+            self.char_start,
+            self.char_end,
+            self.trigger_text,
+            self.event_date,
+            self.surface_hash,
+            detected_language,
+            confidence,
+            EVENT_EXTRACTOR_VERSION,
+            self.provenance_json(quoted_guardrail_fallback=quoted_guardrail_fallback),
+        )
+
+
+@dataclass(frozen=True)
+class _ExtractionPass:
+    """Immutable extraction settings with a deliberately shared mutable dedupe set."""
+
+    uid: str
+    event_date: str
+    seen_event_keys: set[str]
+    degrade_confidence: bool
+    skip_boilerplate: bool
+
+
 def _surface_hash(text: str) -> str:
     """Compute SHA256 hash of text for surface identification."""
     return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
-
-
-def _event_key(
-    *,
-    uid: str,
-    event_kind: str,
-    source_scope: str,
-    surface_scope: str,
-    segment_ordinal: int | None,
-    char_start: int,
-    char_end: int,
-    trigger_text: str,
-    event_date: str,
-) -> str:
-    """Generate a unique hash key for an event based on its attributes."""
-    seed = "|".join(
-        (
-            uid,
-            event_kind,
-            source_scope,
-            surface_scope,
-            str(segment_ordinal if segment_ordinal is not None else ""),
-            str(char_start),
-            str(char_end),
-            trigger_text.casefold(),
-            event_date,
-        )
-    )
-    return hashlib.sha256(seed.encode("utf-8", errors="ignore")).hexdigest()
 
 
 def _is_boilerplate_surface(text: str) -> bool:
@@ -116,27 +176,40 @@ def _is_boilerplate_surface(text: str) -> bool:
 
 def _extract_from_candidates(
     *,
-    uid: str,
-    event_date: str,
-    candidates: list[tuple[str, str, int | None, str]],
-    seen_event_keys: set[str],
-    degrade_confidence: bool,
-    skip_boilerplate: bool,
-) -> list[tuple[object, ...]]:
+    extraction_pass: _ExtractionPass,
+    candidates: list[_Candidate],
+) -> list[_EventRow]:
     """Extract event rows from text surface candidates.
 
     Args:
-        uid: The unique identifier of the email.
-        event_date: The date of the email.
+        extraction_pass: Stable metadata and shared deduplication state for this pass.
         candidates: List of text surface candidates to search for events.
-        seen_event_keys: Set of already-seen event keys to avoid duplicates.
-        degrade_confidence: If True, degrade language confidence to low.
-        skip_boilerplate: If True, skip surfaces identified as boilerplate.
 
     Returns:
         A list of event record tuples ready for database upsert.
     """
-    rows: list[tuple[object, ...]] = []
+    rows: list[_EventRow] = []
+    for candidate in _prepared_event_candidates(
+        candidates=candidates,
+        degrade_confidence=extraction_pass.degrade_confidence,
+        skip_boilerplate=extraction_pass.skip_boilerplate,
+    ):
+        rows.extend(
+            _event_rows_from_candidate(
+                extraction_pass=extraction_pass,
+                candidate=candidate,
+            )
+        )
+    return rows
+
+
+def _prepared_event_candidates(
+    *,
+    candidates: list[_Candidate],
+    degrade_confidence: bool,
+    skip_boilerplate: bool,
+) -> Iterator[_PreparedCandidate]:
+    """Yield eligible candidates with stable surface and language metadata."""
     for source_scope, surface_scope, segment_ordinal, text in candidates:
         if not text:
             continue
@@ -146,55 +219,47 @@ def _extract_from_candidates(
         language_details = detect_language_details(text)
         detected_language = str(language_details.get("language") or "unknown")
         confidence = _event_confidence(language_details, degrade_confidence)
-        for event_kind, pattern in _EVENT_RULES:
-            for match in pattern.finditer(text):
-                trigger_text = _clean_text(match.group(0))
-                if not trigger_text:
-                    continue
-                char_start = int(match.start())
-                char_end = int(match.end())
-                event_key = _event_key(
-                    uid=uid,
-                    event_kind=event_kind,
-                    source_scope=source_scope,
-                    surface_scope=surface_scope,
-                    segment_ordinal=segment_ordinal,
-                    char_start=char_start,
-                    char_end=char_end,
-                    trigger_text=trigger_text,
-                    event_date=event_date,
+        yield source_scope, surface_scope, segment_ordinal, text, surface_hash, detected_language, confidence
+
+
+def _event_rows_from_candidate(
+    *,
+    extraction_pass: _ExtractionPass,
+    candidate: _PreparedCandidate,
+) -> list[_EventRow]:
+    """Create deduplicated event rows for one prepared text surface."""
+    source_scope, surface_scope, segment_ordinal, text, surface_hash, detected_language, confidence = candidate
+    rows: list[_EventRow] = []
+    for event_kind, pattern in _EVENT_RULES:
+        for match in pattern.finditer(text):
+            trigger_text = _clean_text(match.group(0))
+            if not trigger_text:
+                continue
+            char_start = int(match.start())
+            char_end = int(match.end())
+            event_match = _EventMatch(
+                uid=extraction_pass.uid,
+                event_kind=event_kind,
+                source_scope=source_scope,
+                surface_scope=surface_scope,
+                segment_ordinal=segment_ordinal,
+                char_start=char_start,
+                char_end=char_end,
+                trigger_text=trigger_text,
+                event_date=extraction_pass.event_date,
+                surface_hash=surface_hash,
+            )
+            event_key = event_match.event_key
+            if event_key in extraction_pass.seen_event_keys:
+                continue
+            extraction_pass.seen_event_keys.add(event_key)
+            rows.append(
+                event_match.row(
+                    detected_language=detected_language,
+                    confidence=confidence,
+                    quoted_guardrail_fallback=extraction_pass.degrade_confidence,
                 )
-                if event_key in seen_event_keys:
-                    continue
-                seen_event_keys.add(event_key)
-                provenance = {
-                    "source_scope": source_scope,
-                    "surface_scope": surface_scope,
-                    "segment_ordinal": segment_ordinal,
-                    "char_start": char_start,
-                    "char_end": char_end,
-                    "surface_hash": surface_hash,
-                    "quoted_guardrail_fallback": bool(degrade_confidence),
-                }
-                rows.append(
-                    (
-                        event_key,
-                        uid,
-                        event_kind,
-                        source_scope,
-                        surface_scope,
-                        segment_ordinal,
-                        char_start,
-                        char_end,
-                        trigger_text,
-                        event_date,
-                        surface_hash,
-                        detected_language,
-                        confidence,
-                        EVENT_EXTRACTOR_VERSION,
-                        json.dumps(provenance, ensure_ascii=True),
-                    )
-                )
+            )
     return rows
 
 
@@ -220,27 +285,33 @@ def extract_event_rows_from_email(email: Any) -> list[tuple[object, ...]]:
     quoted_segment_candidates = [
         candidate for candidate in segment_candidates if candidate[0] in {"quoted_body", "forwarded_header"}
     ]
+    primary_pass = _ExtractionPass(
+        uid=uid,
+        event_date=event_date,
+        seen_event_keys=seen_event_keys,
+        degrade_confidence=False,
+        skip_boilerplate=True,
+    )
 
     rows.extend(
         _extract_from_candidates(
-            uid=uid,
-            event_date=event_date,
+            extraction_pass=primary_pass,
             candidates=[*primary_segment_candidates, *attachment_candidates],
-            seen_event_keys=seen_event_keys,
-            degrade_confidence=False,
-            skip_boilerplate=True,
         )
     )
     if rows:
         return rows
+    quoted_pass = _ExtractionPass(
+        uid=uid,
+        event_date=event_date,
+        seen_event_keys=seen_event_keys,
+        degrade_confidence=True,
+        skip_boilerplate=True,
+    )
     rows.extend(
         _extract_from_candidates(
-            uid=uid,
-            event_date=event_date,
+            extraction_pass=quoted_pass,
             candidates=quoted_segment_candidates,
-            seen_event_keys=seen_event_keys,
-            degrade_confidence=True,
-            skip_boilerplate=True,
         )
     )
     return rows

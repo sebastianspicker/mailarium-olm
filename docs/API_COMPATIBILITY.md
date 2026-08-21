@@ -34,8 +34,25 @@ The `0.5.0a1` Mailarium rebrand is an intentional hard cutover:
   upgrading because their former correlation property is not read as an alias.
 - MCP tool names and parameter schemas remain unchanged.
 
-The canonical GitHub repository URL intentionally remains
-`sebastianspicker/outlook-email-rag`.
+The canonical GitHub repository is
+[`sebastianspicker/mailarium`](https://github.com/sebastianspicker/mailarium).
+
+## Governing 0.5 Retirement Decision
+
+Status: accepted for the `0.5.0a1` alpha contract. It does not make a working
+tree publishable; release requirements are in `RELEASING.md`.
+
+This is a hard cutover. Mailarium does not provide aliases, schema translation,
+or automatic data migration for removed packages, commands, or specialized
+domain workflows. Preserve the original mailbox and attachment sources and a
+backup of the matching prior runtime before upgrading.
+
+Rollback is version rollback, not an in-place schema downgrade. Stop Mailarium,
+keep the existing runtime backup, and restore the matching prior application in
+a separate environment. Do not point a pre-0.5 process at a runtime advanced by
+0.5. Return to 0.5 only with a fresh archive or a separately verified
+migration. Live EWS interoperability remains a separately disclosed release
+limitation.
 
 ## Earlier 0.4 Breaks
 

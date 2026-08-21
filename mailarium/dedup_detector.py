@@ -35,6 +35,52 @@ def _jaccard_similarity(set_a: set[str], set_b: set[str]) -> float:
     return intersection / union if union > 0 else 0.0
 
 
+def _build_ngram_cache(emails: list[tuple[str, str]]) -> list[tuple[str, str, set[str]]]:
+    """Build the comparable-body cache for one subject group."""
+    return [(uid, body, _char_ngrams(body)) for uid, body in emails if body and len(body.strip()) > 20]
+
+
+def _matching_pair(
+    email_a: tuple[str, str, set[str]],
+    email_b: tuple[str, str, set[str]],
+    base_subject: str,
+    threshold: float,
+) -> dict[str, Any] | None:
+    """Build a duplicate record when a pair meets the similarity cutoff."""
+    uid_a, _, ngrams_a = email_a
+    uid_b, _, ngrams_b = email_b
+    similarity = _jaccard_similarity(ngrams_a, ngrams_b)
+    if similarity < threshold:
+        return None
+    return {
+        "uid_a": uid_a,
+        "uid_b": uid_b,
+        "similarity": round(similarity, 4),
+        "subject": base_subject,
+    }
+
+
+def _find_matching_pairs(
+    ngram_cache: list[tuple[str, str, set[str]]],
+    base_subject: str,
+    threshold: float,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return matching pairs from one subject group, in input pair order."""
+    duplicates: list[dict[str, Any]] = []
+
+    for i, email_a in enumerate(ngram_cache):
+        for email_b in ngram_cache[i + 1 :]:
+            duplicate = _matching_pair(email_a, email_b, base_subject, threshold)
+            if duplicate is None:
+                continue
+            duplicates.append(duplicate)
+            if len(duplicates) >= limit:
+                return duplicates
+
+    return duplicates
+
+
 class DuplicateDetector:
     """Detect near-duplicate emails using character n-gram Jaccard similarity.
 
@@ -63,30 +109,14 @@ class DuplicateDetector:
             if len(duplicates) >= limit:
                 break
 
-            # Pre-compute n-grams for each email in the group
-            ngram_cache: list[tuple[str, str, set[str]]] = []
-            for uid, body in emails:
-                if body and len(body.strip()) > 20:
-                    ngrams = _char_ngrams(body)
-                    ngram_cache.append((uid, body, ngrams))
-
-            # Compare all pairs within the group
-            for i, (uid_a, _, ngrams_a) in enumerate(ngram_cache):
-                if len(duplicates) >= limit:
-                    break
-                for j in range(i + 1, len(ngram_cache)):
-                    uid_b, _, ngrams_b = ngram_cache[j]
-                    sim = _jaccard_similarity(ngrams_a, ngrams_b)
-                    if sim >= self.threshold:
-                        duplicates.append(
-                            {
-                                "uid_a": uid_a,
-                                "uid_b": uid_b,
-                                "similarity": round(sim, 4),
-                                "subject": base_subject,
-                            }
-                        )
-                        if len(duplicates) >= limit:
-                            break
+            ngram_cache = _build_ngram_cache(emails)
+            duplicates.extend(
+                _find_matching_pairs(
+                    ngram_cache,
+                    base_subject,
+                    self.threshold,
+                    limit - len(duplicates),
+                )
+            )
 
         return duplicates[:limit]

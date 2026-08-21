@@ -102,16 +102,69 @@ def _render_result_index(
 
 def _render_document(st_module: Any, result: Any, retriever: Any) -> None:
     """Render the selected result as a readable source document."""
+    document_html, conversation_id = _document_markup(result)
+    st_module.markdown("<span class='mailarium-document-marker' aria-hidden='true'></span>", unsafe_allow_html=True)
+    st_module.markdown(document_html, unsafe_allow_html=True)
+    if conversation_id and retriever is not None:
+        if st_module.button("View full thread", key=f"workspace-thread-{result.chunk_id}", use_container_width=True):
+            st_module.session_state["web_thread_id"] = conversation_id
+            st_module.rerun()
+
+
+def _document_markup(result: Any) -> tuple[str, str]:
+    """Build escaped document markup and return its canonical thread identifier."""
     metadata = result.metadata
-    subject = html_escape(str(metadata.get("subject") or "(no subject)"))
-    sender_name = str(metadata.get("sender_name") or "")
-    sender_email = str(metadata.get("sender_email") or "")
+    metadata_html, conversation_id = _document_metadata_markup(metadata)
+    body = _document_body_html(result.text or "")
+    attachment_html = _document_attachment_markup(metadata)
+    return (
+        "<article class='archive-document'>"
+        f"<header><h2>{html_escape(_metadata_text(metadata, 'subject', '(no subject)'))}</h2>"
+        "<div class='document-actions' aria-hidden='true'>&#8942;</div></header>"
+        f"{metadata_html}"
+        f"<div class='document-body'>{body or 'No body text was recovered for this result.'}</div>"
+        f"{attachment_html}"
+        "</article>",
+        conversation_id,
+    )
+
+
+def _document_metadata_markup(metadata: dict[str, Any]) -> tuple[str, str]:
+    """Build escaped message metadata and retain the canonical thread identifier."""
+    sender = _document_sender_markup(metadata)
+    recipients = html_escape(_metadata_text(metadata, "to", "Not recorded"))
+    date = html_escape(_metadata_text(metadata, "date", "Unknown date")[:19].replace("T", " · "))
+    source = html_escape(_metadata_text(metadata, "folder", "Archive"))
+    conversation_id = _metadata_text(metadata, "conversation_id", "").strip()
+    thread_text = "Conversation available" if conversation_id else "Single indexed message"
+    return (
+        "<div class='document-metadata'>"
+        f"<span><b>From</b>{sender}</span><span><b>Date</b>{date}</span>"
+        f"<span><b>To</b>{recipients}</span><span><b>Source</b>{source}</span>"
+        "</div>"
+        f"<div class='thread-line'><span class='thread-dots' aria-hidden='true'>&#9679;&mdash;&#9675;&mdash;&#9675;</span>"
+        f"<span>{thread_text}</span></div>",
+        conversation_id,
+    )
+
+
+def _document_sender_markup(metadata: dict[str, Any]) -> str:
+    """Build the escaped sender display, preserving the name-and-email format."""
+    sender_name = _metadata_text(metadata, "sender_name", "")
+    sender_email = _metadata_text(metadata, "sender_email", "")
     sender = html_escape(sender_name or sender_email or "Unknown sender")
     if sender_name and sender_email:
-        sender = f"{html_escape(sender_name)} &lt;{html_escape(sender_email)}&gt;"
-    recipients = html_escape(str(metadata.get("to") or "Not recorded"))
-    date = html_escape(str(metadata.get("date") or "Unknown date")[:19].replace("T", " · "))
-    body = _document_body_html(result.text or "")
+        return f"{html_escape(sender_name)} &lt;{html_escape(sender_email)}&gt;"
+    return sender
+
+
+def _metadata_text(metadata: dict[str, Any], field: str, fallback: str) -> str:
+    """Normalize one optional message metadata field to its established fallback."""
+    return str(metadata.get(field) or fallback)
+
+
+def _document_attachment_markup(metadata: dict[str, Any]) -> str:
+    """Build the visible attachment list with the existing bounded display policy."""
     attachments = _attachment_names(metadata)
     attachment_html = "".join(
         f"<div class='document-attachment'><span aria-hidden='true'>&#9638;</span>"
@@ -120,27 +173,7 @@ def _render_document(st_module: Any, result: Any, retriever: Any) -> None:
     )
     if not attachment_html:
         attachment_html = "<div class='document-empty-attachments'>No attachments recorded</div>"
-    conversation_id = str(metadata.get("conversation_id") or "").strip()
-    thread_text = "Conversation available" if conversation_id else "Single indexed message"
-    st_module.markdown("<span class='mailarium-document-marker' aria-hidden='true'></span>", unsafe_allow_html=True)
-    st_module.markdown(
-        "<article class='archive-document'>"
-        f"<header><h2>{subject}</h2><div class='document-actions' aria-hidden='true'>&#8942;</div></header>"
-        "<div class='document-metadata'>"
-        f"<span><b>From</b>{sender}</span><span><b>Date</b>{date}</span>"
-        f"<span><b>To</b>{recipients}</span><span><b>Source</b>{html_escape(str(metadata.get('folder') or 'Archive'))}</span>"
-        "</div>"
-        f"<div class='thread-line'><span class='thread-dots' aria-hidden='true'>&#9679;&mdash;&#9675;&mdash;&#9675;</span>"
-        f"<span>{thread_text}</span></div>"
-        f"<div class='document-body'>{body or 'No body text was recovered for this result.'}</div>"
-        f"<div class='document-attachments'><small>{len(attachments)} attachments</small>{attachment_html}</div>"
-        "</article>",
-        unsafe_allow_html=True,
-    )
-    if conversation_id and retriever is not None:
-        if st_module.button("View full thread", key=f"workspace-thread-{result.chunk_id}", use_container_width=True):
-            st_module.session_state["web_thread_id"] = conversation_id
-            st_module.rerun()
+    return f"<div class='document-attachments'><small>{len(attachments)} attachments</small>{attachment_html}</div>"
 
 
 def _render_source_inspector(

@@ -306,6 +306,17 @@ def extract_image_text_ocr(filename: str, content: bytes, *, timeout_seconds: in
         _safe_unlink(temp_path, message="Failed to unlink temp file")
 
 
+def _extract_rendered_pdf_page_text(temp_dir: str, *, timeout_seconds: int) -> str | None:
+    """OCR rendered PDF pages in their existing lexicographic filename order."""
+    page_texts: list[str] = []
+    for page_path in sorted(Path(temp_dir).glob("page-*.png")):
+        page_text = extract_image_text_ocr(page_path.name, page_path.read_bytes(), timeout_seconds=timeout_seconds)
+        if page_text:
+            page_texts.append(page_text)
+    joined = "\n\n".join(page_texts).strip()
+    return _truncate(joined) if joined else None
+
+
 def extract_pdf_text_ocr(filename: str, content: bytes, *, timeout_seconds: int = 90) -> str | None:
     """Best-effort OCR for scanned PDFs using pdftoppm plus Tesseract."""
     if _dispatch_extension(filename) != ".pdf" or not content or not pdf_ocr_available():
@@ -325,15 +336,7 @@ def extract_pdf_text_ocr(filename: str, content: bytes, *, timeout_seconds: int 
         )
         if render.returncode != 0:
             return None
-        page_paths = sorted(Path(temp_dir).glob("page-*.png"))
-        page_texts: list[str] = []
-        for page_path in page_paths:
-            page_bytes = page_path.read_bytes()
-            page_text = extract_image_text_ocr(page_path.name, page_bytes, timeout_seconds=timeout_seconds)
-            if page_text:
-                page_texts.append(page_text)
-        joined = "\n\n".join(page_texts).strip()
-        return _truncate(joined) if joined else None
+        return _extract_rendered_pdf_page_text(temp_dir, timeout_seconds=timeout_seconds)
     except OSError, subprocess.SubprocessError, ValueError:
         return None
     finally:

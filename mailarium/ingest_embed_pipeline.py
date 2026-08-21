@@ -244,13 +244,17 @@ class _EmbedPipeline:
                 self._process_batch(chunks, emails)
         except BaseException as exc:  # pylint: disable=broad-exception-caught
             self._error = exc
-            while True:
-                try:
-                    item = self._queue.get_nowait()
-                    if item is _SENTINEL:
-                        break
-                except queue.Empty:
+            self._discard_queued_batches_after_consumer_error()
+
+    def _discard_queued_batches_after_consumer_error(self) -> None:
+        """Discard pending batches so producers cannot block after consumer failure."""
+        while True:
+            try:
+                item = self._queue.get_nowait()
+                if item is _SENTINEL:
                     break
+            except queue.Empty:
+                break
 
     def _cleanup_vector_batch(self, chunk_ids: list[str]) -> None:
         """Remove partially written vector and sparse data after a batch failure."""
@@ -597,6 +601,16 @@ class _EmbedPipeline:
         except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("WAL checkpoint failed (non-critical)", exc_info=True)
 
+    @staticmethod
+    def _write_analytics_rows(writer: Callable[..., Any], rows: list[tuple[object, ...]], *, commit: bool) -> None:
+        """Write analytics rows while accepting legacy writers without ``commit``."""
+        try:
+            writer(rows, commit=commit)
+        except TypeError as exc:
+            if "unexpected keyword argument 'commit'" not in str(exc):
+                raise
+            writer(rows)
+
     def _compute_analytics(self, emails: list[Email], *, commit: bool = True) -> None:
         """Detect language and sentiment for emails in this batch."""
         if not self._email_db:
@@ -616,19 +630,9 @@ class _EmbedPipeline:
             rows.append(build_analytics_update_row(uid=email.uid, text=body, source=source))
             surface_rows.extend(build_surface_language_rows_from_email(email))
         if rows:
-            try:
-                self._email_db.update_analytics_batch(rows, commit=commit)
-            except TypeError as exc:
-                if "commit" not in str(exc):
-                    raise
-                self._email_db.update_analytics_batch(rows)
+            self._write_analytics_rows(self._email_db.update_analytics_batch, rows, commit=commit)
         if surface_rows and hasattr(self._email_db, "upsert_language_surface_analytics"):
-            try:
-                self._email_db.upsert_language_surface_analytics(surface_rows, commit=commit)
-            except TypeError as exc:
-                if "commit" not in str(exc):
-                    raise
-                self._email_db.upsert_language_surface_analytics(surface_rows)
+            self._write_analytics_rows(self._email_db.upsert_language_surface_analytics, surface_rows, commit=commit)
 
 
 def _exchange_entities_from_email(email: Email) -> list[tuple[str, str, str]]:

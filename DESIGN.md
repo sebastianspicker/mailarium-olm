@@ -42,7 +42,7 @@ must communicate the same state in text.
 - Keep destructive and remote mailbox actions behind explicit confirmation and
   runtime gates.
 
-## Documentation images
+## Documentation assets
 
-Current documentation images and their capture procedure are in
-[`docs/screenshots/`](docs/screenshots/README.md).
+The interface is documented through its source modules and this design guide.
+There are no maintained public screenshots or capture artifacts.

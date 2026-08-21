@@ -18,8 +18,8 @@ tests and privacy boundaries are the easiest to merge.
 Package metadata requires Python `>=3.14.6,<3.15`; CI uses Python 3.14.6.
 
 ```bash
-git clone https://github.com/sebastianspicker/outlook-email-rag.git
-cd outlook-email-rag
+git clone https://github.com/sebastianspicker/mailarium.git
+cd mailarium
 python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install "uv==0.10.7"

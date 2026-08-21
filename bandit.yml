@@ -15,7 +15,7 @@ skips:
   #   - _validate_order_by() for sort columns (db_queries_browse.py)
   #   - _validate_column_update_pairs() for SET columns (db_evidence.py)
   #   - _sql_in_placeholders() generates pure ?,?,... strings
-  #   - _escape_like() protects LIKE wildcards (qa_eval_live.py fixed 2026-06-04)
+  #   - _escape_like() protects LIKE wildcards (db_schema.py)
   # No user input becomes SQL syntax in any finding.
   # Validated 2026-06-04: fresh code-context review of all 13 files.
   - B608

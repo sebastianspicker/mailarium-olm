@@ -8,7 +8,3 @@ The following files are retained as historical design evidence:
 
 These files are not current interface captures and are not linked from the
 public product overview.
-
-Current UI evidence lives in [`../../screenshots/`](../../screenshots/), with
-the authoritative search capture at
-[`streamlit-search-ui.png`](../../screenshots/streamlit-search-ui.png).

@@ -10,6 +10,7 @@ import logging
 import re
 import zipfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, cast
 
 from .image_embedder import _IMAGE_EXTENSIONS
@@ -97,6 +98,16 @@ _ARCHIVE_TEXT_HEADER = "[Archive extracted member text]"
 _ARCHIVE_INVENTORY_HEADER = "[Archive member inventory]"
 _MAX_ARCHIVE_MEMBERS = 20
 _MAX_ARCHIVE_MEMBER_BYTES = 2_000_000
+
+
+@dataclass(frozen=True)
+class _OptionalExtractionRequest:
+    """Immutable dependency and extractor details for one optional text path."""
+
+    import_name: str
+    import_from: str
+    extractor: Callable[[Any, io.BytesIO], str | None]
+    fmt_label: str
 
 
 def _get_extension(filename: str) -> str:
@@ -370,23 +381,33 @@ def _optional_extract(
     Returns:
         The extracted text, truncated if necessary, or None if extraction fails.
     """
+    request = _OptionalExtractionRequest(import_name, import_from, extractor, fmt_label)
+    return _optional_extract_request(content, request, failure_recorder)
+
+
+def _optional_extract_request(
+    content: bytes,
+    request: _OptionalExtractionRequest,
+    failure_recorder: Callable[[str], None] | None,
+) -> str | None:
+    """Run one immutable optional-extraction request and retain diagnostic semantics."""
     try:
-        mod = __import__(import_name)
-        imported = getattr(mod, import_from)
+        mod = __import__(request.import_name)
+        imported = getattr(mod, request.import_from)
     except ImportError, AttributeError:
-        logger.debug("%s not installed; skipping %s extraction.", import_name, fmt_label)
+        logger.debug("%s not installed; skipping %s extraction.", request.import_name, request.fmt_label)
         if failure_recorder:
-            failure_recorder(f"dependency_missing:{import_name}")
+            failure_recorder(f"dependency_missing:{request.import_name}")
         return None
     try:
-        text = extractor(imported, io.BytesIO(content))
+        text = request.extractor(imported, io.BytesIO(content))
         if text:
             return _truncate(text)
         return None
     except (RuntimeError, ValueError, OSError, TypeError) as exc:
-        logger.debug("Failed to extract %s text from attachment.", fmt_label, exc_info=True)
+        logger.debug("Failed to extract %s text from attachment.", request.fmt_label, exc_info=True)
         if failure_recorder:
-            failure_recorder(f"text_extraction_failed:{fmt_label}:{type(exc).__name__}")
+            failure_recorder(f"text_extraction_failed:{request.fmt_label}:{type(exc).__name__}")
         return None
 
 
@@ -579,16 +600,23 @@ def _pptx_extractor(presentation_cls, stream):
         The extracted text with slide and shape markers.
     """
     prs = presentation_cls(stream)
-    lines: list[str] = []
-    for slide_num, slide in enumerate(prs.slides, 1):
-        lines.append(f"[Slide {slide_num}]")
-        for shape in slide.shapes:
-            if shape.has_text_frame:
-                for para in shape.text_frame.paragraphs:
-                    text = para.text.strip()
-                    if text:
-                        lines.append(text)
+    lines = [line for slide_num, slide in enumerate(prs.slides, 1) for line in _pptx_slide_lines(slide_num, slide)]
     return "\n".join(lines).strip()
+
+
+def _pptx_slide_lines(slide_num: int, slide: Any) -> list[str]:
+    """Return the slide marker followed by readable text from its shapes."""
+    lines = [f"[Slide {slide_num}]"]
+    for shape in slide.shapes:
+        lines.extend(_pptx_shape_lines(shape))
+    return lines
+
+
+def _pptx_shape_lines(shape: Any) -> list[str]:
+    """Return non-empty paragraph text from a PPTX shape with a text frame."""
+    if not shape.has_text_frame:
+        return []
+    return [text for para in shape.text_frame.paragraphs if (text := para.text.strip())]
 
 
 def _extract_pdf(content: bytes) -> str | None:

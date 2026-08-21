@@ -58,6 +58,19 @@ def build_email_insert_row(db, email: Email, ingestion_run_id: int | None):
     )
 
 
+def build_v7_email_update_row(email: Email) -> tuple[Any, ...]:
+    """Build the metadata row used by the schema-v7 email update statement."""
+    return (
+        _json_attr(email, "categories", []),
+        _attr(email, "thread_topic", ""),
+        _attr(email, "inference_classification", ""),
+        int(getattr(email, "is_calendar_message", False)),
+        _json_attr(email, "references", []),
+        *_email_exchange_insert_values(email),
+        email.uid,
+    )
+
+
 def _attr(value: Any, name: str, default: Any) -> Any:
     """Read an attribute while converting missing or falsey values to the default."""
     return getattr(value, name, default) or default

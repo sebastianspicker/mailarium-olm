@@ -25,19 +25,15 @@ def _ordered_unique_paths(preferred: list[Path], extras: list[Path]) -> list[Pat
 
 def qa_eval_report_candidates_impl(repo_root: Callable[[], Path]) -> list[Path]:
     """Return QA-evaluation report artifact paths in preferred order."""
-    live_reports = repo_root() / "private" / "tests" / "results" / "qa_eval"
-    qa_eval_fixtures = repo_root() / "tests" / "fixtures" / "qa_eval"
-    preferred = [
-        live_reports / "qa_eval_report.core.live.json",
-        qa_eval_fixtures / "qa_eval_report.core.captured.json",
-    ]
-    extras = [*sorted(live_reports.glob("qa_eval_report*.json")), *sorted(qa_eval_fixtures.glob("qa_eval_report*.json"))]
+    live_reports = repo_root() / "private" / "evaluations" / "qa_eval"
+    preferred = [live_reports / "qa_eval_report.core.live.json"]
+    extras = sorted(live_reports.glob("qa_eval_report*.json"))
     return _ordered_unique_paths(preferred, extras)
 
 
 def qa_eval_remediation_candidates_impl(repo_root: Callable[[], Path]) -> list[Path]:
     """Return QA-evaluation remediation-summary paths in preferred order."""
-    live_reports = repo_root() / "private" / "tests" / "results" / "qa_eval"
+    live_reports = repo_root() / "private" / "evaluations" / "qa_eval"
     preferred = [
         live_reports / "qa_eval_remediation.core.live.json",
     ]
@@ -47,7 +43,7 @@ def qa_eval_remediation_candidates_impl(repo_root: Callable[[], Path]) -> list[P
 
 def inferred_thread_prevalence_candidates_impl(repo_root: Callable[[], Path]) -> list[Path]:
     """Return report paths for natural inferred-thread prevalence."""
-    live_reports = repo_root() / "private" / "tests" / "results" / "qa_eval"
+    live_reports = repo_root() / "private" / "evaluations" / "qa_eval"
     preferred = [live_reports / "qa_eval_inferred_thread_prevalence.live.json"]
     extras = sorted(live_reports.glob("qa_eval_inferred_thread_prevalence*.json"))
     return _ordered_unique_paths(preferred, extras)

@@ -13,14 +13,10 @@ _DEFAULT_OUTPUT_ROOTS = ("private",)
 _DEFAULT_LOCAL_READ_ROOTS = (
     "private",
     "data",
-    "tests/private",
-    "tests/fixtures",
 )
 _DEFAULT_RUNTIME_ROOTS = (
     "private",
     "data",
-    "tests/private",
-    "tests/fixtures",
 )
 _RUNTIME_HOME_ENV = "MAILARIUM_RUNTIME_HOME"
 _LEGACY_ENV_REPLACEMENTS = {

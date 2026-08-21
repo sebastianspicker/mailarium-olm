@@ -85,6 +85,18 @@ clear_settings_cache()
 _lock_fd: TextIO | None = None  # module-level mutable singleton, not a constant
 
 
+def _is_stale_lock_pid(existing_pid: str) -> bool:
+    """Return whether a lock PID no longer identifies a live process."""
+    if not existing_pid or existing_pid == "unknown":
+        return False
+
+    try:
+        os.kill(int(existing_pid), 0)  # signal 0 = existence check
+    except OSError, ValueError:
+        return True
+    return False
+
+
 def _acquire_instance_lock() -> None:
     """Acquire an exclusive file lock to prevent concurrent instances.
 
@@ -116,12 +128,7 @@ def _acquire_instance_lock() -> None:
 
         # Check if the locking process is still alive.  A stale lock from
         # a crashed server should not block startup.
-        stale = False
-        if existing_pid and existing_pid != "unknown":
-            try:
-                os.kill(int(existing_pid), 0)  # signal 0 = existence check
-            except OSError, ValueError:
-                stale = True
+        stale = _is_stale_lock_pid(existing_pid)
 
         if stale:
             logger.warning(

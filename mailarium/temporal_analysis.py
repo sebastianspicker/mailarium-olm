@@ -75,6 +75,26 @@ def _resolve_display_timezone(display_timezone: str | tzinfo | None) -> tzinfo:
     return display_timezone
 
 
+def _response_time_results(sender_times: dict[str, list[float]], *, pair_limit: int, limit: int) -> list[dict[str, Any]]:
+    """Summarize response-time samples by replier, ordered by sample size."""
+    result = []
+    for email, times in sender_times.items():
+        if times:
+            avg = sum(times) / len(times)
+            result.append(
+                {
+                    "replier": email,
+                    "avg_response_hours": round(avg, 1),
+                    "response_count": len(times),
+                    "response_sample_scope": "recent_canonical_reply_pairs",
+                    "response_sample_pair_limit": pair_limit,
+                }
+            )
+
+    result.sort(key=lambda x: x["response_count"], reverse=True)
+    return result[:limit]
+
+
 class TemporalAnalyzer:
     """Time-based analysis of email patterns."""
 
@@ -183,19 +203,4 @@ class TemporalAnalyzer:
             except ValueError, TypeError:
                 continue
 
-        result = []
-        for email, times in sender_times.items():
-            if times:
-                avg = sum(times) / len(times)
-                result.append(
-                    {
-                        "replier": email,
-                        "avg_response_hours": round(avg, 1),
-                        "response_count": len(times),
-                        "response_sample_scope": "recent_canonical_reply_pairs",
-                        "response_sample_pair_limit": pair_limit,
-                    }
-                )
-
-        result.sort(key=lambda x: x["response_count"], reverse=True)
-        return result[:limit]
+        return _response_time_results(sender_times, pair_limit=pair_limit, limit=limit)

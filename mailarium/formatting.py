@@ -251,32 +251,35 @@ _META_HEADER_PREFIXES = (
 )
 
 
-def _strip_metadata_header(text: str) -> str:
-    """Strip the metadata header block from chunk text for cleaner previews."""
-    if not text:
-        return text
-    lines = text.splitlines(keepends=True)
+def _is_metadata_header_line(line: str) -> bool:
+    """Return whether a stripped line belongs to a generated metadata header."""
+    return (
+        line.startswith(_META_HEADER_PREFIXES)
+        or line.startswith("[Calendar/Meeting]")
+        or (line.startswith("[Part ") and "/" in line and line.endswith("]"))
+    )
+
+
+def _metadata_header_end(text: str) -> int:
+    """Return the offset after an initial contiguous generated metadata block."""
     header_end = 0
     saw_header = False
-    for line in lines:
+    for line in text.splitlines(keepends=True):
         stripped = line.strip()
-        if not stripped:
-            if saw_header:
-                header_end += len(line)
-                continue
-            break
-        if (
-            stripped.startswith(_META_HEADER_PREFIXES)
-            or stripped.startswith("[Calendar/Meeting]")
-            or (stripped.startswith("[Part ") and "/" in stripped and stripped.endswith("]"))
-        ):
+        if _is_metadata_header_line(stripped):
             saw_header = True
             header_end += len(line)
-            continue
-        break
-    if saw_header and header_end > 0:
-        return text[header_end:].strip()
-    return text
+        elif saw_header and not stripped:
+            header_end += len(line)
+        else:
+            break
+    return header_end if saw_header else 0
+
+
+def _strip_metadata_header(text: str) -> str:
+    """Strip the metadata header block from chunk text for cleaner previews."""
+    header_end = _metadata_header_end(text)
+    return text[header_end:].strip() if header_end else text
 
 
 def format_date(iso_date: str | None) -> str:

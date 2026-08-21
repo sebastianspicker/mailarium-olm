@@ -106,21 +106,6 @@ keyword weights, and reason codes. A client can then request
 `email_deep_context` for a selected UID or `email_answer_context` for a bounded,
 citable answer contract.
 
-## Evaluation
-
-The repository evaluates answer-context behavior with intentionally authored
-fixtures under `tests/fixtures/qa_eval/`. Captured scenarios cover generic
-grounding, quote attribution, inferred threads, and attachment/OCR behavior.
-`scripts/refresh_qa_eval_captured_reports.py --check` deterministically
-recomputes the saved reports and fails when they drift.
-
-The fixture [provenance manifest](../tests/fixtures/qa_eval/PROVENANCE.md)
-documents the authored-data boundary and deterministic identifier convention.
-
-Evaluation metrics are regression signals, not claims about an operator's
-mailbox. Retrieval quality still depends on archive completeness, extraction
-quality, model state, and the questions being asked.
-
 ## Limits and review
 
 Archive completeness, attachment extraction, OCR quality, model versions, and

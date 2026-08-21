@@ -14,12 +14,12 @@ Preserved by default:
   - private/context.md
   - private/ingest/
   - private/README.local.md
-  - private/tests/materials/
+  - private/evaluations/materials/
 
 Purged by default:
   - private/runtime/ runtime stores, lock files, ledgers, and run history
-  - private/tests/results/
-  - private/tests/exports/
+  - private/evaluations/results/
+  - private/evaluations/exports/
   - stale runtime database/vector-index leftovers under data/
   - repo-local scratch files like tmp_*.txt and .DS_Store
   - generic caches handled by scripts/clean_workspace.sh
@@ -91,7 +91,7 @@ echo "  - ${repo_root}/private/files"
 echo "  - ${repo_root}/private/context.md"
 echo "  - ${repo_root}/private/ingest"
 echo "  - ${repo_root}/private/README.local.md"
-echo "  - ${repo_root}/private/tests/materials"
+echo "  - ${repo_root}/private/evaluations/materials"
 
 declare -a purge_paths=(
 	"${repo_root}/private/runtime/current"
@@ -105,8 +105,8 @@ declare -a purge_paths=(
 	"${repo_root}/private/runtime/email_metadata.db-wal"
 	"${repo_root}/private/runtime/email_metadata_p73.db"
 	"${repo_root}/private/runtime/mcp_server.lock"
-	"${repo_root}/private/tests/results"
-	"${repo_root}/private/tests/exports"
+	"${repo_root}/private/evaluations/results"
+	"${repo_root}/private/evaluations/exports"
 	"${repo_root}/data/vector-index"
 	"${repo_root}/data/email_metadata.db"
 	"${repo_root}/data/email_metadata.db-shm"
@@ -142,8 +142,8 @@ else
 fi
 
 ensure_dir "${repo_root}/private/runtime/current"
-ensure_dir "${repo_root}/private/tests/results"
-ensure_dir "${repo_root}/private/tests/exports"
+ensure_dir "${repo_root}/private/evaluations/results"
+ensure_dir "${repo_root}/private/evaluations/exports"
 
 if [[ "$dry_run" -eq 1 ]]; then
 	echo "Dry run complete. No files were deleted."

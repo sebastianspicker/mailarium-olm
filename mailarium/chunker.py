@@ -269,6 +269,30 @@ def chunk_email(email_dict: dict) -> list[EmailChunk]:
     return _multiple_email_chunks(context)
 
 
+def _chunk_forensic_email_surface(email_dict: dict) -> list[EmailChunk]:
+    """Create additive chunks for a complete recovered EWS body surface."""
+    body = str(email_dict.get("body") or "")
+    forensic_body = str(email_dict.get("forensic_body_text") or "")
+    source = str(email_dict.get("forensic_body_source") or "")
+    if not source.startswith("ews_") or not forensic_body.strip() or forensic_body == body:
+        return []
+    projection = {**email_dict, "body": forensic_body}
+    context = _email_chunk_context(projection, preserve_full_body=True)
+    chunks = _single_email_chunk(context) if len(context.body) <= MAX_CHUNK_CHARS else None
+    values = [chunks] if chunks is not None else _multiple_email_chunks(context)
+    actual_email_type = str(email_dict.get("email_type") or "original")
+    for index, chunk in enumerate(values):
+        chunk.chunk_id = f"{context.uid}__forensic_{index}"
+        chunk.metadata.update(
+            {
+                "email_type": actual_email_type,
+                "source_scope": "forensic_body_text",
+                "body_render_source": source,
+            }
+        )
+    return values
+
+
 @dataclass(frozen=True)
 class _EmailChunkContext:
     """Carry email-level metadata shared by its generated chunks."""
@@ -284,10 +308,15 @@ class _EmailChunkContext:
     metadata: dict[str, object]
 
 
-def _email_chunk_context(email_dict: dict) -> _EmailChunkContext:
+def _email_chunk_context(email_dict: dict, *, preserve_full_body: bool = False) -> _EmailChunkContext:
     """Collect stable email and thread metadata shared by every body chunk."""
-    body, quoted_lines = strip_quoted_content(email_dict.get("body") or "", email_dict.get("email_type", "original"))
-    body, had_signature = strip_signature(body)
+    body = str(email_dict.get("body") or "")
+    if preserve_full_body:
+        quoted_lines = 0
+        had_signature = False
+    else:
+        body, quoted_lines = strip_quoted_content(body, email_dict.get("email_type", "original"))
+        body, had_signature = strip_signature(body)
     att_names = email_dict.get("attachment_names", [])
     metadata = {
         "uid": email_dict["uid"],

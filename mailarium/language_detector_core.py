@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any
 
 from .language_detector_data import STOPWORDS, TOKEN_RE
+
+LanguageDetails = dict[str, str | float | int]
 
 _GERMAN_MARKERS = {
     "bitte",
@@ -105,17 +106,22 @@ def language_hit_counts_impl(tokens: list[str]) -> dict[str, int]:
     return {lang: sum(token_counts[word] for word in stopwords if word in token_counts) for lang, stopwords in STOPWORDS.items()}
 
 
-def detect_language_details_impl(text: str) -> dict[str, str | float | int]:
+def _empty_text_language_details() -> LanguageDetails:
+    """Return the stable result for text with no normalized tokens."""
+    return {
+        "language": "unknown",
+        "confidence": "none",
+        "reason": "empty_text",
+        "token_count": 0,
+    }
+
+
+def detect_language_details_impl(text: str) -> LanguageDetails:
     """Classify text while explicitly identifying empty, short, and weak-evidence cases."""
     tokens = tokenize_impl(text)
     token_count = len(tokens)
     if token_count == 0:
-        return {
-            "language": "unknown",
-            "confidence": "none",
-            "reason": "empty_text",
-            "token_count": 0,
-        }
+        return _empty_text_language_details()
 
     scores = score_languages_impl(tokens, original_text=text)
     ranked_scores = sorted(scores.items(), key=lambda item: item[1], reverse=True)
@@ -130,19 +136,26 @@ def detect_language_details_impl(text: str) -> dict[str, str | float | int]:
     if best_score < 0.02:
         return _low_score_language_details(token_count, german_marker_hits, scores)
 
+    return _confident_language_details(token_count, german_marker_hits, best_lang, best_score)
+
+
+def _confident_language_details(token_count: int, german_hits: int, best_lang: str, best_score: float) -> LanguageDetails:
+    """Return the scored result once the weak-evidence branch is excluded."""
     confidence = "high" if best_score >= 0.08 else "medium"
-    if best_lang == "de" and german_marker_hits > 0 and confidence == "medium":
+    if best_lang == "de" and german_hits > 0 and confidence == "medium":
         confidence = "high"
     return {
         "language": best_lang,
         "confidence": confidence,
-        "reason": "stopword_overlap_with_markers" if german_marker_hits > 0 and best_lang == "de" else "stopword_overlap",
+        "reason": "stopword_overlap_with_markers" if german_hits > 0 and best_lang == "de" else "stopword_overlap",
         "token_count": token_count,
         "score": best_score,
     }
 
 
-def _short_text_language_details(token_count, german_hits, best_lang, best_score, second_score) -> dict[str, Any]:
+def _short_text_language_details(
+    token_count: int, german_hits: int, best_lang: str, best_score: float, second_score: float
+) -> LanguageDetails:
     """Keep short-text decisions conservative unless distinctive German markers exist."""
     if german_hits > 0:
         return {"language": "de", "confidence": "low", "reason": "short_text_german_marker", "token_count": token_count}
@@ -156,7 +169,7 @@ def _short_text_language_details(token_count, german_hits, best_lang, best_score
     return {"language": best_lang, "confidence": "low", "reason": "short_text_stopword_vote", "token_count": token_count}
 
 
-def _low_score_language_details(token_count, german_hits, scores) -> dict[str, Any]:
+def _low_score_language_details(token_count: int, german_hits: int, scores: dict[str, float]) -> LanguageDetails:
     """Expose low-confidence German marker evidence without overstating a language choice."""
     if german_hits > 0:
         return {

@@ -16,9 +16,9 @@ Example client configuration:
 {
   "mcpServers": {
     "mailarium": {
-      "command": "/absolute/path/to/outlook-email-rag/.venv/bin/python",
+      "command": "/absolute/path/to/mailarium/.venv/bin/python",
       "args": ["-m", "mailarium.mcp_server"],
-      "cwd": "/absolute/path/to/outlook-email-rag",
+      "cwd": "/absolute/path/to/mailarium",
       "env": {
         "VECTOR_INDEX_PATH": "private/runtime/current/vector-index",
         "SQLITE_PATH": "private/runtime/current/email_metadata.db"

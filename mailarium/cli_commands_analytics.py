@@ -139,6 +139,69 @@ def run_entities_impl(db, entity_type: str | None) -> None:
             print(f"  {ent['total_mentions']:>4}x  [{ent['entity_type']}]  {ent['entity_text']}")
 
 
+_HEATMAP_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_HEATMAP_LEVELS = " ░▒▓█"
+_HEATMAP_LEVEL_COLORS = ("dim", "blue", "cyan", "yellow", "green bold")
+
+
+def _build_heatmap_model(data: list[dict]) -> tuple[dict[tuple[int, int], int], int]:
+    """Build a cell lookup and preserve the global maximum across source rows."""
+    grid: dict[tuple[int, int], int] = {}
+    max_count = 0
+    for row in data:
+        key = (row["hour"], row["day_of_week"])
+        grid[key] = row["count"]
+        max_count = max(max_count, row["count"])
+    return grid, max_count
+
+
+def _heatmap_level(count: int, max_count: int) -> int:
+    """Return the heatmap intensity index, including the all-zero case."""
+    if max_count == 0:
+        return 0
+    return int((count / max_count) * (len(_HEATMAP_LEVELS) - 1))
+
+
+def _render_rich_heatmap(grid: dict[tuple[int, int], int], max_count: int) -> None:
+    """Render the heatmap with Rich when the optional dependency is available."""
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+    header = "       " + "   ".join(f"[bold]{day}[/]" for day in _HEATMAP_DAYS)
+    rows: list[str] = [header]
+    for hour in range(24):
+        row_str = f"  [dim]{hour:02d}[/]   "
+        for day in range(7):
+            level = _heatmap_level(grid.get((hour, day), 0), max_count)
+            color = _HEATMAP_LEVEL_COLORS[level]
+            row_str += f" [{color}]{_HEATMAP_LEVELS[level]}[/{color}]  "
+        rows.append(row_str)
+
+    body = "\n".join(rows)
+    legend = f"[dim]' '=none  [blue]░[/]=low  [cyan]▒[/]=mid  [yellow]▓[/]=high  [green bold]█[/]=peak (max={max_count})[/]"
+    console.print(
+        Panel(
+            f"{body}\n\n  {legend}",
+            title="[bold]Activity Heatmap (hour x day-of-week)[/]",
+            border_style="blue",
+        )
+    )
+
+
+def _render_plain_heatmap(grid: dict[tuple[int, int], int], max_count: int) -> None:
+    """Render the dependency-free heatmap fallback."""
+    print("\nActivity heatmap (hour × day-of-week):\n")
+    print(f"      {'   '.join(_HEATMAP_DAYS)}")
+    for hour in range(24):
+        row_str = f"  {hour:02d}  "
+        for day in range(7):
+            level = _heatmap_level(grid.get((hour, day), 0), max_count)
+            row_str += f" {_HEATMAP_LEVELS[level]}  "
+        print(row_str)
+    print(f"\n  Legend: ' '=0  ░=low  ▒=mid  ▓=high  █=peak (max={max_count})")
+
+
 def run_heatmap_impl(db) -> None:
     """Display an activity heatmap showing email activity by hour and day of week.
 
@@ -153,57 +216,12 @@ def run_heatmap_impl(db) -> None:
         print("No heatmap data available.")
         return
 
-    grid: dict[tuple[int, int], int] = {}
-    max_count = 0
-    for row in data:
-        key = (row["hour"], row["day_of_week"])
-        grid[key] = row["count"]
-        max_count = max(max_count, row["count"])
-
-    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    levels = " \u2591\u2592\u2593\u2588"
+    grid, max_count = _build_heatmap_model(data)
 
     try:
-        from rich.console import Console
-        from rich.panel import Panel
-
-        console = Console()
-        level_colors = ["dim", "blue", "cyan", "yellow", "green bold"]
-
-        header = "       " + "   ".join(f"[bold]{d}[/]" for d in days)
-        rows: list[str] = [header]
-        for hour in range(24):
-            row_str = f"  [dim]{hour:02d}[/]   "
-            for day in range(7):
-                count = grid.get((hour, day), 0)
-                level = int((count / max_count) * (len(levels) - 1)) if max_count > 0 else 0
-                color = level_colors[level]
-                row_str += f" [{color}]{levels[level]}[/{color}]  "
-            rows.append(row_str)
-
-        body = "\n".join(rows)
-        legend = (
-            "[dim]' '=none  [blue]\u2591[/]=low  [cyan]\u2592[/]=mid"
-            f"  [yellow]\u2593[/]=high  [green bold]\u2588[/]=peak (max={max_count})[/]"
-        )
-        console.print(
-            Panel(
-                f"{body}\n\n  {legend}",
-                title="[bold]Activity Heatmap (hour x day-of-week)[/]",
-                border_style="blue",
-            )
-        )
+        _render_rich_heatmap(grid, max_count)
     except ImportError:
-        print("\nActivity heatmap (hour \u00d7 day-of-week):\n")
-        print(f"      {'   '.join(days)}")
-        for hour in range(24):
-            row_str = f"  {hour:02d}  "
-            for day in range(7):
-                count = grid.get((hour, day), 0)
-                level = int((count / max_count) * (len(levels) - 1)) if max_count > 0 else 0
-                row_str += f" {levels[level]}  "
-            print(row_str)
-        print(f"\n  Legend: ' '=0  \u2591=low  \u2592=mid  \u2593=high  \u2588=peak (max={max_count})")
+        _render_plain_heatmap(grid, max_count)
 
 
 def run_response_times_impl(db) -> None:

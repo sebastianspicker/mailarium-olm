@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A static, simulated Mailarium interface demo.">
+    <title>Mailarium static demo</title>
+    <link rel="stylesheet" href="demo.css">
+    <script src="demo.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to workspace</a>
+    <div class="demo-notice" role="status"><strong>Static simulated demo.</strong> Fixture data only. This is not a hosted mailbox or live Mailarium runtime.</div>
+    <div class="app-shell">
+      <aside class="rail" aria-label="Mailarium navigation">
+        <a class="lockup" href="./" aria-label="Mailarium static demo home">MAILARIUM <span>DEMO</span></a>
+        <nav class="nav" aria-label="Workspace views">
+          <button type="button" class="nav-button" data-view-target="search" aria-current="page">Search</button>
+          <button type="button" class="nav-button" data-view-target="overview">Overview</button>
+          <button type="button" class="nav-button" data-view-target="evidence">Evidence</button>
+        </nav>
+        <div class="runtime"><span class="runtime-dot" aria-hidden="true"></span><span>Simulated local archive</span><small>synthetic fixture state</small></div>
+      </aside>
+
+      <main id="main" tabindex="-1">
+        <section class="view active" data-view="search" aria-labelledby="search-title">
+          <header class="view-header">
+            <p class="eyebrow">Archive review workspace</p>
+            <h1 id="search-title">Search the archive</h1>
+            <p>Ranked source messages, derived retrieval context, and inspectable provenance.</p>
+          </header>
+          <form class="search-form" data-search-form>
+            <label for="query">Search fixture messages</label>
+            <div class="search-row">
+              <input id="query" name="query" value="vendor renewal" autocomplete="off" data-search-input>
+              <button type="submit" class="button primary" data-action="search">Simulated search</button>
+            </div>
+            <fieldset class="filters">
+              <legend>Search mode and filters</legend>
+              <label><input type="radio" name="mode" value="hybrid" checked> Hybrid retrieval</label>
+              <label><input type="radio" name="mode" value="lexical"> Keyword match</label>
+              <label><input type="checkbox" name="attachments" checked> Include attachments</label>
+              <label><input type="checkbox" name="evidence-only"> Evidence candidates</label>
+            </fieldset>
+          </form>
+          <p class="result-summary" aria-live="polite" data-search-status><strong>3 synthetic results</strong><span>scope: local fixture</span><span>mode: hybrid</span></p>
+          <div class="workspace">
+            <section class="results-pane" aria-labelledby="results-title">
+              <p class="pane-label" id="results-title">Ranked messages</p>
+              <div class="result-list" role="listbox" aria-label="Synthetic search results" data-result-list></div>
+            </section>
+            <article class="document-pane" aria-labelledby="message-title" data-document>
+              <p class="pane-label">Selected source</p>
+              <div class="document-paper">
+                <header><span class="message-kind" data-message-kind>Message</span><span class="document-mark" aria-hidden="true">•••</span></header>
+                <h2 id="message-title" data-message-subject></h2>
+                <dl class="metadata">
+                  <div><dt>From</dt><dd data-message-from></dd></div><div><dt>Date</dt><dd data-message-date></dd></div>
+                  <div><dt>To</dt><dd data-message-to></dd></div><div><dt>Thread</dt><dd data-message-thread></dd></div>
+                </dl>
+                <div class="thread-line"><span aria-hidden="true">● ─ ●</span> <span data-message-thread-note></span></div>
+                <div class="message-body" data-message-body></div>
+                <div class="attachments"><span>Attachments</span><p data-message-attachment></p></div>
+              </div>
+            </article>
+            <aside class="inspector" aria-label="Selected message source details">
+              <p class="pane-label">Source details</p>
+              <p class="confidence"><span>Provisional rank</span> <strong data-message-score></strong></p>
+              <section><h2>Retrieved passage</h2><blockquote data-message-quote></blockquote></section>
+              <section><h2>Provenance</h2><dl class="provenance"><div><dt>Archive ID</dt><dd data-message-id></dd></div><div><dt>Source path</dt><dd data-message-path></dd></div><div><dt>Content state</dt><dd>synthetic fixture</dd></div></dl></section>
+              <button type="button" class="button primary full" data-action="evidence">Simulated add to evidence</button>
+              <button type="button" class="button link" data-action="export">Simulated export source</button>
+              <p class="action-feedback" aria-live="polite" data-action-feedback></p>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" data-view="overview" aria-labelledby="overview-title" hidden>
+          <header class="view-header"><p class="eyebrow">Archive analytics</p><h1 id="overview-title">Overview</h1><p>Summary figures are calculated from the same synthetic fixture set.</p></header>
+          <div class="metrics" aria-label="Synthetic archive metrics"><article><span>Messages</span><strong>48</strong><small>fixture records</small></article><article><span>Threads</span><strong>17</strong><small>synthetic groups</small></article><article><span>Evidence candidates</span><strong>6</strong><small>provisional only</small></article></div>
+          <section class="analytics-card"><h2>Email volume over time</h2><div class="chart" aria-label="Synthetic message volume chart"><span style="--h:40%">Jan</span><span style="--h:65%">Feb</span><span style="--h:52%">Mar</span><span style="--h:82%">Apr</span><span style="--h:70%">May</span></div></section>
+          <section class="analytics-card"><h2>Top contacts</h2><table><thead><tr><th>Contact</th><th>Messages</th><th>Last fixture date</th></tr></thead><tbody><tr><td>mara.chen@example.test</td><td>12</td><td>2026-04-18</td></tr><tr><td>devon.lee@example.test</td><td>9</td><td>2026-04-16</td></tr><tr><td>samir.patel@example.test</td><td>7</td><td>2026-04-12</td></tr></tbody></table></section>
+          <button type="button" class="button primary" data-action="overview-export">Simulated export overview</button><p class="action-feedback" aria-live="polite" data-action-feedback></p>
+        </section>
+
+        <section class="view" data-view="evidence" aria-labelledby="evidence-title" hidden>
+          <header class="view-header"><p class="eyebrow">Review collection</p><h1 id="evidence-title">Evidence</h1><p>Evidence is a review collection. Derived rankings never replace the source message.</p></header>
+          <div class="evidence-card"><span class="tag">Synthetic candidate</span><h2>Renewal terms need confirmation</h2><p>Source: <code>fixture-0007</code> · mara.chen@example.test · 2026-04-18</p><blockquote>“Please confirm the renewal option before the Friday review.”</blockquote><p class="muted">No evidence was written. This demo keeps all mutations simulated.</p><button type="button" class="button primary" data-action="evidence-confirm">Simulated confirm evidence collection</button></div>
+          <p class="action-feedback" aria-live="polite" data-action-feedback></p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

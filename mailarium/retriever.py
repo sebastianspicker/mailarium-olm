@@ -430,20 +430,29 @@ class EmailRetriever:
         documents = (payload.get("documents") or [[]])[0]
         metadatas = (payload.get("metadatas") or [[]])[0]
         distances = (payload.get("distances") or [[]])[0]
-        image_results: list[SearchResult] = []
-        for index, chunk_id in enumerate(ids):
-            document = documents[index] if index < len(documents) else ""
-            metadata = metadatas[index] if index < len(metadatas) else {}
-            distance = float(distances[index]) if index < len(distances) else 1.0
-            image_results.append(
-                SearchResult(
-                    chunk_id=chunk_id,
-                    text=document,
-                    metadata={**metadata, "retrieval_space": "image"},
-                    distance=distance,
-                )
-            )
-        return image_results
+        return [
+            EmailRetriever._image_result_from_payload_row(chunk_id, index, documents, metadatas, distances)
+            for index, chunk_id in enumerate(ids)
+        ]
+
+    @staticmethod
+    def _image_result_from_payload_row(
+        chunk_id: str,
+        index: int,
+        documents: list[Any],
+        metadatas: list[Any],
+        distances: list[Any],
+    ) -> SearchResult:
+        """Hydrate one image result while retaining payload-array defaults."""
+        document = documents[index] if index < len(documents) else ""
+        metadata = metadatas[index] if index < len(metadatas) else {}
+        distance = float(distances[index]) if index < len(distances) else 1.0
+        return SearchResult(
+            chunk_id=chunk_id,
+            text=document,
+            metadata={**metadata, "retrieval_space": "image"},
+            distance=distance,
+        )
 
     def search_filtered(self, query: str, top_k: int = 10, **filter_values: Any) -> list[SearchResult]:
         """Search with optional filters.

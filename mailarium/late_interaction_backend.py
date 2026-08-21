@@ -246,6 +246,13 @@ def _validated_model(value: str) -> tuple[Path, dict[str, Any]]:
 
 def _parse_scores(output: str, results: list[SearchResult]) -> dict[str, float]:
     """Parse scores into the internal representation."""
+    raw_scores = _parse_score_envelope(output)
+    _validate_score_ids(raw_scores, results)
+    return _validate_score_values(raw_scores)
+
+
+def _parse_score_envelope(output: str) -> dict[Any, Any]:
+    """Parse and validate the response envelope and protocol version."""
     if len(output) > _MAX_PAYLOAD_CHARS:
         raise LateInteractionError("late-interaction response exceeds the configured safety limit")
     try:
@@ -257,9 +264,18 @@ def _parse_scores(output: str, results: list[SearchResult]) -> dict[str, float]:
     raw_scores = payload.get("scores")
     if not isinstance(raw_scores, dict):
         raise LateInteractionError("late-interaction response must contain a scores object")
+    return raw_scores
+
+
+def _validate_score_ids(raw_scores: dict[Any, Any], results: list[SearchResult]) -> None:
+    """Require the response to score exactly the requested candidate IDs."""
     expected_ids = {result.chunk_id for result in results}
     if set(raw_scores) != expected_ids:
         raise LateInteractionError("late-interaction response IDs do not match the request")
+
+
+def _validate_score_values(raw_scores: dict[Any, Any]) -> dict[str, float]:
+    """Convert each response score and enforce the normalized score range."""
     scores: dict[str, float] = {}
     for chunk_id, raw_score in raw_scores.items():
         try:

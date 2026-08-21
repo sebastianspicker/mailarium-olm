@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small end-to-end ingest smoke for acceptance runs."""
+"""Small offline ingest smoke for acceptance runs."""
 
 from __future__ import annotations
 

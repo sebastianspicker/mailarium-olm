@@ -104,13 +104,21 @@ class QueryExpander:
         if ascii_lane != base_query:
             lanes.append(ascii_lane)
         try:
-            if self._vocabulary and self._model:
-                related_terms = [term for term, _score in self.get_related_terms(base_query, n_terms=max(1, n_terms * 2))]
-                if related_terms:
-                    lanes.append(f"{base_query} {' '.join(related_terms[:n_terms])}".strip())
+            semantic_lane = self._semantic_lane(base_query, n_terms)
+            if semantic_lane:
+                lanes.append(semantic_lane)
         except Exception:  # pylint: disable=broad-exception-caught
             logger.debug("Query lane expansion failed", exc_info=True)
         return _distinct_lanes(lanes, max_lanes)
+
+    def _semantic_lane(self, base_query: str, n_terms: int) -> str | None:
+        """Build one corpus-derived lane when expansion is configured."""
+        if not self._vocabulary or not self._model:
+            return None
+        related_terms = [term for term, _score in self.get_related_terms(base_query, n_terms=max(1, n_terms * 2))]
+        if not related_terms:
+            return None
+        return f"{base_query} {' '.join(related_terms[:n_terms])}".strip()
 
     def get_related_terms(self, query: str, n_terms: int = 5) -> list[tuple[str, float]]:
         """Get related terms and their similarity scores."""

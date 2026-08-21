@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from base64 import b64decode
 from binascii import Error as Base64Error
 from collections.abc import Iterable
@@ -18,6 +19,18 @@ from .transport import EWSTransport
 _M = "http://schemas.microsoft.com/exchange/services/2006/messages"
 _T = "http://schemas.microsoft.com/exchange/services/2006/types"
 _NS = {"m": _M, "t": _T}
+_NUMERIC_CHARACTER_REFERENCE = re.compile(rb"&#(?:(?P<decimal>[0-9]+)|[xX](?P<hexadecimal>[0-9A-Fa-f]+));")
+# These mail-message types can occur in physical IPF.Note folders. CalendarItem
+# is intentionally excluded so calendar reads continue to fail closed.
+_MAIL_ITEM_TYPES = frozenset(
+    {
+        "Message",
+        "MeetingMessage",
+        "MeetingRequest",
+        "MeetingResponse",
+        "MeetingCancellation",
+    }
+)
 _DISTINGUISHED_FOLDER_IDS = frozenset(
     {
         "archivemsgfolderroot",
@@ -64,6 +77,16 @@ class EWSItemRef:
 
     item_id: str
     change_key: str | None
+
+
+@dataclass(frozen=True)
+class EWSFolder:
+    """Represent one physical, mail-capable EWS folder."""
+
+    folder_id: str
+    display_name: str
+    folder_class: str
+    total_count: int
 
 
 @dataclass(frozen=True)
@@ -153,6 +176,34 @@ class EWSGateway:
         root = self._execute("FindItem", body)
         return _refs(root.findall(".//t:Message/t:ItemId", _NS))
 
+    def find_mail_folders(self) -> tuple[EWSFolder, ...]:
+        """List physical mail folders below the explicitly scoped mailbox root."""
+        if self.mailbox_address is None:
+            raise EWSValidationError("mailbox_address is required to discover mail folders")
+        page = IndexedPage()
+        folders: list[EWSFolder] = []
+        while True:
+            body = (
+                '<m:FindFolder Traversal="Deep"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape>'
+                '<t:AdditionalProperties><t:FieldURI FieldURI="folder:DisplayName"/>'
+                '<t:FieldURI FieldURI="folder:FolderClass"/><t:FieldURI FieldURI="folder:TotalCount"/>'
+                "</t:AdditionalProperties></m:FolderShape>"
+                f'<m:IndexedPageFolderView MaxEntriesReturned="{page.size}" Offset="{page.offset}" BasePoint="Beginning"/>'
+                f"<m:ParentFolderIds>{self._folder_ref('msgfolderroot', 'folder_id')}"
+                "</m:ParentFolderIds></m:FindFolder>"
+            )
+            root = self._execute("FindFolder", body)
+            root_folder = root.find(".//m:RootFolder", _NS)
+            if root_folder is None:
+                raise EWSFaultError("MalformedResponse", "missing EWS FindFolder root")
+            nodes = tuple(root_folder.findall("t:Folders/*", _NS))
+            folders.extend(folder for node in nodes if (folder := _parse_mail_folder(node)) is not None)
+            if _includes_last_item(root_folder):
+                return tuple(folders)
+            if not nodes:
+                raise EWSFaultError("MalformedResponse", "EWS FindFolder returned an empty partial page")
+            page = IndexedPage(offset=_next_folder_page_offset(root_folder, page.offset), size=page.size)
+
     def get_items(self, item_ids: Iterable[EWSItemRef]) -> tuple[EWSItem, ...]:
         """Fetch complete supported message fields for the supplied EWS item references."""
         identifiers = tuple(item_ids)
@@ -171,7 +222,7 @@ class EWSGateway:
             + "</m:ItemIds></m:GetItem>"
         )
         root = self._execute("GetItem", body)
-        return tuple(_parse_item(node) for node in root.findall(".//t:Message", _NS))
+        return tuple(_parse_item(node) for node in _mail_item_nodes(root))
 
     def update_item(
         self,
@@ -345,7 +396,7 @@ class EWSGateway:
             response_body = exc.body
             http_status = exc.status_code
         try:
-            root = ElementTree.fromstring(response_body)
+            root = ElementTree.fromstring(_replace_illegal_xml_numeric_character_references(response_body))
         except ElementTree.ParseError as exc:
             raise EWSFaultError(
                 "MalformedResponse",
@@ -394,7 +445,7 @@ def _parse_sync_changes(
     for change in changes:
         change_type = str(change.tag).rsplit("}", 1)[-1]
         if change_type in {"Create", "Update"}:
-            identifier = change.find("t:Message/t:ItemId", _NS)
+            identifier = _sync_mail_item_id(change)
         elif change_type in {"Delete", "ReadFlagChange"}:
             identifier = change.find("t:ItemId", _NS)
         else:
@@ -415,6 +466,108 @@ def _parse_sync_changes(
         else:
             updated.append(ref)
     return tuple(created), tuple(updated), tuple(deleted)
+
+
+def _mail_item_nodes(root: Element) -> tuple[Element, ...]:
+    """Return direct GetItem results from the supported EWS mail-item family."""
+    return tuple(item for items in root.findall(".//m:Items", _NS) for item in items if _element_type(item) in _MAIL_ITEM_TYPES)
+
+
+def _sync_mail_item_id(change: Element) -> Element | None:
+    """Return the identity of a direct, supported mail item in a sync change."""
+    for item in change:
+        if _element_type(item) in _MAIL_ITEM_TYPES:
+            return item.find("t:ItemId", _NS)
+    return None
+
+
+def _element_type(node: Element) -> str:
+    """Return an EWS element's local name without accepting a namespace wildcard."""
+    return str(node.tag).rsplit("}", 1)[-1]
+
+
+def _replace_illegal_xml_numeric_character_references(response_body: bytes) -> bytes:
+    """Replace only XML 1.0-invalid numeric references before safe XML parsing."""
+
+    def replace(match: re.Match[bytes]) -> bytes:
+        decimal = match.group("decimal")
+        digits = decimal or match.group("hexadecimal")
+        base = 10 if decimal is not None else 16
+        codepoint = _numeric_character_reference_value(digits, base)
+        return match.group(0) if _is_xml_10_character(codepoint) else b"&#xFFFD;"
+
+    return _NUMERIC_CHARACTER_REFERENCE.sub(replace, response_body)
+
+
+def _numeric_character_reference_value(digits: bytes, base: int) -> int:
+    """Parse a numeric reference without converting arbitrarily large integers."""
+    start = next((index for index, digit in enumerate(digits) if digit != ord("0")), len(digits))
+    significant_length = len(digits) - start
+    maximum_digits = 7 if base == 10 else 6
+    if significant_length > maximum_digits:
+        return -1
+    return int(digits[start:], base) if significant_length else 0
+
+
+def _is_xml_10_character(codepoint: int) -> bool:
+    """Return whether a Unicode code point may appear in an XML 1.0 character reference."""
+    return (
+        codepoint in {0x9, 0xA, 0xD}
+        or 0x20 <= codepoint <= 0xD7FF
+        or 0xE000 <= codepoint <= 0xFFFD
+        or 0x10000 <= codepoint <= 0x10FFFF
+    )
+
+
+def _parse_mail_folder(node: Element) -> EWSFolder | None:
+    """Project only physical IPF.Note folders from a FindFolder result."""
+    if _element_type(node) != "Folder":
+        return None
+    identifier = node.find("t:FolderId", _NS)
+    folder_id = identifier.get("Id") if identifier is not None else None
+    folder_class = node.findtext("t:FolderClass", default=None, namespaces=_NS)
+    if not folder_id or not folder_class or not folder_class.startswith("IPF.Note"):
+        return None
+    total_count = _folder_total_count(node)
+    return EWSFolder(
+        folder_id=folder_id,
+        display_name=node.findtext("t:DisplayName", default="", namespaces=_NS),
+        folder_class=folder_class,
+        total_count=total_count,
+    )
+
+
+def _folder_total_count(node: Element) -> int:
+    """Return a non-negative mail-folder count, defaulting an omitted count to zero."""
+    value = node.findtext("t:TotalCount", default=None, namespaces=_NS)
+    if value is None:
+        return 0
+    try:
+        total_count = int(value)
+    except ValueError as exc:
+        raise EWSFaultError("MalformedResponse", "invalid EWS folder total count") from exc
+    if total_count < 0:
+        raise EWSFaultError("MalformedResponse", "invalid EWS folder total count")
+    return total_count
+
+
+def _includes_last_item(root_folder: Element) -> bool:
+    """Read a required FindFolder continuation marker without assuming completion."""
+    value = root_folder.get("IncludesLastItemInRange")
+    if value is None or value.casefold() not in {"true", "false"}:
+        raise EWSFaultError("MalformedResponse", "invalid EWS FindFolder continuation marker")
+    return value.casefold() == "true"
+
+
+def _next_folder_page_offset(root_folder: Element, current_offset: int) -> int:
+    """Require a forward server paging offset for an incomplete folder page."""
+    try:
+        next_offset = int(root_folder.get("IndexedPagingOffset", ""))
+    except ValueError as exc:
+        raise EWSFaultError("MalformedResponse", "missing EWS FindFolder paging offset") from exc
+    if next_offset <= current_offset:
+        raise EWSFaultError("MalformedResponse", "EWS FindFolder returned a non-advancing partial page")
+    return next_offset
 
 
 def _parse_item(node) -> EWSItem:

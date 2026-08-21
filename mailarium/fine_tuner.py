@@ -5,12 +5,24 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 from .config import resolve_device
 
 TrainingMode = Literal["dense", "sparse"]
+
+
+@dataclass(frozen=True)
+class _TrainingBackend:
+    """Mode-specific classes consumed by the shared trainer orchestration."""
+
+    model_type: Any
+    loss_type: Any
+    training_arguments_type: Any
+    trainer_type: Any
+    sets_max_sequence_length: bool = False
 
 
 class FineTuner:
@@ -118,20 +130,21 @@ class FineTuner:
             losses,
         )
 
-        model = SentenceTransformer(self.base_model, device=self.device, trust_remote_code=False)
-        model.max_seq_length = int(config["max_len"])
-        dataset = Dataset.from_dict(_triplet_columns(triplets))
-        loss = losses.TripletLoss(model=model)
-        arguments = SentenceTransformerTrainingArguments(
-            **_training_arguments(output_dir, config, use_fp16=self.device == "cuda")
+        return _run_training(
+            triplets=triplets,
+            output_dir=output_dir,
+            config=config,
+            backend=_TrainingBackend(
+                model_type=SentenceTransformer,
+                loss_type=losses.TripletLoss,
+                training_arguments_type=SentenceTransformerTrainingArguments,
+                trainer_type=SentenceTransformerTrainer,
+                sets_max_sequence_length=True,
+            ),
+            model_name=self.base_model,
+            device=self.device,
+            dataset_type=Dataset,
         )
-        trainer = SentenceTransformerTrainer(
-            model=model,
-            args=arguments,
-            train_dataset=dataset,
-            loss=loss,
-        )
-        return _train_and_save(trainer, model, output_dir)
 
     def _train_sparse(
         self,
@@ -148,17 +161,43 @@ class FineTuner:
         )
         from sentence_transformers.sparse_encoder import losses
 
-        model = SparseEncoder(self.sparse_base_model, device=self.device, trust_remote_code=False)
-        dataset = Dataset.from_dict(_triplet_columns(triplets))
-        loss = losses.SparseTripletLoss(model=model)
-        arguments = SparseEncoderTrainingArguments(**_training_arguments(output_dir, config, use_fp16=self.device == "cuda"))
-        trainer = SparseEncoderTrainer(
-            model=model,
-            args=arguments,
-            train_dataset=dataset,
-            loss=loss,
+        return _run_training(
+            triplets=triplets,
+            output_dir=output_dir,
+            config=config,
+            backend=_TrainingBackend(
+                model_type=SparseEncoder,
+                loss_type=losses.SparseTripletLoss,
+                training_arguments_type=SparseEncoderTrainingArguments,
+                trainer_type=SparseEncoderTrainer,
+            ),
+            model_name=self.sparse_base_model,
+            device=self.device,
+            dataset_type=Dataset,
         )
-        return _train_and_save(trainer, model, output_dir)
+
+
+def _run_training(
+    *,
+    triplets: list[dict[str, str]],
+    output_dir: Path,
+    config: dict[str, Any],
+    backend: _TrainingBackend,
+    model_name: str,
+    device: str,
+    dataset_type: Any,
+) -> dict[str, float]:
+    """Build shared trainer inputs, run training, and save model metrics."""
+    model = backend.model_type(model_name, device=device, trust_remote_code=False)
+    if backend.sets_max_sequence_length:
+        model.max_seq_length = int(config["max_len"])
+    dataset = dataset_type.from_dict(_triplet_columns(triplets))
+    loss = backend.loss_type(model=model)
+    arguments = backend.training_arguments_type(**_training_arguments(output_dir, config, use_fp16=device == "cuda"))
+    trainer = backend.trainer_type(model=model, args=arguments, train_dataset=dataset, loss=loss)
+    result = trainer.train()
+    model.save_pretrained(str(output_dir / "model"), safe_serialization=True)
+    return _numeric_metrics(getattr(result, "metrics", {}))
 
 
 def _training_arguments(
@@ -179,13 +218,6 @@ def _training_arguments(
         "report_to": [],
         "save_strategy": "no",
     }
-
-
-def _train_and_save(trainer: Any, model: Any, output_dir: Path) -> dict[str, float]:
-    """Run a configured trainer and persist its model and numeric metrics."""
-    result = trainer.train()
-    model.save_pretrained(str(output_dir / "model"), safe_serialization=True)
-    return _numeric_metrics(getattr(result, "metrics", {}))
 
 
 def _load_triplets(path: Path) -> list[dict[str, str]]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -70,6 +71,22 @@ _DECISION_PATTERNS = [
     re.compile(r"(?:final decision|the decision is)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
     re.compile(r"(?:die\s+entscheidung\s+ist|endgültig\s+entschieden)\s+(.{10,80}?)(?:[.!?\n]|$)", re.IGNORECASE),
 ]
+
+
+def _iter_unique_pattern_matches(patterns: Sequence[re.Pattern[str]], text: str) -> Iterator[tuple[re.Match[str], str]]:
+    """Yield valid, unique captures in pattern order, then match order."""
+    seen_texts: set[str] = set()
+    for pattern in patterns:
+        for match in pattern.finditer(text):
+            captured_text = match.group(1).strip()
+            if len(captured_text) < 5:
+                continue
+
+            normalized_text = captured_text.lower()
+            if normalized_text in seen_texts:
+                continue
+            seen_texts.add(normalized_text)
+            yield match, captured_text
 
 
 @dataclass
@@ -141,43 +158,31 @@ class ThreadAnalyzer:
             return []
 
         items: list[ActionItem] = []
-        seen_texts: set[str] = set()
+        for match, action_text in _iter_unique_pattern_matches(_ACTION_PATTERNS, text):
+            # Detect deadline
+            deadline = ""
+            dl_match = _DEADLINE_RE.search(action_text)
+            if dl_match:
+                deadline = dl_match.group(1).strip()
 
-        for pattern in _ACTION_PATTERNS:
-            for match in pattern.finditer(text):
-                action_text = match.group(1).strip()
-                if not action_text or len(action_text) < 5:
-                    continue
+            # Detect urgency - check the action item text, not the full body
+            is_urgent = any(w in action_text.lower() for w in _URGENCY_WORDS)
 
-                norm = action_text.lower().strip()
-                if norm in seen_texts:
-                    continue
-                seen_texts.add(norm)
+            # Assignee: if "I'll" pattern, assignee is sender
+            assignee = ""
+            full_match = match.group(0).lower()
+            if any(p in full_match for p in ["i'll", "i will", "i am going to"]):
+                assignee = sender
 
-                # Detect deadline
-                deadline = ""
-                dl_match = _DEADLINE_RE.search(action_text)
-                if dl_match:
-                    deadline = dl_match.group(1).strip()
-
-                # Detect urgency - check the action item text, not the full body
-                is_urgent = any(w in action_text.lower() for w in _URGENCY_WORDS)
-
-                # Assignee: if "I'll" pattern, assignee is sender
-                assignee = ""
-                full_match = match.group(0).lower()
-                if any(p in full_match for p in ["i'll", "i will", "i am going to"]):
-                    assignee = sender
-
-                items.append(
-                    ActionItem(
-                        text=action_text,
-                        assignee=assignee,
-                        deadline=deadline,
-                        is_urgent=is_urgent,
-                        source_uid=source_uid,
-                    )
+            items.append(
+                ActionItem(
+                    text=action_text,
+                    assignee=assignee,
+                    deadline=deadline,
+                    is_urgent=is_urgent,
+                    source_uid=source_uid,
                 )
+            )
 
         return items
 
@@ -197,27 +202,15 @@ class ThreadAnalyzer:
             return []
 
         decisions: list[Decision] = []
-        seen_texts: set[str] = set()
-
-        for pattern in _DECISION_PATTERNS:
-            for match in pattern.finditer(text):
-                decision_text = match.group(1).strip()
-                if not decision_text or len(decision_text) < 5:
-                    continue
-
-                norm = decision_text.lower().strip()
-                if norm in seen_texts:
-                    continue
-                seen_texts.add(norm)
-
-                decisions.append(
-                    Decision(
-                        text=decision_text,
-                        made_by=sender,
-                        date=date,
-                        source_uid=source_uid,
-                    )
+        for _, decision_text in _iter_unique_pattern_matches(_DECISION_PATTERNS, text):
+            decisions.append(
+                Decision(
+                    text=decision_text,
+                    made_by=sender,
+                    date=date,
+                    source_uid=source_uid,
                 )
+            )
 
         return decisions
 
