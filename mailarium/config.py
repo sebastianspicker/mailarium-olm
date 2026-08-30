@@ -1,5 +1,4 @@
 """Application configuration and logging helpers."""
-# pylint: disable=too-many-instance-attributes
 
 from __future__ import annotations
 
@@ -10,8 +9,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
-from .repo_paths import validate_runtime_path
-from .retrieval_policy import normalize_scope
+from mailarium.model.search_scope import normalize_scope
+from mailarium.platform.repo_paths import validate_runtime_path
 
 # ── Model-aware MCP response profiles ─────────────────────────
 #
@@ -252,6 +251,14 @@ class Settings:
     # Env: LATE_INTERACTION_RUNNER
     late_interaction_runner: str = ""
 
+    # Optional SHA-256 digest for the isolated runner executable.
+    # Env: LATE_INTERACTION_RUNNER_SHA256
+    late_interaction_runner_sha256: str = ""
+
+    # Optional directory boundary for the isolated runner executable.
+    # Env: LATE_INTERACTION_RUNNER_DIRECTORY
+    late_interaction_runner_directory: str = ""
+
     # Pinned local model directory consumed by the isolated runner.
     # Env: LATE_INTERACTION_MODEL_PATH
     late_interaction_model_path: str = ""
@@ -369,6 +376,14 @@ class Settings:
                 runtime_profile.get("late_interaction_enabled", cls.late_interaction_enabled),
             ),
             late_interaction_runner=os.getenv("LATE_INTERACTION_RUNNER", cls.late_interaction_runner),
+            late_interaction_runner_sha256=os.getenv(
+                "LATE_INTERACTION_RUNNER_SHA256",
+                cls.late_interaction_runner_sha256,
+            ),
+            late_interaction_runner_directory=os.getenv(
+                "LATE_INTERACTION_RUNNER_DIRECTORY",
+                cls.late_interaction_runner_directory,
+            ),
             late_interaction_model_path=os.getenv(
                 "LATE_INTERACTION_MODEL_PATH",
                 cls.late_interaction_model_path,
@@ -411,7 +426,7 @@ def get_settings() -> Settings:
     receive the same frozen Settings object, which keeps singleton users from
     observing separate instances during startup races.
     """
-    global _settings_cache  # pylint: disable=global-statement
+    global _settings_cache
     if _settings_cache is not None:
         return _settings_cache
     with _settings_cache_lock:
@@ -422,7 +437,7 @@ def get_settings() -> Settings:
 
 def clear_settings_cache() -> None:
     """Clear cached settings after environment-loading or test setup changes."""
-    global _settings_cache  # pylint: disable=global-statement
+    global _settings_cache
     with _settings_cache_lock:
         _settings_cache = None
 

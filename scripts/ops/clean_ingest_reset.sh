@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# Reset private ingestion state while preserving source inputs and requiring explicit confirmation.
+set -euo pipefail
+
+usage() {
+	cat <<'EOF'
+Usage: bash scripts/ops/clean_ingest_reset.sh [--dry-run] [--yes]
+
+Reset the workspace for a fresh private ingestion run while preserving source
+inputs.
+
+Preserved by default:
+  - private/files/
+  - private/context.md
+  - private/ingest/
+  - private/README.local.md
+
+Purged by default:
+  - private/runtime/ runtime stores, lock files, ledgers, and run history
+  - stale runtime database/vector-index leftovers under data/
+  - repo-local scratch files like tmp_*.txt and .DS_Store
+  - generic caches handled by scripts/ops/clean_workspace.sh
+
+Options:
+  --dry-run  Print planned removals without deleting files
+  --yes      Confirm destructive cleanup
+  -h, --help Show this help message
+EOF
+}
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/../.." && pwd)"
+
+dry_run=0
+confirmed=0
+
+for arg in "$@"; do
+	case "$arg" in
+	--dry-run)
+		dry_run=1
+		;;
+	--yes)
+		confirmed=1
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "Unknown argument: $arg" >&2
+		usage >&2
+		exit 2
+		;;
+	esac
+done
+
+if [[ "$dry_run" -ne 1 && "$confirmed" -ne 1 ]]; then
+	echo "Refusing destructive clean-ingest reset without --yes." >&2
+	echo "Run with --dry-run first or pass --yes to execute." >&2
+	exit 2
+fi
+
+remove_path() {
+	local path="$1"
+	if [[ ! -e "$path" && ! -L "$path" ]]; then
+		return
+	fi
+	if [[ "$dry_run" -eq 1 ]]; then
+		echo "DRY-RUN remove: $path"
+		return
+	fi
+	rm -rf -- "$path"
+	echo "Removed: $path"
+}
+
+ensure_dir() {
+	local path="$1"
+	if [[ "$dry_run" -eq 1 ]]; then
+		echo "DRY-RUN create: $path"
+		return
+	fi
+	mkdir -p -- "$path"
+	echo "Ensured: $path"
+}
+
+echo "Preserving source inputs:"
+echo "  - ${repo_root}/private/files"
+echo "  - ${repo_root}/private/context.md"
+echo "  - ${repo_root}/private/ingest"
+echo "  - ${repo_root}/private/README.local.md"
+
+declare -a purge_paths=(
+	"${repo_root}/private/runtime/current"
+	"${repo_root}/private/runtime/runs"
+	"${repo_root}/private/runtime/ledgers"
+	"${repo_root}/private/runtime/archive"
+	"${repo_root}/private/runtime/vector-index"
+	"${repo_root}/private/runtime/vector-index_p73"
+	"${repo_root}/private/runtime/email_metadata.db"
+	"${repo_root}/private/runtime/email_metadata.db-shm"
+	"${repo_root}/private/runtime/email_metadata.db-wal"
+	"${repo_root}/private/runtime/email_metadata_p73.db"
+	"${repo_root}/private/runtime/mcp_server.lock"
+	"${repo_root}/data/vector-index"
+	"${repo_root}/data/email_metadata.db"
+	"${repo_root}/data/email_metadata.db-shm"
+	"${repo_root}/data/email_metadata.db-wal"
+	"${repo_root}/data/email_index.db"
+	"${repo_root}/data/email_index.db-shm"
+	"${repo_root}/data/email_index.db-wal"
+	"${repo_root}/data/mcp_server.lock"
+)
+
+for path in "${purge_paths[@]}"; do
+	remove_path "$path"
+done
+
+for path in "${repo_root}"/private/runtime/runtime_inventory_*.json; do
+	remove_path "$path"
+done
+
+for path in "${repo_root}"/tmp_*.txt; do
+	remove_path "$path"
+done
+
+while IFS= read -r path; do
+	remove_path "$path"
+done < <(
+	find "$repo_root" -name ".DS_Store" -not -path "*/.git/*"
+)
+
+if [[ "$dry_run" -eq 1 ]]; then
+	bash "${repo_root}/scripts/ops/clean_workspace.sh" --dry-run
+else
+	bash "${repo_root}/scripts/ops/clean_workspace.sh"
+fi
+
+ensure_dir "${repo_root}/private/runtime/current"
+
+if [[ "$dry_run" -eq 1 ]]; then
+	echo "Dry run complete. No files were deleted."
+else
+	echo "Clean-ingest reset complete. Source inputs preserved; runtime and generated artifacts purged."
+fi

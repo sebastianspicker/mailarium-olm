@@ -2,15 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
-    branches: [main, dev]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  checks:
+  pull-request:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -23,43 +23,31 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install "uv==0.10.7"
-          uv lock --check
-          uv sync --locked --extra dev --extra nlp --extra image --extra training --extra ews-ntlm
-      - name: Lint
-        run: uv run ruff check .
-      - name: Format check
-        run: uv run ruff format --check .
-      - name: Type Check
-        run: uv run mypy mailarium
-      - name: Run direct contracts
-        run: uv run pytest -q tests/test_contracts.py
-      - name: Security Scan
-        run: uv run bandit -r mailarium -q -ll -ii
-      - name: Dependency Audit
-        run: uv run python scripts/dependency_audit.py
-      - name: Publication privacy scan
-        run: uv run python scripts/privacy_scan.py --tracked-only --json
-      - name: Build release artifacts
+          uv sync --locked --extra dev --extra nlp --extra training --extra ews-ntlm
+      - name: Run pull-request verification profile
+        run: uv run python scripts/verify.py pr
+
+  release-package:
+    needs: pull-request
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14.6"
+      - name: Install dependencies
         run: |
-          uv build --out-dir dist
-          uv export --locked --format requirements-txt --no-emit-project --no-dev \
-            --extra nlp --extra image --extra training --extra ews-ntlm --no-hashes \
-            --output-file dist/requirements.locked.txt
-      - name: Inspect release artifacts
-        run: uv run python scripts/check_release_artifacts.py
-      - name: Installed wheel smoke
-        run: |
-          uv pip install --python .venv/bin/python --no-deps --force-reinstall dist/*.whl
-          repo_root="$PWD"
-          runtime_home="$(mktemp -d)"
-          cd /tmp
-          "$repo_root/.venv/bin/mailarium" --version
-          "$repo_root/.venv/bin/python" -m mailarium.mcp_server --version
-          MAILARIUM_RUNTIME_HOME="$runtime_home" \
-            "$repo_root/.venv/bin/python" "$repo_root/scripts/installed_wheel_smoke.py"
+          python -m pip install "uv==0.10.7"
+          uv sync --locked --extra dev --extra nlp --extra training --extra ews-ntlm
+      - name: Run release verification profile
+        run: uv run python scripts/verify.py release
 
   supported-macos-smoke:
     name: macOS 14 ARM64 package smoke
+    needs: pull-request
     runs-on: macos-14
     timeout-minutes: 30
     steps:
@@ -71,28 +59,9 @@ jobs:
           python-version: "3.14.6"
       - name: Verify supported architecture
         run: python -c "import platform; assert platform.machine() == 'arm64', platform.machine()"
-      - name: Install smoke dependencies
+      - name: Install dependencies
         run: |
           python -m pip install "uv==0.10.7"
-          uv lock --check
           uv sync --locked --extra dev --extra ews-ntlm
-      - name: Run supported-platform checks
-        run: |
-          uv run pytest -q tests/test_contracts.py
-      - name: Build and inspect package
-        run: |
-          uv build --out-dir dist
-          uv export --locked --format requirements-txt --no-emit-project --no-dev \
-            --extra nlp --extra image --extra training --extra ews-ntlm --no-hashes \
-            --output-file dist/requirements.locked.txt
-          uv run python scripts/check_release_artifacts.py dist
-      - name: Smoke installed wheel
-        run: |
-          uv pip install --python .venv/bin/python --no-deps --force-reinstall dist/*.whl
-          repo_root="$PWD"
-          runtime_home="$(mktemp -d)"
-          cd /tmp
-          "$repo_root/.venv/bin/mailarium" --version
-          "$repo_root/.venv/bin/python" -m mailarium.mcp_server --version
-          MAILARIUM_RUNTIME_HOME="$runtime_home" \
-            "$repo_root/.venv/bin/python" "$repo_root/scripts/installed_wheel_smoke.py"
+      - name: Run release verification profile
+        run: uv run python scripts/verify.py release

@@ -1,15 +1,14 @@
-"""Interactive and single-shot CLI for searching indexed emails."""
-
 from __future__ import annotations
 
 import argparse
 import sys
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NoReturn
 
 from dotenv import load_dotenv
 
-from .cli_commands import (  # noqa: F401
+from mailarium.interfaces.cli.cli_commands import (
+    CliDependencies,
     _cmd_admin,
     _cmd_analytics,
     _cmd_browse,
@@ -18,43 +17,13 @@ from .cli_commands import (  # noqa: F401
     _cmd_search,
     _cmd_topics,
     _cmd_training,
-    _get_email_db,
-    _interactive_action,
-    _print_sender_lines,
-    _render_interactive_intro,
-    _render_results_table,
-    _render_senders,
-    _render_stats,
-    _run_analytics_command,
-    _run_browse,
-    _run_custody_chain,
-    _run_dossier,
-    _run_entities,
-    _run_evidence_export,
-    _run_evidence_list,
-    _run_evidence_stats,
-    _run_evidence_verify,
-    _run_export_email,
-    _run_export_network,
-    _run_export_thread,
-    _run_fine_tune,
-    _run_generate_report,
-    _run_generate_training_data,
-    _run_heatmap,
-    _run_provenance,
-    _run_response_times,
-    _run_suggest,
-    _run_top_contacts,
-    _run_volume,
-    resolve_output_format,
-    run_interactive,
-    run_single_query,
-    set_cli_sqlite_path_override,
 )
-from .cli_commands_mailbox import cmd_mailbox
-from .cli_parser import _build_subcommand_parser
+from mailarium.interfaces.cli.cli_commands_mailbox import cmd_mailbox
+from mailarium.interfaces.cli.cli_parser import _build_subcommand_parser
+from mailarium.platform.validation import validate_date_window
+from mailarium.runtime import ApplicationRuntime
+
 from .config import configure_logging
-from .validation import validate_date_window
 
 # ── Unified parse_args ────────────────────────────────────────────
 
@@ -104,46 +73,52 @@ def main(argv: list[str] | None = None) -> None:
     load_dotenv()
     args = parse_args(argv)
     configure_logging(getattr(args, "log_level", None))
-    set_cli_sqlite_path_override(getattr(args, "sqlite_path", None))
-
-    retriever: Any | None = None
-
-    def get_retriever() -> Any:
-        nonlocal retriever
-        if retriever is not None:
-            return retriever
-        try:
-            from .retriever import EmailRetriever
-        except ModuleNotFoundError as exc:
-            print("Missing runtime dependency. Install project dependencies first:")
-            print("  pip install -r requirements.txt")
-            print(f"Details: {exc}")
-            sys.exit(2)
-
-        retriever = EmailRetriever(
+    try:
+        with ApplicationRuntime(
             vector_index_path=getattr(args, "vector_index_path", None),
             sqlite_path=getattr(args, "sqlite_path", None),
             sparse_enabled=True if getattr(args, "learned_sparse", False) else None,
             image_search_enabled=True if getattr(args, "image_search", False) else None,
-        )
-        return retriever
-
-    dispatch: dict[str, Callable[[], Any]] = {
-        "search": lambda: _cmd_search(args, get_retriever),
-        "browse": lambda: _cmd_browse(args),
-        "export": lambda: _cmd_export(args),
-        "evidence": lambda: _cmd_evidence(args),
-        "analytics": lambda: _cmd_analytics(args, get_retriever),
-        "training": lambda: _cmd_training(args),
-        "topics": lambda: _cmd_topics(args),
-        "admin": lambda: _cmd_admin(args, get_retriever),
-        "mailbox": lambda: cmd_mailbox(args),
-    }
-    handler = dispatch.get(args.subcommand)
-    if handler is None:
-        print("A subcommand is required. Run `python -m mailarium.cli --help` for usage.")
+        ) as runtime:
+            archive_database = runtime.archive_database
+            if archive_database is None:
+                _missing_archive_error()
+            mailbox_service = runtime.mailbox_service()
+            if mailbox_service is None:  # pragma: no cover - archive_database is present
+                _missing_archive_error()
+            dependencies = CliDependencies(
+                archive_database=archive_database,
+                search_engine=runtime.search_engine,
+                mailbox_service=mailbox_service,
+            )
+            dispatch: dict[str, Callable[[], Any]] = {
+                "search": lambda: _cmd_search(args, dependencies),
+                "browse": lambda: _cmd_browse(args, dependencies),
+                "export": lambda: _cmd_export(args, dependencies),
+                "evidence": lambda: _cmd_evidence(args, dependencies),
+                "analytics": lambda: _cmd_analytics(args, dependencies),
+                "training": lambda: _cmd_training(args, dependencies),
+                "topics": lambda: _cmd_topics(args, dependencies),
+                "admin": lambda: _cmd_admin(args, dependencies),
+                "mailbox": lambda: cmd_mailbox(args, dependencies.mailbox_service),
+            }
+            handler = dispatch.get(args.subcommand)
+            if handler is None:
+                print("A subcommand is required. Run `python -m mailarium.cli --help` for usage.")
+                sys.exit(2)
+            handler()
+    except ModuleNotFoundError as exc:
+        print("Missing runtime dependency. Install project dependencies first:")
+        print("  uv sync --all-extras")
+        print(f"Details: {exc}")
         sys.exit(2)
-    handler()
+
+
+def _missing_archive_error() -> NoReturn:
+    """Exit without creating a database when the configured archive is absent."""
+    print("SQLite database not found. Run ingestion first:")
+    print("  python -m mailarium.ingest data/your-export.olm --extract-entities")
+    sys.exit(1)
 
 
 if __name__ == "__main__":

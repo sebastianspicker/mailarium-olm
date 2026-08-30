@@ -1,65 +1,30 @@
-"""Local Streamlit UI for browsing and searching indexed emails."""
-
 from __future__ import annotations
 
-from typing import Any
+import threading
+import weakref
 
 import streamlit as st
 
-try:
-    from .formatting import format_date
-    from .repo_paths import validate_runtime_path
-    from .retriever import EmailRetriever
-    from .validation import validate_date_window
-    from .web_app_evidence import render_evidence_page_impl
-    from .web_app_mailbox import render_mailbox_page_impl
-    from .web_app_pages import (
-        get_email_db_safe_impl,
-        render_dashboard_page_impl,
-        render_entity_page_impl,
-        render_network_page_impl,
-    )
-    from .web_app_rendering import render_sidebar_impl
-    from .web_app_results import (
-        _type_badge_html,
-        render_results_impl,
-        render_results_summary_impl,
-    )
-    from .web_app_search import (
-        _as_optional_float,
-        _as_optional_str,
-        _build_csv_export,
-        render_search_page_impl,
-    )
-    from .web_app_styles import inject_styles_impl
-    from .web_ui import build_active_filter_labels, build_export_payload, build_filter_chip_html, sort_search_results
-except ImportError:  # pragma: no cover
-    from mailarium.formatting import format_date
-    from mailarium.repo_paths import validate_runtime_path
-    from mailarium.retriever import EmailRetriever
-    from mailarium.validation import validate_date_window
-    from mailarium.web_app_evidence import render_evidence_page_impl
-    from mailarium.web_app_mailbox import render_mailbox_page_impl
-    from mailarium.web_app_pages import (
-        get_email_db_safe_impl,
-        render_dashboard_page_impl,
-        render_entity_page_impl,
-        render_network_page_impl,
-    )
-    from mailarium.web_app_rendering import render_sidebar_impl
-    from mailarium.web_app_results import (
-        _type_badge_html,
-        render_results_impl,
-        render_results_summary_impl,
-    )
-    from mailarium.web_app_search import (
-        _as_optional_float,
-        _as_optional_str,
-        _build_csv_export,
-        render_search_page_impl,
-    )
-    from mailarium.web_app_styles import inject_styles_impl
-    from mailarium.web_ui import build_active_filter_labels, build_export_payload, build_filter_chip_html, sort_search_results
+from mailarium.interfaces.web.web_app_evidence import render_evidence_page_impl
+from mailarium.interfaces.web.web_app_mailbox import render_mailbox_page_impl
+from mailarium.interfaces.web.web_app_pages import render_dashboard_page_impl, render_entity_page_impl, render_network_page_impl
+from mailarium.interfaces.web.web_app_results import _type_badge_html, render_results_summary_impl
+from mailarium.interfaces.web.web_app_search import (
+    _as_optional_float,
+    _as_optional_str,
+    _build_csv_export,
+    render_search_page_impl,
+)
+from mailarium.interfaces.web.web_app_styles import inject_styles_impl
+from mailarium.interfaces.web.web_ui import (
+    build_active_filter_labels,
+    build_export_payload,
+    build_filter_chip_html,
+    sort_search_results,
+)
+from mailarium.platform.repo_paths import validate_runtime_path
+from mailarium.platform.validation import validate_date_window
+from mailarium.runtime import ApplicationRuntime
 
 st.set_page_config(
     page_title="Mailarium - Email Discovery",
@@ -76,40 +41,27 @@ SORT_OPTIONS = {
 }
 
 PAGE_SIZE = 20
+_runtime_cache_lock = threading.Lock()
+_runtime_instances: weakref.WeakValueDictionary[tuple[str | None, str | None], ApplicationRuntime] = weakref.WeakValueDictionary()
 
 
 @st.cache_resource
-def get_retriever(vector_index_path: str | None, sqlite_path: str | None = None, _cache_version: int = 0):
-    """Get or create a cached EmailRetriever instance."""
-    if sqlite_path is None:
-        return EmailRetriever(vector_index_path=vector_index_path)
-    return EmailRetriever(vector_index_path=vector_index_path, sqlite_path=sqlite_path)
+def get_runtime(vector_index_path: str | None, sqlite_path: str | None = None) -> ApplicationRuntime:
+    """Get the cached owner for one Streamlit archive path pair."""
+    runtime = ApplicationRuntime(vector_index_path=vector_index_path, sqlite_path=sqlite_path)
+    with _runtime_cache_lock:
+        _runtime_instances[(vector_index_path, sqlite_path)] = runtime
+    return runtime
 
 
-def invalidate_retriever_cache() -> None:
-    """Invalidate the cached retriever so the next access creates a fresh one."""
-    get_retriever.clear()
-
-
-def render_sidebar(retriever: EmailRetriever) -> None:
-    """Render the sidebar UI component."""
-    render_sidebar_impl(st_module=st, retriever=retriever)
-
-
-def render_results(results: list[Any], preview_chars: int, retriever: EmailRetriever | None = None) -> None:
-    """Render search results with the given preview character limit."""
-    render_results_impl(
-        st_module=st,
-        results=results,
-        preview_chars=preview_chars,
-        retriever=retriever,
-        format_date_fn=format_date,
-    )
-
-
-def inject_styles() -> None:
-    """Inject custom CSS styles into the Streamlit app."""
-    inject_styles_impl(st_module=st)
+def invalidate_runtime_cache() -> None:
+    """Close and invalidate cached runtime resources before creating replacements."""
+    with _runtime_cache_lock:
+        runtimes = list(_runtime_instances.values())
+        _runtime_instances.clear()
+    for runtime in runtimes:
+        runtime.close()
+    get_runtime.clear()
 
 
 def _render_brand_lockup() -> None:
@@ -139,105 +91,33 @@ def _render_runtime_status() -> None:
     )
 
 
-def render_results_summary(
-    results: list[Any],
-    active_filters: list[str],
-    sort_label: str,
-    search_modes: list[str] | None = None,
-) -> None:
-    """Render a summary of the search results."""
-    render_results_summary_impl(
-        st_module=st,
-        results=results,
-        active_filters=active_filters,
-        sort_label=sort_label,
-        search_modes=search_modes,
-        build_filter_chip_html_fn=build_filter_chip_html,
-    )
-
-
-@st.cache_resource
-def _get_email_db_safe(sqlite_path: str | None, _cache_version: int = 0):
-    """Try to get EmailDatabase instance, return None if unavailable."""
-    return get_email_db_safe_impl(sqlite_path=sqlite_path)
-
-
-def render_dashboard_page(sqlite_path: str | None = None) -> None:
-    """Render the dashboard page with analytics and metrics."""
-    render_dashboard_page_impl(st_module=st, get_email_db_safe_fn=lambda: _get_email_db_safe(sqlite_path))
-
-
-def render_entity_page(sqlite_path: str | None = None) -> None:
-    """Render the entities page showing people and organizations."""
-    render_entity_page_impl(st_module=st, get_email_db_safe_fn=lambda: _get_email_db_safe(sqlite_path))
-
-
-def render_network_page(sqlite_path: str | None = None) -> None:
-    """Render the network page showing communication graphs."""
-    render_network_page_impl(st_module=st, get_email_db_safe_fn=lambda: _get_email_db_safe(sqlite_path))
-
-
-def render_evidence_page(sqlite_path: str | None = None) -> None:
-    """Render the evidence page showing collected evidence."""
-    render_evidence_page_impl(
-        st_module=st,
-        get_email_db_safe_fn=lambda: _get_email_db_safe(sqlite_path),
-        type_badge_html_fn=_type_badge_html,
-    )
-
-
-def render_search_page(retriever: EmailRetriever) -> None:
-    """Render the search page UI."""
-    render_search_page_impl(
-        st_module=st,
-        retriever=retriever,
-        sort_options=SORT_OPTIONS,
-        page_size=PAGE_SIZE,
-        render_results_fn=render_results,
-        render_results_summary_fn=render_results_summary,
-        build_csv_export_fn=_build_csv_export,
-        build_active_filter_labels_fn=build_active_filter_labels,
-        build_export_payload_fn=build_export_payload,
-        sort_search_results_fn=sort_search_results,
-        validate_date_window_fn=validate_date_window,
-        as_optional_str_fn=_as_optional_str,
-        as_optional_float_fn=_as_optional_float,
-    )
-
-
-def render_mailbox_page(sqlite_path: str | None = None, vector_index_path: str | None = None) -> None:
-    """Render mailbox status through the same service used by CLI and MCP."""
-    from .config import get_settings
-    from .mailbox_service import mailbox_service_for_path
-
-    settings = get_settings()
-    service = mailbox_service_for_path(
-        sqlite_path or settings.sqlite_path,
-        vector_index_path=vector_index_path or settings.vector_index_path,
-    )
-    try:
-        render_mailbox_page_impl(st_module=st, service=service)
-    finally:
-        service.close()
-
-
-def _render_non_search_page(page: str, sqlite_path: str | None, vector_index_path: str | None) -> bool:
+def _render_non_search_page(page: str, runtime: ApplicationRuntime) -> bool:
     """Render a selected non-search page and report whether it was handled."""
     handlers = {
-        "Overview": render_dashboard_page,
-        "Dashboard": render_dashboard_page,
-        "People": render_entity_page,
-        "Entities": render_entity_page,
-        "Connections": render_network_page,
-        "Network": render_network_page,
-        "Evidence": render_evidence_page,
+        "Overview": render_dashboard_page_impl,
+        "Dashboard": render_dashboard_page_impl,
+        "People": render_entity_page_impl,
+        "Entities": render_entity_page_impl,
+        "Connections": render_network_page_impl,
+        "Network": render_network_page_impl,
     }
     handler = handlers.get(page)
     if handler:
-        handler(sqlite_path)
+        handler(st_module=st, database=runtime.archive_database)
+        return True
+    if page == "Evidence":
+        render_evidence_page_impl(
+            st_module=st,
+            database=runtime.archive_database,
+            type_badge_html_fn=_type_badge_html,
+        )
         return True
     if page == "Mailbox":
-        render_mailbox_page(sqlite_path, vector_index_path)
+        service = runtime.mailbox_service(create_archive=True)
+        if service is None:  # pragma: no cover - create_archive always supplies the canonical archive.
+            st.warning("SQLite database not available. Run ingestion first to enable mailbox state.")
+            return True
+        render_mailbox_page_impl(st_module=st, service=service)
         return True
     return False
 
@@ -266,7 +146,7 @@ def _render_runtime_path_inputs() -> tuple[str | None, str | None]:
 
 def main() -> None:
     """Main entry point for the Streamlit web application."""
-    inject_styles()
+    inject_styles_impl(st_module=st)
     _render_brand_lockup()
 
     page = st.sidebar.radio(
@@ -284,15 +164,41 @@ def main() -> None:
         return
     _render_runtime_status()
 
-    if _render_non_search_page(page, resolved_sqlite_path, resolved_vector_index_path):
-        return
-
     try:
-        retriever = get_retriever(resolved_vector_index_path, resolved_sqlite_path)
+        runtime = get_runtime(resolved_vector_index_path, resolved_sqlite_path)
     except (OSError, RuntimeError, ValueError) as exc:
         st.error(f"Runtime paths are invalid or unreadable: {exc}")
         return
-    render_search_page(retriever)
+
+    if _render_non_search_page(page, runtime):
+        return
+
+    try:
+        retriever = runtime.search_engine
+    except (OSError, RuntimeError, ValueError) as exc:
+        st.error(f"Runtime paths are invalid or unreadable: {exc}")
+        return
+    render_search_page_impl(
+        st_module=st,
+        retriever=retriever,
+        sort_options=SORT_OPTIONS,
+        page_size=PAGE_SIZE,
+        render_results_summary_fn=lambda results, active_filters, sort_label, search_modes=None: render_results_summary_impl(
+            st_module=st,
+            results=results,
+            active_filters=active_filters,
+            sort_label=sort_label,
+            search_modes=search_modes,
+            build_filter_chip_html_fn=build_filter_chip_html,
+        ),
+        build_csv_export_fn=_build_csv_export,
+        build_active_filter_labels_fn=build_active_filter_labels,
+        build_export_payload_fn=build_export_payload,
+        sort_search_results_fn=sort_search_results,
+        validate_date_window_fn=validate_date_window,
+        as_optional_str_fn=_as_optional_str,
+        as_optional_float_fn=_as_optional_float,
+    )
 
 
 if __name__ == "__main__":

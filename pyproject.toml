@@ -25,7 +25,10 @@ classifiers = [
     "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
-    "usearch==2.26.0",
+    "numpy==2.4.4",
+    "scikit-learn==1.8.0",
+    "numkong==7.8.1",
+    "usearch==2.26.1",
     "torch==2.13.0",
     "sentence-transformers==5.6.0",
     "transformers==5.13.0",
@@ -50,7 +53,7 @@ dependencies = [
     "pygments>=2.20.0",  # CVE-2026-4539 (required by rich)
     "python-multipart>=0.0.31",  # CVE-2026-42561 and CVE-2026-53537 through CVE-2026-53540
     "requests>=2.33.0",  # CVE-2026-25645 (required by multiple deps)
-    "nltk>=3.10.0",  # CVE-2026-54293 (required by textstat)
+    "nltk>=3.10.2",  # Security floor for textstat's transitive dependency
 ]
 
 [project.urls]
@@ -65,9 +68,6 @@ Security = "https://github.com/sebastianspicker/mailarium/blob/main/SECURITY.md"
 nlp = [
     "spacy==3.8.13",
 ]
-image = [
-    "torchvision==0.28.0",
-]
 training = [
     "datasets==5.0.1",
     "accelerate==1.14.0",
@@ -81,6 +81,7 @@ ews-ntlm = [
 ]
 dev = [
     "pytest>=9.0.3",  # CVE-2025-71176 fixed in 9.0.3
+    "coverage>=7.13.0",
     "ruff>=0.14.0",
     "mypy>=1.11.0",
     "lxml-stubs>=0.5.0",
@@ -91,13 +92,6 @@ dev = [
 [project.scripts]
 mailarium-ingest = "mailarium.ingest:main"
 mailarium = "mailarium.cli:main"
-
-[tool.bandit]
-# Bandit B101 (assert): pytest uses bare assert for test validation.
-# The local bandit run (bandit -r mailarium -q -ll -ii) already excludes tests/.
-# The blanket skip prevents accidental noise if bandit is run on the whole
-# repo. Codacy must exclude tests/ from Bandit_B101 separately.
-skips = ["B101"]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -137,56 +131,6 @@ filterwarnings = [
     "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 ]
 
-[tool.pylint.format]
-max-line-length = 130
-
-[tool.pylint.main]
-# Defer PyLint stats-cache environment warning - no persistent .pylint.d cache needed.
-persistent = false
-
-[tool.pylint."messages control"]
-disable = [
-    # Policy: Ruff line length (130) is the canonical style; PyLint C0301 is noise.
-    "C0301",
-    # Policy: missing function docstrings are acceptable; public API docs cover intent.
-    "C0116",
-    # Policy: missing class docstrings are acceptable; test class names and module paths
-    # serve as self-documentation.
-    "C0115",
-    # Policy: missing module docstrings are acceptable; module paths are self-documenting,
-    # especially for test modules where the path conveys the purpose.
-    "C0114",
-    # Policy: lazy imports (import-outside-top-level) are deliberate for optional deps.
-    "C0415",
-    # Policy: facade/export modules intentionally import names for re-export; PyLint
-    # W0611 (unused-import) is noisy with this pattern.
-    "W0611",
-    # Policy: unused arguments (W0613) are intrinsic to test fixtures, monkeypatch
-    # targets, and interface-conforming test doubles.
-    "W0613",
-    # Policy: protected-member access in tests and private-helper seam tests is intentional.
-    "W0212",
-    # Policy: broad duplicate-code detection across unrelated modules is noise.
-    "R0801",
-    # Policy: too-few-public-methods (R0903) is noise for simple test-double classes,
-    # data holders, and single-method test classes - these are idiomatic Python.
-    "R0903",
-    # Policy: implicit-booleaness (C1803) - explicit ``len(x) == 0`` can be clearer
-    # than ``not x`` for collections where truthiness is non-obvious to readers.
-    "C1803",
-    # Policy: cyclic-import (R0401) - Codacy does not honour file-level
-    # ``# pylint: disable=R0401`` directives for its built-in cyclic-import
-    # graph analysis.  All detected cycles originate from lazy imports inside
-    # function bodies (no runtime cycle).  The only "High" cluster was in
-    # tests/test_writing_analyzer.py, where the file-level disable is already
-    # present.
-    "R0401",
-    # Policy: wrong-import-position (C0413) - runtime imports placed after
-    # TYPE_CHECKING blocks are intentional to avoid circular imports at module
-    # load time.  Used in ~10 files across mailarium/ and tests/.
-    "C0413",
-]
-
 [tool.mypy]
 python_version = "3.14"
 files = ["mailarium"]
@@ -196,28 +140,6 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 ignore_missing_imports = true
 
-# Heavy third-party usage (networkx/sklearn/pandas/streamlit) - suppress inference errors
 [[tool.mypy.overrides]]
-module = ["mailarium.attachment_extractor_text"]
+module = ["mailarium.ingestion.attachment_extractor_text"]
 check_untyped_defs = true
-
-[[tool.mypy.overrides]]
-module = [
-    "mailarium.network_analysis",
-    "mailarium.email_clusterer",
-    "mailarium.topic_modeler",
-    "mailarium.temporal_analysis",
-    "mailarium.query_expander",
-    "mailarium.thread_summarizer",
-    "mailarium.dossier_generator",
-    "mailarium.web_app",
-    "mailarium.image_embedder",
-    "mailarium.rfc2822",
-    "mailarium.embedder",
-    "mailarium.retriever",
-    "mailarium.parse_olm",
-    "mailarium.olm_xml_helpers",
-    "mailarium.fine_tuner",
-]
-disallow_untyped_defs = false
-disable_error_code = ["index", "assignment", "return-value", "arg-type", "type-var", "call-overload", "operator", "union-attr", "attr-defined", "misc", "no-redef", "var-annotated", "dict-item"]

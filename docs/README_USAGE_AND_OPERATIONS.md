@@ -1,153 +1,40 @@
-# Usage and Operations
+# Usage and operations
 
-## Runtime layout
+## Runtime data
 
-For a source checkout, keep live data under the ignored `private/` directory:
+In a source checkout, keep operator data under ignored `private/` paths:
 
 ```text
 private/
-├── ingest/
-│   └── archive.olm
-├── runtime/
-│   └── current/
-│       ├── vector-index/
-│       └── email_metadata.db
+├── ingest/archive.olm
+├── runtime/current/email_metadata.db
+├── runtime/current/vector-index/
 └── exports/
 ```
 
-Recommended starting configuration:
+Use `SQLITE_PATH` for the canonical SQLite archive and `VECTOR_INDEX_PATH` for
+derived USearch files. An installed package resolves relative runtime data under
+its platform user-data directory; set an absolute `MAILARIUM_RUNTIME_HOME` to
+override it. For installed exports, configure an absolute
+`MAILARIUM_ALLOWED_OUTPUT_ROOTS` and pass output paths inside it.
+
+## Maintenance
+
+Start with a bounded ingest. Re-running with `--incremental` skips records
+already present in SQLite. `--reembed --resume` reconstructs vector state from
+stored corrected text while retaining matching committed vectors.
 
 ```bash
-VECTOR_INDEX_PATH=private/runtime/current/vector-index
-SQLITE_PATH=private/runtime/current/email_metadata.db
-RUNTIME_PROFILE=quality
-EMBEDDING_LOAD_MODE=auto
+mailarium-ingest private/ingest/archive.olm --max-emails 200
+mailarium-ingest private/ingest/archive.olm --incremental
+mailarium-ingest private/ingest/archive.olm --reembed --resume
 ```
 
-In an installed wheel, relative runtime paths resolve below the per-user runtime
-home instead of `site-packages`:
-
-- macOS: `~/Library/Application Support/mailarium`
-- Windows: `%LOCALAPPDATA%/mailarium`
-- Linux: `${XDG_DATA_HOME:-~/.local/share}/mailarium`
-
-Set `MAILARIUM_RUNTIME_HOME` to an absolute user-writable path to override that
-location.
-
-Output paths use a separate allowlist. In an installed package, configure an
-absolute writable export directory and pass absolute output paths:
-
-```bash
-export MAILARIUM_ALLOWED_OUTPUT_ROOTS=/absolute/path/to/mailarium-exports
-mailarium export report --output /absolute/path/to/mailarium-exports/report.html
-```
-
-### Migrating a pre-0.5 installed runtime
-
-There is no automatic migration or old-path fallback. Stop every process using
-the archive, copy the complete former `outlook-email-rag` runtime directory to
-the corresponding `mailarium` location, and keep the original as a backup.
-Start Mailarium and verify archive statistics, a known search, and configured
-paths before archiving or removing that backup.
-
-| Platform | Former default | Mailarium default |
-| --- | --- | --- |
-| macOS | `~/Library/Application Support/outlook-email-rag` | `~/Library/Application Support/mailarium` |
-| Windows | `%LOCALAPPDATA%/outlook-email-rag` | `%LOCALAPPDATA%/mailarium` |
-| Linux | `${XDG_DATA_HOME:-~/.local/share}/outlook-email-rag` | `${XDG_DATA_HOME:-~/.local/share}/mailarium` |
-
-Rename explicit product variables as follows; a supplied removed name fails
-with an actionable error:
-
-| Removed variable | Replacement |
-| --- | --- |
-| `EMAIL_RAG_RUNTIME_HOME` | `MAILARIUM_RUNTIME_HOME` |
-| `EMAIL_RAG_ALLOWED_OUTPUT_ROOTS` | `MAILARIUM_ALLOWED_OUTPUT_ROOTS` |
-| `EMAIL_RAG_ALLOWED_LOCAL_READ_ROOTS` | `MAILARIUM_ALLOWED_LOCAL_READ_ROOTS` |
-| `EMAIL_RAG_ALLOWED_RUNTIME_ROOTS` | `MAILARIUM_ALLOWED_RUNTIME_ROOTS` |
-
-Source-checkout relative paths continue to resolve from the checkout root.
-
-## Ingest
-
-Ingestion is a separate entry point; it is not a `mailarium` subcommand:
-
-```bash
-mailarium-ingest private/ingest/archive.olm
-# source-checkout equivalent
-python -m mailarium.ingest private/ingest/archive.olm
-```
-
-For a bounded first pass:
-
-```bash
-python -m mailarium.ingest private/ingest/archive.olm --max-emails 200
-```
-
-Re-running ingest is idempotent for already-indexed messages.
-
-## Use the interfaces
-
-CLI:
-
-```bash
-mailarium analytics stats
-mailarium search "project handoff" --scope customer-support --hybrid
-```
-
-MCP server:
-
-```bash
-.venv/bin/python -m mailarium.mcp_server
-```
-
-Streamlit from a source checkout:
-
-```bash
-python -m streamlit run mailarium/web_app.py --server.address 127.0.0.1
-```
-
-Streamlit and MCP are intended for a trusted local operator. This alpha does not
-provide authentication for public or shared deployment.
-
-## Storage and maintenance
-
-SQLite is canonical for messages, metadata, vectors, sparse weights, and
-provenance. The vector-index directory contains rebuildable USearch
-acceleration.
-
-Supported CLI administration is intentionally narrow:
-
-```bash
-mailarium admin reset-index --yes
-```
-
-That command resets the derived vector collection. Preview any broader local
-reset with `bash scripts/clean_ingest_reset.sh --dry-run`.
-
-MCP exposes additional maintenance through `email_admin`:
-
-- `action="diagnostics"`
-- `action="reingest_bodies"` with `olm_path`
-- `action="reembed"`
-- `action="reingest_metadata"` with `olm_path`
-- `action="reingest_analytics"`
-
-These are MCP tool actions, not CLI subcommands.
-
-## Retrieval behavior
-
-`RAG_SCOPE=general` is the process default. A request can supply a narrower
-scope through CLI `--scope`, an MCP `scope` field, or the Streamlit
-`Retrieval Scope` input. Scope is explicit user context and is not inferred
-from the query.
-
-Hybrid retrieval and reranking are runtime choices. The system does not train
-on mailbox queries or content.
+Treat `--reset-index` and `mailarium admin reset-index --yes` as derived-index
+maintenance. Confirm the archive paths first and retain the original `.olm` and
+a SQLite backup.
 
 ## Offline operation
-
-Use:
 
 ```bash
 RUNTIME_PROFILE=offline-test
@@ -155,53 +42,29 @@ EMBEDDING_LOAD_MODE=local_only
 SPACY_AUTO_DOWNLOAD_DURING_INGEST=0
 ```
 
-Local-only mode fails fast when required embedding or reranking weights are
-absent. The spaCy setting separately prevents entity extraction from invoking
-its model downloader. Pre-seed both model stores before disconnecting the
-machine.
+Local-only operation fails when required model files are absent. Pre-seed model
+files before disconnecting the machine. This configuration does not verify a
+model download path.
+
+## EWS operation
+
+Use `mailarium mailbox readiness --account ACCOUNT_ID` before any remote action.
+It checks local configuration and credential references without performing
+network I/O. Process and account read gates must both be enabled for reads;
+writes need both write gates; attachment content needs its own process gate.
+See [CLI_REFERENCE.md](CLI_REFERENCE.md) for commands and limits.
 
 ## Troubleshooting
 
-### No emails indexed
+- No indexed messages: confirm the `.olm` path is readable and the configured
+  SQLite and vector paths are writable. Retry with `--max-emails 200`.
+- MCP cannot start: use the intended environment interpreter and confirm no
+  other MCP server holds the archive lock.
+- Search or model loading fails: inspect `email_admin(action="diagnostics")`,
+  then check runtime profile, load mode, device, model revisions, and index
+  state.
+- PDF export returns HTML: HTML is the baseline. Install and verify WeasyPrint
+  in the active environment before relying on PDF output.
 
-- Confirm the `.olm` path exists and is readable.
-- Run a bounded ingest and inspect the error before starting a full archive.
-- Check that `SQLITE_PATH` and `VECTOR_INDEX_PATH` resolve to writable
-  locations.
-
-### MCP client is disconnected
-
-- Use an absolute Python path and repository working directory in the client
-  configuration.
-- Confirm dependencies are installed in that interpreter.
-- Run `.venv/bin/python -m mailarium.mcp_server --version` manually.
-
-### Search or model loading fails
-
-- Run `email_admin(action="diagnostics")`.
-- Check the resolved runtime profile, load mode, device, model revisions, and
-  index state.
-- In offline mode, confirm the pinned models exist in the local cache.
-
-### PDF output is unavailable
-
-HTML is the supported export baseline. PDF output requires WeasyPrint and falls
-back to HTML when it is absent:
-
-```bash
-python -m pip install weasyprint
-weasyprint --version
-```
-
-Inspect the returned output path and format before sharing.
-
-## Go-live checklist
-
-1. Keep the original `.olm` archive as the recovery source.
-2. Confirm runtime paths are below ignored `private/` or an explicit runtime
-   home.
-3. For installed operation, configure an absolute allowed output root.
-4. Run diagnostics and a small set of known-answer searches.
-5. Verify important results against the original messages and attachments.
-6. Review every export for sensitive content.
-7. Back up SQLite and the original archive; USearch acceleration can be rebuilt.
+Back up the original archive and SQLite database. Rebuild USearch when needed,
+then verify important results against original messages and attachments.

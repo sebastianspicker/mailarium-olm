@@ -1,0 +1,53 @@
+"""Training command-family implementations for the CLI."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
+
+
+def run_generate_training_data_impl(db: ArchiveDatabase, output_path: str) -> None:
+    """Generate contrastive training triplets from email data.
+
+    Args:
+        db: The runtime-owned ArchiveDatabase instance.
+        output_path: Path to save the generated training data JSONL file.
+    """
+    from mailarium.retrieval.training_data_generator import TrainingDataGenerator
+
+    gen = TrainingDataGenerator(db)
+    result = gen.export_jsonl(output_path)
+    print(f"Training data generated: {output_path} ({result['triplet_count']} triplets)")
+
+
+def run_fine_tune_impl(
+    data_path: str,
+    output_dir: str,
+    epochs: int,
+    *,
+    mode: Literal["dense", "sparse"] = "dense",
+) -> None:
+    """Fine-tune the embedding model on training data.
+
+    Args:
+        data_path: Path to the training data JSONL file.
+        output_dir: Directory to save the fine-tuned model.
+        epochs: Number of training epochs.
+    """
+    from mailarium.retrieval.fine_tuner import FineTuner
+
+    ft = FineTuner()
+    result = ft.fine_tune(
+        training_data_path=data_path,
+        output_dir=output_dir,
+        epochs=epochs,
+        mode=mode,
+    )
+    print(f"Fine-tuning result: {result['status']}")
+    print(f"  Triplets: {result['triplet_count']}, Epochs: {result['epochs']}")
+    if result.get("config_path"):
+        print(f"  Config: {result['config_path']}")
+    if result.get("manifest_path"):
+        print(f"  Manifest: {result['manifest_path']}")

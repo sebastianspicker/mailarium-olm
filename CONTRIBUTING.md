@@ -1,59 +1,40 @@
-# Contributing To Mailarium
+# Contributing to Mailarium
 
-Mailarium is currently alpha software. Small, reviewable changes with explicit
-tests and privacy boundaries are the easiest to merge.
+Mailarium is alpha software. Keep changes focused, use synthetic mail data, and
+preserve local-first and fail-closed boundaries.
 
-## Before Opening An Issue
+## Setup
 
-- Use the public docs in [`docs/README.md`](docs/README.md) for setup and
-  operations questions.
-- Search existing issues before filing a duplicate.
-- Use synthetic examples only. Never paste real email bodies, addresses, local
-  private paths, mailbox exports, databases, model caches, or exported reports.
-- Report vulnerabilities through the private process in
-  [`SECURITY.md`](SECURITY.md), not a public issue.
-
-## Development Setup
-
-Package metadata requires Python `>=3.14.6,<3.15`; CI uses Python 3.14.6.
+Mailarium requires Python `>=3.14.6,<3.15`.
 
 ```bash
-git clone https://github.com/sebastianspicker/mailarium.git
-cd mailarium
 python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install "uv==0.10.7"
-uv lock --check
-uv sync --locked --extra dev --extra nlp --extra image --extra training --extra ews-ntlm
+uv sync --locked --extra dev --extra nlp --extra training --extra ews-ntlm
 ```
 
-Keep real mailbox data below the ignored `private/` directory. Tests and docs
-must use synthetic fixtures.
+Keep real archives, databases, model caches, exports, credentials, and local
+paths below ignored storage. Tests, fixtures, screenshots, and documentation
+must use synthetic content only.
 
-## Pull Requests
+## Before opening a pull request
 
-1. Branch from `main` and keep the change focused.
-2. Add a regression test for behavior changes.
-3. Update public docs when a CLI, MCP, Streamlit, configuration, privacy, or
-   compatibility contract changes.
-4. Run the narrowest relevant check, then the repository gates:
+1. Add or update focused tests when behavior changes.
+2. Update the public interface documentation when CLI, MCP, configuration,
+   privacy, EWS, or output behavior changes.
+3. Run the narrowest useful test, then the canonical profile:
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy mailarium
-uv run pytest -q
-uv run python scripts/privacy_scan.py --tracked-only --json
+python scripts/verify.py fast
 ```
 
-5. List skipped checks and their reasons in the pull request.
+Use `python scripts/verify.py pr` when the change needs type checking,
+offline-ingest, security, dependency, or privacy evidence. Reserve
+`python scripts/verify.py release` for a frozen release candidate.
 
-Do not commit runtime data, exports, local work logs, tool state, release
-artifacts, or private screenshots. Do not mix unrelated formatting-only edits
-into a functional change.
+4. State every skipped check and why.
 
-## Compatibility
-
-General, explicitly scoped retrieval is the product surface. Removed legacy
-domain workflows, flat CLI flags, and backend-specific configuration names are
-not compatibility contracts.
+Do not commit runtime data, generated exports, model artifacts, private logs,
+or tool state. Do not expose Streamlit or MCP beyond a trusted local boundary.
+Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.

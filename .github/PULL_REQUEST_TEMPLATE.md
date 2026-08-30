@@ -5,30 +5,27 @@
 ## Scope
 
 - [ ] Runtime behavior changed
-- [ ] CLI/MCP contract changed
+- [ ] CLI, MCP, configuration, or EWS contract changed
 - [ ] Docs, tests, fixtures, or repository metadata only
-- [ ] Privacy/publication boundary affected
+- [ ] Privacy or publication boundary changed
 - [ ] Dependency, security, or CI behavior changed
 
 ## Verification
 
-- [ ] `uv run ruff check .`
-- [ ] `uv run ruff format --check .`
-- [ ] `uv run mypy mailarium`
-- [ ] `uv run pytest -q`
-- [ ] `uv run python scripts/privacy_scan.py --tracked-only --json` when docs, fixtures, exports, or runtime paths changed
-- [ ] `uv run bandit -r mailarium -q -ll -ii` when source security posture changed
-- [ ] `uv run python scripts/dependency_audit.py` when dependencies or lockfiles changed
-- [ ] Skipped checks are listed with the reason
+- [ ] `python scripts/verify.py fast`
+- [ ] `python scripts/verify.py pr` when type, offline-ingest, security,
+      dependency, or privacy evidence is needed
+- [ ] `python scripts/verify.py release` for a release candidate
+- [ ] Skipped checks and reasons are listed below
 
-## Privacy Boundary
+## Privacy and runtime boundary
 
-- [ ] New examples, fixtures, screenshots, and docs use synthetic data only
-- [ ] No personal records, institution-specific details, private local paths, or real actor names were added
-- [ ] Generated exports or runtime artifacts were kept under ignored private paths
+- [ ] Examples, fixtures, screenshots, and docs use synthetic data only
+- [ ] No real archives, SQLite databases, vectors, exports, credentials, or
+      private paths are included
+- [ ] EWS, model, Streamlit, browser, and remote claims match evidence actually
+      collected
 
-## Runtime Boundary
+## Skipped checks
 
-- [ ] No real mailbox exports, SQLite databases, USearch indexes, operator context files, or generated exports are included
-- [ ] Any UI, CLI, or MCP status wording reflects verified runtime state
-- [ ] Incomplete evidence, missing OCR/wrappers, and local-only verification are not described as complete success
+-

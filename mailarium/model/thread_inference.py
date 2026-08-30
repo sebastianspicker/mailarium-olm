@@ -1,0 +1,222 @@
+"""Precision-first inferred parent/thread matching."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+
+from .message import Message
+
+
+@dataclass(frozen=True)
+class InferredThreadMatch:
+    """Describe a candidate parent link and the evidence supporting it."""
+
+    parent_uid: str
+    thread_id: str
+    reason: str
+    confidence: float
+
+
+def _parse_dt(value: str) -> datetime | None:
+    """Parse a date string into a timezone-naive UTC datetime."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        fallback = _parse_rfc2822_dt(value)
+        if fallback is None:
+            return None
+        parsed = fallback
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
+
+
+def _parse_rfc2822_dt(value: str) -> datetime | None:
+    """Parse the RFC-2822 fallback date format without raising."""
+    try:
+        return parsedate_to_datetime(value)
+    except TypeError, ValueError:
+        return None
+
+
+def _participant_set(email: Message) -> set[str]:
+    """Extract the set of normalized participant email addresses from an email."""
+    sender_email = getattr(email, "sender_email", "") or ""
+    participants = {sender_email.lower()} if sender_email else set()
+    for identities in (
+        getattr(email, "to_identities", []),
+        getattr(email, "cc_identities", []),
+        getattr(email, "bcc_identities", []),
+    ):
+        for identity in identities:
+            normalized = identity.strip().lower()
+            if normalized:
+                participants.add(normalized)
+    return participants
+
+
+def _reply_context_participants(email: Message) -> set[str]:
+    """Extract the set of normalized participants from reply context (from/to)."""
+    participants: set[str] = set()
+    if getattr(email, "reply_context_from", ""):
+        participants.add(email.reply_context_from.strip().lower())
+    for identity in getattr(email, "reply_context_to", []):
+        normalized = identity.strip().lower()
+        if normalized:
+            participants.add(normalized)
+    return participants
+
+
+def _snippet(text: str, limit: int = 120) -> str:
+    """Create a normalized snippet of text limited to the specified character count."""
+    return " ".join(text.lower().split())[:limit]
+
+
+def _score_candidate(email: Message, candidate: Message) -> tuple[float, list[str]]:
+    """Score a candidate parent email against a child email, returning score and reasons."""
+    date_signal = _date_signal(email, candidate)
+    if date_signal is None:
+        return 0.0, []
+    signals = [
+        date_signal,
+        _subject_signal(email, candidate),
+        _participant_signal(email, candidate),
+        _snippet_signal(email, candidate),
+    ]
+    return sum(score for score, _ in signals), [reason for _, reasons in signals for reason in reasons]
+
+
+def _date_signal(email: Message, candidate: Message) -> tuple[float, list[str]] | None:
+    """Reject non-earlier candidates and score parents within recent or monthly windows."""
+    child = _parse_dt(getattr(email, "date", "") or "")
+    parent = _parse_dt(getattr(candidate, "date", "") or "")
+    if not child or not parent:
+        return 0.0, []
+    if parent >= child:
+        return None
+    hours = (child - parent).total_seconds() / 3600
+    if hours <= 72:
+        return 0.10, ["recent_date"]
+    return (0.05, ["date_window"]) if hours <= 24 * 30 else None
+
+
+def _subject_signal(email: Message, candidate: Message) -> tuple[float, list[str]]:
+    """Score exact base-subject and reply-context subject matches."""
+    child_base = getattr(email, "base_subject", "") or ""
+    parent_base = getattr(candidate, "base_subject", "") or ""
+    context = getattr(email, "reply_context_subject", "").strip()
+    parent_subject = getattr(candidate, "subject", "") or ""
+    score, reasons = (0.30, ["base_subject"]) if child_base and parent_base and child_base == parent_base else (0.0, [])
+    if context and context == parent_subject:
+        return score + 0.20, [*reasons, "reply_context_subject"]
+    if context and context == parent_base:
+        return score + 0.15, [*reasons, "reply_context_base_subject"]
+    return score, reasons
+
+
+def _participant_signal(email: Message, candidate: Message) -> tuple[float, list[str]]:
+    """Score reply-context and cross-message participant overlap signals."""
+    checks = _participant_match_checks(email, candidate)
+    return sum(weight for matched, weight, _ in checks if matched), [reason for matched, _, reason in checks if matched]
+
+
+def _participant_match_checks(email: Message, candidate: Message) -> tuple[tuple[bool, float, str], ...]:
+    """Build ordered participant-match evidence for a parent candidate."""
+    context_from = getattr(email, "reply_context_from", "").strip().lower()
+    parent_sender = getattr(candidate, "sender_email", "") or ""
+    context_to = _reply_context_participants(email)
+    parent_participants = _participant_set(candidate)
+    child_participants = _participant_set(email)
+    child_sender = getattr(email, "sender_email", "") or ""
+    return (
+        (_matches_reply_context_sender(context_from, parent_sender), 0.25, "reply_context_from"),
+        (_matches_reply_context_recipients(context_to, parent_participants), 0.10, "reply_context_to"),
+        (_sender_is_participant(child_sender, parent_participants), 0.12, "sender_in_parent_participants"),
+        (_sender_is_participant(parent_sender, child_participants), 0.12, "parent_sender_in_child_participants"),
+    )
+
+
+def _matches_reply_context_sender(context_from: str, parent_sender: str) -> bool:
+    """Check whether the reply-context sender is the candidate sender."""
+    return bool(context_from and parent_sender and context_from == parent_sender.lower())
+
+
+def _matches_reply_context_recipients(context_to: set[str], parent_participants: set[str]) -> bool:
+    """Check whether reply-context recipients overlap the candidate participants."""
+    return bool(context_to and context_to & parent_participants)
+
+
+def _sender_is_participant(sender: str, participants: set[str]) -> bool:
+    """Check whether a sender appears among normalized participants."""
+    return bool(sender and sender.lower() in participants)
+
+
+def _snippet_signal(email: Message, candidate: Message) -> tuple[float, list[str]]:
+    """Award a weak signal when the child opening snippet appears in the candidate body."""
+    child = _snippet(getattr(email, "clean_body", "") or "")
+    parent = _snippet(getattr(candidate, "clean_body", "") or "")
+    matched = bool(child and parent and child[:40] and child[:40] in parent)
+    return (0.08, ["snippet_overlap"]) if matched else (0.0, [])
+
+
+def infer_parent_candidate(email: Message, candidate_messages: Sequence[Message]) -> InferredThreadMatch | None:
+    """Infer a likely parent without mutating canonical thread fields."""
+    if _is_ineligible_for_inference(email):
+        return None
+
+    best_candidate = _best_unambiguous_candidate(_scored_parent_candidates(email, candidate_messages))
+    if best_candidate is None:
+        return None
+
+    best_score, best_reasons, best = best_candidate
+    return InferredThreadMatch(
+        parent_uid=getattr(best, "uid", ""),
+        thread_id=_inferred_thread_id(best),
+        reason=",".join(best_reasons),
+        confidence=round(min(best_score, 1.0), 3),
+    )
+
+
+def _is_ineligible_for_inference(email: Message) -> bool:
+    """Return whether canonical headers or type make inference unnecessary."""
+    return (
+        bool(getattr(email, "in_reply_to", "") or getattr(email, "references", []))
+        or getattr(email, "email_type", "original") == "original"
+    )
+
+
+def _best_unambiguous_candidate(
+    scored: list[tuple[float, list[str], Message]],
+) -> tuple[float, list[str], Message] | None:
+    """Return the top scored candidate only when it clears precision thresholds."""
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    best_score, _, _ = scored[0]
+    second_score = scored[1][0] if len(scored) > 1 else 0.0
+    if best_score < 0.80:
+        return None
+    if second_score and best_score - second_score < 0.15:
+        return None
+    return scored[0]
+
+
+def _inferred_thread_id(email: Message) -> str:
+    """Choose the inferred thread identifier using the established fallback order."""
+    return getattr(email, "conversation_id", "") or getattr(email, "thread_topic", "") or getattr(email, "uid", "")
+
+
+def _scored_parent_candidates(email: Message, candidates: Sequence[Message]) -> list[tuple[float, list[str], Message]]:
+    """Score every non-self parent candidate and retain only positive matches."""
+    scored = []
+    for candidate in candidates:
+        if getattr(candidate, "uid", "") != getattr(email, "uid", ""):
+            score, reasons = _score_candidate(email, candidate)
+            if score > 0:
+                scored.append((score, reasons, candidate))
+    return scored

@@ -1,128 +1,51 @@
-# CLI Reference
+# CLI reference
 
-Mailarium installs two terminal entry points:
+Mailarium installs `mailarium` for archive operations and `mailarium-ingest`
+for archive construction and maintenance. Use the active environment for the
+authoritative command schema:
 
 ```bash
 mailarium --help
 mailarium-ingest --help
+mailarium mailbox --help
 ```
 
-The equivalent source-checkout modules are `python -m mailarium.cli` and
+The source-checkout forms are `python -m mailarium.cli` and
 `python -m mailarium.ingest`.
 
-## Runtime flags
-
-The `mailarium` root command and its subcommands accept:
-
-- `--vector-index-path`
-- `--sqlite-path`
-- `--log-level`
-
-Environment variables remain the simplest persistent configuration:
+## Archive operations
 
 ```bash
-export VECTOR_INDEX_PATH=private/runtime/current/vector-index
-export SQLITE_PATH=private/runtime/current/email_metadata.db
-```
-
-## Search
-
-```bash
-mailarium search "invoice from vendor" \
-  --sender billing@example.test \
-  --date-from 2026-01-01 \
-  --scope finance \
-  --hybrid \
-  --rerank
-```
-
-Search supports sender, subject, folder, recipient, attachment, priority,
-email-type, date, score, topic, and cluster filters. Use `--format json` for
-machine-readable output. `--json` remains an alias.
-
-## Browse
-
-```bash
+mailarium search "invoice from vendor" --sender billing@example.test --scope finance --hybrid
 mailarium browse --page 1 --page-size 20 --folder Inbox
-```
-
-Page size is limited to 50.
-
-## Export
-
-```bash
-mailarium export email UID --format html --output private/exports/email.html
-mailarium export thread CONVERSATION_ID --format html \
-  --output private/exports/thread.html
-mailarium export report --output private/exports/report.html
-mailarium export network --output private/exports/network.graphml
-```
-
-HTML is the supported baseline. PDF output requires the optional `weasyprint`
-package and falls back to HTML when that package is absent:
-
-```bash
-python -m pip install weasyprint
-weasyprint --version
-```
-
-## Evidence
-
-```bash
-mailarium evidence list --category decision --min-relevance 3
-mailarium evidence stats
-mailarium evidence verify
-mailarium evidence provenance UID
-mailarium evidence export private/exports/evidence.html --format html
-mailarium evidence dossier private/exports/collection.html --format html
-mailarium evidence custody
-```
-
-## Analytics
-
-```bash
 mailarium analytics stats
-mailarium analytics senders 30
-mailarium analytics suggest
-mailarium analytics contacts analyst@example.test
-mailarium analytics volume month
-mailarium analytics entities --type organization
-mailarium analytics heatmap
-mailarium analytics response-times
-```
-
-## Topics and training
-
-```bash
+mailarium export report --output private/exports/report.html
+mailarium evidence list --category decision --min-relevance 3
 mailarium topics build --n-topics 20
-mailarium training generate-data private/training/triplets.jsonl
-mailarium training fine-tune private/training/triplets.jsonl \
-  --output-dir private/models/fine-tuned \
-  --epochs 3 \
-  --mode dense
 ```
 
-Topic tables are conditional: the default ingest path does not populate them
-until `topics build` runs.
+The root command accepts `--vector-index-path`, `--sqlite-path`, and
+`--log-level`. Search, output, and maintenance options are defined by each
+subcommand. Output paths must stay in configured allowlisted roots and do not
+overwrite existing files.
 
-## Administration
-
-The supported CLI administration command is:
+## Ingestion and maintenance
 
 ```bash
+mailarium-ingest private/ingest/archive.olm --max-emails 200
+mailarium-ingest private/ingest/archive.olm --incremental --extract-attachments --extract-entities
+mailarium-ingest private/ingest/archive.olm --reembed --resume
 mailarium admin reset-index --yes
 ```
 
-Re-embedding and metadata/body backfills are available through the MCP
-`email_admin` tool, not as CLI subcommands.
+`--reset-index` and `mailarium admin reset-index --yes` affect derived vector
+state. Confirm the target paths before using them. SQLite remains canonical.
 
 ## EWS mailbox
 
-From a source checkout, install the optional on-premises profile with
-`python -m pip install -e '.[ews-ntlm]'`. For downloaded release assets, install
-`'./mailarium-0.5.0a1-py3-none-any.whl[ews-ntlm]'` with the release's
-`requirements.locked.txt` as a pip constraint. Configuration stores only
-environment-variable names, never credential values:
+EWS is optional and disabled by default. Configuration stores an HTTPS endpoint,
+authentication mode, selected folders, and a reference to credential environment
+variables, never the credential values themselves.
 
 ```bash
 mailarium mailbox accounts configure \
@@ -132,17 +55,19 @@ mailarium mailbox accounts configure \
   --auth ntlm \
   --credential-ref basic-env:EWS_USER:EWS_PASSWORD \
   --folder inbox \
-  --folder 'AAMk...opaque-folder-id...' \
   --read-enabled
-mailarium mailbox accounts list
+
 mailarium mailbox readiness --account local-exchange
 ```
 
-Remote access is additionally process-gated:
-
-Folder values are either EWS distinguished IDs such as `inbox`, `drafts`, and
-`sentitems`, or opaque EWS FolderId values. Display names are not resolved
-implicitly.
+Remote reads require both account read enablement and `EWS_READ_ENABLED=true`.
+Writes also require account write enablement and `EWS_WRITE_ENABLED=true`.
+Attachment content additionally needs `EWS_ATTACHMENT_CONTENT_ENABLED=true` and
+the sync `--include-attachment-content` flag. The process bounds are
+`EWS_MAX_SYNC_ITEMS`, `EWS_MAX_ATTACHMENT_BYTES`,
+`EWS_MAX_ATTACHMENTS_PER_ITEM`, `EWS_MAX_ATTACHMENT_TOTAL_BYTES_PER_ITEM`,
+`EWS_MAX_ATTACHMENT_TOTAL_BYTES_PER_SYNC`, and
+`EWS_REQUEST_TIMEOUT_SECONDS`.
 
 ```bash
 export EWS_USER='external-runtime-value'
@@ -150,63 +75,10 @@ export EWS_PASSWORD='external-runtime-value'
 export EWS_READ_ENABLED=true
 mailarium mailbox sync --account local-exchange
 mailarium mailbox triage --account local-exchange --create-proposals
-```
-
-Discovering folders is a read-gated operation. It lists only physical mail
-folders; `--select` explicitly replaces the stored synchronization allowlist:
-
-```bash
-mailarium mailbox folders discover --account local-exchange
-mailarium mailbox folders discover --account local-exchange --select
-```
-
-The default sync remains one bounded pass. Use `--until-complete` to repeat
-bounded passes only for folders that still have a continuation. For a large
-remote harvest, `--defer-indexing` persists canonical records and cursors
-without constructing the embedder; run the existing re-embedding workflow
-afterward to populate vectors. Interrupted re-embedding can be restarted with
-`--resume`; matching committed body vectors are retained instead of recomputed.
-
-```bash
-mailarium mailbox sync --account local-exchange --until-complete --defer-indexing
-mailarium-ingest --sqlite-path data/email_metadata.db --vector-index-path data/vector-index --reembed --resume
-```
-
-Attachment metadata is synchronized by default. Content requires both
-`EWS_ATTACHMENT_CONTENT_ENABLED=true` and
-`--include-attachment-content`, and remains subject to byte limits.
-The bounded process controls are `EWS_MAX_SYNC_ITEMS`,
-`EWS_MAX_ATTACHMENT_BYTES`, `EWS_MAX_ATTACHMENTS_PER_ITEM`,
-`EWS_MAX_ATTACHMENT_TOTAL_BYTES_PER_ITEM`,
-`EWS_MAX_ATTACHMENT_TOTAL_BYTES_PER_SYNC`, and
-`EWS_REQUEST_TIMEOUT_SECONDS`.
-
-Proposal inspection and human-only decisions:
-
-```bash
 mailarium mailbox proposals list --state pending
-mailarium mailbox proposals show PROPOSAL_ID
-mailarium mailbox approve PROPOSAL_ID
-mailarium mailbox reject PROPOSAL_ID --reason 'not appropriate'
 ```
 
-Approval requires an interactive terminal and the displayed proposal-ID
-suffix. There is no non-interactive approval bypass. After approval:
-
-```bash
-export EWS_WRITE_ENABLED=true
-mailarium mailbox execute PROPOSAL_ID
-mailarium mailbox reconcile PROPOSAL_ID
-```
-
-The account must also have been configured with `--write-enabled`.
-
-## Ingest
-
-```bash
-mailarium-ingest private/ingest/archive.olm
-python -m mailarium.ingest private/ingest/archive.olm --max-emails 200
-```
-
-Run `mailarium <subcommand> --help` or `mailarium-ingest --help` for the exact
-options in the installed candidate.
+The local interactive CLI is the only approval and rejection surface. An
+approved proposal can be executed only after `EWS_WRITE_ENABLED=true`; uncertain
+outcomes are handled through `mailarium mailbox reconcile`. These commands do
+not establish that a live EWS server is reachable or that a write succeeded.
