@@ -66,11 +66,11 @@ Security = "https://github.com/sebastianspicker/mailarium/blob/main/SECURITY.md"
 
 [project.optional-dependencies]
 nlp = [
-    "spacy==3.8.13",
+    "spacy==3.8.16",
 ]
 training = [
     "datasets==5.0.1",
-    "accelerate==1.14.0",
+    "accelerate==1.15.0",
 ]
 ews = [
     "defusedxml>=0.7.1,<1",
