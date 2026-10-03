@@ -97,6 +97,7 @@ _ARCHIVE_TEXT_HEADER = "[Archive extracted member text]"
 _ARCHIVE_INVENTORY_HEADER = "[Archive member inventory]"
 _MAX_ARCHIVE_MEMBERS = 20
 _MAX_ARCHIVE_MEMBER_BYTES = 2_000_000
+_SAFE_ZIP_COMPRESSION = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
 
 
 @dataclass(frozen=True)
@@ -437,14 +438,17 @@ def _archive_member_text(
     extractors: dict[str, Callable[..., str | None]],
 ) -> str | None:
     """Decode one safe archive member when its type supports text extraction."""
-    if member.file_size > _MAX_ARCHIVE_MEMBER_BYTES:
+    if member.file_size > _MAX_ARCHIVE_MEMBER_BYTES or member.compress_type not in _SAFE_ZIP_COMPRESSION:
         return None
     ext = _dispatch_extension(member.filename)
     if ext in _SKIP_EXTENSIONS or ext in IMAGE_EXTENSIONS or ext in {".zip", ".gz", ".tar", ".rar", ".7z"}:
         return None
     try:
-        member_bytes = archive.read(member)
-    except OSError:
+        with archive.open(member) as member_file:
+            member_bytes = member_file.read(_MAX_ARCHIVE_MEMBER_BYTES + 1)
+        if len(member_bytes) > _MAX_ARCHIVE_MEMBER_BYTES:
+            return None
+    except OSError, RuntimeError, zipfile.BadZipFile:
         logger.debug("Failed to read ZIP member %s.", member.filename, exc_info=True)
         return None
     return _extract_text_with_dispatch(member.filename, member_bytes, extractors=extractors)
@@ -518,8 +522,14 @@ def _extract_ods(content: bytes) -> str | None:
     """
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            xml_text = archive.read("content.xml")
-    except KeyError, OSError, zipfile.BadZipFile:
+            member = archive.getinfo("content.xml")
+            if member.file_size > _MAX_ARCHIVE_MEMBER_BYTES or member.compress_type not in _SAFE_ZIP_COMPRESSION:
+                return None
+            with archive.open(member) as member_file:
+                xml_text = member_file.read(_MAX_ARCHIVE_MEMBER_BYTES + 1)
+            if len(xml_text) > _MAX_ARCHIVE_MEMBER_BYTES:
+                return None
+    except KeyError, OSError, RuntimeError, zipfile.BadZipFile:
         logger.debug("Failed to extract ODS content.xml.", exc_info=True)
         return None
 

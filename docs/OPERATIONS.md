@@ -113,6 +113,11 @@ devices, retrieval stages, and performance controls.
 
 ## Index maintenance and recovery
 
+Explicit SQLite paths supplied to body, metadata, analytics, or entity
+maintenance operations pass through the same runtime-root allowlist as normal
+ingestion. Add an absolute root with `MAILARIUM_ALLOWED_RUNTIME_ROOTS` before
+maintaining a synthetic or operator-approved archive outside the defaults.
+
 SQLite remains canonical during index maintenance. Retain the original `.olm`
 and take a consistent SQLite backup before resetting or reconstructing derived
 state.

@@ -57,6 +57,13 @@ text against synthetic samples before processing operator data.
 | Other archives | `.gz`, `.tar`, `.rar`, `.7z` | Explicit unsupported handling | Unsupported by the current extraction path |
 | Other files | Any unclassified format | Explicit unsupported/reference handling | Unsupported |
 
+ZIP-backed OLM payloads, ZIP attachment members, and ODS `content.xml` use
+only stored or DEFLATE compression. BZIP2 and LZMA ZIP members are rejected so
+the application can enforce expanded-byte limits before decoder allocation.
+Attachment recovery also applies per-message count and retained-byte budgets;
+content rejected by those controls remains visible as unavailable attachment
+metadata rather than disappearing from the inventory.
+
 ## Quality fields
 
 `documentary_support.format_profile` records:

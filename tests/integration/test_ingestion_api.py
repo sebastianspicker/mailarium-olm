@@ -92,8 +92,9 @@ def _exchange_mentions(sqlite_path: str) -> list[tuple[str, ...]]:
     return [tuple(row) for row in rows]
 
 
-def test_reingest_metadata_archive_binds_exchange_entity_extraction(tmp_path) -> None:
+def test_reingest_metadata_archive_binds_exchange_entity_extraction(tmp_path, monkeypatch) -> None:
     """Metadata maintenance parses the OLM and retains the Exchange entity extraction contract."""
+    monkeypatch.setenv("MAILARIUM_ALLOWED_RUNTIME_ROOTS", str(tmp_path))
     olm_path = tmp_path / "mail.olm"
     sqlite_path = str(tmp_path / "archive.db")
     _write_exchange_entity_olm(olm_path)

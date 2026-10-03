@@ -279,6 +279,9 @@ def _extract_attachment_field(
 
 
 MAX_ATTACHMENT_BYTES = 20_000_000  # 20MB per attachment
+MAX_ATTACHMENTS_PER_MESSAGE = 100
+MAX_TOTAL_ATTACHMENT_BYTES_PER_MESSAGE = 100_000_000
+_SAFE_ZIP_COMPRESSION = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
 
 
 def _extract_attachment_contents(
@@ -329,7 +332,26 @@ def _extract_attachment_payloads(
     - ``failure_reason``: explicit reason when payload recovery failed
     """
     attachment_els = _attachment_elements(root, ns)
-    return [payload for att in attachment_els if (payload := _attachment_payload(att, ns, xml_path, zf))]
+    payloads: list[dict[str, object]] = []
+    retained_bytes = 0
+    for attachment in attachment_els[:MAX_ATTACHMENTS_PER_MESSAGE]:
+        payload = _attachment_payload(attachment, ns, xml_path, zf)
+        if payload is None:
+            continue
+        content = payload.get("content")
+        if isinstance(content, bytes):
+            if retained_bytes + len(content) > MAX_TOTAL_ATTACHMENT_BYTES_PER_MESSAGE:
+                payload.update(
+                    {
+                        "content": None,
+                        "extraction_state": "binary_only",
+                        "failure_reason": "attachment_content_exceeds_message_budget",
+                    }
+                )
+            else:
+                retained_bytes += len(content)
+        payloads.append(payload)
+    return payloads
 
 
 def _attachment_elements(root: etree._Element, ns: dict[str, str]) -> list[etree._Element]:
@@ -394,10 +416,20 @@ def _recover_url_attachment(payload: dict[str, object], url: str, xml_path: str,
     xml_dir = "/".join(xml_path.split("/")[:-1])
     for candidate in (url, f"{xml_dir}/{url}"):
         try:
-            with zf.open(candidate) as attachment_file:
+            info = zf.getinfo(candidate)
+            if info.file_size > MAX_ATTACHMENT_BYTES:
+                _set_attachment_size_failure(payload)
+                return
+            if info.compress_type not in _SAFE_ZIP_COMPRESSION:
+                payload["failure_reason"] = "attachment_zip_compression_unsupported"
+                return
+            with zf.open(info) as attachment_file:
                 data = attachment_file.read(MAX_ATTACHMENT_BYTES + 1)
         except KeyError:
             continue
+        except OSError, RuntimeError, zipfile.BadZipFile:
+            payload["failure_reason"] = "attachment_archive_read_failed"
+            return
         if len(data) > MAX_ATTACHMENT_BYTES:
             _set_attachment_size_failure(payload)
         else:

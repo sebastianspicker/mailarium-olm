@@ -7,10 +7,17 @@ import sqlite3
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from mailarium.platform.repo_paths import validate_runtime_path
 from mailarium.platform.settings import get_settings
 
 if TYPE_CHECKING:
     from mailarium.archive import ArchiveDatabase
+
+
+def _maintenance_sqlite_path(sqlite_path: str | None) -> str:
+    """Resolve maintenance storage through the product runtime-path policy."""
+    selected = sqlite_path or get_settings().sqlite_path
+    return str(validate_runtime_path(str(selected), field_name="sqlite_path"))
 
 
 def _json_list(value: object) -> list[Any]:
@@ -81,7 +88,7 @@ def reingest_bodies(
     """Backfill body_text/body_html for emails missing them in SQLite."""
     from mailarium.archive import open_archive_database
 
-    email_db = open_archive_database(sqlite_path or get_settings().sqlite_path)
+    email_db = open_archive_database(_maintenance_sqlite_path(sqlite_path))
     try:
         if force:
             all_uids = email_db.queries.all_uids()
@@ -164,11 +171,10 @@ def reingest_metadata(
     With ``extract_exchange_entities``, entities derived from Exchange fields
     are inserted idempotently alongside the metadata backfill.
     """
-    settings = get_settings()
     from mailarium.archive import open_archive_database
     from mailarium.ingestion.olm.parser import parse_olm
 
-    resolved_sqlite = sqlite_path or settings.sqlite_path
+    resolved_sqlite = _maintenance_sqlite_path(sqlite_path)
     email_db = open_archive_database(resolved_sqlite)
     try:
         all_uids = email_db.queries.all_uids()
@@ -231,7 +237,7 @@ def reingest_analytics(sqlite_path: str | None = None) -> dict[str, Any]:
         select_analytics_text_from_row,
     )
 
-    email_db = open_archive_database(sqlite_path or get_settings().sqlite_path)
+    email_db = open_archive_database(_maintenance_sqlite_path(sqlite_path))
     updated = surface_updated = total_missing = low_confidence = skipped_empty_text_rows = short_text_reason_count = 0
     try:
         for rows in email_db.analytics.iter_analytics_batches():
@@ -278,14 +284,13 @@ def reextract_entities(
     force: bool = False,
 ) -> dict[str, Any]:
     """Backfill or rebuild entity mentions from stored email bodies."""
-    settings = get_settings()
     from mailarium.archive import open_archive_database
     from mailarium.ingestion.enrichment.language_analytics import select_entity_text_from_row
 
     if entity_extractor_fn is None:
         return {"updated": 0, "total_candidates": 0, "message": "Entity extraction is unavailable."}
 
-    resolved_sqlite = sqlite_path or settings.sqlite_path
+    resolved_sqlite = _maintenance_sqlite_path(sqlite_path)
     email_db = open_archive_database(resolved_sqlite)
     rows = email_db.entities.entity_reextraction_candidates(force=force)
     rows = [row for row in rows if select_entity_text_from_row(row)[0] or _exchange_entities_from_row(row)]

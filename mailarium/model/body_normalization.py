@@ -191,13 +191,13 @@ def _quoted_separator_index(lines: list[str], start: int) -> int | None:
 
 
 def _has_reply_headers(lines: list[str], start: int, limit: int) -> bool:
-    positions = [pos for pos in range(start, len(lines)) if lines[pos].strip()]
+    positions = _bounded_non_empty_positions(lines, start, limit)
     return len(positions) >= 3 and sum(1 for pos in positions[:limit] if _is_normalized_reply_header_line(lines[pos])) >= 3
 
 
 def _reply_header_head(lines: list[str], start: int) -> str:
-    tail_indices = [pos for pos in range(start, len(lines)) if lines[pos].strip()]
-    header_candidates = tail_indices[:12]
+    tail_indices = _bounded_non_empty_positions(lines, start, 12)
+    header_candidates = tail_indices
     header_indices = [pos for pos in header_candidates if _is_normalized_reply_header_line(lines[pos])]
     if len(tail_indices) < 3 or len(header_indices) < 3:
         return ""
@@ -207,6 +207,18 @@ def _reply_header_head(lines: list[str], start: int) -> str:
         return ""
     cut_idx = tail_indices[0] if ordinal <= 3 else first_header_idx
     return "\n".join(lines[:cut_idx]).rstrip()
+
+
+def _bounded_non_empty_positions(lines: list[str], start: int, limit: int) -> list[int]:
+    """Collect at most ``limit`` non-empty positions from a candidate suffix."""
+    positions: list[int] = []
+    for pos in range(start, len(lines)):
+        if not lines[pos].strip():
+            continue
+        positions.append(pos)
+        if len(positions) >= limit:
+            break
+    return positions
 
 
 def _leading_header_count(lines: list[str], positions: list[int]) -> int:

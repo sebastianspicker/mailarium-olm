@@ -38,6 +38,15 @@ and this project follows semantic versioning principles for public interfaces.
 
 ### Fixed
 
+- Hardened untrusted archive, attachment, image, HTML, address, and body-tail
+  processing with pre-decode size checks, aggregate budgets, safe ZIP-method
+  restrictions, and bounded traversal. EWS response, pagination, folder
+  discovery, and approved-draft identity checks now fail closed at their
+  respective protocol boundaries.
+- Closed report-redaction, plain-terminal, maintenance-path, local-only
+  reranker, and publication privacy-scan gaps. Security floors were raised for
+  dependencies with fixed releases; the audit still reports the upstream
+  `accelerate` and `nltk` advisories for which no fixed release is available.
 - MCP tools that resolve a runtime dependency no longer fail with `NameError`,
   a regression since the 0.5 modularization.
 - Thread and email HTML export and dossier generation find their templates

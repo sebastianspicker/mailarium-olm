@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _RE_ICAL_UNFOLD = re.compile(r"\r?\n[\t ]")
 _RE_MAILTO = re.compile(r"(?i)mailto:")
+_RE_BARE_EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w.-]+")
 
 
 @functools.lru_cache(maxsize=32)
@@ -251,7 +252,7 @@ def extract_email_from_header(source: str, header_name: str) -> str:
     if match:
         return match.group(1)
     # Bare email
-    match = re.search(r"[\w.+-]+@[\w.-]+", raw)
+    match = _RE_BARE_EMAIL.search(raw)
     return match.group(0) if match else raw
 
 
@@ -310,7 +311,7 @@ def parse_address_list(raw: str) -> list[str]:
         if match:
             addresses.append(match.group(1))
         else:
-            match = re.search(r"[\w.+-]+@[\w.-]+", part)
+            match = _RE_BARE_EMAIL.search(part)
             if match:
                 addresses.append(match.group(0))
     return addresses

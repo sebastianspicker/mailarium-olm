@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from html import unescape
+from html.parser import HTMLParser
 
 # Pre-compiled regexes for html_to_text() hot path
 _RE_STYLE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
@@ -78,6 +79,112 @@ _RE_HIDDEN_STYLE_BLOCK = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+_NON_RENDERED_TAGS = frozenset({"head", "title", "style", "script"})
+_VOID_TAGS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+)
+_QUOTED_CLASSES = frozenset({"gmail_quote", "applemailquote", "yahoo_quoted", "moz-cite-prefix", "outlookmessageheader"})
+_SEMANTIC_PAIRED_TAGS = frozenset({"a", "blockquote", *(f"h{level}" for level in range(1, 7))})
+_HIDDEN_STYLE = re.compile(
+    r"(?:display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?:px|pt|em|rem|%)?"
+    r"|max-height\s*:\s*0(?:px|pt|em|rem|%)?|max-width\s*:\s*0(?:px|pt|em|rem|%)?"
+    r"|opacity\s*:\s*0|mso-hide\s*:\s*all)",
+    re.IGNORECASE,
+)
+
+
+class _EmailHTMLFilter(HTMLParser):
+    """Remove non-rendered and quoted email blocks in one bounded pass."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.parts: list[str] = []
+        self.suppressed_tag = ""
+        self.suppressed_same_tag_depth = 0
+        self.drop_rest = False
+        self.semantic_openings: dict[str, list[int]] = {tag: [] for tag in _SEMANTIC_PAIRED_TAGS}
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self.drop_rest:
+            return
+        normalized = tag.casefold()
+        if self.suppressed_tag:
+            if normalized == self.suppressed_tag and normalized not in _VOID_TAGS:
+                self.suppressed_same_tag_depth += 1
+            return
+        if self._should_suppress(normalized, attrs):
+            if self.drop_rest:
+                return
+            if normalized not in _VOID_TAGS:
+                self.suppressed_tag = normalized
+                self.suppressed_same_tag_depth = 1
+            return
+        part_index = len(self.parts)
+        self.parts.append(self.get_starttag_text() or f"<{tag}>")
+        if normalized in _SEMANTIC_PAIRED_TAGS:
+            self.semantic_openings[normalized].append(part_index)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if not self.drop_rest and not self.suppressed_tag and not self._should_suppress(tag.casefold(), attrs):
+            self.parts.append(self.get_starttag_text() or f"<{tag}/>")
+
+    def handle_endtag(self, tag: str) -> None:
+        if self.drop_rest:
+            return
+        normalized = tag.casefold()
+        if self.suppressed_tag:
+            if normalized == self.suppressed_tag:
+                self.suppressed_same_tag_depth -= 1
+                if self.suppressed_same_tag_depth == 0:
+                    self.suppressed_tag = ""
+            return
+        if normalized in _SEMANTIC_PAIRED_TAGS and self.semantic_openings[normalized]:
+            self.semantic_openings[normalized].pop()
+        self.parts.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if not self.drop_rest and not self.suppressed_tag:
+            self.parts.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        if not self.drop_rest and not self.suppressed_tag:
+            self.parts.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        if not self.drop_rest and not self.suppressed_tag:
+            self.parts.append(f"&#{name};")
+
+    def _should_suppress(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
+        attributes = {name.casefold(): (value or "") for name, value in attrs}
+        if tag in _NON_RENDERED_TAGS or "hidden" in attributes or attributes.get("aria-hidden", "").casefold() == "true":
+            return True
+        if _HIDDEN_STYLE.search(attributes.get("style", "")):
+            return True
+        classes = {value.casefold() for value in attributes.get("class", "").split()}
+        if classes & _QUOTED_CLASSES:
+            return True
+        if tag == "blockquote" and attributes.get("type", "").casefold() == "cite":
+            return True
+        if tag == "div" and attributes.get("id", "").casefold() == "divrplyfwdmsg":
+            self.drop_rest = True
+            return True
+        return False
+
+    def visible_html(self) -> str:
+        """Drop unmatched semantic openings so later substitutions stay linear."""
+        for indexes in self.semantic_openings.values():
+            for index in indexes:
+                self.parts[index] = ""
+        return "".join(self.parts)
+
+
+def _strip_unrendered_email_html(value: str) -> str:
+    """Return visible HTML while avoiding repeated suffix-scanning regexes."""
+    parser = _EmailHTMLFilter()
+    parser.feed(value)
+    parser.close()
+    return parser.visible_html()
+
 
 def looks_like_html(text: str) -> bool:
     """Detect whether a string contains HTML markup.
@@ -111,13 +218,9 @@ def html_to_text(html: str) -> str:
     """Convert HTML to readable plain text, preserving semantic structure."""
     if not html:
         return ""
-    # Remove document metadata and non-rendered blocks before text extraction.
-    text = _RE_HEAD.sub("", html)
-    text = _RE_TITLE.sub("", text)
-    text = _strip_hidden_email_html(text)
-    text = _strip_client_quote_html(text)
-    text = _RE_STYLE.sub("", text)
-    text = _RE_SCRIPT.sub("", text)
+    # Remove document metadata, hidden preheaders, and quoted-client blocks in
+    # one pass before the semantic formatting substitutions below.
+    text = _strip_unrendered_email_html(html)
 
     # Headings → markdown-style
     for _level, (pattern, prefix) in _RE_HEADINGS.items():
@@ -265,13 +368,20 @@ def _tail_blocks(
     maximum: int,
 ) -> Iterator[tuple[int, list[str], list[str]]]:
     """Yield bounded trailing blocks that start after a blank separator."""
-    for index in range(1, len(lines)):
-        if lines[index - 1].strip():
-            continue
+    non_empty_count = 0
+    candidate_indexes: list[int] = []
+    for index in range(len(lines) - 1, 0, -1):
+        if lines[index].strip():
+            non_empty_count += 1
+            if non_empty_count > maximum:
+                break
+        if not lines[index - 1].strip() and minimum <= non_empty_count <= maximum:
+            candidate_indexes.append(index)
+
+    for index in reversed(candidate_indexes):
         tail_lines = lines[index:]
         non_empty_tail = [line for line in tail_lines if line.strip()]
-        if minimum <= len(non_empty_tail) <= maximum:
-            yield index, tail_lines, non_empty_tail
+        yield index, tail_lines, non_empty_tail
 
 
 _LEGAL_DISCLAIMER_CATEGORIES = {

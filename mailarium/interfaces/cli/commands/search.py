@@ -208,11 +208,12 @@ def render_plain(query: str, results) -> None:
 
     for i, result in enumerate(results, 1):
         metadata = result.metadata
+        subject = sanitize_untrusted_text(str(metadata.get("subject", "(no subject)")))
         print(f"{'=' * 70}")
-        print(f"  [Result {i}]  {result.score:.0%}  {metadata.get('subject', '(no subject)')}")
-        sender = metadata.get("sender_name") or metadata.get("sender_email", "?")
-        date = str(metadata.get("date", "?"))[:10]
-        folder = metadata.get("folder", "")
+        print(f"  [Result {i}]  {result.score:.0%}  {subject}")
+        sender = sanitize_untrusted_text(str(metadata.get("sender_name") or metadata.get("sender_email", "?")))
+        date = sanitize_untrusted_text(str(metadata.get("date", "?")))[:10]
+        folder = sanitize_untrusted_text(str(metadata.get("folder", "")))
         print(f"  From: {sender}  |  {date}  |  {folder}")
         body = sanitize_untrusted_text(str(result.text or ""))
         preview = body[:600] + "..." if len(body) > 600 else body

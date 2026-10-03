@@ -29,13 +29,13 @@ class _Gateway:
         return self.items
 
 
-def _service(tmp_path, gateway: _Gateway, persist_record):
+def _service(tmp_path, gateway: _Gateway, persist_record, *, policy: MailboxRuntimePolicy | None = None):
     database = ArchiveDatabase(str(tmp_path / "archive.db"))
     store = database.mailbox
     service = MailboxService(
         store,
         db=database,
-        policy=MailboxRuntimePolicy(read_enabled=True),
+        policy=policy or MailboxRuntimePolicy(read_enabled=True),
         gateway_factory=lambda _account, _policy: gateway,
         persist_record=persist_record,
     )
@@ -123,6 +123,27 @@ def test_sync_failure_leaves_the_page_cursor_uncommitted_for_a_retry(tmp_path) -
         assert result["created"] == 1
         assert store.sources.cursor("synthetic", "inbox") == (1, "watermark-2")
         assert gateway.watermarks == [None, None]
+    finally:
+        service.close()
+        database.close()
+
+
+def test_empty_partial_sync_pages_consume_an_independent_page_budget(tmp_path) -> None:
+    deltas = [
+        EWSSyncDelta(created=(), updated=(), deleted=(), watermark=f"watermark-{index}", has_more=True) for index in range(1, 3)
+    ]
+    gateway = _Gateway(deltas, ())
+    database, store, service = _service(
+        tmp_path,
+        gateway,
+        lambda *_args, **_kwargs: (),
+        policy=MailboxRuntimePolicy(read_enabled=True, max_sync_items=2),
+    )
+    try:
+        result = service.sync("synthetic", folders=("inbox",))
+        assert result["folders"]["inbox"]["complete"] is False
+        assert gateway.watermarks == [None, "watermark-1"]
+        assert store.sources.cursor("synthetic", "inbox") == (1, "watermark-2")
     finally:
         service.close()
         database.close()

@@ -48,7 +48,10 @@ class ResultReranker:
         if self._cross_encoder is None:
             from .reranker import CrossEncoderReranker
 
-            self._cross_encoder = CrossEncoderReranker(model_name=settings.rerank_model)
+            self._cross_encoder = CrossEncoderReranker(
+                model_name=settings.rerank_model,
+                local_files_only=settings.embedding_load_mode == "local_only",
+            )
         return self._cross_encoder.rerank(query, results, top_k=top_k)
 
     def release(self) -> list[Any]:

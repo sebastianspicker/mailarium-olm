@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess  # nosec B404
 from pathlib import Path
@@ -25,19 +26,24 @@ def run_git_bytes(root: Path, args: list[str], *, check: bool = True) -> bytes:
     return completed.stdout
 
 
+def _nul_paths(root: Path, args: list[str]) -> list[str]:
+    """Decode NUL-delimited Git paths without Git display quoting or data loss."""
+    return [os.fsdecode(raw) for raw in run_git_bytes(root, args).split(b"\0") if raw]
+
+
 def tracked_paths(root: Path) -> list[str]:
     """Enumerate paths represented in Git's current index."""
-    return run_git(root, ["ls-files"])
+    return _nul_paths(root, ["ls-files", "-z"])
 
 
 def untracked_paths(root: Path) -> list[str]:
     """Enumerate unignored worktree paths absent from Git's index."""
-    return run_git(root, ["ls-files", "--others", "--exclude-standard"])
+    return _nul_paths(root, ["ls-files", "--others", "--exclude-standard", "-z"])
 
 
 def history_paths(root: Path) -> list[str]:
     """Enumerate every non-empty path recorded across all Git refs."""
-    return sorted(set(run_git(root, ["log", "--all", "--name-only", "--pretty=format:"])))
+    return sorted(set(_nul_paths(root, ["log", "--all", "--name-only", "--pretty=format:", "-z"])))
 
 
 def history_blobs(root: Path) -> list[tuple[str, str]]:
@@ -45,14 +51,13 @@ def history_blobs(root: Path) -> list[tuple[str, str]]:
     blob_paths: dict[tuple[str, str], None] = {}
     for commit in run_git(root, ["rev-list", "--all"]):
         for record in run_git_bytes(root, ["ls-tree", "-rz", commit]).split(b"\0"):
-            line = record.decode("utf-8", errors="ignore")
-            if not line:
+            if not record:
                 continue
             try:
-                meta, path = line.split("\t", 1)
-                _mode, kind, blob_hash = meta.split(" ", 2)
+                meta, raw_path = record.split(b"\t", 1)
+                _mode, kind, blob_hash = meta.decode("ascii").split(" ", 2)
             except ValueError:
                 continue
             if kind == "blob":
-                blob_paths[(blob_hash, path)] = None
+                blob_paths[(blob_hash, os.fsdecode(raw_path))] = None
     return sorted(blob_paths)

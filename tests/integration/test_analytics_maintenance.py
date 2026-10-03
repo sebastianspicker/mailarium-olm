@@ -63,7 +63,8 @@ def test_batched_surfaces_match_original_aggregate_order_and_are_bounded(tmp_pat
         assert sum("FROM attachments WHERE" in statement for statement in statements) == 3
 
 
-def test_analytics_backfill_crosses_pages_and_repeated_runs_preserve_results(tmp_path) -> None:
+def test_analytics_backfill_crosses_pages_and_repeated_runs_preserve_results(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MAILARIUM_ALLOWED_RUNTIME_ROOTS", str(tmp_path))
     path = str(tmp_path / "archive.db")
     with open_archive_database(path) as db:
         db.messages.insert_emails_batch([_email(index) for index in range(260)])

@@ -9,7 +9,7 @@ import pytest
 
 from mailarium.archive import MailboxRepository
 from mailarium.mailbox.ews.errors import EWSConfigurationError, EWSValidationError
-from mailarium.mailbox.ews.gateway import EWSGateway
+from mailarium.mailbox.ews.gateway import EWSGateway, EWSItemRef, EWSOperationResult
 from mailarium.mailbox.ews.transport import EWSTransport
 from mailarium.mailbox.policy import MailboxRuntimePolicy
 from mailarium.mailbox.service import MailboxService
@@ -109,6 +109,50 @@ def test_ews_mutations_escape_identifiers_and_preserve_destructive_guards() -> N
     assert b'DeleteType="MoveToDeletedItems"' in delete_envelope
     assert b'Id="item&lt;&amp;&quot;" ChangeKey="change&lt;&amp;&quot;"' in delete_envelope
     assert b'ConflictResolution="NeverOverwrite"' in update_envelope
+
+
+def test_send_existing_draft_rejects_a_server_replaced_target(monkeypatch) -> None:
+    gateway = EWSGateway(cast(EWSTransport, object()))
+    monkeypatch.setattr(
+        gateway,
+        "update_item",
+        lambda *_args, **_kwargs: EWSOperationResult("UpdateItem", (EWSItemRef("other-draft", "fresh"),)),
+    )
+    sent = []
+    monkeypatch.setattr(gateway, "_mutation", lambda *args: sent.append(args))
+    with pytest.raises(EWSValidationError, match="unexpected item identity"):
+        gateway.send_existing_draft("approved-draft", "original", proposal_id="proposal-1")
+    assert sent == []
+
+
+def test_folder_discovery_enforces_a_page_budget(monkeypatch) -> None:
+    from mailarium.mailbox.ews import gateway as gateway_module
+
+    monkeypatch.setattr(gateway_module, "_MAX_FOLDER_DISCOVERY_PAGES", 2)
+
+    class FakeTransport:
+        calls = 0
+
+        def execute(self, _operation: str, _envelope: bytes) -> bytes:
+            self.calls += 1
+            return b"".join(
+                (
+                    b'<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
+                    b'xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" '
+                    b'xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><s:Body>'
+                    b'<m:FindFolderResponse><m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success">'
+                    b'<m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="false" ',
+                    f'IndexedPagingOffset="{self.calls}">'.encode(),
+                    b'<t:Folders><t:Folder><t:FolderId Id="folder" ChangeKey="key"/>'
+                    b"<t:DisplayName>Folder</t:DisplayName><t:FolderClass>IPF.Note</t:FolderClass>"
+                    b"</t:Folder></t:Folders></m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages>"
+                    b"</m:FindFolderResponse></s:Body></s:Envelope>",
+                )
+            )
+
+    gateway = EWSGateway(cast(EWSTransport, FakeTransport()), mailbox_address="archive@example.test")
+    with pytest.raises(EWSValidationError, match="page limit"):
+        gateway.find_mail_folders()
 
 
 def test_ews_remote_operations_require_process_and_account_grants(tmp_path) -> None:

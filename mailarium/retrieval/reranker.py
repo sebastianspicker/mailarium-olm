@@ -20,9 +20,10 @@ class CrossEncoderReranker:
     much more accurate relevance scores than bi-encoder dot products.
     """
 
-    def __init__(self, model_name: str | None = None):
+    def __init__(self, model_name: str | None = None, *, local_files_only: bool = False):
         """Record the configured model name and defer loading its reranking backend."""
         self.model_name = model_name or _DEFAULT_MODEL
+        self.local_files_only = local_files_only
         self._model = None
 
     @property
@@ -31,7 +32,7 @@ class CrossEncoderReranker:
         if self._model is None:
             from sentence_transformers import CrossEncoder
 
-            self._model = CrossEncoder(self.model_name)
+            self._model = CrossEncoder(self.model_name, local_files_only=self.local_files_only)
         return self._model
 
     def rerank(

@@ -49,6 +49,8 @@ _DISTINGUISHED_FOLDER_IDS = frozenset(
         "tasks",
     }
 )
+_MAX_FOLDER_DISCOVERY_PAGES = 100
+_MAX_DISCOVERED_FOLDER_NODES = 10_000
 
 
 @dataclass(frozen=True)
@@ -189,7 +191,12 @@ class EWSGateway:
             raise EWSValidationError("mailbox_address is required to discover mail folders")
         page = IndexedPage()
         folders: list[EWSFolder] = []
+        page_count = 0
+        raw_folder_count = 0
         while True:
+            if page_count >= _MAX_FOLDER_DISCOVERY_PAGES:
+                raise EWSValidationError("EWS folder discovery exceeds the page limit")
+            page_count += 1
             body = (
                 '<m:FindFolder Traversal="Deep"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape>'
                 '<t:AdditionalProperties><t:FieldURI FieldURI="folder:DisplayName"/>'
@@ -204,6 +211,9 @@ class EWSGateway:
             if root_folder is None:
                 raise EWSFaultError("MalformedResponse", "missing EWS FindFolder root")
             nodes = tuple(root_folder.findall("t:Folders/*", _NS))
+            raw_folder_count += len(nodes)
+            if raw_folder_count > _MAX_DISCOVERED_FOLDER_NODES:
+                raise EWSValidationError("EWS folder discovery exceeds the folder limit")
             folders.extend(folder for node in nodes if (folder := _parse_mail_folder(node)) is not None)
             if _includes_last_item(root_folder):
                 return tuple(folders)
@@ -305,9 +315,11 @@ class EWSGateway:
         """Send an existing draft and preserve an optional proposal correlation value."""
         if proposal_id is not None:
             correlated = self.update_item(item_id, change_key, proposal_id=proposal_id)
-            if correlated.items:
-                item_id = correlated.items[0].item_id
-                change_key = correlated.items[0].change_key or change_key
+            if len(correlated.items) != 1 or correlated.items[0].item_id != item_id:
+                raise EWSValidationError("EWS draft correlation returned an unexpected item identity")
+            if not correlated.items[0].change_key:
+                raise EWSValidationError("EWS draft correlation did not return a change key")
+            change_key = correlated.items[0].change_key
         body = (
             '<m:SendItem SaveItemToFolder="true"><m:ItemIds>'
             f"{_item_id(item_id, change_key)}</m:ItemIds><m:SavedItemFolderId>"

@@ -44,15 +44,17 @@ dependencies = [
     "rich>=13.0.0",
     "streamlit>=1.54.0",
     # Security: minimum versions for transitive deps with known CVEs
-    "PyJWT>=2.13.0",  # CVE-2026-48522 through CVE-2026-48526 (required by mcp)
-    "tornado>=6.5.7",  # CVE-2026-49853 through CVE-2026-49855 (required by streamlit)
+    "PyJWT>=2.15.0",  # Security floor (required by mcp)
+    "tornado>=6.5.9",  # Security floor (required by streamlit)
+    "anyio>=4.14.2",  # Security floor (required by mcp)
     "aiohttp>=3.14.3",  # Security floor (required by mcp http extra)
     "cryptography>=50.0.0",  # Security floor (required by multiple deps)
-    "GitPython>=3.1.58",  # Security floor (required by streamlit)
+    "GitPython>=3.1.60",  # Security floor (required by streamlit)
     "pillow>=12.3.0",  # PYSEC-2026-2253 to -2257 and -3451 to -3453
     "pygments>=2.20.0",  # CVE-2026-4539 (required by rich)
     "python-multipart>=0.0.31",  # CVE-2026-42561 and CVE-2026-53537 through CVE-2026-53540
     "requests>=2.33.0",  # CVE-2026-25645 (required by multiple deps)
+    "urllib3>=2.8.0",  # Security floor (required by requests)
     "nltk>=3.10.2",  # Security floor for textstat's transitive dependency
 ]
 

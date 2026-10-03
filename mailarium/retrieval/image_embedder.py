@@ -148,10 +148,10 @@ def _validated_image(image_bytes: bytes, *, max_pixels: int) -> Any:
     from PIL import Image
 
     with Image.open(io.BytesIO(image_bytes)) as image:
-        image.load()
         width, height = image.size
         if width <= 0 or height <= 0 or width * height > max_pixels:
             raise ValueError("image dimensions exceed the configured safety limit")
+        image.load()
         return image.convert("RGB")
 
 

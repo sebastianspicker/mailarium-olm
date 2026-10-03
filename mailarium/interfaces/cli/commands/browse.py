@@ -85,11 +85,12 @@ def browse(
         print(f"\nBrowsing emails: page {page_num}/{total_pages} ({total} total)\n")
         for i, email in enumerate(emails, start=offset + 1):
             subject = sanitize_untrusted_text(str(email.get("subject", "(no subject)")))
-            sender_val = email.get("sender_email", "?")
-            date_val = str(email.get("date", "?"))[:10]
-            uid = email.get("uid", "?")[:12]
+            sender_val = sanitize_untrusted_text(str(email.get("sender_email", "?")))
+            date_val = sanitize_untrusted_text(str(email.get("date", "?")))[:10]
+            uid = sanitize_untrusted_text(str(email.get("uid", "?")))[:12]
+            conversation_id = sanitize_untrusted_text(str(email.get("conversation_id", "")))[:20]
             print(f"  {i:>4}  {date_val}  {sender_val:<30}  {subject}")
-            print(f"        uid: {uid}  conv: {email.get('conversation_id', '')[:20]}")
+            print(f"        uid: {uid}  conv: {conversation_id}")
 
         print(f"\nShowing {offset + 1}–{offset + len(emails)} of {total}")
         if offset + limit < total:

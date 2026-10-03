@@ -155,11 +155,13 @@ class MailboxSynchronizer:
         generation, watermark, full_refresh = self._sync_cursor_state(account_id, folder_id)
         result = {"created": 0, "updated": 0, "deleted": 0, "indexed_chunks": 0, "complete": False}
         reset_attempted = False
+        pages_requested = 0
         while True:
             remaining = self.policy.max_sync_items - _sync_processed_count(result)
-            if remaining <= 0:
+            if remaining <= 0 or pages_requested >= self.policy.max_sync_items:
                 return result
             request_watermark = watermark
+            pages_requested += 1
             delta, generation, watermark, full_refresh, reset_attempted = self._request_sync_delta(
                 account_id, folder_id, gateway, generation, watermark, full_refresh, reset_attempted, remaining
             )

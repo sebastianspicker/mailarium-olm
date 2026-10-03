@@ -113,6 +113,7 @@ class _RequestsSession:
 
     def __init__(self, session: Any) -> None:
         self.session = session
+        self._adapter_limit: int | None = None
 
     def post(
         self,
@@ -123,6 +124,11 @@ class _RequestsSession:
         timeout: float,
         max_response_bytes: int,
     ) -> _BufferedResponse:
+        if self._adapter_limit is None:
+            self.session.mount("https://", _bounded_requests_adapter(max_response_bytes))
+            self._adapter_limit = max_response_bytes
+        elif self._adapter_limit != max_response_bytes:
+            raise EWSConfigurationError("a reused EWS session cannot change its response limit")
         response = self.session.post(
             url,
             data=data,
@@ -143,6 +149,49 @@ class _RequestsSession:
 
     def close(self) -> None:
         self.session.close()
+
+
+class _BoundedRawResponse:
+    """Count bytes below requests hooks so authentication cannot pre-buffer past the limit."""
+
+    def __init__(self, raw: Any, byte_limit: int) -> None:
+        self._raw = raw
+        self._byte_limit = byte_limit
+        self._consumed = 0
+
+    def _charge(self, data: bytes) -> bytes:
+        self._consumed += len(data)
+        if self._consumed > self._byte_limit:
+            close = getattr(self._raw, "close", None)
+            if callable(close):
+                close()
+            raise EWSValidationError("EWS response exceeds configured size limit")
+        return data
+
+    def read(self, amt: int | None = None, decode_content: bool | None = None, cache_content: bool = False) -> bytes:
+        remaining_probe = self._byte_limit - self._consumed + 1
+        bounded_amt = remaining_probe if amt is None else min(amt, remaining_probe)
+        return self._charge(self._raw.read(bounded_amt, decode_content=decode_content, cache_content=cache_content))
+
+    def stream(self, amt: int = 64 * 1024, decode_content: bool | None = None) -> Iterator[bytes]:
+        for chunk in self._raw.stream(amt, decode_content=decode_content):
+            yield self._charge(chunk)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._raw, name)
+
+
+def _bounded_requests_adapter(max_response_bytes: int) -> Any:
+    """Create a requests adapter that bounds every response before response hooks run."""
+    requests = import_module("requests")
+
+    class _Adapter(requests.adapters.HTTPAdapter):  # type: ignore[name-defined]
+        def send(self, request: Any, **kwargs: Any) -> Any:
+            response = super().send(request, **kwargs)
+            response.raw = _BoundedRawResponse(response.raw, max_response_bytes)
+            return response
+
+    return _Adapter()
 
 
 def _buffered_urllib_response(raw: Any, max_response_bytes: int) -> _BufferedResponse:

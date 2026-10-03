@@ -76,6 +76,7 @@ STRUCTURED_IDENTITY_KEYS = frozenset(
         "primary_email",
         "email",
         "sender_email",
+        "sender_name",
     }
 )
 PRIVILEGED_TERMS = (
@@ -226,11 +227,13 @@ def _redact_string(
 
 
 def _redact_value(value: Any, *, mode: str, path: tuple[Any, ...], counters: Counter[str]) -> Any:
-    """Recursively redact a value (string, list, or dict) according to privacy mode."""
+    """Recursively redact a value while preserving supported container shapes."""
     if isinstance(value, str):
         return _redact_string(value, mode=mode, path=path, counters=counters)
     if isinstance(value, list):
         return [_redact_value(item, mode=mode, path=(*path, index), counters=counters) for index, item in enumerate(value)]
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item, mode=mode, path=(*path, index), counters=counters) for index, item in enumerate(value))
     if isinstance(value, dict):
         return {key: _redact_value(item, mode=mode, path=(*path, key), counters=counters) for key, item in value.items()}
     return value
