@@ -12,6 +12,7 @@ from mailarium.investigation.evidence_exporter import EvidenceExporter
 from mailarium.platform.repo_paths import validate_new_output_path
 
 from .capture import render_capture_source
+from .presentation import relevance_label
 
 if TYPE_CHECKING:
     from mailarium.archive import ArchiveDatabase
@@ -29,7 +30,11 @@ def render_evidence_export_page(*, database: ArchiveDatabase | None) -> None:
         _render_export_result(database, result)
         return
     st.markdown("<h1 class='page-title'>Prepare your evidence report</h1>", unsafe_allow_html=True)
-    st.caption("Export saved evidence across the archive. These filters are independent of the current search.")
+    st.markdown(
+        "<p class='page-note'>Choose which saved findings go into the report, check the list, then prepare it. "
+        "These filters work across the whole ledger, independently of your current search.</p>",
+        unsafe_allow_html=True,
+    )
     _render_export_controls(database)
 
 
@@ -57,6 +62,7 @@ def _render_export_controls(db: ArchiveDatabase) -> None:
             "Minimum relevance",
             [1, 2, 3, 4, 5],
             index=int(defaults.get("min_relevance", 1)) - 1,
+            format_func=relevance_label,
             key="evidence-export-relevance",
         )
     with format_column:
@@ -85,7 +91,7 @@ def _render_export_controls(db: ArchiveDatabase) -> None:
         logger.exception("Evidence export preview failed")
         st.error("Matching evidence could not be loaded. Check archive diagnostics and try again.")
         return
-    st.caption(f"{preview['total']} saved findings match these filters.")
+    st.caption(f"{preview['total']} saved {'finding matches' if preview['total'] == 1 else 'findings match'} these filters.")
     if preview["total"] > 10000:
         st.warning(
             "The exporter includes at most 10,000 findings. Narrow the filters to include the complete matching collection."
@@ -93,10 +99,13 @@ def _render_export_controls(db: ArchiveDatabase) -> None:
     _render_scope_preview(preview["items"])
     _review_notice()
     if not preview["items"]:
-        st.info("No saved evidence matches these filters. Adjust the filters or capture a finding from Inspect.")
+        st.info(
+            "No saved finding matches these filters. Lower the minimum relevance, choose All categories, "
+            "or capture a finding on Inspect."
+        )
     if st.button("Save report locally" if local else "Prepare download", type="primary", disabled=not bool(preview["items"])):
         _generate_export(db, values)
-    if st.button("Return to evidence", key="export-return-empty"):
+    if st.button("← Return to evidence", key="export-return-empty", type="tertiary"):
         _return_to_evidence()
 
 
@@ -199,7 +208,7 @@ def _render_export_result(db: ArchiveDatabase, result: dict[str, Any]) -> None:
         fields = {
             "Format": fmt,
             "Category filter": result.get("category") or "All categories",
-            "Minimum relevance": f"{result['min_relevance']} / 5",
+            "Minimum relevance": relevance_label(result["min_relevance"]),
             "Included findings": result["item_count"],
             "Included": "Finding details and available stored source-message appendix"
             if fmt == "HTML"
@@ -212,10 +221,10 @@ def _render_export_result(db: ArchiveDatabase, result: dict[str, Any]) -> None:
             unsafe_allow_html=True,
         )
         _review_notice()
-    back, another = st.columns(2)
-    if back.button("Return to evidence", key="export-return"):
+    row = st.container(horizontal=True, gap="medium")
+    if row.button("← Return to evidence", key="export-return", type="tertiary"):
         _return_to_evidence()
-    if another.button("Prepare another report", key="export-another"):
+    if row.button("Prepare another report", key="export-another", type="tertiary"):
         st.session_state.pop("web_evidence_export", None)
         st.rerun()
 
@@ -223,15 +232,17 @@ def _render_export_result(db: ArchiveDatabase, result: dict[str, Any]) -> None:
 def _render_included_findings(db: ArchiveDatabase, items: list[dict[str, Any]]) -> None:
     """Show the actual included records with optional source inspection."""
     for item in items[:20]:
+        verified = bool(item.get("verified"))
         st.markdown(
-            f"<div class='workspace-label'>{escape(str(item.get('category') or ''))} · "
-            f"Relevance {int(item.get('relevance') or 1)} / 5</div>"
+            "<div class='export-finding'>"
+            f"<span class='register'>F-{int(item['id']):04d} · {escape(str(item.get('category') or ''))} · "
+            f"{escape(relevance_label(item.get('relevance')))} · {'text match' if verified else 'unverified'}</span>"
             f"<h3>{escape(str(item.get('subject') or '(no subject)'))}</h3>"
-            f"<div class='evidence-quote'>{escape(str(item.get('key_quote') or '')).replace(chr(10), '<br/>')}</div>"
-            f"<h4>Analyst summary</h4><p>{escape(str(item.get('summary') or ''))}</p>",
+            f"<blockquote class='evidence-quote{'' if verified else ' is-unmatched'}'>"
+            f"{escape(str(item.get('key_quote') or ''))}</blockquote>"
+            f"<h4>Why it matters</h4><p>{escape(str(item.get('summary') or ''))}</p></div>",
             unsafe_allow_html=True,
         )
-        st.caption(f"Evidence ID: {item['id']} · {'Text match recorded' if item.get('verified') else 'Unverified quote'}")
         with st.expander(f"View source for finding {item['id']}"):
             if st.button("Load stored source", key=f"export-source-{item['id']}"):
                 try:

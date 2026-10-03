@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from html import escape
 from typing import Any
@@ -156,3 +156,37 @@ def _normalize_optional_text(value: str | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+RELEVANCE_LABELS = ("Tangential", "Background", "Supporting", "Significant", "Critical")
+
+
+def relevance_label(value: Any) -> str:
+    """Name a 1-5 evidence relevance with its number, clamping stored outliers."""
+    try:
+        relevance = max(1, min(5, int(value)))
+    except TypeError, ValueError:
+        relevance = 1
+    return f"{relevance} · {RELEVANCE_LABELS[relevance - 1]}"
+
+
+def build_register_table_html(rows: Sequence[Mapping[str, Any]], columns: Mapping[str, str], numeric: Iterable[str] = ()) -> str:
+    """Render derived rows as an escaped, accessible table; ``columns`` maps row keys to headings."""
+    numeric_keys = set(numeric)
+
+    def cell(key: str, value: Any) -> str:
+        css = " class='is-num'" if key in numeric_keys else ""
+        if isinstance(value, float):
+            value = f"{value:,.4f}".rstrip("0").rstrip(".") if abs(value) < 1 else f"{value:,.2f}"
+        elif isinstance(value, int) and not isinstance(value, bool):
+            value = f"{value:,}"
+        return f"<td{css}>{escape('' if value is None else str(value))}</td>"
+
+    head = "".join(
+        f"<th scope='col'{' class=is-num' if key in numeric_keys else ''}>{escape(label)}</th>" for key, label in columns.items()
+    )
+    body = "".join("<tr>" + "".join(cell(key, row.get(key)) for key in columns) + "</tr>" for row in rows)
+    return (
+        "<div class='register-table-wrap'><table class='register-table'>"
+        f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>"
+    )

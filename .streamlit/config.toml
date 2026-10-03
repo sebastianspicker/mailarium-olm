@@ -1,10 +1,20 @@
+# Base theme for Streamlit-rendered internals (data grids, menus, date pickers).
+# The token stylesheet in mailarium/interfaces/web/styles.py owns the visible
+# design and its day/night switch; these values mirror its night tokens.
 [theme]
-base = "light"
-primaryColor = "#0B63CE"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F7FA"
-textColor = "#172331"
-font = "sans serif"
+base = "dark"
+primaryColor = "#ef8c66"
+backgroundColor = "#141311"
+secondaryBackgroundColor = "#1b1a17"
+textColor = "#ede7db"
+borderColor = "#36332d"
+dataframeBorderColor = "#36332d"
+dataframeHeaderBackgroundColor = "#1b1a17"
+font = "Seravek, 'Gill Sans Nova', 'Segoe UI', 'Noto Sans', sans-serif"
+headingFont = "'Iowan Old Style', Charter, 'Bitstream Charter', Georgia, serif"
+codeFont = "'PT Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+baseRadius = "2px"
+showWidgetBorder = true
 
 [server]
 headless = true

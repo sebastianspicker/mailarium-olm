@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="description"
+      content="Mailarium searches a local Outlook archive and keeps every finding tied to the words someone actually wrote. Synthetic, offline demonstration; no mailbox is connected.">
+    <meta name="color-scheme" content="light dark">
+    <title>Mailarium · Synthetic demo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      try {
+        const stored = localStorage.getItem("mailarium-demo-theme");
+        if (stored === "day" || stored === "night") document.documentElement.dataset.theme = stored;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <header class="masthead">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 40 28" aria-hidden="true" focusable="false">
+          <circle class="ring-source" cx="14" cy="14" r="10" />
+          <circle class="ring-analyst" cx="26" cy="14" r="10" />
+          <path class="ring-finding" d="M20 6A10 10 0 0 1 20 22A10 10 0 0 1 20 6Z" />
+        </svg>
+        <span class="brand-name">Mailarium</span>
+        <span class="brand-context">Synthetic demo</span>
+      </div>
+      <p class="archive-status" id="archive-status"></p>
+      <div class="masthead-actions">
+        <button class="quiet-button" id="theme-toggle" type="button" aria-pressed="false">Light: <span>night</span></button>
+        <button class="quiet-button" id="command-open" type="button" aria-haspopup="dialog">Commands <kbd>⌘K</kbd></button>
+      </div>
+    </header>
+
+    <p class="boundary"><strong>Synthetic data only.</strong> This static page has no archive, mailbox, network access or runtime path. Every person and message in it is fictional.</p>
+
+    <nav class="steps" aria-label="Investigation steps">
+      <ol>
+        <li><button type="button" data-page="search" aria-current="page"><span class="step-number">1</span>Search</button></li>
+        <li><button type="button" data-page="inspect"><span class="step-number">2</span>Inspect</button></li>
+        <li><button type="button" data-page="evidence"><span class="step-number">3</span>Evidence <span class="step-count" data-evidence-count>0</span></button></li>
+        <li><button type="button" data-page="export"><span class="step-number">4</span>Export</button></li>
+      </ol>
+      <ul class="tools" aria-label="Sources and tools">
+        <li><button type="button" data-page="overview">Overview</button></li>
+        <li><button type="button" data-page="people">People</button></li>
+        <li><button type="button" data-page="connections">Connections</button></li>
+        <li><button type="button" data-page="mailbox">Mailbox</button></li>
+      </ul>
+    </nav>
+
+    <main id="main-content" tabindex="-1">
+      <section class="page active" id="page-search" aria-labelledby="search-heading">
+        <div class="desk">
+          <div class="desk-main">
+            <h1 id="search-heading" class="display">What are you trying to establish?</h1>
+            <p class="lede">Ask in plain words, or paste a phrase you remember from the correspondence.</p>
+            <form class="search-form" id="search-form">
+              <label class="field field-question">
+                <span class="field-label">Question or phrase</span>
+                <input id="search-input" type="search" autocomplete="off" placeholder="Search the correspondence…" value="Why was the Harbor launch delayed?">
+              </label>
+              <div class="field-row">
+                <label class="field">
+                  <span class="field-label">Folder contains</span>
+                  <input id="folder-input" type="text" autocomplete="off" placeholder="Any folder">
+                </label>
+                <fieldset class="field mode-switch">
+                  <legend class="field-label">Ranking</legend>
+                  <div class="segmented">
+                    <button type="button" data-mode="semantic" aria-pressed="true">Semantic</button>
+                    <button type="button" data-mode="hybrid" aria-pressed="false">Hybrid</button>
+                    <button type="button" data-mode="keyword" aria-pressed="false">Keyword</button>
+                  </div>
+                </fieldset>
+              </div>
+              <div class="form-foot">
+                <p class="hint">Scope is optional. Folder matches any part of the folder path.</p>
+                <button class="button primary" type="submit">Search archive</button>
+              </div>
+            </form>
+          </div>
+          <aside class="margin" aria-label="How search works">
+            <p class="register">How this search reads</p>
+            <dl>
+              <dt>Meaning first</dt>
+              <dd>Semantic search finds messages about your question even when the wording differs.</dd>
+              <dt>Exact words</dt>
+              <dd>Hybrid adds keyword matching, so names and phrases rank higher.</dd>
+              <dt>Candidates, not answers</dt>
+              <dd>Ranking decides what to read first. Only the stored text can support a finding.</dd>
+              <dt>Scope</dt>
+              <dd><span class="num" id="scope-count">0</span> synthetic messages, held in this page.</dd>
+            </dl>
+          </aside>
+        </div>
+      </section>
+
+      <section class="page" id="page-inspect" aria-labelledby="inspect-heading">
+        <h1 id="inspect-heading" class="quiet-title">Read the candidates</h1>
+        <p class="result-summary" id="result-summary" aria-live="polite"></p>
+        <div class="reading-desk">
+          <div class="candidates">
+            <a class="mobile-skip" href="#source-sheet">Skip to the selected message ↓</a>
+            <ol id="results-list" aria-label="Candidate messages"></ol>
+          </div>
+          <article class="sheet" id="source-sheet" aria-label="Selected message" tabindex="-1"></article>
+          <aside class="capture" aria-labelledby="capture-heading">
+            <p class="register" id="capture-heading">Your finding</p>
+            <form id="capture-form" novalidate>
+              <label class="field">
+                <span class="field-label">Exact quote</span>
+                <textarea id="quote-input" rows="3" class="text-voice" placeholder="Copy the words from the message, or select them and use the button below."></textarea>
+              </label>
+              <button class="link-button" type="button" id="use-selection">Use the selected text</button>
+              <p class="quote-status" id="quote-status" aria-live="polite"></p>
+              <label class="field">
+                <span class="field-label">Category</span>
+                <input id="category-input" type="text" maxlength="80" placeholder="decision, dependency, pressure…">
+              </label>
+              <label class="field">
+                <span class="field-label">Why this matters</span>
+                <textarea id="summary-input" rows="3"></textarea>
+              </label>
+              <label class="field">
+                <span class="field-label">Relevance</span>
+                <select id="relevance-input">
+                  <option value="1">1 · Tangential</option>
+                  <option value="2">2 · Background</option>
+                  <option value="3" selected>3 · Supporting</option>
+                  <option value="4">4 · Significant</option>
+                  <option value="5">5 · Critical</option>
+                </select>
+              </label>
+              <p class="form-error" id="capture-error" role="alert"></p>
+              <button class="button primary" type="submit">Save finding</button>
+            </form>
+          </aside>
+        </div>
+      </section>
+
+      <section class="page" id="page-evidence" aria-labelledby="evidence-heading">
+        <div class="page-heading">
+          <h1 id="evidence-heading">Evidence ledger</h1>
+          <p>Every finding quotes a stored message. In this demo the ledger lives in browser memory and is not a custody record.</p>
+        </div>
+        <dl class="figures" id="evidence-figures"></dl>
+        <div id="ledger"></div>
+        <div class="actions"><button class="button primary" type="button" data-page="export">Prepare a report</button></div>
+      </section>
+
+      <section class="page" id="page-export" aria-labelledby="export-heading">
+        <div class="page-heading">
+          <h1 id="export-heading">Prepare your evidence report</h1>
+          <p>Choose which findings go into the report, check the list, then download it. These filters work across the whole ledger.</p>
+        </div>
+        <div class="field-row three">
+          <label class="field"><span class="field-label">Category</span><select id="export-category"></select></label>
+          <label class="field"><span class="field-label">Minimum relevance</span>
+            <select id="export-relevance">
+              <option value="1">1 · Tangential</option>
+              <option value="2">2 · Background</option>
+              <option value="3">3 · Supporting</option>
+              <option value="4">4 · Significant</option>
+              <option value="5">5 · Critical</option>
+            </select>
+          </label>
+          <label class="field"><span class="field-label">Format</span><select disabled><option>CSV (demo)</option></select></label>
+        </div>
+        <p class="hint" id="export-count"></p>
+        <div id="export-preview"></div>
+        <div class="review-note"><strong>Review before sharing</strong><p>A real export contains correspondence and addresses. Check the report and its source text before distributing it.</p></div>
+        <div class="actions"><button class="button primary" type="button" id="export-download">Download synthetic CSV</button></div>
+      </section>
+
+      <section class="page" id="page-overview" aria-labelledby="overview-heading">
+        <div class="page-heading">
+          <h1 id="overview-heading">The archive at a glance</h1>
+          <p>Counts derived from stored messages. Use them to decide where to read, not as findings.</p>
+        </div>
+        <dl class="figures" id="overview-figures"></dl>
+        <h2 class="section-heading">Messages over time</h2>
+        <div class="volume" id="volume-chart" role="img" aria-label="Synthetic monthly message volume"></div>
+      </section>
+
+      <section class="page" id="page-people" aria-labelledby="people-heading">
+        <div class="page-heading">
+          <h1 id="people-heading">People &amp; names</h1>
+          <p>Extracted automatically. Confirm each name against the message it came from.</p>
+        </div>
+        <div id="people-table"></div>
+      </section>
+
+      <section class="page" id="page-connections" aria-labelledby="connections-heading">
+        <div class="page-heading">
+          <h1 id="connections-heading">The web of correspondence</h1>
+          <p>Who wrote to whom, derived from sender and recipient fields. Not a live mailbox graph.</p>
+        </div>
+        <div id="connection-table"></div>
+      </section>
+
+      <section class="page" id="page-mailbox" aria-labelledby="mailbox-heading">
+        <div class="page-heading">
+          <h1 id="mailbox-heading">Live mailbox</h1>
+          <p>In the local application, selected Exchange folders can be synchronized after separate opt-ins. Approvals happen only in the local CLI.</p>
+        </div>
+        <dl class="readiness">
+          <div><dt>Configuration</dt><dd class="is-off">Not available here</dd></div>
+          <div><dt>Remote reads</dt><dd class="is-off">Disabled</dd></div>
+          <div><dt>Remote writes</dt><dd class="is-off">Disabled</dd></div>
+        </dl>
+        <div class="mailbox-grid">
+          <button class="locked-control" type="button" disabled>Connect mailbox <small>No credentials or network in this demo</small></button>
+          <button class="locked-control" type="button" disabled>Synchronize selected folders <small>No mailbox is connected</small></button>
+          <button class="locked-control" type="button" disabled>Read live attachments <small>Attachment access is fail-closed</small></button>
+          <button class="locked-control" type="button" disabled>Execute proposals <small>No proposal executor exists here</small></button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="colophon">
+      <span class="register-line">Evidence · <span data-evidence-count>0</span> saved</span>
+      <span>No archive or mailbox is connected.</span>
+    </footer>
+
+    <dialog id="command-palette" aria-labelledby="command-title">
+      <form method="dialog" class="palette">
+        <div class="palette-head">
+          <h2 id="command-title">Go to</h2>
+          <button class="quiet-button" value="cancel" aria-label="Close commands">Esc</button>
+        </div>
+        <label class="field"><span class="sr-only">Filter commands</span><input id="command-filter" type="search" placeholder="Type to filter" autocomplete="off"></label>
+        <div id="command-list" class="command-list"></div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="mock-data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

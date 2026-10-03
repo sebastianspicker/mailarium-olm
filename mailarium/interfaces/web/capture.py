@@ -24,13 +24,14 @@ def render_evidence_capture(*, database: ArchiveDatabase, uid: str) -> None:
     st.markdown("<h1 class='page-title'>Record what the source supports</h1>", unsafe_allow_html=True)
     query = str(st.session_state.get("web_query") or "")
     filters = st.session_state.get("web_filters", {})
-    context = [query] if query else []
+    context = [f"“{query}”"] if query else []
     for key, label in (("folder", "Folder contains"), ("date_from", "From"), ("date_to", "To")):
         if filters.get(key):
             context.append(f"{label}: {filters[key]}")
     if context:
         st.markdown(
-            "<div class='search-control-chips'>" + "".join(f"<span>{escape(value)}</span>" for value in context) + "</div>",
+            "<div class='capture-context'><span class='register'>Found while asking</span>"
+            "<div class='search-control-chips'>" + "".join(f"<span>{escape(value)}</span>" for value in context) + "</div></div>",
             unsafe_allow_html=True,
         )
     try:
@@ -43,27 +44,28 @@ def render_evidence_capture(*, database: ArchiveDatabase, uid: str) -> None:
         st.warning("This source message is no longer available in the archive. Return to Inspect to select a source.")
         _capture_navigation()
         return
-    source_column, form_column = st.columns([0.48, 0.52], gap="small")
-    with source_column, st.container(key="capture-source"):
-        render_capture_source(source)
+    source_column, form_column = st.columns([0.56, 0.44], gap="small")
     with form_column, st.container(key="capture-form"):
-        _render_capture_controls(database, uid)
+        quote = _render_capture_controls(database, uid)
+    with source_column, st.container(key="capture-source"):
+        render_capture_source(source, highlight=quote)
 
 
-def render_capture_source(source: dict[str, Any]) -> None:
-    """Render stored source text and metadata with the same escaping as Inspect."""
+def render_capture_source(source: dict[str, Any], *, highlight: str = "") -> None:
+    """Render stored source text with the same escaping as Inspect, underlining a literal quote."""
     body = source.get("forensic_body_text") or source.get("body_text") or source.get("raw_body_text") or ""
     metadata = dict(source)
     attachments = source.get("attachments") or []
     metadata["attachment_names"] = [item["name"] for item in attachments if isinstance(item, dict) and item.get("name")]
-    markup, _ = _document_markup(SimpleNamespace(metadata=metadata, text=str(body)))
+    markup, _ = _document_markup(SimpleNamespace(metadata=metadata, text=str(body)), highlight=highlight)
     st.markdown(markup, unsafe_allow_html=True)
     with st.expander("Source details"):
-        st.json(source)
+        st.json(source, expanded=False)
 
 
-def _render_capture_controls(db: ArchiveDatabase, uid: str) -> None:
-    """Keep editable draft values separate from widget lifecycle and saved records."""
+def _render_capture_controls(db: ArchiveDatabase, uid: str) -> str:
+    """Keep editable draft values separate from widget lifecycle and return the current quote."""
+    st.markdown("<div class='capture-margin-heading'>Your finding</div>", unsafe_allow_html=True)
     draft_key = f"capture-draft-{uid}"
     draft = st.session_state.get(draft_key, {})
     key_prefix = hashlib.sha256(uid.encode()).hexdigest()[:20]
@@ -95,6 +97,7 @@ def _render_capture_controls(db: ArchiveDatabase, uid: str) -> None:
     elif st.button("Save finding", type="primary", key="capture-save"):
         _save_finding(db, values, token)
     _capture_navigation()
+    return quote
 
 
 def _capture_token(db: ArchiveDatabase, values: dict[str, Any]) -> str:
@@ -130,7 +133,7 @@ def _save_finding(db: ArchiveDatabase, values: dict[str, Any], token: str) -> No
 def _render_quote_status(db: ArchiveDatabase, uid: str, quote: str) -> None:
     """Describe canonical exact and near matching without factual-verification claims."""
     if not quote.strip():
-        st.caption("Paste a passage from the stored message to check its text match.")
+        st.caption("Copy the words from the stored message. They are checked against it as you type.")
         return
     try:
         match = db.evidence.quote_verification_state(email_uid=uid, quote=quote)
@@ -140,14 +143,16 @@ def _render_quote_status(db: ArchiveDatabase, uid: str, quote: str) -> None:
         return
     state = match.get("state")
     if state == "exact_verified":
-        label = "Text match in stored message"
+        label = "Text match in the stored message"
+        status_class = "quote-status"
     elif state == "near_exact_verified":
-        label = "Near text match in stored message; recorded as unverified"
+        label = "Near match only. It will be recorded as unverified."
+        status_class = "quote-status is-unmatched is-near"
     else:
-        label = "No text match in stored message; you can save this as unverified"
-    status_class = "quote-status" if state == "exact_verified" else "quote-status is-unmatched"
+        label = "No text match in the stored message. You can still save it as unverified."
+        status_class = "quote-status is-unmatched"
     st.markdown(f"<div class='{status_class}'>{escape(label)}</div>", unsafe_allow_html=True)
-    st.caption("Matching normalizes case, whitespace, Unicode and punctuation. A text match does not verify the conclusion.")
+    st.caption("Matching ignores case, spacing, Unicode form and punctuation. A match confirms the words, not the conclusion.")
 
 
 def _render_saved_finding(item: dict[str, Any]) -> None:
@@ -164,10 +169,10 @@ def _render_saved_finding(item: dict[str, Any]) -> None:
 
 def _capture_navigation() -> None:
     """Offer source navigation and the existing collection browser."""
-    back, browse = st.columns(2)
-    if back.button("Back to source", key="capture-back"):
+    row = st.container(horizontal=True, gap="medium")
+    if row.button("← Back to source", key="capture-back", type="tertiary"):
         st.session_state["web_route"] = "Inspect"
         st.rerun()
-    if browse.button("Browse evidence", key="capture-browse"):
+    if row.button("Open the ledger", key="capture-browse", type="tertiary"):
         st.session_state.pop("web_capture_uid", None)
         st.rerun()

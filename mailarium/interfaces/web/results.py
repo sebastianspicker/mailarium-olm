@@ -9,16 +9,6 @@ import streamlit as st
 from .presentation import build_filter_chip_html
 
 
-def type_badge_html(email_type: str | None) -> str:
-    """Generate HTML for an email type badge (reply, forward, attachment, etc.)."""
-    from html import escape as html_escape
-
-    if not email_type or email_type == "original":
-        return ""
-    css_class = f"type-{email_type}" if email_type in ("reply", "forward") else "type-original"
-    return f" <span class='type-badge {css_class}'>{html_escape(str(email_type))}</span>"
-
-
 def render_results_summary(
     *,
     results: list[Any],
@@ -41,8 +31,8 @@ def render_results_summary(
     filter_html = build_filter_chip_html(active_filters)
     st.markdown(
         "<div class='result-summary'>"
-        f"<strong>Showing {len(results)} candidate messages</strong>"
-        f"<span class='result-sort'>Sorted by {html_escape(sort_label)}</span>"
+        f"<strong><span class='num'>{len(results)}</span> candidate {'message' if len(results) == 1 else 'messages'}</strong>"
+        f"<span class='result-sort'>ordered by {html_escape(sort_label.lower())}</span>"
         f"<span class='result-context'>{mode_html}{filter_html}</span>"
         "</div>",
         unsafe_allow_html=True,

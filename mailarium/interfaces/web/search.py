@@ -13,31 +13,61 @@ from mailarium.platform.validation import validate_date_window
 
 from .presentation import build_active_filter_labels, sort_search_results
 from .results import render_results_summary
-from .workspace import render_search_workspace
+from .workspace import _document_body_html, render_search_workspace
 
 logger = logging.getLogger(__name__)
 
 
 def render_search_page(*, retriever: Any, sort_options: dict[str, str], page_size: int, stage: str = "Search") -> None:
     """Render the search page implementation with filters and results display."""
+    indexed = retriever.collection.count()
     if stage == "Search":
-        st.markdown(
-            "<div class='search-heading search-landing-heading'><span class='workspace-label'>"
-            "Search your local archive</span><h1 class='page-title'>What are you trying to establish?</h1>"
-            "<p class='page-note'>Start with a question or a phrase from the correspondence.</p></div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown("<h1 class='page-title'>Find the reason behind a decision</h1>", unsafe_allow_html=True)
-    if retriever.collection.count() == 0:
-        st.warning("No emails indexed yet.")
-        st.info(
-            "To index your Outlook archive, run the ingestion script:\n\n"
-            "```\npython -m mailarium.ingest path/to/export.olm\n```\n\n"
-            "Or use the **`email_ingest`** MCP tool directly from your MCP client."
-        )
+        with st.container(key="search-desk"):
+            main_column, margin_column = st.columns([0.64, 0.36])
+            with margin_column:
+                st.markdown(_search_margin_html(indexed), unsafe_allow_html=True)
+            with main_column:
+                st.markdown(
+                    "<div class='search-heading search-landing-heading'>"
+                    "<h1 class='page-title'>What are you trying to establish?</h1>"
+                    "<p class='page-note'>Ask in plain words, or paste a phrase you remember from the correspondence.</p>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+                if indexed == 0:
+                    _render_empty_archive()
+                    return
+                _init_search_state()
+                values = _render_search_form(sort_options)
+                _handle_search_submission(retriever, sort_options, values)
         return
 
+    st.markdown("<h1 class='page-title is-quiet'>Read the candidates</h1>", unsafe_allow_html=True)
+    if indexed == 0:
+        _render_empty_archive()
+        return
+    _init_search_state()
+    values = _render_search_form(sort_options, compact=True)
+    _handle_search_submission(retriever, sort_options, values)
+    results = st.session_state.get("web_results", [])
+    if not results:
+        last_query = st.session_state.get("web_query", "")
+        if last_query:
+            st.warning(
+                f'No candidates for "{last_query}" within these filters. Remove a filter, widen the dates, '
+                "or turn on Hybrid search under More filters to match exact words."
+            )
+        else:
+            st.info("Ask a question on the Search step. Candidate messages appear here beside their stored source.")
+        return
+
+    results, sort_value, filters, page, page_results, total_pages = _prepare_search_results(sort_options, page_size, results)
+    _render_search_thread(retriever)
+    _render_search_footer(retriever, page_size, results, sort_value, filters, page, page_results, total_pages)
+
+
+def _init_search_state() -> None:
+    """Seed the session keys every search stage reads."""
     st.session_state.setdefault("web_results", [])
     st.session_state.setdefault("web_query", "")
     st.session_state.setdefault("web_filters", {})
@@ -45,26 +75,33 @@ def render_search_page(*, retriever: Any, sort_options: dict[str, str], page_siz
     st.session_state.setdefault("web_page", 0)
     st.session_state.setdefault("web_thread_id", None)
 
-    values = _render_search_form(sort_options, compact=stage == "Inspect")
-    _handle_search_submission(retriever, sort_options, values)
-    if stage == "Search":
-        return
-    results = st.session_state.get("web_results", [])
-    if not results:
-        last_query = st.session_state.get("web_query", "")
-        if last_query:
-            st.warning(
-                f'No results found for "{last_query}". '
-                "Try broadening your search terms, removing filters, "
-                "or enabling hybrid search mode for better keyword coverage."
-            )
-        else:
-            st.info("Enter a search query above and click Search to browse indexed emails with advanced filters.")
-        return
 
-    results, sort_value, filters, page, page_results, total_pages = _prepare_search_results(sort_options, page_size, results)
-    _render_search_thread(retriever)
-    _render_search_footer(retriever, page_size, results, sort_value, filters, page, page_results, total_pages)
+def _search_margin_html(indexed: int) -> str:
+    """Explain, in the margin, what a ranked search can and cannot establish."""
+    scope = (
+        f"<span class='num'>{indexed:,}</span> indexed {'message' if indexed == 1 else 'messages'}, held on this machine."
+        if indexed
+        else "Nothing is indexed yet."
+    )
+    return (
+        "<aside class='search-margin' aria-label='How search works'><span class='register'>How this search reads</span><dl>"
+        "<dt>Meaning first</dt><dd>Semantic search finds messages about your question even when the wording differs.</dd>"
+        "<dt>Exact words</dt><dd>Turn on Hybrid search under More filters to add keyword matching.</dd>"
+        "<dt>Candidates, not answers</dt><dd>Ranking decides what to read first. Only the stored text can support a finding.</dd>"
+        f"<dt>Scope</dt><dd>{scope}</dd>"
+        "</dl></aside>"
+    )
+
+
+def _render_empty_archive() -> None:
+    """Name the missing prerequisite and the one command that resolves it."""
+    st.markdown(
+        "<div class='ledger-empty'><strong>This archive is empty.</strong>"
+        "Import an Outlook <code>.olm</code> export first. Search opens as soon as messages are indexed.</div>",
+        unsafe_allow_html=True,
+    )
+    st.code("mailarium-ingest path/to/archive.olm", language=None)
+    st.caption("MCP clients can run the same import with the email_ingest tool.")
 
 
 def _render_search_form(sort_options: dict[str, str], *, compact: bool = False) -> dict[str, Any]:
@@ -94,21 +131,26 @@ def _render_search_form(sort_options: dict[str, str], *, compact: bool = False) 
                 folder, date_from_val, date_to_val = _render_scope_fields(defaults)
             ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([2, 2, 2, 2])
             with ctrl_col1:
-                top_k = st.number_input("Max Results", min_value=1, max_value=50, value=defaults.get("top_k", 10))
+                top_k = st.number_input("Maximum results", min_value=1, max_value=50, value=defaults.get("top_k", 10))
             with ctrl_col2:
                 sort_label = st.selectbox(
-                    "Sort By",
+                    "Sort by",
                     list(sort_options.keys()),
                     index=list(sort_options).index(defaults.get("sort_label", next(iter(sort_options)))),
                 )
             with ctrl_col3:
                 min_score = st.slider(
-                    "Min Relevance", min_value=0.0, max_value=1.0, value=defaults.get("min_score", 0.0), step=0.05
+                    "Minimum retrieval score",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=defaults.get("min_score", 0.0),
+                    step=0.05,
+                    help="Hides lower-ranked candidates. A score orders reading; it is not a probability.",
                 )
             with ctrl_col4:
                 email_type_options = ["Any", "reply", "forward", "original"]
                 email_type_label = st.selectbox(
-                    "Email Type", email_type_options, index=email_type_options.index(defaults.get("email_type_label", "Any"))
+                    "Message type", email_type_options, index=email_type_options.index(defaults.get("email_type_label", "Any"))
                 )
 
             filt_col1, filt_col2, filt_col3 = st.columns(3)
@@ -121,29 +163,29 @@ def _render_search_form(sort_options: dict[str, str], *, compact: bool = False) 
                 cc = st.text_input("CC", value=defaults.get("cc", ""), placeholder="cc recipient")
                 bcc = st.text_input("BCC", value=defaults.get("bcc", ""), placeholder="bcc recipient")
 
-            priority = st.number_input("Min Priority", min_value=0, max_value=5, value=defaults.get("priority", 0), step=1)
+            priority = st.number_input("Minimum priority", min_value=0, max_value=5, value=defaults.get("priority", 0), step=1)
             has_attachments = st.checkbox("Has attachments", value=defaults.get("has_attachments", False))
             mode_col1, mode_col2, mode_col3 = st.columns(3)
             with mode_col1:
                 use_hybrid = st.checkbox(
                     "Hybrid search",
                     value=defaults.get("use_hybrid", False),
-                    help="Combines semantic vectors with BM25 keyword matching for better recall.",
+                    help="Adds keyword matching to semantic search, so exact names and phrases rank higher.",
                 )
             with mode_col2:
                 use_rerank = st.checkbox(
                     "Re-rank results",
                     value=defaults.get("use_rerank", False),
-                    help="Re-ranks using the configured maintained reranker. Slower but more precise.",
+                    help="Reorders the top candidates with the configured reranker. Slower, usually sharper.",
                 )
             with mode_col3:
                 use_expand = st.checkbox(
                     "Expand query",
                     value=defaults.get("use_expand", False),
-                    help="Adds semantically related terms for broader coverage.",
+                    help="Adds related terms to the question for broader coverage.",
                 )
             scope = st.text_input(
-                "Retrieval Scope",
+                "Retrieval scope",
                 value=defaults.get("scope", ""),
                 placeholder="general, finance, customer support, ...",
                 help="Optional relevance context. Hybrid channel weights adapt to each query automatically.",
@@ -152,7 +194,7 @@ def _render_search_form(sort_options: dict[str, str], *, compact: bool = False) 
         if not compact:
             hint, action = st.columns([3, 1], vertical_alignment="center")
             with hint:
-                st.caption("Search messages matching these filters.")
+                st.caption("Scope is optional. Folder matches any part of the folder path.")
             with action:
                 search_clicked = st.form_submit_button("Search archive", type="primary", use_container_width=True)
 
@@ -200,7 +242,7 @@ def _handle_search_submission(retriever: Any, sort_options: dict[str, str], valu
         return
     query = values["query"]
     if not query.strip():
-        st.warning("Please enter a query.")
+        st.warning("Enter a question or phrase to search.")
         return
     dates = _validated_search_dates(values)
     if dates is None:
@@ -233,7 +275,7 @@ def _validated_search_dates(values) -> tuple[str | None, str | None] | None:
     try:
         validate_date_window(date_from, date_to)
     except ValueError:
-        st.error("Date From cannot be later than Date To.")
+        st.error("The From date is after the To date. Swap them or clear one.")
         return None
     return date_from, date_to
 
@@ -342,8 +384,8 @@ def _render_search_thread(retriever: Any) -> None:
     """Render and close the canonical conversation selected in session state."""
     thread_id = st.session_state.get("web_thread_id")
     if thread_id:
-        st.markdown("### Conversation Thread")
-        st.caption("Canonical conversation view. Inferred thread groups remain available through CLI/MCP workflows.")
+        st.markdown("<h2 class='thread-heading'>Conversation thread</h2>", unsafe_allow_html=True)
+        st.caption("Canonical conversation view. Inferred thread groups remain available through CLI and MCP workflows.")
         thread_results = retriever.search_by_thread(thread_id)
         if thread_results:
             st.markdown(_thread_summary_html(thread_results), unsafe_allow_html=True)
@@ -351,8 +393,8 @@ def _render_search_thread(retriever: Any) -> None:
             for idx, tr in enumerate(thread_results, 1):
                 st.markdown(_thread_email_html(idx, tr), unsafe_allow_html=True)
         else:
-            st.info("No emails found for this thread.")
-        if st.button("Close Thread View", type="secondary"):
+            st.info("No stored messages carry this thread identifier.")
+        if st.button("Close thread view", type="secondary"):
             del st.session_state["web_thread_id"]
             st.rerun()
         st.divider()
@@ -362,11 +404,11 @@ def _thread_summary_html(results: list[Any]) -> str:
     """Build escaped thread counts, date range, and a bounded participant summary."""
     participants = list(dict.fromkeys(_thread_sender(result) for result in results))
     dates = [str(result.metadata.get("date", ""))[:10] for result in results if result.metadata.get("date")]
-    date_range = f" &middot; {min(dates)} to {max(dates)}" if dates else ""
+    date_range = f" &middot; <span class='num'>{min(dates)}</span> to <span class='num'>{max(dates)}</span>" if dates else ""
     overflow = f" (+{len(participants) - 5})" if len(participants) > 5 else ""
     return (
         "<div class='thread-summary'>"
-        f"<strong>{len(results)} messages</strong> &middot; <strong>{len(participants)} participants</strong>"
+        f"<span class='num'>{len(results)}</span> messages &middot; <span class='num'>{len(participants)}</span> participants"
         f"{date_range}<br/><span>Participants: "
         f"{html_escape(', '.join(participants[:5]))}{overflow}</span></div>"
     )
@@ -378,24 +420,19 @@ def _thread_sender(result: Any) -> str:
 
 
 def _thread_email_html(index: int, result: Any) -> str:
-    """Render one escaped thread message with type badge and bounded body text."""
+    """Render one escaped thread message with its type and bounded body text."""
     metadata = result.metadata
     email_type = metadata.get("email_type", "original")
-    indicators = {"reply": ("#d8b4fe", "REPLY"), "forward": ("#f9a8d4", "FWD")}
-    indicator = indicators.get(email_type)
-    badge = (
-        f"<span style='color:{indicator[0]};font-size:0.72rem;font-weight:600;margin-left:0.4rem;'>{indicator[1]}</span>"
-        if indicator
-        else ""
-    )
+    kind = {"reply": "Reply", "forward": "Forward"}.get(email_type, "")
+    kind_html = f"<span class='register'>{kind}</span>" if kind else ""
     body = result.text[:800] if len(result.text) > 800 else result.text
-    border = "#64d8d6" if index % 2 == 1 else "#d8b4fe"
+    truncated = "<span class='register'>Excerpt · first 800 characters</span>" if len(result.text) > 800 else ""
     return (
-        f"<div class='thread-email' style='border-left-color:{border};'><div class='thread-email-header'>"
-        f"<strong>{index}. {html_escape(_thread_sender(result))}</strong>{badge} &middot; "
-        f"{html_escape(str(metadata.get('date', '?'))[:10])}<br/>"
-        f"<span style='color:#9aa9b6;font-size:0.78rem;'>{html_escape(str(metadata.get('subject', '?')))}</span>"
-        f"</div><div class='thread-email-body'>{html_escape(body)}</div></div>"
+        f"<div class='thread-email{' is-reply' if kind else ''}'><div class='thread-email-header'>"
+        f"<span class='register'>{index:02d}</span><strong>{html_escape(_thread_sender(result))}</strong>{kind_html}"
+        f"<span class='num'>{html_escape(str(metadata.get('date', '?'))[:10])}</span>"
+        f"<span class='thread-email-subject'>{html_escape(str(metadata.get('subject', '?')))}</span>"
+        f"</div><div class='thread-email-body'>{_document_body_html(body)}</div>{truncated}</div>"
     )
 
 

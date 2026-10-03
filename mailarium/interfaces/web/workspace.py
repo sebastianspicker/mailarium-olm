@@ -65,7 +65,11 @@ def _render_result_index(
     total_pages: int,
 ) -> None:
     """Render compact selectable correspondence rows."""
-    st.markdown("<span class='mailarium-results-marker' aria-hidden='true'></span>", unsafe_allow_html=True)
+    st.markdown(
+        "<span class='mailarium-results-marker' aria-hidden='true'></span>"
+        "<a class='mobile-skip' href='#stored-message'>Skip to the selected message ↓</a>",
+        unsafe_allow_html=True,
+    )
     selected_id = str(selected.chunk_id)
     for index, result in enumerate(page_results, start=page * page_size + 1):
         metadata = result.metadata
@@ -76,9 +80,9 @@ def _render_result_index(
         attachment_count = str(metadata.get("attachment_count") or "0")
         badges = ""
         if attachment_count not in {"", "0", "None"}:
-            badges = f"{attachment_count} attachments"
+            badges = f"{attachment_count} {'attachment' if attachment_count == '1' else 'attachments'}"
         subject, sender, preview, badges = (_escape_markdown(value) for value in (subject, sender, preview, badges))
-        label = f"{index} · **{subject}**\n\n{sender} · {_escape_markdown(date)}\n\n{preview}"
+        label = f"`{index:02d}` **{subject}**\n\n{sender} · {_escape_markdown(date)}\n\n{preview}"
         if badges:
             label += f"\n\n{badges}"
         is_selected = str(result.chunk_id) == selected_id
@@ -93,7 +97,7 @@ def _render_result_index(
 
     start = page * page_size + 1
     end = min(start + len(page_results) - 1, len(results))
-    st.caption(f"Showing {start} to {end} of {len(results)} results")
+    st.caption(f"{start}–{end} of {len(results)} candidates")
     if total_pages > 1:
         nav = st.columns(2, gap="small")
         with nav[0]:
@@ -109,10 +113,11 @@ def _render_result_index(
 def _render_document(result: Any, retriever: Any) -> None:
     """Render the selected result as a readable source document."""
     document_html, conversation_id = _document_markup(result)
-    st.markdown("<span class='mailarium-document-marker' aria-hidden='true'></span>", unsafe_allow_html=True)
+    st.markdown("<span class='mailarium-document-marker' id='stored-message'></span>", unsafe_allow_html=True)
     st.markdown(document_html, unsafe_allow_html=True)
     uid = str(result.metadata.get("uid") or "").strip()
-    if st.button(
+    actions = st.container(horizontal=True, gap="small")
+    if actions.button(
         "Capture finding",
         key=f"workspace-evidence-{result.chunk_id}",
         type="primary",
@@ -123,24 +128,24 @@ def _render_document(result: Any, retriever: Any) -> None:
         st.session_state["web_route"] = "Evidence"
         st.rerun()
     if conversation_id and retriever is not None:
-        if st.button("View full thread", key=f"workspace-thread-{result.chunk_id}", use_container_width=True):
+        if actions.button("View full thread", key=f"workspace-thread-{result.chunk_id}"):
             st.session_state["web_thread_id"] = conversation_id
             st.rerun()
 
 
-def _document_markup(result: Any) -> tuple[str, str]:
+def _document_markup(result: Any, *, highlight: str = "") -> tuple[str, str]:
     """Build escaped document markup and return its canonical thread identifier."""
     metadata = result.metadata
     metadata_html, conversation_id = _document_metadata_markup(metadata)
-    body = _document_body_html(result.text or "")
+    body = _document_body_html(result.text or "", highlight=highlight)
     attachment_html = _document_attachment_markup(metadata)
     return (
         "<article class='archive-document'>"
-        "<header><span class='workspace-label'>Source message</span>"
+        "<header><span class='workspace-label'>Stored message</span>"
         f"<h2>{html_escape(_metadata_text(metadata, 'subject', '(no subject)'))}</h2>"
         "</header>"
         f"{metadata_html}"
-        f"<div class='document-body'>{body or 'No body text was recovered for this result.'}</div>"
+        f"{body or _EMPTY_BODY_HTML}"
         f"{attachment_html}"
         "</article>",
         conversation_id,
@@ -156,10 +161,10 @@ def _document_metadata_markup(metadata: dict[str, Any]) -> tuple[str, str]:
     conversation_id = _metadata_text(metadata, "conversation_id", "").strip()
     thread_text = "Canonical thread ID recorded" if conversation_id else "No canonical thread ID recorded"
     return (
-        "<div class='document-metadata'>"
-        f"<span><b>From</b>{sender}</span><span><b>Date</b>{date}</span>"
-        f"<span><b>To</b>{recipients}</span><span><b>Source</b>{source}</span>"
-        "</div>"
+        "<dl class='document-metadata'>"
+        f"<dt>From</dt><dd>{sender}</dd><dt>To</dt><dd>{recipients}</dd>"
+        f"<dt>Date</dt><dd class='num'>{date}</dd><dt>Folder</dt><dd>{source}</dd>"
+        "</dl>"
         "<div class='thread-line'>"
         f"<span>{thread_text}</span></div>",
         conversation_id,
@@ -186,13 +191,17 @@ def _document_attachment_markup(metadata: dict[str, Any]) -> str:
     """Build the visible attachment list with the existing bounded display policy."""
     attachments = _attachment_names(metadata)
     attachment_html = "".join(
-        f"<div class='document-attachment'><span aria-hidden='true'>&#9638;</span>"
-        f"<strong>{html_escape(name)}</strong><small>Local attachment</small></div>"
+        f"<li class='document-attachment'><span>{html_escape(name)}</span><small>name recorded</small></li>"
         for name in attachments[:4]
     )
     if not attachment_html:
-        return "<div class='document-attachments'>No attachments recorded</div>"
-    return f"<div class='document-attachments'><small>{len(attachments)} attachments</small>{attachment_html}</div>"
+        return "<div class='document-attachments is-none'>No attachments recorded</div>"
+    noun = "attachment" if len(attachments) == 1 else "attachments"
+    more = f"<li class='document-attachment'><span>and {len(attachments) - 4} more</span></li>" if len(attachments) > 4 else ""
+    return (
+        f"<div class='document-attachments'><span class='register'>{len(attachments)} {noun}</span>"
+        f"<ul>{attachment_html}{more}</ul></div>"
+    )
 
 
 def _render_source_inspector(
@@ -209,7 +218,7 @@ def _render_source_inspector(
             "Message UID": metadata.get("uid") or "Not recorded",
             "Chunk ID": result.chunk_id,
             "Conversation ID": metadata.get("conversation_id") or "Not recorded",
-            "Folder / Archive": metadata.get("folder") or "Not recorded",
+            "Folder": metadata.get("folder") or "Not recorded",
             "Retrieval score": str(result.score),
             "Search mode": "Hybrid" if filters.get("hybrid") else "Semantic",
         }
@@ -222,7 +231,7 @@ def _render_source_inspector(
             unsafe_allow_html=True,
         )
         st.caption("Retrieval scores rank candidate messages. They do not establish a finding.")
-        st.json(metadata)
+        st.json(metadata, expanded=False)
     with st.expander("Download source and results", expanded=False):
         st.caption(
             "Source JSON includes the stored text when available. CSV contains summaries; "
@@ -262,9 +271,50 @@ def _compact_text(value: str, limit: int) -> str:
     return compact[: max(0, limit - 1)].rstrip() + "…"
 
 
-def _document_body_html(value: str) -> str:
-    """Escape the entire stored text while preserving message line breaks."""
-    return html_escape(str(value)).replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br/>")
+_EMPTY_BODY_HTML = "<div class='document-body'><span class='is-empty'>No body text was recovered for this message.</span></div>"
+
+
+def _document_body_html(value: str, *, highlight: str = "") -> str:
+    """Escape the stored text, keep its line breaks, and set quoted history apart from authored text.
+
+    Quoted lines keep their literal ``>`` markers so copied text still equals the stored text. A
+    highlight of at least three characters is underlined once per line where it occurs literally.
+    """
+    lines = str(value).replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    needle = highlight.strip()
+    mark = re.compile(re.escape(needle), re.IGNORECASE) if len(needle) >= 3 else None
+    if not any(line.strip() for line in lines):
+        return ""
+    parts: list[str] = []
+    quoted: list[str] = []
+
+    def render(line: str) -> str:
+        found = mark.search(line) if mark is not None else None
+        if found is None:
+            return html_escape(line)
+        return (
+            html_escape(line[: found.start()])
+            + f"<mark class='pencil-mark'>{html_escape(found.group(0))}</mark>"
+            + html_escape(line[found.end() :])
+        )
+
+    def flush_quoted() -> None:
+        if quoted:
+            parts.append(
+                "<span class='quoted-history'><span class='register' aria-hidden='true'>Quoted history</span>"
+                + "<br/>".join(quoted)
+                + "</span>"
+            )
+            quoted.clear()
+
+    for line in lines:
+        if line.lstrip().startswith(">"):
+            quoted.append(render(line))
+            continue
+        flush_quoted()
+        parts.append(render(line) + "<br/>")
+    flush_quoted()
+    return f"<div class='document-body'>{''.join(parts)}</div>"
 
 
 def _attachment_names(metadata: dict[str, Any]) -> list[str]:

@@ -6,18 +6,25 @@ from typing import Any
 
 import streamlit as st
 
+from .presentation import build_register_table_html
+
 
 def render_mailbox_page(*, service: Any) -> None:
     """Render local state and invoke remote sync only from an explicit button."""
     st.markdown(
-        "<div class='page-heading'><h1>Mailbox</h1>"
-        "<span class='page-note'>Remote reads stay scoped; approvals remain in the local CLI.</span></div>",
+        "<div class='page-heading'><h1>Live mailbox</h1>"
+        "<span class='page-note'>Synchronize selected Exchange folders and review action proposals. "
+        "Nothing is approved or executed from this page; approvals happen only in the local CLI.</span></div>",
         unsafe_allow_html=True,
     )
-    st.caption("Selected-folder EWS synchronization and proposal status. Approvals are available only in the local CLI.")
     accounts = service.accounts()
     if not accounts:
-        st.info("No EWS account is configured. Use `mailarium mailbox accounts configure`. ")
+        st.markdown(
+            "<div class='ledger-empty'><strong>No Exchange account is configured.</strong>"
+            "Remote reads, writes and attachment content are separate opt-ins, all off by default.</div>",
+            unsafe_allow_html=True,
+        )
+        st.code("mailarium mailbox accounts configure", language=None)
         return
 
     account_ids = [str(account["account_id"]) for account in accounts]
@@ -30,12 +37,14 @@ def render_mailbox_page(*, service: Any) -> None:
             try:
                 result = service.sync(account_id)
             except Exception as exc:  # Streamlit must render a stable error state for remote failures.
-                st.error(f"Mailbox synchronization failed: {type(exc).__name__}")
+                st.error(
+                    f"Synchronization failed ({type(exc).__name__}). Folders processed before the failure may already be stored."
+                )
             else:
-                st.success("Mailbox synchronization completed.")
-                st.json(result)
+                st.success("Selected folders synchronized.")
+                st.json(result, expanded=False)
 
-    st.subheader("Action proposals")
+    st.markdown("<h3 class='analysis-heading'>Action proposals</h3>", unsafe_allow_html=True)
     proposals = service.proposals()
     if proposals:
         rows = [
@@ -48,23 +57,51 @@ def render_mailbox_page(*, service: Any) -> None:
             }
             for proposal in proposals
         ]
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.markdown(
+            build_register_table_html(
+                rows,
+                {
+                    "proposal_id": "Proposal",
+                    "operation": "Operation",
+                    "state": "State",
+                    "created_at": "Created",
+                    "expires_at": "Expires",
+                },
+            ),
+            unsafe_allow_html=True,
+        )
+        st.caption("Approve or reject proposals with mailarium mailbox in the local CLI.")
     else:
-        st.info("No mailbox action proposals.")
+        st.info("No action proposals are waiting.")
 
 
 def _render_readiness(readiness: dict[str, Any]) -> None:
     """Render offline, disabled, error, and unverified-live states distinctly."""
     from html import escape as html_escape
 
-    columns = st.columns(3)
-    columns[0].metric("Offline configuration", "Ready" if readiness["offline_ready"] else "Needs attention")
-    columns[1].metric("Remote reads", "Enabled" if readiness["read_ready"] else "Disabled")
-    columns[2].metric("Remote writes", "Enabled" if readiness["write_ready"] else "Disabled")
+    states = (
+        (
+            "Configuration",
+            "Ready" if readiness["offline_ready"] else "Needs attention",
+            "is-on" if readiness["offline_ready"] else "is-attention",
+        ),
+        ("Remote reads", "Enabled" if readiness["read_ready"] else "Disabled", "is-on" if readiness["read_ready"] else "is-off"),
+        (
+            "Remote writes",
+            "Enabled" if readiness["write_ready"] else "Disabled",
+            "is-on" if readiness["write_ready"] else "is-off",
+        ),
+    )
+    st.markdown(
+        "<dl class='readiness'>"
+        + "".join(f"<div><dt>{label}</dt><dd class='{css}'>{value}</dd></div>" for label, value, css in states)
+        + "</dl>",
+        unsafe_allow_html=True,
+    )
     if readiness["problems"]:
         st.warning("\n".join(f"- {problem}" for problem in readiness["problems"]))
     rendered_status = str(readiness["status"])
     st.markdown(
-        f"<div class='mailbox-boundary'><span aria-hidden='true'>&#9671;</span>{html_escape(rendered_status)}</div>",
+        f"<div class='mailbox-boundary'><span>Status</span>{html_escape(rendered_status)}</div>",
         unsafe_allow_html=True,
     )

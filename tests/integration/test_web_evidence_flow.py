@@ -233,3 +233,22 @@ def test_missing_capture_source_cannot_create_evidence(evidence_archive: Archive
     assert app.warning
     assert not any(button.key == "capture-save" for button in app.button)
     assert evidence_archive.evidence.evidence_stats()["total"] == 0
+
+
+def test_ledger_hands_its_filters_to_export(evidence_archive: ArchiveDatabase) -> None:
+    """The ledger's category and minimum relevance prime the Export preview."""
+    _seed_evidence(evidence_archive)
+    app = AppTest.from_string(_APP)
+    app.session_state["database"] = evidence_archive
+    app.session_state["web_route"] = "Evidence"
+    app.run()
+    assert not app.exception
+    next(box for box in app.selectbox if box.label == "Category").set_value("decision")
+    next(box for box in app.selectbox if box.label == "Minimum relevance").set_value(3).run()
+    app.button(key="evidence-export-handoff").click().run()
+    assert app.session_state["web_route"] == "Export"
+    app.run()
+    assert not app.exception
+    assert app.selectbox(key="evidence-export-category").value == "decision"
+    assert app.selectbox(key="evidence-export-relevance").value == 3
+    assert app.dataframe[0].value["Category"].tolist() == ["decision"]

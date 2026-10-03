@@ -2,51 +2,15 @@
 
 from __future__ import annotations
 
+from html import escape as html_escape
 from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 
-from .results import type_badge_html
+from .presentation import relevance_label
 
 if TYPE_CHECKING:
     from mailarium.archive import ArchiveDatabase
-
-
-def _relevance_badge_html(relevance: int) -> str:
-    """Generate HTML for a relevance badge with color coding and star rating."""
-    relevance = max(1, min(5, relevance))
-    rel_colors = {
-        5: ("#2f6b46", "rgba(47,107,70,0.11)"),
-        4: ("#2f6b46", "rgba(47,107,70,0.11)"),
-        3: ("#7a5305", "rgba(122,83,5,0.10)"),
-        2: ("#6f6649", "rgba(111,102,73,0.10)"),
-        1: ("#6f6649", "rgba(111,102,73,0.10)"),
-    }
-    rel_labels = {5: "CRITICAL", 4: "STRONG", 3: "SUPPORTING", 2: "BACKGROUND", 1: "TANGENTIAL"}
-    color, bg = rel_colors.get(relevance, ("#6f6649", "rgba(111,102,73,0.10)"))
-    label = rel_labels.get(relevance, str(relevance))
-    stars = "\u2605" * relevance + "\u2606" * (5 - relevance)
-    return (
-        f"<span style='display:inline-block;padding:0.15rem 0.5rem;border-radius:6px;"
-        f"background:{bg};color:{color};font-size:0.75rem;font-weight:600;"
-        f'font-family:"SF Mono","Fira Code",monospace;\'>'
-        f"{stars} {label}</span>"
-    )
-
-
-def _verified_badge_html(verified: bool) -> str:
-    """Generate HTML for a verification status badge."""
-    if verified:
-        return (
-            "<span style='display:inline-block;padding:0.12rem 0.45rem;border-radius:6px;"
-            "background:rgba(47,107,70,0.11);color:#2f6b46;font-size:0.72rem;font-weight:600;"
-            "letter-spacing:0.04em;'>TEXT MATCH</span>"
-        )
-    return (
-        "<span style='display:inline-block;padding:0.12rem 0.45rem;border-radius:6px;"
-        "background:rgba(122,83,5,0.10);color:#7a5305;font-size:0.72rem;font-weight:600;"
-        "letter-spacing:0.04em;'>UNVERIFIED</span>"
-    )
 
 
 def render_evidence_page(
@@ -61,190 +25,143 @@ def render_evidence_page(
         return
     st.markdown(
         "<div class='page-heading'><h1>Evidence ledger</h1>"
-        "<span class='page-note'>Collection is provisional until the source and custody record are reviewed.</span></div>",
+        "<span class='page-note'>Every finding quotes a stored message. Treat the collection as provisional until each "
+        "quote and its source have been reviewed.</span></div>",
         unsafe_allow_html=True,
-    )
-    st.info(
-        "Capture findings from Inspect, browse saved evidence here, or prepare HTML/CSV reports in Export. "
-        "Use the CLI or MCP evidence tools for repeatable workflows, custody checks, "
-        "dossier generation, and PDF export."
     )
 
     if database is None:
-        st.warning("SQLite database not available. Run ingestion first to enable evidence management.")
+        st.warning("The SQLite archive is not available. Run ingestion first to keep an evidence ledger.")
         return
 
     categories = _render_evidence_overview(database)
-    items, total, cat_filter = _select_evidence_items(database, categories)
+    items, total, cat_filter, min_relevance = _select_evidence_items(database, categories)
     _render_evidence_items(items, total)
-    _render_evidence_export(database, cat_filter)
+    _render_export_handoff(cat_filter, min_relevance, bool(items))
+    st.caption("Custody checks, dossiers and PDF export are available through the CLI and MCP evidence tools.")
 
 
 def _render_evidence_overview(db: ArchiveDatabase) -> list[dict[str, Any]]:
-    """Render evidence totals, verification rate, and non-empty category counts."""
-    import pandas as pd
-
+    """Render evidence totals, text-match counts, and non-empty category counts."""
     stats = db.evidence.evidence_stats()
-    met_col1, met_col2, met_col3, met_col4 = st.columns(4)
-    met_col1.metric("Total Items", stats["total"])
-    met_col2.metric("Text matches", stats["verified"])
-    met_col3.metric("Unverified", stats["unverified"])
-    verified_pct = f"{stats['verified'] / stats['total']:.0%}" if stats["total"] > 0 else "N/A"
-    met_col4.metric("Text-match rate", verified_pct)
-
-    st.caption("Text matching follows stored quote normalization; it does not verify an analyst conclusion.")
+    total = int(stats["total"])
+    rate = f"{stats['verified'] / total:.0%}" if total > 0 else "–"
+    ledger_figures = (
+        ("Findings", f"{total:,}", ""),
+        ("Text match", f"{int(stats['verified']):,}", ""),
+        ("Unverified", f"{int(stats['unverified']):,}", " is-caution" if stats["unverified"] else ""),
+        ("Match rate", rate, ""),
+    )
+    st.markdown(
+        "<dl class='ledger-figures'>"
+        + "".join(f"<div><dt>{label}</dt><dd class='{css.strip()}'>{value}</dd></div>" for label, value, css in ledger_figures)
+        + "</dl>",
+        unsafe_allow_html=True,
+    )
+    st.caption("A text match follows the stored quote normalization. It confirms the words, not the analyst's conclusion.")
 
     categories = db.evidence.evidence_categories()
     cats_with_items = [category for category in categories if category["count"] > 0]
-    if cats_with_items:
-        st.subheader("Items by Category")
-        df_cats = pd.DataFrame(cats_with_items)
-        st.bar_chart(df_cats, x="category", y="count")
+    if len(cats_with_items) > 1:
+        from . import figures
+
+        st.markdown("<h3>By category</h3>", unsafe_allow_html=True)
+        figures.show(figures.ranked_bars(cats_with_items, label="category", value="count", value_title="Findings"))
 
     return categories
 
 
-def _select_evidence_items(db: ArchiveDatabase, categories: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, str | None]:
+def _select_evidence_items(
+    db: ArchiveDatabase, categories: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], int, str | None, int]:
     """Collect evidence filters and run text search or filtered listing accordingly."""
-    st.divider()
-    st.subheader("Browse Evidence")
-    browse_col1, browse_col2, browse_col3 = st.columns(3)
+    st.markdown("<h2 class='ledger-heading'>Findings</h2>", unsafe_allow_html=True)
+    browse_col1, browse_col2, browse_col3 = st.columns([1, 1, 1.4])
 
     with browse_col1:
         all_categories = ["All"] + [category["category"] for category in categories]
-        selected_cat = st.selectbox("Category", all_categories, index=0)
+        selected_cat = st.selectbox(
+            "Category", all_categories, index=0, format_func=lambda value: "All categories" if value == "All" else value
+        )
 
     with browse_col2:
-        min_rel = st.slider("Min Relevance", min_value=1, max_value=5, value=1)
+        min_rel = st.selectbox("Minimum relevance", [1, 2, 3, 4, 5], index=0, format_func=relevance_label)
 
     with browse_col3:
-        text_filter = st.text_input("Text search", placeholder="Search quotes, summaries, notes...")
+        text_filter = st.text_input("Search findings", placeholder="Words in quotes, summaries or notes")
 
     cat_filter = None if selected_cat == "All" else selected_cat
     rel_filter = min_rel if min_rel > 1 else None
 
     if text_filter.strip():
         result = db.evidence.search_evidence(query=text_filter.strip(), category=cat_filter, min_relevance=rel_filter, limit=100)
-        items = result["items"]
-        total = result["total"]
     else:
         result = db.evidence.list_evidence(category=cat_filter, min_relevance=rel_filter, limit=100)
-        items = result["items"]
-        total = result["total"]
-
-    return items, total, cat_filter
+    return result["items"], result["total"], cat_filter, int(min_rel)
 
 
 def _render_evidence_items(items: list[dict[str, Any]], total: int) -> None:
-    """Render escaped evidence details, verification badges, and provenance fields."""
-    st.caption(f"Showing {len(items)} of {total} items")
-
+    """Render each finding as a ledger entry: register, source, exact quote, interpretation."""
     if not items:
-        st.info(
-            "No evidence items found. Open a stored source in Inspect and choose Capture finding to start collecting evidence."
+        st.markdown(
+            "<div class='ledger-empty'><strong>No findings here yet.</strong>"
+            "Open a stored message on Inspect and choose Capture finding. Findings you save appear in this ledger "
+            "with their quote and source.</div>",
+            unsafe_allow_html=True,
         )
-    else:
-        from html import escape as html_escape
-
-        for item in items:
-            relevance = item.get("relevance", 0)
-            verified = bool(item.get("verified"))
-            date_short = str(item.get("date", ""))[:10]
-            category = item.get("category", "general")
-            sender_name = item.get("sender_name", "")
-            subject = item.get("subject", "(no subject)")
-
-            with st.expander(
-                f"{category.upper()} | "
-                + "\u2605" * relevance
-                + "\u2606" * (5 - relevance)
-                + f" | {'TEXT MATCH' if verified else 'UNVERIFIED'} | "
-                f"{sender_name} | {date_short} -- {subject}",
-                expanded=False,
-            ):
-                badges = _relevance_badge_html(relevance)
-                badges += " " + _verified_badge_html(verified)
-                badges += " " + type_badge_html(None)
-                badges += (
-                    f" <span style='display:inline-block;padding:0.12rem 0.45rem;border-radius:6px;"
-                    f"background:rgba(216,180,254,0.16);color:#d8b4fe;font-size:0.72rem;font-weight:600;"
-                    f"text-transform:uppercase;letter-spacing:0.04em;'>{html_escape(category)}</span>"
-                )
-                st.markdown(badges, unsafe_allow_html=True)
-
-                ev_col1, ev_col2, ev_col3 = st.columns(3)
-                with ev_col1:
-                    sender_display_ev = html_escape(sender_name or item.get("sender_email", ""))
-                    st.markdown(
-                        f"<div class='email-field'><strong>From:</strong> {sender_display_ev}</div>",
-                        unsafe_allow_html=True,
-                    )
-                with ev_col2:
-                    st.markdown(
-                        f"<div class='email-field'><strong>Date:</strong> {html_escape(date_short)}</div>",
-                        unsafe_allow_html=True,
-                    )
-                with ev_col3:
-                    st.markdown(
-                        f"<div class='email-field'><strong>Subject:</strong> {html_escape(str(subject))}</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                quote = item.get("key_quote", "")
-                if quote:
-                    st.markdown(
-                        f"<div class='evidence-quote'><strong>Quote:</strong> <em>\"{html_escape(quote)}\"</em></div>",
-                        unsafe_allow_html=True,
-                    )
-
-                summary = item.get("summary", "")
-                if summary:
-                    st.markdown(f"**Summary:** {html_escape(summary)}")
-
-                if item.get("notes"):
-                    st.markdown(f"**Notes:** {html_escape(item['notes'])}")
-
-                st.caption(
-                    f"Evidence ID: {item['id']} | "
-                    f"Email UID: {item.get('email_uid', '')} | "
-                    f"Sender: {item.get('sender_email', '')} | "
-                    f"Recipients: {item.get('recipients', '')}"
-                )
+        return
+    shown = f"{len(items)} of {total}" if total > len(items) else f"{total}"
+    st.caption(f"{shown} {'finding' if total == 1 else 'findings'}, newest first")
+    st.markdown("".join(_evidence_entry_html(item) for item in items), unsafe_allow_html=True)
 
 
-def _render_evidence_export(db: ArchiveDatabase, cat_filter: str | None) -> None:
-    """Generate filtered HTML or CSV evidence and expose the matching download."""
-    st.divider()
-    st.subheader("Export Evidence")
-    export_col1, export_col2 = st.columns(2)
+def _evidence_entry_html(item: dict[str, Any]) -> str:
+    """Build one escaped ledger entry; status is stated in words as well as color."""
+    verified = bool(item.get("verified"))
+    status_class = "evidence-status" if verified else "evidence-status is-unmatched"
+    status = "text match" if verified else "unverified"
+    sender = str(item.get("sender_name") or item.get("sender_email") or "Unknown sender")
+    sender_email = str(item.get("sender_email") or "")
+    source_line = html_escape(sender)
+    if sender_email and sender_email != sender:
+        source_line += f" &lt;{html_escape(sender_email)}&gt;"
+    quote = str(item.get("key_quote") or "")
+    summary = str(item.get("summary") or "")
+    notes = str(item.get("notes") or "")
+    register = (
+        f"<span class='evidence-id'>F-{int(item['id']):04d}</span>"
+        f"<span>{html_escape(str(item.get('date') or '')[:10])}</span>"
+        f"<span class='category-tag'>{html_escape(str(item.get('category') or 'uncategorized'))}</span>"
+        f"<span>{html_escape(relevance_label(item.get('relevance')))}</span>"
+        f"<span class='{status_class}'>{status}</span>"
+    )
+    body = (
+        f"<h3>{html_escape(str(item.get('subject') or '(no subject)'))}</h3>"
+        f"<p class='evidence-entry-source'>{source_line}</p>"
+        f"<blockquote class='evidence-quote{'' if verified else ' is-unmatched'}'>{html_escape(quote)}</blockquote>"
+        + (f"<p><b>Why it matters</b> · {html_escape(summary)}</p>" if summary else "")
+        + (f"<p><b>Notes</b> · {html_escape(notes)}</p>" if notes else "")
+        + "<p class='evidence-meta'>"
+        f"Message UID {html_escape(str(item.get('email_uid') or ''))}"
+        + (f" · To {html_escape(str(item.get('recipients')))}" if item.get("recipients") else "")
+        + "</p>"
+    )
+    return (
+        f"<article class='evidence-entry'><div class='evidence-entry-register'>{register}</div>"
+        f"<div class='evidence-entry-body'>{body}</div></article>"
+    )
 
-    with export_col1:
-        export_format = st.selectbox("Format", ["html", "csv"], index=0)
 
-    with export_col2:
-        export_min_rel = st.selectbox("Min Relevance for Export", [1, 2, 3, 4, 5], index=0)
-
-    if st.button("Generate Export"):
-        from mailarium.investigation.evidence_exporter import EvidenceExporter
-
-        exporter = EvidenceExporter(db)
-        export_min_rel_val: int | None = export_min_rel if export_min_rel > 1 else None
-        if export_format == "csv":
-            export_result = exporter.export_csv(min_relevance=export_min_rel_val, category=cat_filter)
-        else:
-            export_result = exporter.export_html(min_relevance=export_min_rel_val, category=cat_filter)
-
-        if export_format == "html" and "html" in export_result:
-            st.download_button(
-                label="Download HTML Report",
-                data=export_result["html"],
-                file_name="evidence_report.html",
-                mime="text/html",
-            )
-        elif export_format == "csv" and "csv" in export_result:
-            st.download_button(
-                label="Download CSV",
-                data=export_result["csv"],
-                file_name="evidence_report.csv",
-                mime="text/csv",
-            )
+def _render_export_handoff(category: str | None, min_relevance: int, has_items: bool) -> None:
+    """Carry the ledger's filters into Export, where the report is previewed before it is prepared."""
+    if not has_items:
+        return
+    if st.button("Prepare a report for this category and relevance", type="primary", key="evidence-export-handoff"):
+        for key in ("evidence-export-category", "evidence-export-relevance"):
+            st.session_state.pop(key, None)
+        draft = dict(st.session_state.get("web_evidence_export_draft", {}))
+        draft.update({"category": category, "min_relevance": min_relevance})
+        st.session_state["web_evidence_export_draft"] = draft
+        st.session_state.pop("web_evidence_export", None)
+        st.session_state["web_route"] = "Export"
+        st.rerun()

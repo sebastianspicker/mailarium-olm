@@ -9,6 +9,15 @@ and this project follows semantic versioning principles for public interfaces.
 
 ### Changed
 
+- Redesigned the Streamlit interface and the synthetic Pages demo around one
+  token system that separates stored message text, analyst input, and
+  machine-derived values typographically. Fonts are local; nothing is fetched.
+  Quoted history in message bodies is set apart, a typed evidence quote is
+  underlined in its source while drafting, and charts follow the selected
+  theme. The Evidence page's inline export form now hands its filters to the
+  Export page, which previews the selection first. Several web labels moved to
+  sentence case.
+
 - Reorganised internal modules into explicit platform, model, archive,
   retrieval, ingestion, investigation, mailbox, and interface packages. CLI
   commands, MCP tool schemas, the archive schema, and environment variables

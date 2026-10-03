@@ -1,0 +1,47 @@
+name: Deploy synthetic Pages demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - demo/**
+      - .github/workflows/pages-demo.yml
+      - scripts/smoke/pages_demo.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-demo
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+      - name: Verify static demo assets
+        run: python3 scripts/smoke/pages_demo.py
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: demo
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5

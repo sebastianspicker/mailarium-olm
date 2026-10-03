@@ -15,7 +15,7 @@ from .evidence import render_evidence_page
 from .mailbox import render_mailbox_page
 from .search import render_search_page
 from .shell import bind_archive_session, render_archive_status, render_footer, render_header, render_navigation
-from .styles import inject_styles
+from .styles import PAGE_ICON_SVG, inject_styles
 
 SORT_OPTIONS = {
     "Relevance": "relevance",
@@ -92,8 +92,8 @@ def _resolve_runtime_paths(vector_index_path: str | None, sqlite_path: str | Non
 def main() -> None:
     """Main entry point for the Streamlit web application."""
     st.set_page_config(
-        page_title="Mailarium - Email Discovery",
-        page_icon="✉️",
+        page_title="Mailarium · Local archive",
+        page_icon=PAGE_ICON_SVG,
         layout="wide",
         initial_sidebar_state="auto",
     )

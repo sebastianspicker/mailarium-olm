@@ -68,13 +68,14 @@ def test_web_app_body_renders_search_screen_without_app_exception(isolated_runti
 
 
 def test_refined_styles_keep_accessible_theme_and_mobile_contracts() -> None:
-    """The rendered design exposes both lights and retains source-first mobile review."""
+    """The rendered design exposes both lights, three type voices, and source-first mobile review."""
     day_css = build_style_css("day")
     night_css = build_style_css("night")
 
-    assert "--ground:#f2f5f6" in day_css
-    assert "--ground:#0d1c26" in night_css
-    assert "--font-serif" in day_css
+    assert "--paper:#f5f2ea" in day_css
+    assert "--paper:#141311" in night_css
+    assert all(voice in day_css for voice in ("--font-text", "--font-ui", "--font-mono"))
+    assert "https://" not in day_css and "@import" not in day_css
     assert "@media (prefers-reduced-motion:reduce)" in day_css
     assert "@media (max-width:860px)" in day_css
     assert "mailarium-results-marker) { display:none" not in day_css
@@ -89,7 +90,7 @@ def test_web_app_theme_toggle_rerenders_the_light_theme(isolated_runtime_home: P
     app.button(key="web-theme-toggle").click().run(timeout=45)
 
     assert app.button(key="web-theme-toggle").label == "Use dark theme"
-    assert "--ground:#f2f5f6" in str(app.markdown[0].value)
+    assert "--paper:#f5f2ea" in str(app.markdown[0].value)
 
 
 def test_streamlit_smoke_rejects_deliberately_broken_app(broken_streamlit_app: Path) -> None:
@@ -197,8 +198,8 @@ def test_search_source_handoff_and_archive_switch(isolated_runtime_home: Path, m
     assert app.radio(key="web_navigation").value == "Inspect"
     assert any("This final paragraph is absent from the retrieval chunk." in str(item.value) for item in app.markdown)
     next(item for item in app.button if item.label == "View full thread").click().run()
-    assert any("Conversation Thread" in str(item.value) for item in app.markdown)
-    next(item for item in app.button if item.label == "Close Thread View").click().run()
+    assert any("Conversation thread" in str(item.value) for item in app.markdown)
+    next(item for item in app.button if item.label == "Close thread view").click().run()
     next(item for item in app.button if item.label == "Capture finding").click().run()
     assert not app.exception
     assert app.session_state["web_capture_uid"] == message.uid
