@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from base64 import b64encode
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib import import_module
+from threading import RLock
 from typing import Any
 from urllib import error, request
 from urllib.parse import urlparse
@@ -177,13 +179,30 @@ class EWSTransport:
         self.timeout_seconds = timeout_seconds
         self.max_response_bytes = max_response_bytes
         self.debug_sink = debug_sink
+        self._session: Any | None = None
+        self._session_lock = RLock()
+
+    @contextmanager
+    def session(self) -> Iterator[Any]:
+        """Reuse one serialized connection pool within a bounded caller operation."""
+        with self._session_lock:
+            owned = self._session is None
+            if owned:
+                self._session = self.session_factory()
+            try:
+                yield self._session
+            finally:
+                if owned:
+                    session, self._session = self._session, None
+                    close = getattr(session, "close", None)
+                    if callable(close):
+                        close()
 
     def execute(self, operation: str, envelope: bytes) -> bytes:
         """Post one SOAP envelope and classify HTTP failures without logging its body."""
         if not operation or not envelope:
             raise EWSValidationError("EWS operation and SOAP envelope are required")
-        session = self.session_factory()
-        try:
+        with self.session() as session:
             response = session.post(
                 self.endpoint,
                 data=envelope,
@@ -211,10 +230,6 @@ class EWSTransport:
             if status_code >= 400:
                 raise EWSHTTPError(status_code, body)
             return body
-        finally:
-            close = getattr(session, "close", None)
-            if callable(close):
-                close()
 
     def _diagnose(self, operation: str, status_code: int, request_size: int, response_size: int) -> None:
         if self.debug_sink is not None:

@@ -4,29 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from mailarium.interfaces.presentation import serialize_results
 from mailarium.investigation.answer_context import build_answer_context_payload
 from mailarium.model.message_formatting import format_triage_results
 from mailarium.platform.repo_paths import normalize_local_path
 
-from ..mcp_models import (
-    EmailAnswerContextInput,
-    EmailIngestInput,
-    EmailSearchStructuredInput,
-    EmailTriageInput,
-    ListSendersInput,
-)
-from .utils import ToolDepsProto, get_deps, json_error, json_response, run_with_retriever
-
-# Thread-safety note: _deps is written once during single-threaded module
-# registration (register_all) at import time, then only read by tool handlers.
-# No lock needed - the write happens-before any tool call.
-_deps: ToolDepsProto | None = None
-
-
-def _d() -> ToolDepsProto:
-    """Return the module-level deps, asserting it was set by ``register()``."""
-    return get_deps(_deps)
-
+from ..models.answer_context import EmailAnswerContextInput
+from ..models.search import EmailIngestInput, EmailSearchStructuredInput, EmailTriageInput, ListSendersInput
+from .utils import ToolDepsProto, json_error, json_response, run_with_retriever
 
 _FILTER_FIELDS = [
     "sender",
@@ -149,19 +134,11 @@ def _structured_filters(params: EmailSearchStructuredInput) -> dict[str, Any]:
     return {field: getattr(params, field) for field in output_order}
 
 
-async def email_answer_context(params: EmailAnswerContextInput) -> str:
-    """Build an answer-oriented evidence bundle for a natural-language question."""
-    return json_response(await build_answer_context_payload(_d(), params))
+async def _answer_context(deps: ToolDepsProto, params: EmailAnswerContextInput) -> str:
+    return json_response(await build_answer_context_payload(deps, params))
 
 
-async def email_list_senders(params: ListSendersInput) -> str:
-    """List all unique senders in the email archive, sorted by frequency.
-
-    Useful for discovering who is in the archive before searching for
-    specific conversations. Returns sender name, email, and message count.
-    """
-    deps = _d()
-
+async def _list_senders(deps: ToolDepsProto, params: ListSendersInput) -> str:
     def _run() -> str:
         r = deps.get_retriever()
         senders = r.list_senders(limit=params.limit)
@@ -176,28 +153,13 @@ async def email_list_senders(params: ListSendersInput) -> str:
     return await deps.offload(_run)
 
 
-async def email_stats() -> str:
-    """Get statistics about the email archive.
-
-    Returns total email count, date range, number of unique senders,
-    and folder distribution. Useful for understanding the scope of the
-    archive before searching.
-    """
-    return await run_with_retriever(_d(), lambda r: json_response(r.stats()))
+async def _stats(deps: ToolDepsProto) -> str:
+    return await run_with_retriever(deps, lambda r: json_response(r.stats()))
 
 
-async def email_search_structured(params: EmailSearchStructuredInput) -> str:
-    """Combine semantic retrieval with metadata filters in one search request.
-
-    Supports filters: sender, date range, folder, to, cc, bcc, attachments,
-    priority, topic, cluster. Returns structured JSON. Also supports reranking,
-    hybrid BM25 search, and query expansion. For simple unfiltered queries,
-    email_search is faster.
-    """
-    deps = _d()
-
+async def _search_structured(deps: ToolDepsProto, params: EmailSearchStructuredInput) -> str:
     def _run() -> str:
-        from mailarium.config import get_settings
+        from mailarium.platform.settings import get_settings
 
         settings = get_settings()
         r = deps.get_retriever()
@@ -210,7 +172,7 @@ async def email_search_structured(params: EmailSearchStructuredInput) -> str:
             from mailarium.retrieval.scan_session import filter_seen
 
             results, scan_meta = filter_seen(params.scan_id, results)
-        payload = r.serialize_results(params.query, results)
+        payload = serialize_results(r.settings, params.query, results)
         diagnostics = _retrieval_diagnostics(getattr(r, "last_search_debug", getattr(r, "_last_search_debug", None)))
         if diagnostics:
             payload["retrieval_diagnostics"] = diagnostics
@@ -230,14 +192,7 @@ async def email_search_structured(params: EmailSearchStructuredInput) -> str:
     return await deps.offload(_run)
 
 
-async def email_list_folders() -> str:
-    """List all folders in the email archive with email counts.
-
-    Returns a sorted list of folder names and the number of emails in each.
-    Useful for understanding archive structure before scoping a search.
-    """
-    deps = _d()
-
+async def _list_folders(deps: ToolDepsProto) -> str:
     def _run() -> str:
         r = deps.get_retriever()
         folders = r.list_folders()
@@ -252,13 +207,7 @@ async def email_list_folders() -> str:
     return await deps.offload(_run)
 
 
-async def email_ingest(params: EmailIngestInput) -> str:
-    """Ingest an Outlook .olm export into the email vector database.
-
-    Parses the archive, chunks each email, embeds the chunks, and stores
-    them in USearch vector index. Already-indexed emails are skipped automatically.
-    """
-
+async def _ingest(deps: ToolDepsProto, params: EmailIngestInput) -> str:
     def _run() -> str:
         from mailarium.ingestion import ingest_archive
 
@@ -289,7 +238,7 @@ async def email_ingest(params: EmailIngestInput) -> str:
         if params.dry_run:
             payload["ingest_archive_status"] = "dry_run"
         else:
-            active_vector_index_path, active_sqlite_path = _d().resolved_runtime_paths()
+            active_vector_index_path, active_sqlite_path = deps.resolved_runtime_paths()
             target_vector_index_path = params.vector_index_path or active_vector_index_path
             target_sqlite_path = params.sqlite_path or active_sqlite_path
             target_is_active_archive = normalize_local_path(
@@ -298,7 +247,7 @@ async def email_ingest(params: EmailIngestInput) -> str:
                 target_sqlite_path, field_name="sqlite_path"
             ) == normalize_local_path(active_sqlite_path, field_name="sqlite_path")
             if target_is_active_archive:
-                invalidate_mcp_singletons()
+                invalidate_mcp_singletons(deps)
                 payload["ingest_archive_status"] = "active_archive_updated"
             else:
                 payload["ingest_archive_status"] = "inactive_target_success"
@@ -316,17 +265,17 @@ async def email_ingest(params: EmailIngestInput) -> str:
 
         return json_response(payload)
 
-    return await _d().offload(_run)
+    return await deps.offload(_run)
 
 
-def invalidate_mcp_singletons() -> None:
+def invalidate_mcp_singletons(deps: ToolDepsProto) -> None:
     """Reset every archive-backed singleton after archive mutations.
 
     The retriever caches BM25/sparse indices, query embeddings, and the
     USearch vector index collection reference. After ingest or maintenance writes these
     caches are stale. Re-creating the singletons forces a fresh load.
     """
-    _d().reset_runtime_clients()
+    deps.reset_runtime_clients()
 
 
 def _archive_stats_hint(retriever: Any) -> dict[str, Any]:
@@ -343,14 +292,7 @@ def _archive_stats_hint(retriever: Any) -> dict[str, Any]:
         return {}
 
 
-async def email_triage(params: EmailTriageInput) -> str:
-    """Fast triage scan: ultra-compact results, high recall, up to 100 emails.
-
-    Returns minimal JSON per result (uid, sender, date, subject, score, preview).
-    Always uses query expansion for maximum recall. Issue 3-5 triage calls
-    with different queries in one message for pseudo-parallel scanning.
-    """
-    deps = _d()
+async def _triage(deps: ToolDepsProto, params: EmailTriageInput) -> str:
     return await deps.offload(lambda: _run_triage(deps, params))
 
 
@@ -372,7 +314,7 @@ def _triage_search_kwargs(params: EmailTriageInput, top_k: int) -> dict[str, Any
 
 def _run_triage(deps: ToolDepsProto, params: EmailTriageInput) -> str:
     """Bound triage retrieval by settings, apply optional scan filtering, and serialize archive diagnostics."""
-    from mailarium.config import get_settings
+    from mailarium.platform.settings import get_settings
 
     settings = get_settings()
     retriever = deps.get_retriever()
@@ -415,17 +357,70 @@ def _add_triage_metadata(
 
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
-    """Register core search tools."""
-    global _deps
-    _deps = deps
-
+    """Register core search tools bound to ``deps``."""
     ann = deps.tool_annotations
     # email_search removed - subsumed by email_search_structured (no filters = same)
-    mcp_instance.tool(name="email_list_senders", annotations=ann("List Email Senders"))(email_list_senders)
-    mcp_instance.tool(name="email_stats", annotations=ann("Email Archive Stats"))(email_stats)
-    mcp_instance.tool(name="email_answer_context", annotations=ann("Question-to-Evidence Context"))(email_answer_context)
-    mcp_instance.tool(name="email_search_structured", annotations=ann("Search Emails (Structured JSON)"))(email_search_structured)
-    mcp_instance.tool(name="email_list_folders", annotations=ann("List Email Folders"))(email_list_folders)
-    mcp_instance.tool(name="email_ingest", annotations=deps.idempotent_write_annotations("Ingest Email Archive"))(email_ingest)
+
+    @mcp_instance.tool(name="email_list_senders", annotations=ann("List Email Senders"))
+    async def email_list_senders(params: ListSendersInput) -> str:
+        """List all unique senders in the email archive, sorted by frequency.
+
+        Useful for discovering who is in the archive before searching for
+        specific conversations. Returns sender name, email, and message count.
+        """
+        return await _list_senders(deps, params)
+
+    @mcp_instance.tool(name="email_stats", annotations=ann("Email Archive Stats"))
+    async def email_stats() -> str:
+        """Get statistics about the email archive.
+
+        Returns total email count, date range, number of unique senders,
+        and folder distribution. Useful for understanding the scope of the
+        archive before searching.
+        """
+        return await _stats(deps)
+
+    @mcp_instance.tool(name="email_answer_context", annotations=ann("Question-to-Evidence Context"))
+    async def email_answer_context(params: EmailAnswerContextInput) -> str:
+        """Build an answer-oriented evidence bundle for a natural-language question."""
+        return await _answer_context(deps, params)
+
+    @mcp_instance.tool(name="email_search_structured", annotations=ann("Search Emails (Structured JSON)"))
+    async def email_search_structured(params: EmailSearchStructuredInput) -> str:
+        """Combine semantic retrieval with metadata filters in one search request.
+
+        Supports filters: sender, date range, folder, to, cc, bcc, attachments,
+        priority, topic, cluster. Returns structured JSON. Also supports reranking,
+        hybrid BM25 search, and query expansion. For simple unfiltered queries,
+        email_search is faster.
+        """
+        return await _search_structured(deps, params)
+
+    @mcp_instance.tool(name="email_list_folders", annotations=ann("List Email Folders"))
+    async def email_list_folders() -> str:
+        """List all folders in the email archive with email counts.
+
+        Returns a sorted list of folder names and the number of emails in each.
+        Useful for understanding archive structure before scoping a search.
+        """
+        return await _list_folders(deps)
+
+    @mcp_instance.tool(name="email_ingest", annotations=deps.idempotent_write_annotations("Ingest Email Archive"))
+    async def email_ingest(params: EmailIngestInput) -> str:
+        """Ingest an Outlook .olm export into the email vector database.
+
+        Parses the archive, chunks each email, embeds the chunks, and stores
+        them in USearch vector index. Already-indexed emails are skipped automatically.
+        """
+        return await _ingest(deps, params)
+
     # email_search_thread removed - subsumed by email_thread_lookup in threads.py
-    mcp_instance.tool(name="email_triage", annotations=ann("Fast Triage Scan"))(email_triage)
+    @mcp_instance.tool(name="email_triage", annotations=ann("Fast Triage Scan"))
+    async def email_triage(params: EmailTriageInput) -> str:
+        """Fast triage scan: ultra-compact results, high recall, up to 100 emails.
+
+        Returns minimal JSON per result (uid, sender, date, subject, score, preview).
+        Always uses query expansion for maximum recall. Issue 3-5 triage calls
+        with different queries in one message for pseudo-parallel scanning.
+        """
+        return await _triage(deps, params)

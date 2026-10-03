@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .retriever import SearchResult
+    from .models import SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class CrossEncoderReranker:
         limit = top_k if top_k is not None else len(scored)
         reranked = []
         for result, distance in scored[:limit]:
-            from .retriever import SearchResult as SearchResultModel
+            from .models import SearchResult as SearchResultModel
 
             reranked.append(
                 SearchResultModel(

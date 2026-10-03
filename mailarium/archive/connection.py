@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from .db_schema import init_schema
+from .schema.tables import init_schema
 
 
 class ArchiveConnection:

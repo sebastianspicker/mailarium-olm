@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from mailarium.mcp_server import McpRuntimeState, create_mcp_server
+from mailarium.interfaces.mcp.runtime_state import McpRuntimeState
+from mailarium.interfaces.mcp.server import create_mcp_server
 
 
 def test_mcp_registers_mailbox_tools_with_schema_and_safety_annotations() -> None:

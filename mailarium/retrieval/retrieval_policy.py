@@ -9,8 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from mailarium.model.search_scope import GENERAL_SCOPE as _GENERAL_SCOPE
-from mailarium.model.search_scope import normalize_scope as _normalize_scope
+from mailarium.platform.validation import GENERAL_SCOPE, normalize_scope
 
 __all__ = [
     "RetrievalPolicy",
@@ -50,8 +49,8 @@ def resolve_retrieval_policy(query: str, scope: str | None = None) -> RetrievalP
     if not isinstance(query, str):
         raise TypeError("query must be a string")
 
-    resolved_scope = _normalize_scope(scope)
-    reason_codes: list[str] = ["scope_general" if resolved_scope == _GENERAL_SCOPE else "scope_explicit"]
+    resolved_scope = normalize_scope(scope)
+    reason_codes: list[str] = ["scope_general" if resolved_scope == GENERAL_SCOPE else "scope_explicit"]
     lexical_reasons = _lexical_reason_codes(query)
     if lexical_reasons:
         semantic_weight, keyword_weight = 0.30, 0.70
@@ -75,8 +74,8 @@ def apply_scope_context(query: str, scope: str | None = None) -> str:
     """Append an explicit non-general scope marker so downstream retrieval honors it."""
     if not isinstance(query, str):
         raise TypeError("query must be a string")
-    resolved_scope = _normalize_scope(scope)
-    if resolved_scope == _GENERAL_SCOPE:
+    resolved_scope = normalize_scope(scope)
+    if resolved_scope == GENERAL_SCOPE:
         return query
     return f"{query}\nRetrieval scope: {resolved_scope}"
 

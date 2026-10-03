@@ -21,40 +21,28 @@ PACKAGE_NAME = "mailarium"
 # a package or an inter-package import requires deliberately extending it.
 PACKAGE_DEPENDENCIES = {
     "archive": frozenset({"model"}),
-    "ingestion": frozenset({"archive", "investigation", "model", "platform", "retrieval"}),
+    "ingestion": frozenset({"archive", "model", "platform", "retrieval"}),
     "interfaces": frozenset({"archive", "ingestion", "investigation", "mailbox", "model", "platform", "retrieval"}),
     "investigation": frozenset({"archive", "model", "platform", "retrieval"}),
-    "mailbox": frozenset({"archive", "ingestion", "model", "retrieval"}),
+    "mailbox": frozenset({"archive", "ingestion", "model", "platform"}),
     "model": frozenset(),
     "platform": frozenset(),
-    "privacy": frozenset(),
     "retrieval": frozenset({"archive", "model", "platform"}),
 }
 KNOWN_PACKAGES = frozenset(PACKAGE_DEPENDENCIES)
 
-# Root modules are composition or entry-point adapters, not feature packages.
-# Keeping their dependencies explicit prevents a new top-level module from
-# silently bypassing the package policy.
+# Root modules are entry-point adapters, not feature packages. Keeping their
+# dependencies explicit prevents a new top-level module from silently
+# bypassing the package policy. Feature packages never import root modules.
 ROOT_MODULE_DEPENDENCIES = {
     "__init__": frozenset(),
-    "__main__": frozenset({"mcp_server"}),
-    "cli": frozenset({"config", "interfaces", "platform", "runtime"}),
-    "config": frozenset({"model", "platform"}),
+    "__main__": frozenset({"interfaces"}),
+    "cli": frozenset({"interfaces"}),
     "ingest": frozenset({"interfaces"}),
-    "mcp_server": frozenset({"archive", "config", "interfaces", "mailbox", "platform", "retrieval", "runtime"}),
-    "runtime": frozenset({"archive", "config", "mailbox", "retrieval"}),
-    "web_app": frozenset({"config", "interfaces", "investigation", "mailbox", "platform", "retrieval", "runtime"}),
+    "mcp_server": frozenset({"interfaces"}),
+    "web_app": frozenset({"interfaces"}),
 }
 KNOWN_ROOT_MODULES = frozenset(ROOT_MODULE_DEPENDENCIES)
-
-# ``config`` is the sole root support module intentionally used inside feature
-# packages.  Entry points and runtime composition stay one-way at the root.
-PACKAGE_ROOT_DEPENDENCIES = {
-    "ingestion": frozenset({"config"}),
-    "interfaces": frozenset({"config"}),
-    "investigation": frozenset({"config"}),
-    "retrieval": frozenset({"config"}),
-}
 
 
 @dataclass(frozen=True)
@@ -310,9 +298,7 @@ def _forbidden_edge_violations(edges: Iterable[ImportEdge]) -> list[Violation]:
     violations: list[Violation] = []
     for edge in edges:
         if edge.source_component in KNOWN_PACKAGES:
-            allowed = PACKAGE_DEPENDENCIES[edge.source_component] | PACKAGE_ROOT_DEPENDENCIES.get(
-                edge.source_component, frozenset()
-            )
+            allowed = PACKAGE_DEPENDENCIES[edge.source_component]
         elif edge.source_component in KNOWN_ROOT_MODULES:
             allowed = ROOT_MODULE_DEPENDENCIES[edge.source_component]
         else:
@@ -435,6 +421,45 @@ def _cycle_violations(edges: Iterable[ImportEdge]) -> list[Violation]:
     return violations
 
 
+def _module_cycle_violations(root: Path, edges: Iterable[ImportEdge]) -> list[Violation]:
+    """Reject import cycles between modules, including cycles inside one package.
+
+    A cycle inside a package usually means one concept is split across files
+    that call back into each other; the package allow-list alone cannot see it.
+    """
+    modules = {
+        name
+        for path in (root / PACKAGE_NAME).rglob("*.py")
+        if "__pycache__" not in path.parts and (name := module_name(path, root)) is not None
+    }
+
+    def resolve(target: str) -> str | None:
+        while target and target not in modules:
+            target = target.rpartition(".")[0]
+        return target or None
+
+    edge_list: list[tuple[str, str, ImportEdge]] = []
+    graph: dict[str, set[str]] = defaultdict(set)
+    for edge in edges:
+        target = resolve(edge.target_module)
+        if target is None or target == edge.source_module:
+            continue
+        edge_list.append((edge.source_module, target, edge))
+        graph[edge.source_module].add(target)
+        graph.setdefault(target, set())
+    violations: list[Violation] = []
+    for component in _cyclic_components(graph):
+        cycle = _cycle_for_component(component, graph)
+        first = min(
+            (edge for source, target, edge in edge_list if source == cycle[0] and target == cycle[1]),
+            key=lambda candidate: (candidate.path, candidate.line, candidate.target_module),
+        )
+        violations.append(
+            Violation(first.path, first.line, first.source_module, first.target_module, f"module cycle: {' -> '.join(cycle)}")
+        )
+    return violations
+
+
 def check(root: Path) -> list[Violation]:
     """Collect all package-policy violations below ``root/mailarium``."""
     package_root = root / PACKAGE_NAME
@@ -446,6 +471,7 @@ def check(root: Path) -> list[Violation]:
         *_unknown_component_violations(root, edges),
         *_forbidden_edge_violations(edges),
         *_cycle_violations(edges),
+        *_module_cycle_violations(root, edges),
     ]
     return sorted(violations, key=lambda item: (item.path, item.line, item.source, item.target, item.reason))
 

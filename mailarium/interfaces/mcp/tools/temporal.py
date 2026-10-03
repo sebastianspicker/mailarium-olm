@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..mcp_models import EmailTemporalInput
+from ..models.analysis import EmailTemporalInput
 from .utils import ToolDepsProto, json_error, json_response, run_with_db
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 
 def register(mcp: Any, deps: ToolDepsProto) -> None:
@@ -20,7 +23,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
         analysis='response_times': recent-sample response times per sender, based on up to 500 canonical reply pairs.
         """
 
-        def _work(db: Any) -> str:
+        def _work(db: ArchiveDatabase) -> str:
             from mailarium.investigation.temporal_analysis import TemporalAnalyzer
 
             analyzer = TemporalAnalyzer(db)

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..mcp_models import (
+from ..models.evidence import (
     CustodyChainInput,
     EmailDossierInput,
     EmailProvenanceInput,
@@ -20,6 +20,9 @@ from ..mcp_models import (
     EvidenceUpdateInput,
 )
 from .utils import ToolDepsProto, json_error, json_response, run_with_db
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +41,9 @@ def _compact_evidence_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]
     return compacted
 
 
-def _custody_chain_response(db: Any, params: CustodyChainInput) -> str:
+def _custody_chain_response(db: ArchiveDatabase, params: CustodyChainInput) -> str:
     """Query custody events, optionally compact them, and echo only active filters."""
-    events = db.get_custody_chain(
+    events = db.custody.get_custody_chain(
         target_type=params.target_type, target_id=params.target_id, action=params.action, limit=params.limit
     )
     if params.compact:
@@ -68,7 +71,7 @@ def _compact_custody_events(events: list[dict[str, Any]]) -> list[dict[str, Any]
     return compacted
 
 
-def _query_evidence_response(db: Any, params: EvidenceQueryInput) -> str:
+def _query_evidence_response(db: ArchiveDatabase, params: EvidenceQueryInput) -> str:
     """Route evidence requests to text search, chronological timeline, or filtered listing."""
     if params.query:
         return _search_evidence_response(db, params)
@@ -77,10 +80,10 @@ def _query_evidence_response(db: Any, params: EvidenceQueryInput) -> str:
     return _list_evidence_response(db, params)
 
 
-def _search_evidence_response(db: Any, params: EvidenceQueryInput) -> str:
+def _search_evidence_response(db: ArchiveDatabase, params: EvidenceQueryInput) -> str:
     """Search evidence text, optionally remove full quotes, and annotate empty results."""
-    result = db.search_evidence(
-        query=params.query,
+    result = db.evidence.search_evidence(
+        query=params.query or "",
         category=params.category,
         min_relevance=params.min_relevance,
         limit=params.limit,
@@ -93,9 +96,9 @@ def _search_evidence_response(db: Any, params: EvidenceQueryInput) -> str:
     return json_response(result)
 
 
-def _timeline_evidence_response(db: Any, params: EvidenceQueryInput) -> str:
+def _timeline_evidence_response(db: ArchiveDatabase, params: EvidenceQueryInput) -> str:
     """Return chronologically filtered evidence with optional quote compaction and empty-state guidance."""
-    items = db.evidence_timeline(
+    items = db.evidence.evidence_timeline(
         category=params.category,
         min_relevance=params.min_relevance,
         limit=params.limit,
@@ -109,9 +112,9 @@ def _timeline_evidence_response(db: Any, params: EvidenceQueryInput) -> str:
     return json_response(payload)
 
 
-def _list_evidence_response(db: Any, params: EvidenceQueryInput) -> str:
+def _list_evidence_response(db: ArchiveDatabase, params: EvidenceQueryInput) -> str:
     """List filtered evidence with pagination metadata, optional quote compaction, and collection guidance."""
-    result = db.list_evidence(
+    result = db.evidence.list_evidence(
         category=params.category,
         min_relevance=params.min_relevance,
         email_uid=params.email_uid,
@@ -162,8 +165,8 @@ def _register_custody_tools(mcp: Any, deps: ToolDepsProto) -> None:
     async def email_provenance(params: EmailProvenanceInput) -> str:
         """Full provenance for an email: OLM source hash, ingestion run, custody events."""
 
-        def _work(db: Any) -> str:
-            return json_response(db.email_provenance(params.email_uid), default=str)
+        def _work(db: ArchiveDatabase) -> str:
+            return json_response(db.custody.email_provenance(params.email_uid), default=str)
 
         return await run_with_db(deps, _work)
 
@@ -174,8 +177,8 @@ def _register_custody_tools(mcp: Any, deps: ToolDepsProto) -> None:
     async def evidence_provenance(params: EvidenceProvenanceInput) -> str:
         """Full evidence chain: item details + source email provenance + modification history."""
 
-        def _work(db: Any) -> str:
-            return json_response(db.evidence_provenance(params.evidence_id), default=str)
+        def _work(db: ArchiveDatabase) -> str:
+            return json_response(db.evidence.evidence_provenance(params.evidence_id), default=str)
 
         return await run_with_db(deps, _work)
 
@@ -198,7 +201,7 @@ def _register_dossier_tool(mcp: Any, deps: ToolDepsProto) -> None:
         evidence, source emails, relationship analysis, and chain of custody.
         """
 
-        def _work(db: Any) -> str:
+        def _work(db: ArchiveDatabase) -> str:
             if params.preview_only:
                 from mailarium.investigation.dossier_generator import DossierGenerator
 
@@ -254,10 +257,10 @@ def _register_evidence_add_tool(mcp: Any, deps: ToolDepsProto) -> None:
         to read the full email body before extracting a quote.
         """
 
-        def _work(db: Any) -> str:
+        def _work(db: ArchiveDatabase) -> str:
             try:
                 return json_response(
-                    db.add_evidence(
+                    db.evidence.add_evidence(
                         email_uid=params.email_uid,
                         category=params.category,
                         key_quote=params.key_quote,
@@ -300,8 +303,8 @@ def _register_evidence_detail_tools(mcp: Any, deps: ToolDepsProto) -> None:
     async def evidence_get(params: EvidenceGetInput) -> str:
         """Get a single evidence item with full details including quote and verification status."""
 
-        def _work(db: Any) -> str:
-            item = db.get_evidence(params.evidence_id)
+        def _work(db: ArchiveDatabase) -> str:
+            item = db.evidence.get_evidence(params.evidence_id)
             if not item:
                 return json_error(f"Evidence item not found: {params.evidence_id}")
             return json_response(item)
@@ -319,8 +322,8 @@ def _register_evidence_mutation_tools(mcp: Any, deps: ToolDepsProto) -> None:
     async def evidence_update(params: EvidenceUpdateInput) -> str:
         """Update an evidence item's category, quote, summary, relevance, or notes."""
 
-        def _work(db: Any) -> str:
-            updated = db.update_evidence(
+        def _work(db: ArchiveDatabase) -> str:
+            updated = db.evidence.update_evidence(
                 params.evidence_id,
                 category=params.category,
                 key_quote=params.key_quote,
@@ -330,7 +333,7 @@ def _register_evidence_mutation_tools(mcp: Any, deps: ToolDepsProto) -> None:
             )
             if not updated:
                 return json_error(f"Evidence item not found: {params.evidence_id}")
-            return json_response(db.get_evidence(params.evidence_id))
+            return json_response(db.evidence.get_evidence(params.evidence_id))
 
         return await run_with_db(deps, _work)
 
@@ -341,8 +344,8 @@ def _register_evidence_mutation_tools(mcp: Any, deps: ToolDepsProto) -> None:
     async def evidence_remove(params: EvidenceRemoveInput) -> str:
         """Remove an evidence item by ID."""
 
-        def _work(db: Any) -> str:
-            removed = db.remove_evidence(params.evidence_id)
+        def _work(db: ArchiveDatabase) -> str:
+            removed = db.evidence.remove_evidence(params.evidence_id)
             if not removed:
                 return json_error(f"Evidence item not found: {params.evidence_id}")
             return json_response({"removed": params.evidence_id})
@@ -355,7 +358,7 @@ def _register_evidence_mutation_tools(mcp: Any, deps: ToolDepsProto) -> None:
     )
     async def evidence_verify() -> str:
         """Re-verify all evidence quotes against source email body text."""
-        return await run_with_db(deps, lambda db: json_response(db.verify_evidence_quotes()))
+        return await run_with_db(deps, lambda db: json_response(db.evidence.verify_evidence_quotes()))
 
 
 def _register_evidence_export_tools(mcp: Any, deps: ToolDepsProto) -> None:
@@ -368,7 +371,7 @@ def _register_evidence_export_tools(mcp: Any, deps: ToolDepsProto) -> None:
     async def evidence_export(params: EvidenceExportInput) -> str:
         """Export the evidence collection as an HTML report or CSV file."""
 
-        def _work(db: Any) -> str:
+        def _work(db: ArchiveDatabase) -> str:
             from mailarium.investigation.evidence_exporter import EvidenceExporter
 
             return json_response(
@@ -393,12 +396,12 @@ def _register_evidence_export_tools(mcp: Any, deps: ToolDepsProto) -> None:
         and relevance level, plus all category counts.
         """
 
-        def _work(db: Any) -> str:
-            stats = db.evidence_stats(
+        def _work(db: ArchiveDatabase) -> str:
+            stats = db.evidence.evidence_stats(
                 category=params.category,
                 min_relevance=params.min_relevance,
             )
-            categories = db.evidence_categories()
+            categories = db.evidence.evidence_categories()
             total = stats.get("total", 0)
             verified = stats.get("verified", 0)
             payload: dict[str, Any] = {
@@ -427,12 +430,12 @@ def _register_evidence_export_tools(mcp: Any, deps: ToolDepsProto) -> None:
         Each item is independent - if one fails, others still succeed.
         """
 
-        def _work(db: Any) -> str:
+        def _work(db: ArchiveDatabase) -> str:
             added: list[dict] = []
             failed: list[dict] = []
             for item in params.items:
                 try:
-                    result = db.add_evidence(
+                    result = db.evidence.add_evidence(
                         email_uid=item.email_uid,
                         category=item.category,
                         key_quote=item.key_quote,

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..mcp_models import (
-    ActionItemsInput,
-    DecisionsInput,
-    EmailThreadLookupInput,
-    ThreadSummaryInput,
-)
+from mailarium.interfaces.presentation import serialize_results
+
+from ..models.analysis import ActionItemsInput, DecisionsInput, EmailThreadLookupInput, ThreadSummaryInput
 from .utils import ToolDepsProto, json_error, json_response, run_with_db
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 
 def register(mcp: Any, deps: ToolDepsProto) -> None:
@@ -139,7 +139,8 @@ def _register_thread_lookup_tool(mcp: Any, deps: ToolDepsProto) -> None:
                     conversation_id=conv_id,
                     top_k=params.limit,
                 )
-                payload = retriever.serialize_results(
+                payload = serialize_results(
+                    retriever.settings,
                     conv_id,
                     results,
                 )
@@ -148,8 +149,8 @@ def _register_thread_lookup_tool(mcp: Any, deps: ToolDepsProto) -> None:
 
             return await deps.offload(_run)
 
-        def _work(db):
-            emails = db.thread_by_topic(params.thread_topic, limit=params.limit)
+        def _work(db: ArchiveDatabase) -> str:
+            emails = db.queries.thread_by_topic(params.thread_topic or "", limit=params.limit)
             return json_response(
                 {
                     "thread_topic": params.thread_topic,

@@ -9,8 +9,9 @@ Use this file after the first setup succeeds. It is an advanced tuning reference
 
 - Email content stays local.
 - First-run embedding or reranking model loading may contact Hugging Face.
-- Entity extraction can invoke spaCy's model downloader unless
-  `SPACY_AUTO_DOWNLOAD_DURING_INGEST=0`.
+- Entity extraction can invoke spaCy's model downloader. Set both
+  `SPACY_AUTO_DOWNLOAD_DURING_INGEST=0` and `SPACY_AUTO_DOWNLOAD=0` to
+  prevent an ingestion-triggered download.
 - Model caches and local runtime stores can consume several gigabytes on disk depending on archive size and enabled models.
 - In a source checkout, keep live operator runtimes under `private/runtime/current/` and keep tracked `data/` limited to sanitized examples.
 - An installed wheel keeps relative runtime data under its per-user runtime home, never under `site-packages`. Override that home with an absolute `MAILARIUM_RUNTIME_HOME` when needed.
@@ -100,12 +101,41 @@ Use that summary instead of inferring behavior from `.env` alone.
 
 ## Throughput Measurement
 
-The embedding forward pass is usually the main ingestion cost. This alpha does
-not publish a representative cross-hardware benchmark because the repository
-does not contain a reproducible benchmark artifact. Measure a bounded ingest on
-the target archive and machine before estimating a full run. Model availability,
-message size, attachment extraction, thermal behavior, and the selected runtime
-profile can all affect elapsed time.
+Use the synthetic benchmark to compare vector storage, warm queries, and
+duplicate detection without reading a mailbox or loading model weights:
+
+```bash
+uv run python scripts/benchmark.py --rows 2000 --batch-size 100 --repetitions 3
+```
+
+It prints JSON with seeded input sizes, Python and dependency versions, timing
+samples, medians and ranges, SQL statement counts, and full-index checksum
+counts. Each vector run uses a fresh temporary archive. Immediate and deferred
+checkpoint runs use identical inputs; warm-query measurements follow an
+integrity check and an untimed query. Duplicate-detection measurements exclude
+n-gram construction and use dissimilar bodies sharing one subject.
+
+The [2026-09-08 comparison](benchmarks/optimization-2026-09-08.json) records
+three runs on Darwin arm64 with Python 3.14.7 and the locked dependencies.
+Inputs were 2,000 normalized 64-dimensional vectors in batches of 100, ten
+warm queries, and 800 dissimilar 120-character bodies, all using seed 42.
+
+| Workload | Baseline median | Optimized median | Ratio |
+| --- | ---: | ---: | ---: |
+| Vector writes, immediate baseline versus deferred publication | 350.5 ms | 80.9 ms | 4.3× |
+| Ten warm vector queries | 23.9 ms | 2.87 ms | 8.3× |
+| Exact duplicate detection over dissimilar bodies | 1,704.0 ms | 60.1 ms | 28.3× |
+
+The ten warm queries issued 20 SQL statements instead of 120 and no repeated
+full-file hashes instead of ten. The artifact contains every sample, source
+identifiers, environment versions, and comparison limits.
+
+These synthetic workloads isolate storage and matching costs. They do not
+measure embedding inference, attachment extraction, live EWS latency, or
+representative cross-hardware throughput. Measure a bounded ingest on the
+target archive and machine before estimating a full run. Model availability,
+message sizes, thermal behavior, and the selected runtime profile affect
+elapsed time.
 
 ## High-Value Knobs
 
@@ -145,8 +175,10 @@ If you need deterministic local behavior with no model downloads:
 RUNTIME_PROFILE=offline-test
 EMBEDDING_LOAD_MODE=local_only
 SPACY_AUTO_DOWNLOAD_DURING_INGEST=0
+SPACY_AUTO_DOWNLOAD=0
 ```
 
 Pre-seed the required Hugging Face and spaCy models before disconnecting the
 machine. When the local spaCy model is missing and automatic download is
-disabled, entity extraction falls back to the built-in regex extractor.
+disabled by both controls, entity extraction falls back to the built-in regex
+extractor.

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..mcp_models import EmailReportInput
+from ..models.analysis import EmailReportInput
 from .utils import ToolDepsProto, json_error, json_response, run_with_db
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
         type='writing': writing style and readability metrics per sender.
         """
 
-        def _work(db: Any) -> str:
+        def _work(db: ArchiveDatabase) -> str:
             if params.type == "archive":
                 from mailarium.investigation.report_generator import ReportGenerationError, ReportGenerator
 
@@ -72,7 +75,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
         return await run_with_db(deps, _work)
 
 
-def _writing_analysis(deps: ToolDepsProto, db: Any, sender: str | None, limit: int) -> str:
+def _writing_analysis(deps: ToolDepsProto, db: ArchiveDatabase, sender: str | None, limit: int) -> str:
     """Analyze one sender or top archive senders and format the resulting style report."""
     from mailarium.investigation.writing_analyzer import WritingAnalyzer
 
@@ -83,14 +86,14 @@ def _writing_analysis(deps: ToolDepsProto, db: Any, sender: str | None, limit: i
     return _top_sender_writing_analysis(db, retriever, analyzer, limit)
 
 
-def _sender_texts(db: Any, retriever: Any, sender_filter: str, max_texts: int = 50) -> list[str]:
+def _sender_texts(db: ArchiveDatabase, retriever: Any, sender_filter: str, max_texts: int = 50) -> list[str]:
     """Get email body texts for a sender, preferring the SQLite archive."""
     if db:
         try:
-            emails = db.list_emails_paginated(sender=sender_filter, limit=max_texts, offset=0)
+            emails = db.queries.list_emails_paginated(sender=sender_filter, limit=max_texts, offset=0)
             uids = [email["uid"] for email in emails.get("emails", [])]
             if uids:
-                full_map = db.get_emails_full_batch(uids)
+                full_map = db.queries.get_emails_full_batch(uids)
                 return [full.get("body_text", "") for full in full_map.values() if full and full.get("body_text")][:max_texts]
         except Exception:
             logger.debug("SQLite query failed for sender %r, falling back", sender_filter, exc_info=True)
@@ -112,12 +115,12 @@ def _single_sender_writing_analysis(texts: list[str], analyzer: Any, sender: str
     return json_response(profile)
 
 
-def _top_sender_writing_analysis(db: Any, retriever: Any, analyzer: Any, limit: int) -> str:
+def _top_sender_writing_analysis(db: ArchiveDatabase, retriever: Any, analyzer: Any, limit: int) -> str:
     """Build writing profiles for top senders while skipping missing addresses and empty analyses."""
     if not db:
         return json_error("SQLite database not available.")
     try:
-        senders = db.top_senders(limit=limit)
+        senders = db.queries.top_senders(limit=limit)
     except Exception:
         return json_error("Could not fetch sender list.")
     profiles = []

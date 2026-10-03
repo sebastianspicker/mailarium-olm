@@ -42,10 +42,10 @@ class ReportGenerator:
 
     def _gather_overview(self) -> dict[str, Any]:
         """Collect high-level archive statistics."""
-        total = self._db.email_count()
-        senders = self._db.unique_sender_count()
-        folders = self._db.folder_counts()
-        date_start, date_end = self._db.date_range()
+        total = self._db.queries.email_count()
+        senders = self._db.queries.unique_sender_count()
+        folders = self._db.queries.folder_counts()
+        date_start, date_end = self._db.queries.date_range()
         return {
             "total_emails": total,
             "unique_senders": senders,
@@ -55,10 +55,10 @@ class ReportGenerator:
         }
 
     def _gather_top_senders(self, limit: int = 15) -> list[dict[str, Any]]:
-        return self._db.top_senders(limit=limit)
+        return self._db.queries.top_senders(limit=limit)
 
     def _gather_folders(self) -> list[tuple[str, int]]:
-        folder_counts = self._db.folder_counts()
+        folder_counts = self._db.queries.folder_counts()
         return sorted(folder_counts.items(), key=lambda x: x[1], reverse=True)
 
     def _gather_monthly_volume(self) -> list[dict[str, Any]]:
@@ -73,7 +73,7 @@ class ReportGenerator:
 
     def _gather_top_entities(self, limit: int = 20) -> list[dict[str, Any]]:
         try:
-            return self._db.top_entities(limit=limit)
+            return self._db.entities.top_entities(limit=limit)
         except Exception as exc:
             self._record_warning(f"top_entities unavailable: {type(exc).__name__}", exc=exc)
             return []

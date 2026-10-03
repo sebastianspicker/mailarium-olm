@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..mcp_models import EmailQualityInput
+from ..models.analysis import EmailQualityInput
 from .utils import ToolDepsProto, json_error, json_response, run_with_db
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 
 def register(mcp: Any, deps: ToolDepsProto) -> None:
@@ -21,13 +24,13 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
         check='sentiment': sentiment distribution across indexed emails.
         """
 
-        def _work(db: Any) -> str:
+        def _work(db: ArchiveDatabase) -> str:
             return _email_quality_work(db, params)
 
         return await run_with_db(deps, _work)
 
 
-def _email_quality_work(db: Any, params: EmailQualityInput) -> str:
+def _email_quality_work(db: ArchiveDatabase, params: EmailQualityInput) -> str:
     """Dispatch the requested quality check and reject unsupported check names explicitly."""
     handlers = {"duplicates": _duplicates_quality, "languages": _languages_quality, "sentiment": _sentiment_quality}
     handler = handlers.get(params.check)
@@ -36,7 +39,7 @@ def _email_quality_work(db: Any, params: EmailQualityInput) -> str:
     return handler(db, params)
 
 
-def _duplicates_quality(db: Any, params: EmailQualityInput) -> str:
+def _duplicates_quality(db: ArchiveDatabase, params: EmailQualityInput) -> str:
     """Run thresholded duplicate detection and serialize the bounded match set."""
     from mailarium.investigation.dedup_detector import DuplicateDetector
 
@@ -44,10 +47,10 @@ def _duplicates_quality(db: Any, params: EmailQualityInput) -> str:
     return json_response({"count": len(duplicates), "duplicates": duplicates})
 
 
-def _languages_quality(db: Any, _params: EmailQualityInput) -> str:
+def _languages_quality(db: ArchiveDatabase, _params: EmailQualityInput) -> str:
     """Summarize language labels, confidence coverage, metadata completeness, and caveats from SQLite."""
     try:
-        total_row, rows, confidence_rows, reason_rows, source_rows, metadata_row = _load_language_rows(db)
+        total_row, rows, confidence_rows, reason_rows, source_rows, metadata_row = db.analytics.language_distribution_rows()
     except sqlite3.OperationalError:
         return json_error("Language columns not found. Run email_admin(action='reingest_analytics').")
     total_count = int(total_row["cnt"] or 0)
@@ -69,39 +72,9 @@ def _languages_quality(db: Any, _params: EmailQualityInput) -> str:
     )
 
 
-_LANGUAGE_GROUP_QUERIES = (
-    """SELECT detected_language, COUNT(*) as cnt FROM emails
-       WHERE detected_language IS NOT NULL AND detected_language != ''
-       GROUP BY detected_language ORDER BY cnt DESC""",
-    """SELECT detected_language_confidence AS confidence, COUNT(*) AS cnt FROM emails
-       WHERE detected_language_confidence IS NOT NULL AND detected_language_confidence != ''
-       GROUP BY detected_language_confidence ORDER BY cnt DESC""",
-    """SELECT detected_language_reason AS reason, COUNT(*) AS cnt FROM emails
-       WHERE detected_language_reason IS NOT NULL AND detected_language_reason != ''
-       GROUP BY detected_language_reason ORDER BY cnt DESC""",
-    """SELECT detected_language_source AS source, COUNT(*) AS cnt FROM emails
-       WHERE detected_language_source IS NOT NULL AND detected_language_source != ''
-       GROUP BY detected_language_source ORDER BY cnt DESC""",
-)
-_LANGUAGE_METADATA_QUERY = """SELECT
-    SUM(CASE WHEN COALESCE(detected_language_confidence, '') != ''
-        OR COALESCE(detected_language_reason, '') != ''
-        OR COALESCE(detected_language_source, '') != '' THEN 1 ELSE 0 END) AS metadata_rows,
-    SUM(CASE WHEN detected_language IS NOT NULL AND detected_language != ''
-        AND detected_language_confidence = 'low' THEN 1 ELSE 0 END) AS low_confidence_labeled_rows,
-    SUM(CASE WHEN COALESCE(detected_language_reason, '') LIKE 'short_text_%' THEN 1 ELSE 0 END) AS short_text_rows
-    FROM emails"""
-
-
-def _load_language_rows(db: Any) -> tuple[Any, ...]:
-    """Load language rows while preserving the caller's fallback behavior."""
-    total = db.conn.execute("SELECT COUNT(*) AS cnt FROM emails").fetchone()
-    grouped = [db.conn.execute(query).fetchall() for query in _LANGUAGE_GROUP_QUERIES]
-    metadata = db.conn.execute(_LANGUAGE_METADATA_QUERY).fetchone()
-    return total, *grouped, metadata
-
-
-def _language_coverage(stats, total: int, labeled: int, unlabeled: int, metadata: dict[str, int]) -> dict[str, Any]:
+def _language_coverage(
+    stats: list[dict[str, Any]], total: int, labeled: int, unlabeled: int, metadata: dict[str, int]
+) -> dict[str, Any]:
     """Calculate labeled, dominant-language, confidence, and short-text coverage shares."""
     dominant_count = int(stats[0]["count"]) if stats else 0
     return {
@@ -139,19 +112,10 @@ def _language_caveats(total: int, unlabeled: int, metadata: dict[str, int]) -> l
     return [message for condition, message in candidates if condition]
 
 
-def _sentiment_quality(db: Any, _params: EmailQualityInput) -> str:
+def _sentiment_quality(db: ArchiveDatabase, _params: EmailQualityInput) -> str:
     """Aggregate sentiment counts and mean scores, failing clearly when analytics data is absent."""
     try:
-        rows = db.conn.execute(
-            """
-                        SELECT sentiment_label, COUNT(*) as cnt,
-                               ROUND(AVG(sentiment_score), 4) as avg_score
-                        FROM emails
-                        WHERE sentiment_label IS NOT NULL AND sentiment_label != ''
-                        GROUP BY sentiment_label
-                        ORDER BY cnt DESC
-                        """
-        ).fetchall()
+        rows = db.analytics.sentiment_distribution_rows()
     except sqlite3.OperationalError:
         return json_error("Sentiment columns not found. Run email_admin(action='reingest_analytics').")
     if not rows:

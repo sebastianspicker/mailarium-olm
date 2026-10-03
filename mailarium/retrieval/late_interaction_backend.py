@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .retriever_models import SearchResult
+    from .models import SearchResult
 
 _PROTOCOL_VERSION = 1
 _MAX_CANDIDATES = 100
@@ -97,7 +97,7 @@ class LocalLateInteractionBackend:
             enumerate(candidates),
             key=lambda item: (-scores[item[1].chunk_id], item[0]),
         )
-        from .retriever_models import SearchResult as SearchResultModel
+        from .models import SearchResult as SearchResultModel
 
         return [
             SearchResultModel(

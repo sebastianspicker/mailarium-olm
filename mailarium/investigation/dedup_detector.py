@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
+from collections.abc import Iterable, Iterator
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -67,9 +69,18 @@ def _find_matching_pairs(
 ) -> list[dict[str, Any]]:
     """Return matching pairs from one subject group, in input pair order."""
     duplicates: list[dict[str, Any]] = []
+    if limit <= 0 or threshold > 1:
+        return duplicates
+    candidate_rows: Iterable[tuple[int, Iterable[int]]]
+    if threshold <= 0 or not math.isfinite(threshold):
+        candidate_rows = ((i, range(i + 1, len(ngram_cache))) for i in range(len(ngram_cache)))
+    else:
+        candidate_rows = _overlap_candidate_rows(ngram_cache, threshold)
 
-    for i, email_a in enumerate(ngram_cache):
-        for email_b in ngram_cache[i + 1 :]:
+    for i, candidate_indexes in candidate_rows:
+        email_a = ngram_cache[i]
+        for j in candidate_indexes:
+            email_b = ngram_cache[j]
             duplicate = _matching_pair(email_a, email_b, base_subject, threshold)
             if duplicate is None:
                 continue
@@ -78,6 +89,63 @@ def _find_matching_pairs(
                 return duplicates
 
     return duplicates
+
+
+def _can_reach_jaccard(size_a: int, size_b: int, overlap: int, threshold: float) -> bool:
+    """Return whether pair cardinalities and overlap can meet the cutoff."""
+    if size_a == 0 or size_b == 0:
+        return size_a == size_b
+    union = size_a + size_b - overlap
+    return overlap / union >= threshold
+
+
+def _candidate_overlap_counts(
+    index: int,
+    ngrams: set[str],
+    sizes: list[int],
+    postings: dict[str, list[int]],
+    threshold: float,
+) -> dict[int, int]:
+    """Count shared n-grams only for later rows with viable cardinality."""
+    overlap_counts: dict[int, int] = {}
+    size_a = sizes[index]
+    for ngram in ngrams:
+        for other in postings.get(ngram, ()):
+            if other <= index:
+                continue
+            if not _can_reach_jaccard(size_a, sizes[other], min(size_a, sizes[other]), threshold):
+                continue
+            overlap_counts[other] = overlap_counts.get(other, 0) + 1
+    return overlap_counts
+
+
+def _ngram_postings(ngram_cache: list[tuple[str, str, set[str]]]) -> dict[str, list[int]]:
+    """Build a compact inverted index without materializing candidate pairs."""
+    postings: dict[str, list[int]] = {}
+    for index, (_uid, _body, ngrams) in enumerate(ngram_cache):
+        for ngram in ngrams:
+            postings.setdefault(ngram, []).append(index)
+    return postings
+
+
+def _overlap_candidate_rows(
+    ngram_cache: list[tuple[str, str, set[str]]], threshold: float
+) -> Iterator[tuple[int, Iterable[int]]]:
+    """Yield exact overlap-qualified later indexes one input row at a time."""
+    postings = _ngram_postings(ngram_cache)
+    sizes = [len(item[2]) for item in ngram_cache]
+    for index, (_uid, _body, ngrams) in enumerate(ngram_cache):
+        size_a = sizes[index]
+        if size_a == 0:
+            yield index, (other for other in range(index + 1, len(sizes)) if sizes[other] == 0)
+            continue
+        overlap_counts = _candidate_overlap_counts(index, ngrams, sizes, postings, threshold)
+        yield (
+            index,
+            sorted(
+                other for other, overlap in overlap_counts.items() if _can_reach_jaccard(size_a, sizes[other], overlap, threshold)
+            ),
+        )
 
 
 class DuplicateDetector:
@@ -102,7 +170,7 @@ class DuplicateDetector:
             List of dicts: {uid_a, uid_b, similarity, subject}.
         """
         duplicates: list[dict[str, Any]] = []
-        groups = self.db.emails_by_base_subject(min_group_size=2)
+        groups = self.db.queries.emails_by_base_subject(min_group_size=2)
 
         for base_subject, emails in groups:
             if len(duplicates) >= limit:

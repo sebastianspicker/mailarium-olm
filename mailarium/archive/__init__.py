@@ -6,6 +6,7 @@ work.  Its caller owns the returned connection and must close it deterministical
 """
 
 from .database import ArchiveDatabase
+from .repositories.mailbox.repository import MailboxRepository
 
 
 def open_archive_database(
@@ -17,4 +18,4 @@ def open_archive_database(
     return ArchiveDatabase(sqlite_path, busy_timeout_ms=busy_timeout_ms)
 
 
-__all__ = ["ArchiveDatabase", "open_archive_database"]
+__all__ = ["ArchiveDatabase", "MailboxRepository", "open_archive_database"]

@@ -1,87 +1,100 @@
 # Mailarium
 
+**Local Outlook OLM archive search with optional Exchange EWS integration.**
+
 Mailarium is a local-first mailbox investigation tool for Outlook `.olm`
 archives. It normalizes messages and selected attachments into a local SQLite
-archive, builds rebuildable USearch acceleration, and offers CLI, MCP, and
-Streamlit interfaces for search, evidence, analysis, exports, and controlled
-mailbox workflows.
+archive, builds rebuildable search acceleration, and exposes the same archive
+through CLI, MCP, and trusted-local Streamlit interfaces.
 
 Mailarium is alpha software. Commands, storage details, and defaults can change
 within the `0.5.x` line.
 
-## Boundaries
+## Capabilities and limits
 
-- SQLite holds canonical messages, metadata, provenance, and vector data.
-  USearch is derived acceleration and can be rebuilt.
-- An `.olm` archive remains the recovery source. Retrieval scores, OCR output,
-  and generated summaries require review against original material.
+Mailarium supports:
+
+- bounded and incremental `.olm` ingestion;
+- lexical, dense, hybrid, and optional reranked retrieval;
+- message, thread, entity, attachment, relationship, and temporal analysis;
+- evidence collections, archive reports, and allowlisted exports;
+- optional synchronization of selected on-premises EWS folders; and
+- proposal-gated EWS actions with local interactive approval.
+
+The operating boundaries are deliberate:
+
+- SQLite is the canonical archive. USearch, BM25, sparse, and other retrieval
+  indexes are derived and may be rebuilt.
+- The original `.olm` remains the recovery source. Rankings, OCR, extracted
+  entities, and generated summaries must be checked against source material.
 - Streamlit and MCP are trusted-local interfaces, not authenticated public
   services.
-- Optional EWS support is limited to a configured HTTPS endpoint. Reads,
-  writes, and attachment content are independently opt-in. Live EWS operation
-  is not verified by the local source checks.
-- First model use may download local model weights unless local-only mode is
-  selected. No mailbox content is sent to a hosted model service by Mailarium.
+- EWS reads, writes, and attachment content are separate, disabled-by-default
+  opt-ins against one explicitly configured HTTPS endpoint.
+- Model weights may be downloaded on first use unless local-only settings are
+  selected. Mailarium does not send mailbox content to a hosted model service.
+
+Mailarium is not a hosted mailbox service, an Outlook replacement, or a legal
+case or matter management system.
 
 ## Requirements
 
 - Python `>=3.14.6,<3.15`
 - macOS 14 or later on Apple Silicon for the documented operator runtime
-- Disk space for the archive, SQLite database, model cache, and vector index
+- Enough disk space for the source archive, SQLite database, model cache, and
+  derived indexes
 
-## Install
+## Quick start
+
+Run these commands from the repository root:
 
 ```bash
-git clone https://github.com/sebastianspicker/mailarium.git
-cd mailarium
 python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e .
-```
-
-For development, use the locked environment:
-
-```bash
-python -m pip install "uv==0.10.7"
-uv sync --locked --extra dev --extra nlp --extra training --extra ews-ntlm
-```
-
-## Configure and ingest
-
-Copy the tracked template, then keep live data under ignored paths:
-
-```bash
 cp .env.example .env
 mkdir -p private/ingest private/runtime/current private/exports
 mailarium-ingest private/ingest/archive.olm --max-emails 200
+mailarium search "project handoff" --hybrid
 ```
 
-The normal source-checkout paths are:
+Place the real archive at `private/ingest/archive.olm` or substitute another
+allowed local path. The tracked `.env.example` uses source-checkout runtime
+paths below `private/`. Keep archives, databases, exports, model artifacts, and
+credentials out of version control.
+
+For deterministic offline ingestion, pre-seed the required models and set both
+spaCy download controls:
 
 ```dotenv
-VECTOR_INDEX_PATH=private/runtime/current/vector-index
-SQLITE_PATH=private/runtime/current/email_metadata.db
-RUNTIME_PROFILE=quality
-EMBEDDING_LOAD_MODE=auto
+RUNTIME_PROFILE=offline-test
+EMBEDDING_LOAD_MODE=local_only
+SPACY_AUTO_DOWNLOAD_DURING_INGEST=0
+SPACY_AUTO_DOWNLOAD=0
 ```
 
-For offline runs, use `RUNTIME_PROFILE=offline-test`,
-`EMBEDDING_LOAD_MODE=local_only`, and
-`SPACY_AUTO_DOWNLOAD_DURING_INGEST=0`. Required model files must already be
-available locally.
+See [operations](docs/OPERATIONS.md) for path rules, configuration precedence,
+maintenance, backups, EWS readiness, and troubleshooting.
 
-## Use the interfaces
+## Interfaces
+
+The installed terminal entry points are `mailarium` and `mailarium-ingest`.
+Use their live help for the exact command schema:
 
 ```bash
-mailarium search "project handoff" --scope customer-support --hybrid
+mailarium --help
+mailarium-ingest --help
+mailarium mailbox --help
+```
+
+Common archive commands include:
+
+```bash
 mailarium browse --page 1 --page-size 20
 mailarium analytics stats
 mailarium export report --output private/exports/report.html
 ```
-
-The installed commands are `mailarium` and `mailarium-ingest`. Their module
-forms are `python -m mailarium.cli` and `python -m mailarium.ingest`.
 
 Start the stdio MCP server with the environment interpreter:
 
@@ -89,47 +102,96 @@ Start the stdio MCP server with the environment interpreter:
 .venv/bin/python -m mailarium.mcp_server
 ```
 
-Start Streamlit only on a trusted local interface:
+Streamlit does not load `.env` itself. Export its runtime variables or pass
+them in the launch environment, and bind only to a trusted local interface:
 
 ```bash
+VECTOR_INDEX_PATH=private/runtime/current/vector-index \
+SQLITE_PATH=private/runtime/current/email_metadata.db \
 python -m streamlit run mailarium/web_app.py --server.address 127.0.0.1
 ```
 
-See [the documentation index](docs/README.md) for CLI, MCP, privacy, EWS, and
-runtime details.
+The source module forms are `python -m mailarium.cli`,
+`python -m mailarium.ingest`, and `python -m mailarium.mcp_server`.
+`python -m mailarium` also starts the MCP server.
+
+## Public synthetic demo
+
+The prepared GitHub Pages URL is
+[https://sebastianspicker.github.io/mailarium/](https://sebastianspicker.github.io/mailarium/).
+It is a static, synthetic demonstration only: it has no mailbox, archive,
+credentials, runtime paths, or network connection, and it is not a deployed
+Mailarium instance. Preview it locally without installing dependencies:
+
+```bash
+python3 -m http.server --directory demo 8000
+```
+
+Then open <http://localhost:8000>.
+
+## Repository structure
+
+Mailarium is one Python distribution and one modular monolith. Its interfaces
+are independently started, but they are not separately published packages.
+
+| Path | Responsibility | Independent surface |
+| --- | --- | --- |
+| `mailarium/model/` | Shared messages, attachments, chunks, scopes, and value objects | No |
+| `mailarium/archive/` | Canonical SQLite schema, repositories, provenance, and source mappings | No |
+| `mailarium/ingestion/` | OLM parsing, extraction, normalization, chunking, and archive writes | `mailarium-ingest` |
+| `mailarium/retrieval/` | Embeddings, indexes, ranking, filters, and index lifecycle | No |
+| `mailarium/investigation/` | Evidence, reports, exports, entities, networks, topics, and threads | No |
+| `mailarium/mailbox/` | EWS accounts, synchronization, proposals, and controlled execution | CLI and MCP operations |
+| `mailarium/interfaces/` | CLI (`cli/`), MCP (`mcp/`), and Streamlit (`web/`) adapters; `runtime.py` composes long-lived resources | `mailarium`, `mailarium-ingest`, MCP, Streamlit |
+| `mailarium/platform/` | Configuration (`settings.py`), runtime paths, validation, and sanitization | No |
+| `mailarium/*.py` | Launchers for `python -m` and Streamlit that delegate to `mailarium/interfaces/` | Entry points |
+| `scripts/` | Architecture policy, verification profiles, smokes, operations, and release tooling (including the publication privacy scanner) | Development tooling |
+| `demo/` | Dependency-free synthetic interface demonstration | Static files only |
+
+See [architecture](docs/ARCHITECTURE.md) for dependencies, runtime ownership,
+and data flows.
 
 ## Development
 
-Run the canonical verification profile that matches the work:
+Create the locked development environment from the repository root:
 
 ```bash
-python scripts/verify.py fast
-python scripts/verify.py pr
-python scripts/verify.py release
+python -m pip install "uv==0.10.7"
+uv sync --locked --extra dev --extra nlp --extra training --extra ews-ntlm
 ```
 
-`fast` is the deterministic lint, format, architecture, and contract gate.
-`pr` adds type checking, offline ingestion, security, dependency, and privacy
-checks. `release` also builds, inspects, installs, and smokes the distribution.
-These are local checks; they do not prove live EWS, model-download, browser, or
-remote CI behavior.
+Run the repository-owned verification profile that matches the change:
 
-## Project layout
-
-```text
-mailarium/
-├── archive/        SQLite schema, repositories, and source mappings
-├── ingestion/      OLM parsing and archive construction
-├── interfaces/     CLI, MCP, and Streamlit adapters
-├── investigation/  Evidence and derived analysis
-├── mailbox/         EWS accounts, sync, proposals, and execution
-├── model/           Shared value objects and normalization
-├── platform/        Paths, validation, and sanitization
-├── privacy/         Publication-boundary scanning
-├── retrieval/       Embeddings, indexes, ranking, and filters
-└── runtime.py       Application composition
+```bash
+uv run python scripts/verify.py fast
+uv run python scripts/verify.py pr
+uv run python scripts/verify.py release
 ```
 
-Keep real archives, databases, exports, and credentials out of version control.
-See [SECURITY.md](SECURITY.md) before reporting a vulnerability or exposing an
-interface outside a trusted local environment.
+`fast` runs lock, lint, format, architecture, and contract checks. `pr` adds
+typing, the complete tests under critical branch coverage floors, offline and
+native ingestion smokes, security analysis, dependency audit, and privacy
+scanning. `package` covers the Streamlit smoke, build, artifact inspection,
+and installed-wheel smoke; `release` runs `pr` and then `package`. These
+local profiles do not prove live EWS, real model downloads, a manual browser
+session, remote CI, or publication.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Operations and configuration](docs/OPERATIONS.md)
+- [CLI reference](docs/CLI_REFERENCE.md)
+- [MCP tools](docs/MCP_TOOLS.md)
+- [Web interfaces](docs/WEB_INTERFACE.md)
+- [Runtime tuning](docs/RUNTIME_TUNING.md)
+- [Attachment support](docs/ATTACHMENT_SUPPORT.md)
+- [Answer grounding](docs/ANSWER_GROUNDING.md)
+- [Privacy and redaction](docs/PRIVACY_AND_REDACTION.md)
+- [Contributing](CONTRIBUTING.md), [security](SECURITY.md), and
+  [releasing](RELEASING.md)
+
+Support requests must use synthetic examples and sanitized diagnostics. Use
+the repository issue forms for questions, defects, and feature proposals, and
+follow [SECURITY.md](SECURITY.md) for suspected vulnerabilities.
+
+Mailarium is licensed under the [MIT License](LICENSE).

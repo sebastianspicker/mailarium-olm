@@ -5,15 +5,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .quality import _is_weak_evidence_item
+from .text import _snippet
+
 """Budgeting and evidence-packing helpers for answer context responses."""
-
-
-def _compact_snippet_text(text: str, *, max_chars: int) -> str:
-    """Return a compact single-line snippet."""
-    collapsed = " ".join(text.split())
-    if len(collapsed) <= max_chars:
-        return collapsed
-    return collapsed[: max_chars - 3].rstrip() + "..."
 
 
 def _evidence_identity(item: dict[str, Any]) -> str:
@@ -56,14 +51,6 @@ def _reindex_evidence(items: list[dict[str, Any]]) -> None:
     """Rewrite evidence ranks after packing changes."""
     for index, item in enumerate(items, start=1):
         item["rank"] = index
-
-
-def _is_weak_evidence_item(item: dict[str, Any]) -> bool:
-    """Classify evidence that cannot justify answer synthesis or consume scarce packing budget."""
-    if item.get("weak_message"):
-        return True
-    attachment = item.get("attachment")
-    return isinstance(attachment, dict) and attachment.get("evidence_strength") == "weak_reference"
 
 
 def _attachment_strength_score(item: dict[str, Any]) -> int:
@@ -153,7 +140,7 @@ def _compact_snippets_for_budget(
     )
     for item in ordered_items:
         snippet = str(item.get("snippet") or "")
-        compacted = _compact_snippet_text(
+        compacted = _snippet(
             snippet,
             max_chars=_snippet_budget_for_item(item, cited_candidate_uids=cited_candidate_uids, phase=phase),
         )
@@ -313,10 +300,7 @@ def _strip_optional_evidence_fields(
 
 def _trim_snippet_for_budget(text: Any, *, max_chars: int) -> str:
     """Collapse and trim a snippet to a fixed character budget."""
-    collapsed = " ".join(str(text or "").split())
-    if len(collapsed) <= max_chars:
-        return collapsed
-    return collapsed[: max_chars - 3].rstrip() + "..."
+    return _snippet(str(text or ""), max_chars=max_chars)
 
 
 def _trim_provenance_for_budget(provenance: Any) -> dict[str, Any]:

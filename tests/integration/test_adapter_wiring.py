@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from mailarium.interfaces.mcp.mcp_models_search import EmailSearchStructuredInput
+from mailarium.interfaces.mcp.models.search import EmailSearchStructuredInput
 from mailarium.interfaces.mcp.tools import mailbox as mailbox_tools
 from mailarium.interfaces.mcp.tools import search as search_tools
 from mailarium.interfaces.mcp.tools.mailbox import MailboxSyncInput
@@ -27,6 +27,8 @@ class _Registry:
 
 
 class _Retriever:
+    settings = None
+
     def __init__(self) -> None:
         self.calls = []
         self.last_search_debug = {"use_hybrid": True, "retrieval_policy": {"scope": "finance"}}
@@ -34,10 +36,6 @@ class _Retriever:
     def search_filtered(self, **kwargs):
         self.calls.append(kwargs)
         return []
-
-    @staticmethod
-    def serialize_results(query, results):
-        return {"query": query, "count": len(results), "results": []}
 
 
 class _MailboxService:

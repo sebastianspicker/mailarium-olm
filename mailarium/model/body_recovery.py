@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from .html_text import clean_text as _clean_text
 from .html_text import html_to_text as _html_to_text
 from .html_text import looks_like_html as _looks_like_html
-from .rfc2822 import _extract_body_from_source
+from .rfc2822 import extract_body_from_source
 
 _HTML_SHELL_SUMMARY = "HTML shell message with no recoverable visible text."
 _IMAGE_ONLY_SUMMARY = "Image-only message with attachments and no recoverable body text."
@@ -78,7 +78,7 @@ def classify_body_state(
 
 def _body_surfaces(raw_text: str, raw_html: str, raw_source: str, preview: str) -> _BodySurfaces:
     """Collect visible, source, and normalized body variants for recovery decisions."""
-    source_text, source_html = _extract_body_from_source(raw_source) if raw_source else ("", "")
+    source_text, source_html = extract_body_from_source(raw_source) if raw_source else ("", "")
     source_text_visible = _normalize_visible_text(source_text, "text")
     source_html_visible = _normalize_visible_text(source_html, "html")
     return _BodySurfaces(

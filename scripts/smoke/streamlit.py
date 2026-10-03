@@ -16,7 +16,7 @@ SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 sys.path = [entry for entry in sys.path if Path(entry or ".").resolve() != SCRIPT_DIRECTORY]
 
 ROOT = Path(__file__).resolve().parents[2]
-VISIBLE_ELEMENT = "Search the archive"
+VISIBLE_ELEMENT = "What are you trying to establish?"
 DEFAULT_TIMEOUT_SECONDS = 45
 
 

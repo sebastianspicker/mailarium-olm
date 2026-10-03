@@ -6,9 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .utils import ToolDepsProto, get_deps, json_error, json_response
-
-_deps: ToolDepsProto | None = None
+from .utils import ToolDepsProto, json_error, json_response
 
 
 class MailboxAccountInput(BaseModel):
@@ -53,12 +51,8 @@ class MailboxProposalIdInput(BaseModel):
     proposal_id: str = Field(min_length=1, max_length=100)
 
 
-def _d() -> ToolDepsProto:
-    return get_deps(_deps)
-
-
-def _service() -> Any:
-    service = _d().get_mailbox_service()
+def _service(deps: ToolDepsProto) -> Any:
+    service = deps.get_mailbox_service()
     if service is None:
         raise RuntimeError("SQLite database not available. Run ingestion or configure the archive path first.")
     return service
@@ -71,13 +65,11 @@ def _remote_error(exc: Exception) -> str:
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     """Register mailbox tools without exposing approval or actor parameters."""
-    global _deps
-    _deps = deps
 
     @mcp_instance.tool(name="email_mailbox_status", annotations=deps.tool_annotations("Mailbox Readiness"))
     async def email_mailbox_status(params: MailboxAccountInput) -> str:
         try:
-            return json_response(await deps.offload(_service().readiness, params.account_id))
+            return json_response(await deps.offload(_service(deps).readiness, params.account_id))
         except (KeyError, ValueError, RuntimeError) as exc:
             return json_error(str(exc))
 
@@ -86,7 +78,7 @@ def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     @mcp_instance.tool(name="email_mailbox_triage", annotations=deps.tool_annotations("Triage Synchronized Mailbox"))
     async def email_mailbox_triage(params: MailboxTriageInput) -> str:
         try:
-            result = await deps.offload(_service().triage, params.account_id, folders=params.folders)
+            result = await deps.offload(_service(deps).triage, params.account_id, folders=params.folders)
             return json_response(result)
         except (KeyError, ValueError, RuntimeError) as exc:
             return json_error(str(exc))
@@ -98,7 +90,7 @@ def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     async def email_mailbox_propose_action(params: MailboxProposalInput) -> str:
         try:
             result = await deps.offload(
-                _service().propose_action,
+                _service(deps).propose_action,
                 account_id=params.account_id,
                 folder_id=params.folder_id,
                 operation=params.operation,
@@ -114,9 +106,9 @@ def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     async def email_mailbox_proposal_status(params: MailboxProposalStatusInput) -> str:
         try:
             if params.proposal_id:
-                result = await deps.offload(_service().proposal, params.proposal_id)
+                result = await deps.offload(_service(deps).proposal, params.proposal_id)
             else:
-                result = await deps.offload(_service().proposals, state=params.state)
+                result = await deps.offload(_service(deps).proposals, state=params.state)
             return json_response(result)
         except (KeyError, ValueError, RuntimeError) as exc:
             return json_error(str(exc))
@@ -129,7 +121,7 @@ def _register_sync_tool(mcp_instance: Any, deps: ToolDepsProto) -> None:
     async def email_mailbox_sync(params: MailboxSyncInput) -> str:
         try:
             result = await deps.offload(
-                _service().sync,
+                _service(deps).sync,
                 params.account_id,
                 folders=params.folders,
                 include_attachment_content=params.include_attachment_content,
@@ -148,7 +140,7 @@ def _register_execution_tools(mcp_instance: Any, deps: ToolDepsProto) -> None:
     )
     async def email_mailbox_execute_approved(params: MailboxProposalIdInput) -> str:
         try:
-            return json_response(await deps.offload(_service().execute, params.proposal_id))
+            return json_response(await deps.offload(_service(deps).execute, params.proposal_id))
         except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
             return json_error(str(exc))
         except Exception as exc:
@@ -160,7 +152,7 @@ def _register_execution_tools(mcp_instance: Any, deps: ToolDepsProto) -> None:
     )
     async def email_mailbox_reconcile(params: MailboxProposalIdInput) -> str:
         try:
-            return json_response(await deps.offload(_service().reconcile, params.proposal_id))
+            return json_response(await deps.offload(_service(deps).reconcile, params.proposal_id))
         except (KeyError, ValueError, PermissionError, RuntimeError) as exc:
             return json_error(str(exc))
         except Exception as exc:

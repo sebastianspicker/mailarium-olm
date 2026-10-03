@@ -240,11 +240,6 @@ def _chunk_metadata(metadata: dict[str, object], *, index: int, total: int, star
     }
 
 
-def _split_text(text: str, max_len: int, overlap: int) -> list[str]:
-    """Split text into overlapping segments, preferring to break at paragraph/sentence boundaries."""
-    return [segment for segment, _start, _end in _split_text_with_offsets(text, max_len, overlap)]
-
-
 def _split_text_with_offsets(text: str, max_len: int, overlap: int) -> list[tuple[str, int, int]]:
     """Split text into overlapping segments and return ``(segment, start, end)``."""
     if not text:

@@ -18,19 +18,3 @@ def as_list(value: Any) -> list[Any]:
 def compact(value: Any) -> str:
     """Normalize a value to a compact string with single spaces and no leading/trailing whitespace."""
     return " ".join(str(value or "").split()).strip()
-
-
-def first_nonempty(*values: Any) -> str:
-    """Return the first non-empty string from the given values after compacting each.
-
-    Args:
-        *values: Variable number of values to check.
-
-    Returns:
-        The first non-empty compacted string, or empty string if none found.
-    """
-    for value in values:
-        text = compact(value)
-        if text:
-            return text
-    return ""

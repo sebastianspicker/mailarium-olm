@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..mcp_models import (
+from ..models.analysis import (
     CoordinatedTimingInput,
     EmailContactsInput,
     NetworkAnalysisInput,
@@ -13,6 +13,9 @@ from ..mcp_models import (
     SharedRecipientsInput,
 )
 from .utils import ToolDepsProto, json_response, run_with_db, run_with_network
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 
 def register(mcp: Any, deps: ToolDepsProto) -> None:
@@ -35,11 +38,14 @@ def _register_contacts_tool(mcp: Any, deps: ToolDepsProto) -> None:
         Omit compare_with to get top communication partners ranked by frequency.
         Set compare_with to get bidirectional communication stats between two addresses.
         """
-        if params.compare_with:
+        compare_with = params.compare_with
+        if compare_with:
             return await run_with_db(
-                deps, lambda db: json_response(db.communication_between(params.email_address, params.compare_with))
+                deps, lambda db: json_response(db.analytics.communication_between(params.email_address, compare_with))
             )
-        return await run_with_db(deps, lambda db: json_response(db.top_contacts(params.email_address, limit=params.limit)))
+        return await run_with_db(
+            deps, lambda db: json_response(db.analytics.top_contacts(params.email_address, limit=params.limit))
+        )
 
 
 def _register_network_analysis_tool(mcp: Any, deps: ToolDepsProto) -> None:
@@ -65,7 +71,7 @@ def _register_relationship_paths_tool(mcp: Any, deps: ToolDepsProto) -> None:
         Useful for mapping relationships in communication and project analysis.
         """
 
-        def _work(db: Any, net: Any) -> str:
+        def _work(db: ArchiveDatabase, net: Any) -> str:
             paths = net.find_paths(
                 source=params.source,
                 target=params.target,
@@ -91,7 +97,7 @@ def _register_shared_recipients_tool(mcp: Any, deps: ToolDepsProto) -> None:
         Useful for discovering shared targets or information brokers.
         """
 
-        def _work(db: Any, net: Any) -> str:
+        def _work(db: ArchiveDatabase, net: Any) -> str:
             results = net.shared_recipients(
                 email_addresses=params.email_addresses,
                 min_shared=params.min_shared,
@@ -117,7 +123,7 @@ def _register_coordinated_timing_tool(mcp: Any, deps: ToolDepsProto) -> None:
         people were actively emailing within the same time window.
         """
 
-        def _work(db: Any, net: Any) -> str:
+        def _work(db: ArchiveDatabase, net: Any) -> str:
             windows = net.coordinated_timing(
                 email_addresses=params.email_addresses,
                 window_hours=params.window_hours,

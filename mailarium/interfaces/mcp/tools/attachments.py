@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..mcp_models import EmailAttachmentsInput
+from ..models.analysis import EmailAttachmentsInput
 from .utils import ToolDepsProto, json_error, json_response, run_with_db
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 
 def register(mcp: Any, deps: ToolDepsProto) -> None:
@@ -23,10 +26,10 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
         mode='stats': aggregate statistics (counts, sizes, type distribution).
         """
 
-        def _work(db: Any) -> str:
+        def _work(db: ArchiveDatabase) -> str:
             if params.mode == "list":
                 return json_response(
-                    db.list_attachments(
+                    db.attachments.list_attachments(
                         filename=params.filename,
                         extension=params.extension,
                         mime_type=params.mime_type,
@@ -36,7 +39,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
                     )
                 )
             if params.mode == "search":
-                results = db.search_emails_by_attachment(
+                results = db.attachments.search_emails_by_attachment(
                     filename=params.filename,
                     extension=params.extension,
                     mime_type=params.mime_type,
@@ -44,7 +47,7 @@ def register(mcp: Any, deps: ToolDepsProto) -> None:
                 )
                 return json_response({"emails": results, "count": len(results)})
             if params.mode == "stats":
-                return json_response(db.attachment_stats())
+                return json_response(db.attachments.attachment_stats())
             return json_error(f"Invalid mode: {params.mode}. Use 'list', 'search', or 'stats'.")
 
         return await run_with_db(deps, _work)

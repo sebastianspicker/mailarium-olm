@@ -14,9 +14,9 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    """Expose facade contracts lazily to avoid config-to-policy import cycles."""
+    """Expose facade contracts lazily so importing the package stays lightweight."""
     if name == "SearchEngine":
         return getattr(import_module(".retriever", __name__), name)
     if name in {"SearchRequest", "SearchResponse", "SearchResult"}:
-        return getattr(import_module(".retriever_models", __name__), name)
+        return getattr(import_module(".models", __name__), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

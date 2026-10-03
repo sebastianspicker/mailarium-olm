@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .retriever import SearchResult
+    from .models import SearchResult
 
 
 def _normalize_filter(value: str | None) -> str | None:
@@ -279,6 +278,66 @@ def _matches_attachment_request(result: SearchResult, request: MetadataFilterReq
     return _matches_attachment_name(result, request.attachment_name) and _matches_attachment_type(result, request.attachment_type)
 
 
+@dataclass(frozen=True)
+class SearchFilters:
+    """Normalized metadata filters for filtered search."""
+
+    sender: str | None
+    date_from: str | None
+    date_to: str | None
+    subject: str | None
+    folder: str | None
+    cc: str | None
+    to: str | None
+    bcc: str | None
+    has_attachments: bool | None
+    priority: int | None
+    min_score: float | None
+    email_type: str | None
+    allowed_uids: set[str] | None
+    category: str | None
+    is_calendar: bool | None
+    attachment_name: str | None
+    attachment_type: str | None
+
+    @property
+    def has_filters(self) -> bool:
+        """Report whether any textual, optional, or categorical search filter is active."""
+        text_filters = (self.sender, self.date_from, self.date_to, self.subject, self.folder, self.cc, self.to, self.bcc)
+        optional_filters = (self.has_attachments, self.priority, self.min_score, self.allowed_uids, self.is_calendar)
+        return (
+            any(text_filters)
+            or any(value is not None for value in optional_filters)
+            or any((self.email_type, self.category, self.attachment_name, self.attachment_type))
+        )
+
+    def apply(self, results: list[SearchResult], *, use_rerank: bool) -> list[SearchResult]:
+        """Apply metadata filters with rerank-aware min-score handling."""
+        if not self.has_filters:
+            return results
+        filter_min_score = None if use_rerank else self.min_score
+        return apply_metadata_filters(
+            results,
+            sender=self.sender,
+            subject=self.subject,
+            folder=self.folder,
+            cc=self.cc,
+            to=self.to,
+            bcc=self.bcc,
+            email_type=self.email_type,
+            date_from=self.date_from,
+            date_to=self.date_to,
+            has_attachments=self.has_attachments,
+            priority=self.priority,
+            min_score=filter_min_score,
+            allowed_uids=self.allowed_uids,
+            category=self.category,
+            is_calendar=self.is_calendar,
+            attachment_name=self.attachment_name,
+            attachment_type=self.attachment_type,
+        )
+
+
 # ── Deduplication ──
 
 
@@ -337,28 +396,3 @@ def _deduplicate_by_email(results: list[SearchResult]) -> list[SearchResult]:
         seen_keys.add(key)
         deduped.append(result)
     return deduped
-
-
-# ── JSON safety ──
-
-
-def _safe_json_float(value: Any) -> float | None:
-    """Safely convert a value to a rounded float, handling non-finite values."""
-    try:
-        number = float(value)
-    except TypeError, ValueError:
-        return None
-    if not math.isfinite(number):
-        return None
-    return round(number, 4)
-
-
-def _json_safe(value: Any) -> Any:
-    """Make a value JSON-safe by handling non-finite floats and nested structures."""
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, list | tuple):
-        return [_json_safe(v) for v in value]
-    return value

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from .assembly import pack_answer_context, run_analysis_stage, run_enrichment_stage, run_retrieval_stage
+from .assembly import run_analysis_stage, run_enrichment_stage, run_retrieval_stage
 from .contracts import AnswerContextDependencies, AnswerContextRequest
 from .models import AnswerContextRuntime
+from .packing import pack_answer_context
 
 """Orchestration entry points for answer-context runtime assembly."""
 

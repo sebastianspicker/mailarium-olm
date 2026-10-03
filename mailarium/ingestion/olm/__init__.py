@@ -5,14 +5,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..records import ParsedMessage
-    from .parse_olm import parse_olm
+    from .parser import parse_olm
 
 __all__ = ["ParsedMessage", "parse_olm"]
 
 
 def __getattr__(name: str):
-    """Defer parser import so model helpers can use OLM primitives safely."""
+    """Defer the parser import until a caller requests the parser or its record type."""
     if name in __all__:
-        module = import_module(".parse_olm", __name__)
+        module = import_module(".parser", __name__)
         return getattr(module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

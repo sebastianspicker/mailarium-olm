@@ -8,14 +8,14 @@ from typing import Any, Literal
 
 import numpy as np
 
-from mailarium.config import (
+from mailarium.model.attachment_profiles import IMAGE_EXTENSIONS
+from mailarium.platform.settings import (
     DEFAULT_IMAGE_EMBEDDING_MODEL,
     DEFAULT_IMAGE_EMBEDDING_MODEL_REVISION,
-    _require_model_revision,
+    require_model_revision,
     resolve_device,
     resolve_embedding_load_mode,
 )
-from mailarium.model.attachment_profiles import IMAGE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class ImageEmbedder:
             if model_name == DEFAULT_IMAGE_EMBEDDING_MODEL
             else ""
         )
-        self.model_revision = _require_model_revision(self.model_revision, variable_name="model_revision")
+        self.model_revision = require_model_revision(self.model_revision, variable_name="model_revision")
         self.device = resolve_device(device)
         self.load_mode = resolve_embedding_load_mode(load_mode)
         self.max_bytes = max(int(max_bytes), 1)
@@ -106,10 +106,6 @@ class ImageEmbedder:
         except Exception:
             logger.debug("Failed to encode image-search text", exc_info=True)
             return None
-
-    def encode_image_batch(self, images: list[bytes]) -> list[list[float] | None]:
-        """Encode a bounded list while preserving row alignment."""
-        return [self.encode_image(image) for image in images]
 
     def runtime_summary(self) -> dict[str, Any]:
         """Report model, device, and load state without forcing initialization."""

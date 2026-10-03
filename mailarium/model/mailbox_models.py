@@ -29,8 +29,6 @@ class ActorKind(StrEnum):
     ASSISTANT = "assistant"
     HUMAN = "human"
     SYSTEM = "system"
-    SERVER = "assistant"  # compatibility spelling
-    USER = "human"  # compatibility spelling
 
 
 @dataclass(frozen=True)

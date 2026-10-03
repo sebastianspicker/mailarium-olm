@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator, Sequence
+from contextlib import ExitStack, contextmanager
 from typing import TYPE_CHECKING
 
 from mailarium.model.chunks import EmailChunk
 
 if TYPE_CHECKING:
     from mailarium.archive import ArchiveDatabase
-from mailarium.archive.storage import (
+from mailarium.archive.vectors import (
     get_vector_collection,
+    get_vector_ids_for_uids,
     iter_vector_ids,
     to_builtin_list,
 )
-from mailarium.config import resolve_runtime_settings
+from mailarium.platform.settings import resolve_runtime_settings
 
 from .multi_vector_embedder import MultiVectorEmbedder, MultiVectorResult
 
@@ -200,6 +203,18 @@ class EmailEmbedder:
                 self._existing_ids_cache.update(iter_vector_ids(self.image_collection))
         return self._existing_ids_cache
 
+    def get_ids_for_uids(self, uids: Sequence[str]) -> set[str]:
+        """Return stored chunk IDs only for the selected canonical email UIDs."""
+        database = self._sparse_db
+        if database is None:
+            raise RuntimeError("EmailEmbedder is closed")
+        return get_vector_ids_for_uids(database, uids)
+
+    def forget_existing_ids(self, ids: Sequence[str]) -> None:
+        """Discard deleted IDs from an initialized lifecycle deduplication cache."""
+        if self._existing_ids_cache is not None:
+            self._existing_ids_cache.difference_update(str(chunk_id) for chunk_id in ids)
+
     def warmup(self) -> None:
         """Force model load and run a test encode to ensure GPU readiness.
 
@@ -212,6 +227,14 @@ class EmailEmbedder:
         """Flush committed vector changes into both derived USearch files."""
         self.collection.checkpoint()
         self.image_collection.checkpoint()
+
+    @contextmanager
+    def defer_checkpoints(self) -> Iterator[None]:
+        """Give one bounded operation ownership of final derived-index publication."""
+        with ExitStack() as stack:
+            stack.enter_context(self.collection.defer_checkpoints())
+            stack.enter_context(self.image_collection.defer_checkpoints())
+            yield
 
     def _touch_collection_revision(self) -> None:
         """Checkpoint committed writes; active SQLite transactions defer safely."""
@@ -230,6 +253,23 @@ class EmailEmbedder:
         Encoding is performed in a single pass for maximum GPU throughput.
         Storage writes use ``batch_size`` for bounded SQLite operations.
         """
+        with self.defer_checkpoints():
+            return self._add_chunks(
+                chunks,
+                show_progress=show_progress,
+                batch_size=batch_size,
+                skip_existing_check=skip_existing_check,
+            )
+
+    def _add_chunks(
+        self,
+        chunks: list[EmailChunk],
+        *,
+        show_progress: bool,
+        batch_size: int,
+        skip_existing_check: bool,
+    ) -> int:
+        """Implement one add operation under its caller's checkpoint boundary."""
         if batch_size <= 0:
             raise ValueError("batch_size must be a positive integer.")
 
@@ -280,7 +320,7 @@ class EmailEmbedder:
             db = self._sparse_db
             if db is None:
                 raise RuntimeError("EmailEmbedder is closed")
-            inserted = db.insert_sparse_batch(
+            inserted = db.sparse.insert_sparse_batch(
                 ids,
                 sparse_vectors,
                 model_id=self.settings.sparse_model,
@@ -293,24 +333,17 @@ class EmailEmbedder:
             logger.warning("Failed to store sparse vectors", exc_info=True)
             return 0
 
-    def delete_chunks_by_uid(self, uid: str) -> int:
-        """Delete all vector chunks for an email UID. Returns count deleted."""
-        existing = self.get_existing_ids(refresh=False)
-        chunk_ids = [cid for cid in existing if cid.startswith(f"{uid}__")]
-        if not chunk_ids:
-            return 0
-        self.collection.delete(ids=chunk_ids)
-        self.image_collection.delete(ids=chunk_ids)
-        existing.difference_update(chunk_ids)
-        self._touch_collection_revision()
-        return len(chunk_ids)
-
     def upsert_chunks(
         self,
         chunks: list[EmailChunk],
         batch_size: int = 100,
     ) -> int:
         """Re-embed and upsert chunks, preserving separate embedding spaces."""
+        with self.defer_checkpoints():
+            return self._upsert_chunks(chunks, batch_size=batch_size)
+
+    def _upsert_chunks(self, chunks: list[EmailChunk], *, batch_size: int) -> int:
+        """Implement one upsert operation under its caller's checkpoint boundary."""
         if not chunks:
             return 0
 

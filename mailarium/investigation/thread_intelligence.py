@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 # ── Action Item Patterns ──────────────────────────────────────
 
@@ -110,36 +109,6 @@ class Decision:
     source_uid: str = ""
 
 
-@dataclass
-class ThreadAnalysis:
-    """Complete analysis of an email thread."""
-
-    summary: str = ""
-    action_items: list[ActionItem] = field(default_factory=list)
-    decisions: list[Decision] = field(default_factory=list)
-    participants: list[dict[str, Any]] = field(default_factory=list)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize extracted thread findings for API and report consumers."""
-        return {
-            "summary": self.summary,
-            "action_items": [
-                {
-                    "text": a.text,
-                    "assignee": a.assignee,
-                    "deadline": a.deadline,
-                    "is_urgent": a.is_urgent,
-                    "source_uid": a.source_uid,
-                }
-                for a in self.action_items
-            ],
-            "decisions": [
-                {"text": d.text, "made_by": d.made_by, "date": d.date, "source_uid": d.source_uid} for d in self.decisions
-            ],
-            "participants": self.participants,
-        }
-
-
 class ThreadAnalyzer:
     """Extract structured intelligence from email threads."""
 
@@ -213,72 +182,3 @@ class ThreadAnalyzer:
             )
 
         return decisions
-
-    def analyze_thread(self, emails: list[dict]) -> ThreadAnalysis:
-        """Analyze a complete email thread.
-
-        Args:
-            emails: List of email dicts with keys:
-                clean_body, sender_name, sender_email, date, uid, subject.
-                Should be sorted chronologically.
-
-        Returns:
-            ThreadAnalysis with summary, action items, decisions, participants.
-        """
-        from .thread_summarizer import summarize_thread
-
-        if not emails:
-            return ThreadAnalysis()
-
-        # Generate summary
-        summary = summarize_thread(emails, max_sentences=5)
-
-        # Extract action items and decisions from all emails
-        all_actions: list[ActionItem] = []
-        all_decisions: list[Decision] = []
-
-        for email in emails:
-            body = email.get("clean_body", "") or email.get("body", "")
-            sender = email.get("sender_name", "") or email.get("sender_email", "")
-            uid = email.get("uid", "")
-            date = email.get("date", "")
-
-            actions = self.extract_action_items(body, sender=sender, source_uid=uid)
-            all_actions.extend(actions)
-
-            decisions = self.extract_decisions(body, sender=sender, date=date, source_uid=uid)
-            all_decisions.extend(decisions)
-
-        # Identify participants
-        participants = self._identify_participants(emails)
-
-        return ThreadAnalysis(
-            summary=summary,
-            action_items=all_actions,
-            decisions=all_decisions,
-            participants=participants,
-        )
-
-    def _identify_participants(self, emails: list[dict]) -> list[dict[str, Any]]:
-        """Identify key participants in a thread."""
-        from collections import Counter
-
-        sender_counts: Counter[str] = Counter()
-        for email in emails:
-            sender = email.get("sender_email", "") or email.get("sender_name", "")
-            if sender:
-                sender_counts[sender] += 1
-
-        participants = []
-        for sender, count in sender_counts.most_common():
-            initiator = emails[0].get("sender_email", "") or emails[0].get("sender_name", "")
-            role = "initiator" if sender == initiator else "responder"
-            participants.append(
-                {
-                    "email": sender,
-                    "message_count": count,
-                    "role": role,
-                }
-            )
-
-        return participants

@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import Any, Protocol
+from collections.abc import Iterator, Sequence
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Any, Protocol
 
-from mailarium.archive.message_enrichment import segment_rows_for_email
 from mailarium.ingestion.olm.body_forensics import render_forensic_text
 from mailarium.ingestion.records import ParsedMessage
 from mailarium.model.attachment_identity import (
@@ -20,14 +21,21 @@ from mailarium.model.attachment_identity import (
 from mailarium.model.conversation_segments import extract_segments
 from mailarium.model.mailbox_models import MailboxMessageRecord
 
-from .attachment_extractor import classify_text_extraction_state, extract_text_with_reason
+from .attachments.extract import classify_text_extraction_state, extract_text_with_reason
 from .chunker import _chunk_forensic_email_surface, chunk_attachment, chunk_email
+
+if TYPE_CHECKING:
+    import sqlite3
+
+    from mailarium.archive import ArchiveDatabase
 
 
 class MailboxSourceStore(Protocol):
     """Persistence operations required to project one mailbox record."""
 
-    conn: Any
+    def shares_archive(self, database: ArchiveDatabase) -> bool: ...
+
+    def batch_write(self) -> AbstractContextManager[None]: ...
 
     def upsert_source(self, record: MailboxMessageRecord) -> None: ...
 
@@ -43,6 +51,12 @@ class MailboxSourceStore(Protocol):
         change_key: str = "",
     ) -> None: ...
 
+    def canonical_email_uid_for_remote_item(self, account_id: str, source: str, remote_item_id: str) -> str: ...
+
+    def projection_marker(self, account_id: str, source: str, remote_item_id: str) -> Any: ...
+
+    def sources_for_canonical_email(self, canonical_email_uid: str) -> list[Any]: ...
+
 
 @dataclass(frozen=True)
 class MailboxIngestResult:
@@ -57,25 +71,19 @@ class MailboxIngestResult:
     possible_duplicate: bool = False
 
 
-def canonical_uid_for_record(record: MailboxMessageRecord, *, db: Any, store: MailboxSourceStore) -> tuple[str, bool]:
+def canonical_uid_for_record(record: MailboxMessageRecord, *, db: ArchiveDatabase, store: MailboxSourceStore) -> tuple[str, bool]:
     """Resolve stable identity without binding canonical IDs to mutable EWS IDs."""
     remote_item_id = record.remote_item_id or record.source_identity
-    source_row = store.conn.execute(
-        "SELECT canonical_email_uid FROM email_sources WHERE account_id=? AND source=? AND remote_item_id=?",
-        (record.account_id, record.source, remote_item_id),
-    ).fetchone()
-    if source_row is not None and source_row[0]:
-        return str(source_row[0]), False
+    linked_uid = store.canonical_email_uid_for_remote_item(record.account_id, record.source, remote_item_id)
+    if linked_uid:
+        return linked_uid, False
 
     if record.canonical_email_uid:
         return record.canonical_email_uid, False
 
     if record.internet_message_id:
         candidate = hashlib.sha256(record.internet_message_id.encode()).hexdigest()
-        existing = db.conn.execute(
-            "SELECT sender_email,date,content_sha256 FROM emails WHERE uid=?",
-            (candidate,),
-        ).fetchone()
+        existing = db.queries.email_identity_fingerprint(candidate)
         if existing is None or _fingerprint_matches(record, existing, db):
             return candidate, False
 
@@ -83,11 +91,11 @@ def canonical_uid_for_record(record: MailboxMessageRecord, *, db: Any, store: Ma
     return hashlib.sha256(source_key.encode()).hexdigest(), bool(record.internet_message_id)
 
 
-def _fingerprint_matches(record: MailboxMessageRecord, existing: Any, db: Any) -> bool:
+def _fingerprint_matches(record: MailboxMessageRecord, existing: sqlite3.Row, db: ArchiveDatabase) -> bool:
     """Require consistent envelope and content before cross-source identity reuse."""
     sender_matches = not record.sender_email or not existing["sender_email"] or record.sender_email == existing["sender_email"]
     date_matches = not record.received_at or not existing["date"] or record.received_at == existing["date"]
-    body_hash = db.compute_content_hash(record.body_text) if record.body_text else None
+    body_hash = db.custody.compute_content_hash(record.body_text) if record.body_text else None
     content_matches = not body_hash or not existing["content_sha256"] or body_hash == existing["content_sha256"]
     return bool(sender_matches and date_matches and content_matches)
 
@@ -129,27 +137,122 @@ def mailbox_record_to_email(record: MailboxMessageRecord, canonical_uid: str) ->
     return email
 
 
+@dataclass(frozen=True)
+class _PreparedProjection:
+    email: ParsedMessage | None
+    source: MailboxMessageRecord | None
+    result: MailboxIngestResult
+    finalize: bool = False
+
+
 def persist_mailbox_record(
     record: MailboxMessageRecord,
     *,
-    db: Any,
+    db: ArchiveDatabase,
     store: MailboxSourceStore,
     embedder: Any | None = None,
 ) -> MailboxIngestResult:
     """Upsert one mailbox record and refresh affected body/attachment vectors."""
+    prepared = _prepare_record_projection(record, db=db, store=store, batch=False)
+    result = _index_prepared_projection(prepared, embedder)
+    _finalize_prepared_projection(prepared, store)
+    return result
+
+
+def persist_mailbox_records(
+    records: Sequence[MailboxMessageRecord],
+    *,
+    db: ArchiveDatabase,
+    store: MailboxSourceStore,
+    embedder: Any | None = None,
+) -> list[MailboxIngestResult]:
+    """Project a bounded page with durable pending markers before vector work.
+
+    Canonical rows and pending source markers commit together. Final source
+    hashes commit only after every record's vector work succeeds. A failure
+    leaves the page replayable without advancing its cursor.
+    """
+    if not store.shares_archive(db):
+        raise ValueError("mailbox batches require the canonical shared connection")
+    return [
+        result
+        for batch in _source_batches(records)
+        for result in _persist_record_batch(batch, db=db, store=store, embedder=embedder)
+    ]
+
+
+def _source_batches(records: Sequence[MailboxMessageRecord]) -> Iterator[list[MailboxMessageRecord]]:
+    """Bound batches and finish each source observation before a repeated identity."""
+    batch: list[MailboxMessageRecord] = []
+    seen: set[tuple[str, str, str]] = set()
+    for record in records:
+        identity = (record.account_id, record.source, record.remote_item_id or record.source_identity)
+        if len(batch) == 100 or identity in seen:
+            yield batch
+            batch = []
+            seen.clear()
+        batch.append(record)
+        seen.add(identity)
+    if batch:
+        yield batch
+
+
+def _persist_record_batch(
+    records: Sequence[MailboxMessageRecord], *, db: ArchiveDatabase, store: MailboxSourceStore, embedder: Any
+) -> list[MailboxIngestResult]:
+    with db.operation():
+        with store.batch_write():
+            prepared = [_prepare_record_projection(record, db=db, store=store, batch=True) for record in records]
+        defer = getattr(embedder, "defer_checkpoints", None)
+        with defer() if callable(defer) else nullcontext():
+            results = [_index_prepared_projection(projection, embedder) for projection in prepared]
+        with store.batch_write():
+            for projection in prepared:
+                _finalize_prepared_projection(projection, store)
+        return results
+
+
+def _index_prepared_projection(prepared: _PreparedProjection, embedder: Any) -> MailboxIngestResult:
+    if prepared.email is None:
+        return prepared.result
+    indexed = _index_mailbox_projection(
+        embedder,
+        prepared.email,
+        prepared.result.canonical_email_uid,
+        inserted=prepared.result.inserted,
+        changed=prepared.result.content_changed or prepared.result.metadata_changed,
+    )
+    return replace(prepared.result, indexed_chunks=indexed)
+
+
+def _finalize_prepared_projection(prepared: _PreparedProjection, store: MailboxSourceStore) -> None:
+    if prepared.source is None:
+        return
+    if prepared.finalize:
+        store.finalize_source_projection(prepared.source)
+    else:
+        store.upsert_source(prepared.source)
+
+
+def _prepare_record_projection(
+    record: MailboxMessageRecord, *, db: ArchiveDatabase, store: MailboxSourceStore, batch: bool
+) -> _PreparedProjection:
+    """Persist canonical content and the retry marker, leaving vector work outside the transaction."""
     canonical_uid, possible_duplicate = canonical_uid_for_record(record, db=db, store=store)
     if record.is_tombstone:
         _persist_tombstone(record, store)
-        return MailboxIngestResult(
-            canonical_uid,
-            tombstoned=True,
-            possible_duplicate=possible_duplicate,
+        return _PreparedProjection(
+            None, None, MailboxIngestResult(canonical_uid, tombstoned=True, possible_duplicate=possible_duplicate)
         )
 
     email, existing, source_row, content_hash, source_folders, canonical_preexisting = _prepare_mailbox_projection(
         record, canonical_uid, db=db, store=store
     )
-    inserted = existing is None and bool(db.insert_email(email))
+    inserted = existing is None and (
+        canonical_uid in db.messages.insert_emails_batch([email], commit=False)
+        if batch
+        else bool(db.messages.insert_email(email))
+    )
     content_changed = existing is not None and (
         content_hash != existing["content_sha256"] or _body_evidence_changed(email, existing)
     )
@@ -161,7 +264,7 @@ def persist_mailbox_record(
     previous_metadata = json.loads(source_row["metadata_json"]) if source_row is not None else {}
     metadata_changed = existing is not None and previous_metadata.get("projection_hash") != projection_hash
     if content_changed or metadata_changed:
-        _update_existing_email(db, email, content_hash)
+        db.messages.refresh_mailbox_message(email, content_hash, commit=not batch)
 
     metadata = dict(record.metadata)
     metadata["possible_duplicate"] = possible_duplicate
@@ -174,7 +277,8 @@ def persist_mailbox_record(
         "remote_item_id": record.remote_item_id or record.source_identity,
         "metadata": metadata,
     }
-    if inserted and source_row is None:
+    needs_finalization = batch or (inserted and source_row is None) or projection_pending
+    if needs_finalization and not projection_pending:
         pending_metadata = dict(metadata)
         pending_metadata.pop("projection_hash")
         pending_metadata["projection_pending"] = True
@@ -186,23 +290,17 @@ def persist_mailbox_record(
                 }
             )
         )
-    indexed = _index_mailbox_projection(
-        embedder, email, canonical_uid, inserted=inserted, changed=content_changed or metadata_changed
-    )
-    # The projection hash is the durable retry marker. Record it only after
-    # vector work succeeds so a transient indexing failure is repaired by the
-    # next sync replay instead of being mistaken for a completed projection.
-    if (inserted and source_row is None) or projection_pending:
-        store.finalize_source_projection(MailboxMessageRecord(**source_values))
-    else:
-        store.upsert_source(MailboxMessageRecord(**source_values))
-    return MailboxIngestResult(
-        canonical_uid,
-        inserted=inserted,
-        content_changed=content_changed,
-        metadata_changed=metadata_changed,
-        indexed_chunks=indexed,
-        possible_duplicate=possible_duplicate,
+    return _PreparedProjection(
+        email,
+        MailboxMessageRecord(**source_values),
+        MailboxIngestResult(
+            canonical_uid,
+            inserted=inserted,
+            content_changed=content_changed,
+            metadata_changed=metadata_changed,
+            possible_duplicate=possible_duplicate,
+        ),
+        needs_finalization,
     )
 
 
@@ -220,11 +318,11 @@ def _prepare_mailbox_projection(
     record: MailboxMessageRecord,
     canonical_uid: str,
     *,
-    db: Any,
+    db: ArchiveDatabase,
     store: MailboxSourceStore,
 ) -> tuple[ParsedMessage, Any, Any, str | None, tuple[str, ...], bool]:
     email = mailbox_record_to_email(record, canonical_uid)
-    content_hash = db.compute_content_hash(email.clean_body) if email.clean_body else None
+    content_hash = db.custody.compute_content_hash(email.clean_body) if email.clean_body else None
     existing = _existing_canonical_email(db, canonical_uid, email)
     source_row = _existing_mailbox_source(store, record)
     canonical_preexisting = _canonical_preexisting(existing, source_row)
@@ -243,11 +341,8 @@ def _prepare_mailbox_projection(
     return email, existing, source_row, content_hash, source_folders, canonical_preexisting
 
 
-def _existing_canonical_email(db: Any, canonical_uid: str, email: ParsedMessage) -> Any:
-    existing = db.conn.execute(
-        "SELECT content_sha256,raw_source,folder,raw_body_text,raw_body_html,forensic_body_text FROM emails WHERE uid=?",
-        (canonical_uid,),
-    ).fetchone()
+def _existing_canonical_email(db: ArchiveDatabase, canonical_uid: str, email: ParsedMessage) -> sqlite3.Row | None:
+    existing = db.queries.email_projection_state(canonical_uid)
     if existing is not None:
         _preserve_existing_attachment_metadata(email, db)
     return existing
@@ -267,10 +362,7 @@ def _body_evidence_changed(email: ParsedMessage, existing: Any) -> bool:
 
 
 def _existing_mailbox_source(store: MailboxSourceStore, record: MailboxMessageRecord) -> Any:
-    return store.conn.execute(
-        "SELECT canonical_preexisting,metadata_json FROM email_sources WHERE account_id=? AND source=? AND remote_item_id=?",
-        (record.account_id, record.source, record.remote_item_id or record.source_identity),
-    ).fetchone()
+    return store.projection_marker(record.account_id, record.source, record.remote_item_id or record.source_identity)
 
 
 def _canonical_preexisting(existing: Any, source_row: Any) -> bool:
@@ -380,10 +472,10 @@ def _attachment_reconciliation_key(attachment: dict[str, Any]) -> tuple[str, str
     )
 
 
-def _preserve_existing_attachment_metadata(email: ParsedMessage, db: Any) -> None:
+def _preserve_existing_attachment_metadata(email: ParsedMessage, db: ArchiveDatabase) -> None:
     """Keep richer canonical attachment identities when EWS supplies metadata only."""
     existing_by_key: dict[tuple[str, str, int, bool], list[dict[str, Any]]] = defaultdict(list)
-    for existing in db.attachments_for_email(email.uid):
+    for existing in db.attachments.attachments_for_email(email.uid):
         existing_by_key[_attachment_reconciliation_key(existing)].append(existing)
     for attachment in email.attachments:
         candidates = existing_by_key.get(_attachment_reconciliation_key(attachment), [])
@@ -432,11 +524,7 @@ def _project_record_source_folders(
     remote_item_id = record.remote_item_id or record.source_identity
     folders: set[str] = set()
     preexisting = canonical_preexisting
-    rows = store.conn.execute(
-        "SELECT account_id,source,remote_item_id,folder_id,is_tombstone,"
-        "canonical_preexisting FROM email_sources WHERE canonical_email_uid=?",
-        (canonical_uid,),
-    ).fetchall()
+    rows = store.sources_for_canonical_email(canonical_uid)
     for row in rows:
         if _is_current_record_source(row, record, remote_item_id):
             continue
@@ -542,89 +630,6 @@ def _projection_hash(
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
-def _update_existing_email(db: Any, email: ParsedMessage, content_hash: str | None) -> None:
-    """Refresh mutable EWS content while preserving canonical evidence rows."""
-    with db.operation():
-        db.conn.execute("BEGIN IMMEDIATE")
-        try:
-            db.update_body_text(
-                email.uid,
-                email.clean_body,
-                email.body_html,
-                normalized_body_source=email.clean_body_source,
-                body_normalization_version=email.body_normalization_version,
-                body_kind=email.body_kind,
-                body_empty_reason=email.body_empty_reason,
-                recovery_strategy=email.recovery_strategy,
-                recovery_confidence=email.recovery_confidence,
-                commit=False,
-            )
-            db.update_headers(
-                email.uid,
-                email.subject,
-                email.sender_name,
-                email.sender_email,
-                email.base_subject,
-                email.email_type,
-                commit=False,
-            )
-            _replace_body_evidence(db.conn, email)
-            db.conn.execute(
-                "UPDATE emails SET date=?,folder=?,priority=?,is_read=?,body_length=?,content_sha256=? WHERE uid=?",
-                (email.date, email.folder, email.priority, int(email.is_read), len(email.clean_body), content_hash, email.uid),
-            )
-            db.update_v7_metadata(email, commit=False)
-            _replace_recipients(db.conn, email)
-            db.conn.commit()
-        except Exception:
-            db.conn.rollback()
-            raise
-
-
-def _replace_body_evidence(conn: Any, email: ParsedMessage) -> None:
-    """Persist the complete EWS surface and its quoted-message segmentation."""
-    existing = conn.execute("SELECT raw_source FROM emails WHERE uid=?", (email.uid,)).fetchone()
-    if existing is not None and str(existing["raw_source"] or "") not in {"", "ews"}:
-        return
-    if email.raw_body_text or email.raw_body_html:
-        conn.execute(
-            "UPDATE emails SET raw_body_text=?,raw_body_html=?,forensic_body_text=?,forensic_body_source=? WHERE uid=?",
-            (
-                email.raw_body_text,
-                email.raw_body_html,
-                email.forensic_body_text,
-                email.forensic_body_source,
-                email.uid,
-            ),
-        )
-    segments: list[object] = list(email.segments)
-    segment_rows = segment_rows_for_email(email.uid, segments)
-    if not segment_rows:
-        return
-    conn.execute("DELETE FROM message_segments WHERE email_uid=?", (email.uid,))
-    conn.executemany(
-        "INSERT INTO message_segments(email_uid,ordinal,segment_type,depth,text,source_surface,provenance_json) "
-        "VALUES(?,?,?,?,?,?,?)",
-        segment_rows,
-    )
-
-
-def _replace_recipients(conn: Any, email: ParsedMessage) -> None:
-    """Replace envelope recipients for a changed mailbox item."""
-    conn.execute("DELETE FROM recipients WHERE email_uid=?", (email.uid,))
-    rows = [
-        (email.uid, address, "", kind)
-        for kind, values in (("to", email.to), ("cc", email.cc), ("bcc", email.bcc))
-        for address in values
-        if address
-    ]
-    if rows:
-        conn.executemany(
-            "INSERT OR IGNORE INTO recipients(email_uid,address,display_name,type) VALUES(?,?,?,?)",
-            rows,
-        )
-
-
 def _delete_obsolete_chunks(
     embedder: Any,
     uid: str,
@@ -633,7 +638,7 @@ def _delete_obsolete_chunks(
     preserved_attachment_prefixes: set[str] | None = None,
 ) -> None:
     """Remove stale derived rows after a changed message produces fewer chunks."""
-    existing_ids = embedder.get_existing_ids(refresh=True)
+    existing_ids = embedder.get_ids_for_uids([uid])
     prefixes = preserved_attachment_prefixes or set()
     obsolete = sorted(
         chunk_id
@@ -646,5 +651,5 @@ def _delete_obsolete_chunks(
         return
     embedder.collection.delete(ids=obsolete)
     embedder.image_collection.delete(ids=obsolete)
-    existing_ids.difference_update(obsolete)
+    embedder.forget_existing_ids(obsolete)
     embedder.checkpoint()

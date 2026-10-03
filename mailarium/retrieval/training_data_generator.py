@@ -125,16 +125,11 @@ class TrainingDataGenerator:
 
         Returns (threads, sender_index, all_emails) - replaces three separate full-table scans.
         """
-        rows = self._db.conn.execute(
-            "SELECT uid, conversation_id, sender_email, subject, body_text FROM emails ORDER BY date"
-        ).fetchall()
-
         threads: dict[str, list[dict]] = {}
         sender_index: dict[str, list[dict]] = {}
         all_emails: list[dict] = []
 
-        for row in rows:
-            email = dict(row)
+        for email in self._db.queries.training_email_rows():
             all_emails.append(email)
 
             # Build sender index
@@ -151,38 +146,6 @@ class TrainingDataGenerator:
         threads = {k: v for k, v in threads.items() if len(v) >= min_thread_size}
 
         return threads, sender_index, all_emails
-
-    def _load_threads(self, min_size: int) -> dict[str, list[dict]]:
-        """Load chronological conversation groups meeting the minimum size."""
-        rows = self._db.conn.execute(
-            "SELECT uid, conversation_id, sender_email, subject, body_text "
-            "FROM emails WHERE conversation_id IS NOT NULL AND conversation_id != '' "
-            "ORDER BY date"
-        ).fetchall()
-
-        threads: dict[str, list[dict]] = {}
-        for row in rows:
-            conv_id = row["conversation_id"]
-            threads.setdefault(conv_id, []).append(dict(row))
-
-        # Filter to threads with enough emails
-        return {k: v for k, v in threads.items() if len(v) >= min_size}
-
-    def _build_sender_index(self) -> dict[str, list[dict]]:
-        """Group email rows by normalized sender address for hard-negative selection."""
-        rows = self._db.conn.execute("SELECT uid, conversation_id, sender_email, subject, body_text FROM emails").fetchall()
-
-        index: dict[str, list[dict]] = {}
-        for row in rows:
-            sender = (row["sender_email"] or "").lower()
-            if sender:
-                index.setdefault(sender, []).append(dict(row))
-        return index
-
-    def _load_all_emails(self) -> list[dict]:
-        """Load the minimal email fields used by contrastive sampling."""
-        rows = self._db.conn.execute("SELECT uid, conversation_id, sender_email, subject, body_text FROM emails").fetchall()
-        return [dict(r) for r in rows]
 
     def _find_negative(
         self,

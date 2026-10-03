@@ -7,18 +7,28 @@ import argparse
 import json
 from pathlib import Path
 
-# Floors are derived from the focused composition suite.  They intentionally
-# protect exercised control flow per module, instead of letting high coverage
-# in a small facade conceal an untested storage or adapter boundary.
+# The single list of critical modules. Floors are measured over the complete
+# test suite (``scripts/verify.py pr``) and protect exercised control flow per
+# module, instead of letting high coverage in a small facade conceal an
+# untested storage or adapter boundary.
 CRITICAL_BRANCH_FLOORS = {
-    "mailarium/runtime.py": 70.0,
-    "mailarium/mailbox/sync_service.py": 40.0,
+    "mailarium/interfaces/runtime.py": 70.0,
+    "mailarium/mailbox/sync.py": 40.0,
+    "mailarium/mailbox/execution.py": 80.0,
+    "mailarium/mailbox/proposals.py": 90.0,
     "mailarium/investigation/answer_context/workflow.py": 50.0,
     "mailarium/interfaces/mcp/tools/search.py": 35.0,
     "mailarium/archive/database.py": 40.0,
+    "mailarium/archive/repositories/messages.py": 40.0,
+    "mailarium/archive/repositories/message_rows.py": 40.0,
+    "mailarium/archive/repositories/sparse.py": 40.0,
+    "mailarium/archive/vectors.py": 50.0,
+    "mailarium/investigation/answer_context/ranking.py": 55.0,
+    "mailarium/investigation/answer_context/multi_lane.py": 55.0,
+    "mailarium/investigation/answer_context/single_lane.py": 55.0,
     "mailarium/ingestion/ingest_embed_pipeline.py": 35.0,
     "mailarium/ingestion/mailbox_ingest.py": 35.0,
-    "mailarium/web_app.py": 50.0,
+    "mailarium/interfaces/web/app.py": 50.0,
 }
 
 

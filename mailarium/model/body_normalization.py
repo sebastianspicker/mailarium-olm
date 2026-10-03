@@ -146,13 +146,6 @@ def _normalize_candidate_text(text: str) -> str:
     return _strip_legal_disclaimer_tail(text)
 
 
-def _normalize_preview_candidate(raw: str) -> NormalizedBody:
-    """Normalize preview text for last-resort body fallback."""
-    if not raw or not raw.strip():
-        return NormalizedBody("", "preview")
-    return NormalizedBody(_normalize_candidate_text(_clean_text(raw)), "preview")
-
-
 def _strip_normalized_quoted_content(text: str, email_type: str) -> str:
     """Strip conservative quoted tails before persistence for replies/forwards."""
     if not text:

@@ -3,7 +3,7 @@
 Each module exports a ``register(mcp, deps)`` function that binds
 its tools to the shared FastMCP instance.  The *deps* argument is a
 ``ToolDeps`` namespace providing singletons, helpers, and constants
-so that tool modules never import from ``mcp_server`` directly
+so that tool modules never import from ``interfaces.mcp.server`` directly
 (which would create a circular dependency).
 
 Registration is intentionally explicit so each module owns its tool names,

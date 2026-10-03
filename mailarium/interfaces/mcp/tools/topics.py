@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..mcp_models import (
-    EmailClustersInput,
-    EmailDiscoveryInput,
-    EmailTopicsInput,
-    FindSimilarInput,
-)
+from mailarium.interfaces.presentation import serialize_results
+
+from ..models.analysis import EmailClustersInput, EmailTopicsInput
+from ..models.search import EmailDiscoveryInput, FindSimilarInput
 from .utils import ToolDepsProto, json_error, json_response, run_with_db
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 
 def register(mcp: Any, deps: ToolDepsProto) -> None:
@@ -32,10 +33,10 @@ def _register_clusters_tool(mcp: Any, deps: ToolDepsProto) -> None:
         Set cluster_id to list emails in that cluster, sorted by centroid proximity.
         """
 
-        def _work(db):
+        def _work(db: ArchiveDatabase) -> str:
             if params.cluster_id is not None:
-                return json_response(db.emails_in_cluster(params.cluster_id, limit=params.limit))
-            results = db.cluster_summary()
+                return json_response(db.analytics.emails_in_cluster(params.cluster_id, limit=params.limit))
+            results = db.analytics.cluster_summary()
             if not results:
                 return json_error("No clusters available. Run `mailarium topics build` to populate cluster tables.")
             return json_response(results)
@@ -74,10 +75,10 @@ def _register_topics_tool(mcp: Any, deps: ToolDepsProto) -> None:
         Set topic_id to list emails for that topic, ranked by relevance.
         """
 
-        def _work(db):
+        def _work(db: ArchiveDatabase) -> str:
             if params.topic_id is not None:
-                return json_response(db.emails_by_topic(params.topic_id, limit=params.limit))
-            results = db.topic_distribution()
+                return json_response(db.analytics.emails_by_topic(params.topic_id, limit=params.limit))
+            results = db.analytics.topic_distribution()
             if not results:
                 return json_error("No topics available. Run `mailarium topics build` to populate topic tables.")
             return json_response(results)
@@ -92,9 +93,9 @@ def _register_discovery_tool(mcp: Any, deps: ToolDepsProto) -> None:
     async def email_discovery(params: EmailDiscoveryInput) -> str:
         """Discover keywords or get search suggestions."""
 
-        def _work(db):
+        def _work(db: ArchiveDatabase) -> str:
             if params.mode == "keywords":
-                results = db.top_keywords(sender=params.sender, folder=params.folder, limit=params.limit)
+                results = db.analytics.top_keywords(sender=params.sender, folder=params.folder, limit=params.limit)
                 if not results:
                     return json_error("No keywords available. Run ingestion with --extract-keywords.")
                 return json_response(results)
@@ -115,7 +116,7 @@ def _similarity_query(deps: ToolDepsProto, params: FindSimilarInput) -> tuple[st
         return params.query, None
     assert params.uid is not None
     db = deps.get_archive_database()
-    email = db.get_email_full(params.uid) if db else None
+    email = db.queries.get_email_full(params.uid) if db else None
     if db and not email:
         return None, f"Email not found: {params.uid}"
     query = (email or {}).get("body_text") or (email or {}).get("subject") or ""
@@ -135,7 +136,7 @@ def _similarity_response(deps: ToolDepsProto, params: FindSimilarInput, query: s
     if params.uid:
         results = [result for result in results if result.metadata.get("uid") != params.uid]
     visible_results, scan_payload = _similarity_scan(params.scan_id, results[: params.top_k])
-    payload = retriever.serialize_results(query, visible_results)
+    payload = serialize_results(retriever.settings, query, visible_results)
     from .search import _retrieval_diagnostics
 
     diagnostics = _retrieval_diagnostics(getattr(retriever, "last_search_debug", getattr(retriever, "_last_search_debug", None)))

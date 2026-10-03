@@ -69,7 +69,7 @@ def test_native_pipeline_persists_sqlite_rows_vectors_and_a_reopened_collection(
     try:
         pipeline = _run_pipeline(embedder, database, email, _chunk(email))
         assert pipeline.sqlite_inserted == pipeline.chunks_added == 1
-        assert database.get_email_full(email.uid)["subject"] == "Native storage handoff"
+        assert database.queries.get_email_full(email.uid)["subject"] == "Native storage handoff"
         assert embedder.collection.count() == 1
     finally:
         embedder.close()
@@ -97,22 +97,22 @@ def test_native_pipeline_rolls_back_failed_batch_and_allows_a_clean_retry(monkey
     database = open_archive_database(str(sqlite_path))
     embedder = EmailEmbedder(database, vector_index_path=str(vector_path), sqlite_path=str(sqlite_path))
     email = _email("retry@example.test")
-    original_completion = database.mark_ingest_batch_completed
+    original_completion = database.ingest_ledger.mark_ingest_batch_completed
 
     def fail_completion(*_args, **_kwargs) -> None:
         raise RuntimeError("synthetic completion failure")
 
-    monkeypatch.setattr(database, "mark_ingest_batch_completed", fail_completion)
+    monkeypatch.setattr(database.ingest_ledger, "mark_ingest_batch_completed", fail_completion)
     try:
         with pytest.raises(RuntimeError, match="synthetic completion failure"):
             _run_pipeline(embedder, database, email, _chunk(email))
-        assert database.get_email_full(email.uid) is None
+        assert database.queries.get_email_full(email.uid) is None
         assert embedder.collection.count() == 0
 
-        monkeypatch.setattr(database, "mark_ingest_batch_completed", original_completion)
+        monkeypatch.setattr(database.ingest_ledger, "mark_ingest_batch_completed", original_completion)
         retry = _run_pipeline(embedder, database, email, _chunk(email))
         assert retry.sqlite_inserted == retry.chunks_added == 1
-        assert database.get_email_full(email.uid) is not None
+        assert database.queries.get_email_full(email.uid) is not None
         assert embedder.collection.count() == 1
     finally:
         embedder.close()

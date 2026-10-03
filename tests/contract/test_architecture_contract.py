@@ -57,6 +57,22 @@ def test_check_rejects_an_introduced_compatibility_package_cycle(tmp_path: Path)
     assert any("package cycle: compatibility -> mailbox -> compatibility" in item for item in rendered)
 
 
+def test_check_rejects_a_module_cycle_inside_one_package(tmp_path: Path) -> None:
+    write_module(tmp_path, "mailarium/retrieval/__init__.py", "")
+    write_module(tmp_path, "mailarium/retrieval/engine.py", "from .stages import run\n")
+    write_module(
+        tmp_path,
+        "mailarium/retrieval/stages.py",
+        "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    from mailarium.retrieval.engine import Engine\n",
+    )
+
+    rendered = [item.render(tmp_path) for item in checker.check(tmp_path)]
+
+    assert len(rendered) == 1
+    assert "module cycle:" in rendered[0]
+    assert "mailarium.retrieval.engine" in rendered[0] and "mailarium.retrieval.stages" in rendered[0]
+
+
 def test_check_rejects_unknown_architectural_packages(tmp_path: Path) -> None:
     write_module(tmp_path, "mailarium/model/service.py", "from mailarium.legacy import adapter\n")
     write_module(tmp_path, "mailarium/legacy/__init__.py", "")

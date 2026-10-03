@@ -11,7 +11,7 @@ from mailarium.platform.repo_paths import (
     validate_output_path,
     validate_runtime_path,
 )
-from mailarium.privacy.privacy_scan_rules import TRACKED_FORBIDDEN_PATH_PATTERNS, path_matches
+from scripts.release.privacy.privacy_scan_rules import TRACKED_FORBIDDEN_PATH_PATTERNS, path_matches
 
 
 def test_runtime_paths_are_absolute_contained_by_the_configured_root(monkeypatch, tmp_path) -> None:

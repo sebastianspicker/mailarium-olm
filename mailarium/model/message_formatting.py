@@ -44,33 +44,6 @@ def _append_header_value(parts: list[str], label: str, value: Any) -> None:
         parts.append(f"{label}: {value}")
 
 
-def build_result_header(metadata: Mapping[str, Any]) -> str:
-    """Build the compact metadata header used in LLM result context."""
-    parts: list[str] = []
-    date_value = metadata.get("date")
-    _append_header_value(parts, "Date", str(date_value)[:10] if date_value else "")
-    _append_header_value(parts, "From", format_sender(metadata.get("sender_name"), metadata.get("sender_email")))
-    to_value = metadata.get("to")
-    if to_value:
-        _append_header_value(parts, "To", ", ".join(str(item) for item in to_value) if isinstance(to_value, list) else to_value)
-    _append_header_value(parts, "Subject", metadata.get("subject"))
-    _append_nondefault_header(parts, "Type", metadata.get("email_type"), "original")
-    _append_nondefault_header(parts, "Folder", metadata.get("folder"), "Inbox")
-    _append_nondefault_header(parts, "Priority", metadata.get("priority"), "0")
-    _append_nondefault_header(parts, "Categories", metadata.get("categories"))
-    if str(metadata.get("is_calendar_message", "")).lower() in ("true", "1"):
-        parts.append("[Calendar/Meeting]")
-    attachment_names = metadata.get("attachment_names")
-    if attachment_names and str(attachment_names).strip():
-        parts.append(f"Attachments: {attachment_names}")
-    return "\n".join(parts)
-
-
-def _append_nondefault_header(parts: list[str], label: str, value: Any, default: str = "") -> None:
-    if value and str(value).strip() and str(value) != default:
-        parts.append(f"{label}: {value}")
-
-
 def truncate_body(text: str | None, max_chars: int) -> str:
     """Bound message text while preserving the existing deep-context hint."""
     if text is None:
@@ -83,11 +56,6 @@ def truncate_body(text: str | None, max_chars: int) -> str:
         text[:max_chars] + f"\n[...truncated at {max_chars:,}/{total_chars:,} chars. "
         f"Use email_deep_context with the UID to read the full {total_chars:,}-character body.]"
     )
-
-
-def format_context_block(text: str, metadata: Mapping[str, Any], score: float, *, max_body_chars: int = 0) -> str:
-    """Format one result block for LLM context."""
-    return f"---\n{build_result_header(metadata)}\nRelevance: {score:.2f}\n---\n{truncate_body(text, max_body_chars)}\n"
 
 
 def estimate_tokens(text: str | None) -> int:

@@ -6,18 +6,19 @@ import logging
 import os
 import sqlite3
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .runtime import IngestRuntime
+from .context import IngestRuntime
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 logger = logging.getLogger(__name__)
-
-_IngestRuntime = IngestRuntime
 
 
 def _update_ingest_checkpoint_safe(
     *,
-    checkpoint_store: Any,
+    checkpoint_store: ArchiveDatabase | None,
     run_id: int | None,
     olm_path: str,
     last_batch_ordinal: int,
@@ -29,7 +30,7 @@ def _update_ingest_checkpoint_safe(
     stage: str,
 ) -> bool:
     """Attempt one checkpoint update without aborting ingest on expected mid-run lock contention."""
-    if not checkpoint_store or run_id is None or not hasattr(checkpoint_store, "update_ingest_checkpoint"):
+    if not checkpoint_store or run_id is None:
         return False
     started = time.monotonic()
     logger.debug(
@@ -42,7 +43,7 @@ def _update_ingest_checkpoint_safe(
         status,
     )
     try:
-        updated = checkpoint_store.update_ingest_checkpoint(
+        updated = checkpoint_store.ingest_ledger.update_ingest_checkpoint(
             run_id=run_id,
             olm_path=olm_path,
             last_batch_ordinal=last_batch_ordinal,
@@ -54,7 +55,7 @@ def _update_ingest_checkpoint_safe(
             skip_locked=allow_locked_skip,
         )
     except TypeError:
-        updated = checkpoint_store.update_ingest_checkpoint(
+        updated = checkpoint_store.ingest_ledger.update_ingest_checkpoint(
             run_id=run_id,
             olm_path=olm_path,
             last_batch_ordinal=last_batch_ordinal,
@@ -94,11 +95,11 @@ def _update_ingest_checkpoint_safe(
     return True
 
 
-def _initialize_ingest_checkpoint(runtime: _IngestRuntime) -> None:
+def initialize_ingest_checkpoint(runtime: IngestRuntime) -> None:
     """Load or create the checkpoint that controls resumable ingestion."""
     store = runtime.checkpoint_store
-    if store and runtime.request.resume and hasattr(store, "latest_ingest_checkpoint"):
-        checkpoint = store.latest_ingest_checkpoint(olm_path=runtime.request.olm_path)
+    if store and runtime.request.resume:
+        checkpoint = store.ingest_ledger.latest_ingest_checkpoint(olm_path=runtime.request.olm_path)
         if isinstance(checkpoint, dict):
             runtime.resume_skip = max(int(checkpoint.get("emails_parsed") or 0), 0)
             runtime.resumed = runtime.resume_skip > 0
@@ -109,15 +110,15 @@ def _initialize_ingest_checkpoint(runtime: _IngestRuntime) -> None:
         file_size = os.path.getsize(runtime.request.olm_path)
         if os.environ.get("INGEST_RECORD_OLM_SHA256", "0") == "1":
             file_hash = runtime.dependencies.hash_file_sha256(runtime.request.olm_path)
-    runtime.run_id = runtime.bookkeeping_db.record_ingestion_start(
+    runtime.run_id = runtime.bookkeeping_db.ingest_ledger.record_ingestion_start(
         runtime.request.olm_path,
         olm_sha256=file_hash,
         file_size_bytes=file_size,
     )
-    _checkpoint_ingest(runtime, status="running", stage="ingestion_start", allow_locked_skip=False)
+    checkpoint_ingest(runtime, status="running", stage="ingestion_start", allow_locked_skip=False)
 
 
-def _initialize_ingest_pipeline(runtime: _IngestRuntime) -> None:
+def initialize_ingest_pipeline(runtime: IngestRuntime) -> None:
     """Create the parser, chunker, writer, and progress state for ingestion."""
     provenance = runtime.dependencies.resolve_entity_extractor_provenance(runtime.entity_extractor)
     if not runtime.request.dry_run:
@@ -137,12 +138,12 @@ def _initialize_ingest_pipeline(runtime: _IngestRuntime) -> None:
         unit="email",
     )
     if runtime.request.incremental and runtime.bookkeeping_db and not runtime.request.embed_images:
-        runtime.completed_uids = runtime.bookkeeping_db.completed_ingest_uids(
+        runtime.completed_uids = runtime.bookkeeping_db.ingest_ledger.completed_ingest_uids(
             attachment_required=runtime.request.extract_attachments,
         )
 
 
-def _checkpoint_ingest(runtime: _IngestRuntime, *, status: str, stage: str, allow_locked_skip: bool) -> None:
+def checkpoint_ingest(runtime: IngestRuntime, *, status: str, stage: str, allow_locked_skip: bool) -> None:
     """Persist progress after a processed batch so ingestion can resume safely."""
     _update_ingest_checkpoint_safe(
         checkpoint_store=runtime.checkpoint_store,
@@ -158,22 +159,22 @@ def _checkpoint_ingest(runtime: _IngestRuntime, *, status: str, stage: str, allo
     )
 
 
-def _complete_ingest(runtime: _IngestRuntime, stats: dict[str, Any]) -> None:
+def complete_ingest(runtime: IngestRuntime, stats: dict[str, Any]) -> None:
     """Flush outstanding work, close progress, and return final ingest metrics."""
     if runtime.bookkeeping_db and runtime.run_id is not None:
-        runtime.bookkeeping_db.record_ingestion_complete(
+        runtime.bookkeeping_db.ingest_ledger.record_ingestion_complete(
             runtime.run_id,
             {
                 "emails_parsed": runtime.counters.emails,
                 "emails_inserted": stats["sqlite_inserted"],
             },
         )
-        if runtime.checkpoint_store and hasattr(runtime.checkpoint_store, "clear_ingest_checkpoint"):
-            runtime.checkpoint_store.clear_ingest_checkpoint(runtime.run_id, commit=True)
+        if runtime.checkpoint_store:
+            runtime.checkpoint_store.ingest_ledger.clear_ingest_checkpoint(runtime.run_id, commit=True)
     runtime.dependencies.resolve_runtime_summary(runtime.settings)
 
 
-def _fail_ingest(runtime: _IngestRuntime, exc: Exception) -> None:
+def fail_ingest(runtime: IngestRuntime, exc: Exception) -> None:
     """Close progress and propagate an ingest failure after recording elapsed time."""
     if runtime.pipeline:
         try:
@@ -184,16 +185,16 @@ def _fail_ingest(runtime: _IngestRuntime, exc: Exception) -> None:
             logger.warning("Background ingest pipeline abort failed", exc_info=True)
     if not runtime.bookkeeping_db or runtime.run_id is None:
         return
-    _checkpoint_ingest(runtime, status="failed", stage="ingestion_failed", allow_locked_skip=False)
+    checkpoint_ingest(runtime, status="failed", stage="ingestion_failed", allow_locked_skip=False)
     inserted = int(getattr(runtime.pipeline, "sqlite_inserted", 0) or 0)
-    runtime.bookkeeping_db.record_ingestion_failure(
+    runtime.bookkeeping_db.ingest_ledger.record_ingestion_failure(
         runtime.run_id,
         error_message=str(exc),
         stats={"emails_parsed": runtime.counters.emails, "emails_inserted": inserted},
     )
 
 
-def _close_ingest_runtime(runtime: _IngestRuntime) -> None:
+def close_ingest_runtime(runtime: IngestRuntime) -> None:
     """Close every resource this ingestion invocation created.
 
     Cleanup is deliberately best-effort per resource: a failed progress,
@@ -201,14 +202,14 @@ def _close_ingest_runtime(runtime: _IngestRuntime) -> None:
     control connection can be the same object as the primary archive database,
     so identity de-duplication also avoids a second close.
     """
-    progress = getattr(runtime, "progress", None)
+    progress = runtime.progress
     if progress is not None:
         _close_ingest_resource(progress, "progress")
 
     resources = (
-        (getattr(runtime, "embedder", None), "embedder"),
-        (getattr(runtime, "control_db", None), "checkpoint database"),
-        (getattr(runtime, "email_db", None), "archive database"),
+        (runtime.embedder, "embedder"),
+        (runtime.control_db, "checkpoint database"),
+        (runtime.email_db, "archive database"),
     )
     closed_ids: set[int] = set()
     for resource, label in resources:

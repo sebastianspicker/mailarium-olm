@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from mailarium.archive import open_archive_database
+from mailarium.retrieval.diagnostics import SearchDiagnostics
+from mailarium.retrieval.hybrid import BM25Retriever, SparseRetriever
+from mailarium.retrieval.query_encoding import QueryEncoder
 from mailarium.retrieval.retriever import SearchEngine
 
 
@@ -33,7 +36,7 @@ def test_canonical_collection_serves_dense_bm25_sparse_and_hybrid_channels(monke
         image_search_enabled=False,
         database=database,
     )
-    engine._embedder = _DeterministicEmbedder()
+    engine.embedder = _DeterministicEmbedder()
     engine.collection.add(
         ids=["dense__0", "keyword__0"],
         embeddings=[[1.0, 0.0], [0.0, 1.0]],
@@ -43,7 +46,7 @@ def test_canonical_collection_serves_dense_bm25_sparse_and_hybrid_channels(monke
             {"uid": "keyword", "folder": "Inbox", "sender_email": "sender@example.test"},
         ],
     )
-    database.insert_sparse_batch(
+    database.sparse.insert_sparse_batch(
         ["dense__0", "keyword__0"],
         [{8: 1.0}, {7: 1.0}],
         model_id=engine.settings.sparse_model,
@@ -51,8 +54,16 @@ def test_canonical_collection_serves_dense_bm25_sparse_and_hybrid_channels(monke
     )
     try:
         dense = engine.search_filtered("handoff", top_k=1)
-        bm25 = engine._get_bm25_results("needle", 2)
-        sparse = engine._get_sparse_results("needle", 2)
+        encoder = QueryEncoder(engine.settings)
+        encoder.embedder = engine.embedder
+        bm25 = BM25Retriever(collection=engine.collection, diagnostics=SearchDiagnostics()).ranked_ids("needle", 2)
+        sparse = SparseRetriever(
+            collection=engine.collection,
+            database=database,
+            encoder=encoder,
+            settings=engine.settings,
+            diagnostics=SearchDiagnostics(),
+        ).ranked_ids("needle", 2)
         hybrid = engine.search_filtered("needle", top_k=2, hybrid=True)
 
         assert [result.chunk_id for result in dense] == ["dense__0"]

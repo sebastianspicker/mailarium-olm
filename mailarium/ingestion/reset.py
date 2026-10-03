@@ -6,11 +6,11 @@ import argparse
 import os
 import shutil
 
-from mailarium.config import get_settings
 from mailarium.platform.repo_paths import validate_runtime_path
+from mailarium.platform.settings import get_settings
 
 
-def reset_index_impl(args: argparse.Namespace) -> None:
+def reset_index(args: argparse.Namespace) -> None:
     """Clear rebuildable vector state while preserving the relational archive."""
     from mailarium.archive import open_archive_database
 
@@ -18,7 +18,7 @@ def reset_index_impl(args: argparse.Namespace) -> None:
     sqlite_file = validate_runtime_path(args.sqlite_path or settings.sqlite_path, field_name="sqlite_path")
     database = open_archive_database(str(sqlite_file))
     try:
-        counts = database.reset_vector_data()
+        counts = database.vector_maintenance.reset_vector_data()
     finally:
         database.close()
     vector_index_dir = validate_runtime_path(

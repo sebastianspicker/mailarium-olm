@@ -7,8 +7,8 @@ from typing import ClassVar
 
 import pytest
 
-import mailarium.cli as cli
-from mailarium.interfaces.cli import cli_commands, cli_commands_mailbox
+import mailarium.interfaces.cli.main as cli
+from mailarium.interfaces.cli.commands import analytics, browse, mailbox
 
 
 class _Runtime:
@@ -17,8 +17,10 @@ class _Runtime:
     instances: ClassVar[list[_Runtime]] = []
 
     def __init__(self, **_kwargs) -> None:
-        self.database = object()
-        self.search = SimpleNamespace(email_db=self.database)
+        self.database = SimpleNamespace(
+            queries=SimpleNamespace(list_emails_paginated=lambda **_filters: {"total": 0, "emails": []})
+        )
+        self.search = SimpleNamespace(email_db=self.database, stats=lambda: {"total_emails": 0})
         self.mailbox = SimpleNamespace(db=self.database)
         self.close_count = 0
         self.instances.append(self)
@@ -44,17 +46,26 @@ class _Runtime:
         self.close()
 
 
-def test_cli_dependencies_are_per_invocation_and_share_runtime_archive(monkeypatch) -> None:
+def test_cli_dependencies_are_per_invocation_and_share_runtime_archive(monkeypatch, capsys: pytest.CaptureFixture[str]) -> None:
     """Representative command families receive only their owning runtime's services."""
     _Runtime.instances.clear()
     received = []
+    dependencies_type = cli.CliDependencies
+
+    def recording_dependencies(**services):
+        dependencies = dependencies_type(**services)
+        received.append(dependencies)
+        return dependencies
+
     monkeypatch.setattr(cli, "ApplicationRuntime", _Runtime)
-    monkeypatch.setattr(cli, "_cmd_browse", lambda _args, dependencies: received.append(dependencies))
-    monkeypatch.setattr(cli, "_cmd_analytics", lambda _args, dependencies: received.append(dependencies))
+    monkeypatch.setattr(cli, "CliDependencies", recording_dependencies)
 
-    cli.main(["browse"])
-    cli.main(["analytics", "stats"])
+    with pytest.raises(SystemExit, match="0"):
+        cli.main(["browse"])
+    with pytest.raises(SystemExit, match="0"):
+        cli.main(["analytics", "stats"])
 
+    assert capsys.readouterr().out == 'No emails found.\n{\n  "total_emails": 0\n}\n'
     assert len(received) == 2
     assert len(_Runtime.instances) == 2
     for dependencies, runtime in zip(received, _Runtime.instances, strict=True):
@@ -63,9 +74,10 @@ def test_cli_dependencies_are_per_invocation_and_share_runtime_archive(monkeypat
         assert dependencies.mailbox_service.db is dependencies.archive_database
         assert runtime.close_count == 1
     assert received[0].archive_database is not received[1].archive_database
-    assert not hasattr(cli_commands, "_CLI_ARCHIVE_DATABASE")
-    assert not hasattr(cli_commands, "_CLI_SQLITE_PATH_OVERRIDE")
-    assert not hasattr(cli_commands_mailbox, "mailbox_service_for_path")
+    for module in (cli, browse, analytics):
+        assert not hasattr(module, "_CLI_ARCHIVE_DATABASE")
+        assert not hasattr(module, "_CLI_SQLITE_PATH_OVERRIDE")
+    assert not hasattr(mailbox, "mailbox_service_for_path")
 
 
 def test_cli_rejects_missing_archive_before_constructing_services(monkeypatch, capsys: pytest.CaptureFixture[str]) -> None:

@@ -8,9 +8,8 @@ import pytest
 
 from mailarium.archive import ArchiveDatabase
 from mailarium.mailbox.ews.gateway import EWSItem, EWSItemRef, EWSSyncDelta
-from mailarium.mailbox.mailbox_runtime import MailboxRuntimePolicy
-from mailarium.mailbox.mailbox_service import MailboxService
-from mailarium.mailbox.mailbox_store import MailboxStore
+from mailarium.mailbox.policy import MailboxRuntimePolicy
+from mailarium.mailbox.service import MailboxService
 
 
 class _Gateway:
@@ -32,7 +31,7 @@ class _Gateway:
 
 def _service(tmp_path, gateway: _Gateway, persist_record):
     database = ArchiveDatabase(str(tmp_path / "archive.db"))
-    store = MailboxStore(database.conn, operation_context=database.operation)
+    store = database.mailbox
     service = MailboxService(
         store,
         db=database,
@@ -81,7 +80,7 @@ def test_sync_persists_synthetic_ews_records_and_commits_the_cursor(tmp_path) ->
     holder = {}
 
     def persist(record, **_kwargs):
-        holder["store"].upsert_message(record, stamp_current_generation=True)
+        holder["store"].sources.upsert_message(record, stamp_current_generation=True)
         return SimpleNamespace(indexed_chunks=2)
 
     database, store, service = _service(tmp_path, gateway, persist)
@@ -92,8 +91,8 @@ def test_sync_persists_synthetic_ews_records_and_commits_the_cursor(tmp_path) ->
         assert result["created"] == 1
         assert result["indexed_chunks"] == 2
         assert result["folders"]["inbox"]["complete"] is True
-        assert store.cursor("synthetic", "inbox") == (1, "watermark-1")
-        assert store.list_sources("synthetic", "inbox")[0]["remote_item_id"] == "remote-1"
+        assert store.sources.cursor("synthetic", "inbox") == (1, "watermark-1")
+        assert store.sources.list_sources("synthetic", "inbox")[0]["remote_item_id"] == "remote-1"
     finally:
         service.close()
         database.close()
@@ -107,7 +106,7 @@ def test_sync_failure_leaves_the_page_cursor_uncommitted_for_a_retry(tmp_path) -
     def persist(record, **_kwargs):
         if holder["fail"]:
             raise RuntimeError("synthetic persistence failure")
-        holder["store"].upsert_message(record, stamp_current_generation=True)
+        holder["store"].sources.upsert_message(record, stamp_current_generation=True)
         return SimpleNamespace(indexed_chunks=1)
 
     database, store, service = _service(tmp_path, gateway, persist)
@@ -115,14 +114,14 @@ def test_sync_failure_leaves_the_page_cursor_uncommitted_for_a_retry(tmp_path) -
     try:
         with pytest.raises(RuntimeError, match="synthetic persistence failure"):
             service.sync("synthetic", folders=("inbox",))
-        assert store.cursor("synthetic", "inbox") == (1, "")
-        assert store.list_sources("synthetic", "inbox") == []
+        assert store.sources.cursor("synthetic", "inbox") == (1, "")
+        assert store.sources.list_sources("synthetic", "inbox") == []
 
         holder["fail"] = False
         result = service.sync("synthetic", folders=("inbox",))
 
         assert result["created"] == 1
-        assert store.cursor("synthetic", "inbox") == (1, "watermark-2")
+        assert store.sources.cursor("synthetic", "inbox") == (1, "watermark-2")
         assert gateway.watermarks == [None, None]
     finally:
         service.close()

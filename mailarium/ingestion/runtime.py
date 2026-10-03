@@ -6,24 +6,23 @@ import logging
 import os
 import time
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ._ingest_context import _IngestCounters, _IngestDependencies, _IngestRequest, _IngestRuntime
+from .context import IngestCounters, IngestRequest, IngestRuntime, ProductionIngestDependencies
+from .lifecycle import initialize_ingest_checkpoint, initialize_ingest_pipeline
 
-IngestCounters = _IngestCounters
-IngestDependencies = _IngestDependencies
-IngestRequest = _IngestRequest
-IngestRuntime = _IngestRuntime
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 logger = logging.getLogger(__name__)
 
 
-def _preload_models(embedder, entity_extractor_fn) -> float:
+def _preload_models(embedder, entity_extractor) -> float:
     """Preload models for embedder and entity extractor to avoid first-use latency.
 
     Args:
         embedder: The embedder instance to warm up.
-        entity_extractor_fn: Optional entity extraction function to preload.
+        entity_extractor: Optional entity extraction function to preload.
 
     Returns:
         The number of seconds spent preloading models.
@@ -31,9 +30,9 @@ def _preload_models(embedder, entity_extractor_fn) -> float:
     start = time.monotonic()
     if embedder:
         embedder.warmup()
-    if entity_extractor_fn:
+    if entity_extractor:
         try:
-            from mailarium.investigation.nlp_entity_extractor import preload as _preload_nlp
+            from mailarium.ingestion.enrichment.nlp_entity_extractor import preload as _preload_nlp
 
             _preload_nlp()
         except ImportError:
@@ -47,7 +46,7 @@ def build_ingest_runtime_resources(
     dry_run: bool,
     vector_index_path: str | None,
     sqlite_path: str | None,
-) -> tuple[Any, Any]:
+) -> tuple[Any, ArchiveDatabase | None]:
     """Build and configure the runtime components (embedder and email database).
 
     Args:
@@ -83,18 +82,18 @@ def build_ingest_runtime_resources(
     return embedder, email_db
 
 
-def _ingest_extractors(request: _IngestRequest, dependencies: _IngestDependencies) -> tuple[Any, ...]:
+def _ingest_extractors(request: IngestRequest, dependencies: ProductionIngestDependencies) -> tuple[Any, ...]:
     """Load only the attachment and image extractors enabled by the request."""
     attachment_extractor = attachment_ocr_extractor = classify_text_state = None
     if request.extract_attachments:
-        from .attachment_extractor import classify_text_extraction_state, extract_attachment_text_ocr, extract_text_with_reason
+        from .attachments.extract import classify_text_extraction_state, extract_attachment_text_ocr, extract_text_with_reason
 
         attachment_extractor = extract_text_with_reason
         attachment_ocr_extractor = extract_attachment_text_ocr
         classify_text_state = classify_text_extraction_state
     image_embedder = image_matcher = None
     if request.embed_images and not request.dry_run and dependencies.should_enable_image_embedding():
-        from .attachment_extractor import _get_image_embedder, extract_image_embedding, is_image_attachment
+        from .attachments.extract import _get_image_embedder, extract_image_embedding, is_image_attachment
 
         if _get_image_embedder().is_available:
             image_embedder = extract_image_embedding
@@ -102,7 +101,7 @@ def _ingest_extractors(request: _IngestRequest, dependencies: _IngestDependencie
     return attachment_extractor, attachment_ocr_extractor, classify_text_state, image_embedder, image_matcher
 
 
-def _ingest_control_db(email_db: Any, sqlite_path: str) -> Any:
+def _ingest_control_db(email_db: ArchiveDatabase | None, sqlite_path: str) -> ArchiveDatabase | None:
     """Open a short-timeout control connection only for the real database backend."""
     if not email_db:
         return None
@@ -116,7 +115,7 @@ def _ingest_control_db(email_db: Any, sqlite_path: str) -> Any:
     )
 
 
-def _initialize_ingest_runtime(request: _IngestRequest, dependencies: _IngestDependencies) -> _IngestRuntime:
+def initialize_ingest_runtime(request: IngestRequest, dependencies: ProductionIngestDependencies) -> IngestRuntime:
     """Open configured stores and construct the runtime objects for one ingest run."""
     settings = dependencies.get_settings()
     sqlite_path = request.sqlite_path or settings.sqlite_path
@@ -132,7 +131,7 @@ def _initialize_ingest_runtime(request: _IngestRequest, dependencies: _IngestDep
     if request.embed_images and extractors[3] is None:
         request = replace(request, embed_images=False)
     _preload_models(embedder, entity_extractor)
-    runtime = _IngestRuntime(
+    runtime = IngestRuntime(
         request=request,
         dependencies=dependencies,
         settings=settings,
@@ -153,7 +152,7 @@ def _initialize_ingest_runtime(request: _IngestRequest, dependencies: _IngestDep
         resume_skip=0,
         resumed=False,
         completed_uids=set(),
-        counters=_IngestCounters(),
+        counters=IngestCounters(),
         pending_chunks=[],
         pending_emails=[],
         content_hashes=set(),
@@ -162,12 +161,6 @@ def _initialize_ingest_runtime(request: _IngestRequest, dependencies: _IngestDep
         start_time=time.time(),
     )
     # Lifecycle setup takes ownership only after all resources above exist.
-    # Keep this import local to avoid a construction/lifecycle import cycle.
-    from .lifecycle import _initialize_ingest_checkpoint, _initialize_ingest_pipeline
-
-    _initialize_ingest_checkpoint(runtime)
-    _initialize_ingest_pipeline(runtime)
+    initialize_ingest_checkpoint(runtime)
+    initialize_ingest_pipeline(runtime)
     return runtime
-
-
-initialize_ingest_runtime = _initialize_ingest_runtime

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import collections
+import heapq
 import logging
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
@@ -35,11 +36,11 @@ class CommunicationNetwork:
 
     def top_contacts(self, email_address: str, limit: int = 20) -> list[dict[str, Any]]:
         """Top communication partners (bidirectional frequency)."""
-        return self._db.top_contacts(email_address, limit=limit)
+        return self._db.analytics.top_contacts(email_address, limit=limit)
 
     def communication_between(self, email_a: str, email_b: str) -> dict[str, Any]:
         """Bidirectional communication stats between two addresses."""
-        return self._db.communication_between(email_a, email_b)
+        return self._db.analytics.communication_between(email_a, email_b)
 
     def network_analysis(self, top_n: int = 20) -> dict[str, Any]:
         """Summarize centrality, communities, and bridges, caching results by graph shape."""
@@ -161,7 +162,7 @@ class CommunicationNetwork:
 
         if self._graph is None:
             self._graph = nx.DiGraph()
-            for sender, recipient, count in self._db.all_edges():
+            for sender, recipient, count in self._db.analytics.all_edges():
                 self._graph.add_edge(sender, recipient, weight=count)
         return nx
 
@@ -206,25 +207,36 @@ class CommunicationNetwork:
         return undirected
 
     def _shortest_paths(self, nx, graph, source, target, max_hops, top_k):
-        """Collect the best simple paths while enforcing hop and result limits."""
-        paths = []
-        try:
-            for path_nodes in nx.shortest_simple_paths(graph, source, target, weight="cost"):
-                if len(path_nodes) - 1 > max_hops:
-                    break
-                edges = self._path_edges(path_nodes)
+        """Collect weighted simple paths with a hard, finite hop boundary."""
+        remaining_hops = nx.single_source_shortest_path_length(graph, target, cutoff=max_hops)
+        if source not in remaining_hops:
+            return []
+        paths: list[dict[str, Any]] = []
+        frontier: list[tuple[float, int, tuple[str, ...]]] = [(0.0, 0, (source,))]
 
+        while frontier and len(paths) < top_k:
+            cost, hops, path_nodes = heapq.heappop(frontier)
+            node = path_nodes[-1]
+            if node == target:
                 paths.append(
                     {
                         "nodes": list(path_nodes),
-                        "edges": edges,
-                        "hops": len(path_nodes) - 1,
+                        "edges": self._path_edges(path_nodes),
+                        "hops": hops,
                     }
                 )
-                if len(paths) >= top_k:
-                    break
-        except nx.NetworkXNoPath:
-            pass  # no path exists between the two nodes - return empty list
+                continue
+            if hops >= max_hops:
+                continue
+
+            for neighbor in sorted(graph.neighbors(node)):
+                if neighbor in path_nodes:
+                    continue
+                if neighbor not in remaining_hops or hops + 1 + remaining_hops[neighbor] > max_hops:
+                    continue
+                edge_cost = float(graph[node][neighbor].get("cost", 1.0))
+                next_path = (*path_nodes, neighbor)
+                heapq.heappush(frontier, (cost + edge_cost, hops + 1, next_path))
 
         return paths
 
@@ -248,7 +260,7 @@ class CommunicationNetwork:
         Returns:
             List of {"recipient": str, "senders": [str], "total_emails": int}
         """
-        return self._db.shared_recipients_query(email_addresses, min_shared=min_shared)
+        return self._db.analytics.shared_recipients_query(email_addresses, min_shared=min_shared)
 
     def coordinated_timing(
         self,
@@ -267,7 +279,7 @@ class CommunicationNetwork:
         if window_hours < 1:
             window_hours = 1
 
-        timeline = self._db.sender_activity_timeline(email_addresses)
+        timeline = self._db.analytics.sender_activity_timeline(email_addresses)
         if not timeline:
             return []
 

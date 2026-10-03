@@ -43,7 +43,7 @@ class EmailExporter:
             {"html": str, "email_count": int, "subject": str}
             or {"error": str} on failure.
         """
-        emails = self._db.get_thread_emails(conversation_id)
+        emails = self._db.queries.get_thread_emails(conversation_id)
         if not emails:
             return {"error": f"No emails found for conversation: {conversation_id}"}
         html = self._render_thread(emails, render_mode=render_mode)
@@ -74,7 +74,7 @@ class EmailExporter:
 
     def export_single_html(self, uid: str, *, render_mode: str = "retrieval") -> dict[str, Any]:
         """Export a single email as styled HTML."""
-        email = self._db.get_email_full(uid)
+        email = self._db.queries.get_email_full(uid)
         if not email:
             return {"error": f"Email not found: {uid}"}
         html = self._render_thread([email], render_mode=render_mode)

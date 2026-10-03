@@ -6,10 +6,8 @@ import hashlib
 from dataclasses import dataclass
 from email.parser import HeaderParser
 
-from mailarium.model.html_text import clean_text as _clean_text
-from mailarium.model.html_text import html_to_text as _html_to_text
-from mailarium.model.html_text import looks_like_html as _looks_like_html
-from mailarium.model.rfc2822 import _extract_body_from_source
+from mailarium.model.html_text import clean_text, html_to_text, looks_like_html
+from mailarium.model.rfc2822 import extract_body_from_source
 
 
 @dataclass(frozen=True)
@@ -36,22 +34,22 @@ def render_forensic_text(raw_body_text: str, raw_body_html: str, raw_source: str
     headers = extract_source_headers(raw_source)
 
     if raw_body_text.strip():
-        if _looks_like_html(raw_body_text):
-            text = _html_to_text(raw_body_text)
+        if looks_like_html(raw_body_text):
+            text = html_to_text(raw_body_text)
             source = "raw_body_text_html"
         else:
-            text = _clean_text(raw_body_text)
+            text = clean_text(raw_body_text)
             source = "raw_body_text"
     elif raw_body_html.strip():
-        text = _html_to_text(raw_body_html)
+        text = html_to_text(raw_body_html)
         source = "raw_body_html"
     elif raw_source.strip():
-        source_body_text, source_body_html = _extract_body_from_source(raw_source)
+        source_body_text, source_body_html = extract_body_from_source(raw_source)
         if source_body_text.strip():
-            text = _clean_text(source_body_text)
+            text = clean_text(source_body_text)
             source = "raw_source_text"
         elif source_body_html.strip():
-            text = _html_to_text(source_body_html)
+            text = html_to_text(source_body_html)
             source = "raw_source_html"
         else:
             text = ""

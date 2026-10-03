@@ -227,12 +227,12 @@ def _extract_attachments(root: etree._Element, ns: dict[str, str]) -> tuple[list
 
 def _extract_attachment_info(att: etree._Element, ns: dict[str, str]) -> dict:
     """Extract attachment name, MIME type and size from a messageAttachment element."""
-    from mailarium.model.rfc2822 import _parse_int
+    from mailarium.model.rfc2822 import parse_int
 
     name = _extract_attachment_field(att, ns, "OPFAttachmentName", attr_hint="name")
     mime_type = _extract_attachment_field(att, ns, "OPFAttachmentContentType", attr_hint="contenttype")
     size_str = _extract_attachment_field(att, ns, "OPFAttachmentContentFileSize", attr_hint="filesize")
-    size = _parse_int(size_str) if size_str else 0
+    size = parse_int(size_str) if size_str else 0
     content_id = _extract_attachment_field(att, ns, "OPFAttachmentContentID", attr_hint="contentid")
     return {
         "name": name,

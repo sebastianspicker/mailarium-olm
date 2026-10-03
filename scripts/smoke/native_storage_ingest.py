@@ -71,7 +71,7 @@ def _run_native_pipeline(*, sqlite_path: Path, vector_path: Path) -> dict[str, o
         pipeline.finish()
         if pipeline.sqlite_inserted != 1 or pipeline.chunks_added != 1:
             raise RuntimeError(f"native pipeline counts were not one: {pipeline.sqlite_inserted=}, {pipeline.chunks_added=}")
-        if database.get_email_full(email.uid) is None or embedder.collection.count() != 1:
+        if database.queries.get_email_full(email.uid) is None or embedder.collection.count() != 1:
             raise RuntimeError("native pipeline did not persist both canonical email and vector rows")
     finally:
         embedder.close()

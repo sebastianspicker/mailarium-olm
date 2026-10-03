@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mailarium"
 version = "0.5.0a1"
-description = "Local Outlook .olm indexing and search with CLI, MCP, and Streamlit interfaces"
+description = "Local Outlook OLM archive search with optional Exchange EWS integration."
 readme = "README.md"
 requires-python = ">=3.14.6,<3.15"
 license = "MIT"
@@ -87,18 +87,19 @@ dev = [
     "lxml-stubs>=0.5.0",
     "bandit>=1.7.10",
     "pip-audit>=2.8.0",
+    "pyyaml>=6.0",  # tests/contract/test_verification_profiles.py parses the CI workflow
 ]
 
 [project.scripts]
-mailarium-ingest = "mailarium.ingest:main"
-mailarium = "mailarium.cli:main"
+mailarium-ingest = "mailarium.interfaces.cli.ingest:main"
+mailarium = "mailarium.interfaces.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mailarium*"]
 
 [tool.setuptools.package-data]
-mailarium = ["templates/*.html", "templates/dossier/*.html"]
+mailarium = ["investigation/templates/*.html", "investigation/templates/dossier/*.html"]
 
 [tool.ruff]
 line-length = 130
@@ -141,5 +142,5 @@ warn_redundant_casts = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["mailarium.ingestion.attachment_extractor_text"]
+module = ["mailarium.ingestion.attachments.text"]
 check_untyped_defs = true

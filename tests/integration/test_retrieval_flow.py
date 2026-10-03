@@ -32,7 +32,7 @@ def test_filtered_retrieval_uses_canonical_vectors_and_deduplicates_email_chunks
         database=database,
     )
     embedder = _SyntheticEmbedder()
-    engine._embedder = embedder
+    engine.embedder = embedder
     engine.collection.add(
         ids=["mail-1__chunk_0", "mail-1__chunk_1", "mail-2__chunk_0"],
         embeddings=[[1.0, 0.0], [0.9, 0.1], [0.0, 1.0]],

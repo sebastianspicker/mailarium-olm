@@ -6,6 +6,7 @@ import copy
 import json
 import logging
 import threading
+import weakref
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -13,7 +14,8 @@ if TYPE_CHECKING:
     from mcp.types import ToolAnnotations
 
     from mailarium.archive import ArchiveDatabase
-    from mailarium.mailbox.mailbox_service import MailboxService
+    from mailarium.investigation.network_analysis import CommunicationNetwork
+    from mailarium.mailbox.service import MailboxService
     from mailarium.retrieval.retriever import SearchEngine
 
 logger = logging.getLogger(__name__)
@@ -174,7 +176,7 @@ def _fallback_truncated_json(
 
 
 class ToolDepsProto(Protocol):
-    """Protocol describing the ToolDeps interface injected by mcp_server.
+    """Protocol describing the ToolDeps interface injected by interfaces.mcp.server.
 
     Avoids circular imports while giving mypy full attr-defined checking.
     """
@@ -230,27 +232,16 @@ class ToolDepsProto(Protocol):
         ...
 
 
-def get_deps(deps: ToolDepsProto | None) -> ToolDepsProto:
-    """Return *deps* after asserting it has been initialized by ``register()``."""
-    if deps is None:
-        raise RuntimeError("Tool module not registered - call register() first")
-    return deps
-
-
-async def run_with_db(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
+async def run_with_db(deps: ToolDepsProto, fn: Callable[[ArchiveDatabase], str]) -> str:
     """Offload ``fn(db)`` to a thread, returning DB_UNAVAILABLE if db is None."""
 
     def _run() -> str:
         db = deps.get_archive_database()
         if not db:
             return deps.DB_UNAVAILABLE
-        # Some MCP helpers legitimately use db.conn directly. Keep the whole
-        # facade callback serialized so those reads and writes share the same
-        # transaction boundary as ArchiveDatabase methods.
-        operation = getattr(db, "operation", None)
-        if operation is None:
-            return fn(db)
-        with operation():
+        # Keep the whole callback serialized so its archive reads and writes
+        # observe one consistent state across several repository calls.
+        with db.operation():
             return fn(db)
 
     return await deps.offload(_run)
@@ -287,7 +278,7 @@ def json_response(data: Any, *, max_chars: int | None = None, **kwargs: Any) -> 
     raw = _serialize_json(data, pretty=True, **kwargs)
 
     if max_chars is None:
-        from mailarium.config import get_settings
+        from mailarium.platform.settings import get_settings
 
         max_chars = get_settings().mcp_max_json_response_chars
 
@@ -392,14 +383,15 @@ def json_error(message: str) -> str:
 
 
 _network_lock = threading.Lock()
+_comm_network_cache: weakref.WeakKeyDictionary[ArchiveDatabase, CommunicationNetwork] = weakref.WeakKeyDictionary()
 
 
 async def run_with_network(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
     """Offload ``fn(db, network)`` with DB guard and cached CommunicationNetwork.
 
     Thread-safe: uses ``_network_lock`` to prevent concurrent threads from
-    both creating a ``CommunicationNetwork`` when ``_cached_comm_network`` is
-    not yet set.  The lock only contends during the one-time initialization;
+    both creating a ``CommunicationNetwork`` when ``_comm_network_cache`` has
+    no entry for the archive yet.  The lock only contends during the one-time initialization;
     subsequent calls see the cached instance immediately.
     """
 
@@ -407,11 +399,11 @@ async def run_with_network(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
         db = deps.get_archive_database()
         if not db:
             return deps.DB_UNAVAILABLE
-        net = getattr(db, "_cached_comm_network", None)
+        net = _comm_network_cache.get(db)
         if net is None:
             with _network_lock:
                 # Double-check under lock - another thread may have created it.
-                net = getattr(db, "_cached_comm_network", None)
+                net = _comm_network_cache.get(db)
                 if net is None:
                     from mailarium.investigation.network_analysis import CommunicationNetwork
 
@@ -419,7 +411,7 @@ async def run_with_network(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
                         net = CommunicationNetwork(db)
                     except Exception as exc:
                         return json_error(f"Network analysis unavailable: {type(exc).__name__}")
-                    db._cached_comm_network = net  # type: ignore[attr-defined]
+                    _comm_network_cache[db] = net
         return fn(db, net)
 
     return await deps.offload(_run)

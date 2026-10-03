@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from mailarium.config import (
+from mailarium.platform.settings import (
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_EMBEDDING_MODEL_REVISION,
     resolve_device,

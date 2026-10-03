@@ -5,7 +5,7 @@ from __future__ import annotations
 from zipfile import ZipFile
 
 from mailarium.ingestion import ParsedMessage
-from mailarium.ingestion.olm.parse_olm import parse_olm
+from mailarium.ingestion.olm import parse_olm
 from mailarium.model import MESSAGE_UID_ALGORITHM, MESSAGE_UID_VERSION, Message
 from mailarium.model.html_text import html_to_text
 from mailarium.platform.sanitization import sanitize_untrusted_text

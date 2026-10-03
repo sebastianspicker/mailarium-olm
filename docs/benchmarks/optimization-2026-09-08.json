@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-08",
+  "baseline_commit": "de73011f49749c99c079eb5d63ca8b5f1dbb12c7",
+  "baseline_method": "Archived HEAD sources executed with the same benchmark harness and locked development environment as the optimized working tree.",
+  "comparison": "Baseline immediate vector writes versus optimized deferred writes. Warm queries use optimized deferred-run samples. Duplicate detection uses identical seeded bodies.",
+  "limitations": [
+    "Synthetic local workload; no real mail, EWS, embedding inference or model downloads.",
+    "Three repetitions are descriptive timings, not a statistical performance guarantee.",
+    "Duplicate timing excludes n-gram construction, consistently in both runs."
+  ],
+  "optimized_source_sha256": {
+    "scripts/benchmark.py": "206a5c1c24d9e85f9fd85a8111ca66dcf4d247528073fda741821f9f2a348935",
+    "mailarium/archive/storage.py": "d267c94f79a619fe45d8544a2be0b39f375c47fbfea553458c9669ea6540b22f",
+    "mailarium/investigation/dedup_detector.py": "09d1386c4fc15e5a87d4e0182c97940f000b66c3e7976d87b2025a5b3252431d"
+  },
+  "baseline": {
+    "schema_version": 1,
+    "data": "synthetic seeded vectors and dissimilar email bodies; temporary SQLite and USearch state only",
+    "environment": {
+      "python": "3.14.7",
+      "system": "Darwin",
+      "machine": "arm64",
+      "packages": {
+        "numpy": "2.4.4",
+        "usearch": "2.26.1",
+        "networkx": "3.6.1"
+      }
+    },
+    "parameters": {
+      "rows": 2000,
+      "dimensions": 64,
+      "batch_size": 100,
+      "queries": 10,
+      "duplicate_rows": 800,
+      "repetitions": 3,
+      "seed": 42
+    },
+    "vector_runs": {
+      "immediate": {
+        "samples": [
+          {
+            "write_seconds": 0.3712385830003768,
+            "query_seconds": 0.0238982080045389,
+            "warm_query_sql_statements": 120,
+            "warm_query_full_file_hashes": 10,
+            "checkpoint_deferral_available": false
+          },
+          {
+            "write_seconds": 0.350079874995572,
+            "query_seconds": 0.02368354200007161,
+            "warm_query_sql_statements": 120,
+            "warm_query_full_file_hashes": 10,
+            "checkpoint_deferral_available": false
+          },
+          {
+            "write_seconds": 0.3505497500009369,
+            "query_seconds": 0.02417549999518087,
+            "warm_query_sql_statements": 120,
+            "warm_query_full_file_hashes": 10,
+            "checkpoint_deferral_available": false
+          }
+        ],
+        "writes": {
+          "seconds": [
+            0.3712385830003768,
+            0.350079874995572,
+            0.3505497500009369
+          ],
+          "median_seconds": 0.3505497500009369,
+          "min_seconds": 0.350079874995572,
+          "max_seconds": 0.3712385830003768
+        },
+        "warm_queries": {
+          "seconds": [
+            0.0238982080045389,
+            0.02368354200007161,
+            0.02417549999518087
+          ],
+          "median_seconds": 0.0238982080045389,
+          "min_seconds": 0.02368354200007161,
+          "max_seconds": 0.02417549999518087
+        }
+      },
+      "deferred": {
+        "samples": [
+          {
+            "write_seconds": 0.36604708400409436,
+            "query_seconds": 0.023698917000729125,
+            "warm_query_sql_statements": 120,
+            "warm_query_full_file_hashes": 10,
+            "checkpoint_deferral_available": false
+          },
+          {
+            "write_seconds": 0.39133570800186135,
+            "query_seconds": 0.024663500000315253,
+            "warm_query_sql_statements": 120,
+            "warm_query_full_file_hashes": 10,
+            "checkpoint_deferral_available": false
+          },
+          {
+            "write_seconds": 0.39256033299898263,
+            "query_seconds": 0.024712334001378622,
+            "warm_query_sql_statements": 120,
+            "warm_query_full_file_hashes": 10,
+            "checkpoint_deferral_available": false
+          }
+        ],
+        "writes": {
+          "seconds": [
+            0.36604708400409436,
+            0.39133570800186135,
+            0.39256033299898263
+          ],
+          "median_seconds": 0.39133570800186135,
+          "min_seconds": 0.36604708400409436,
+          "max_seconds": 0.39256033299898263
+        },
+        "warm_queries": {
+          "seconds": [
+            0.023698917000729125,
+            0.024663500000315253,
+            0.024712334001378622
+          ],
+          "median_seconds": 0.024663500000315253,
+          "min_seconds": 0.023698917000729125,
+          "max_seconds": 0.024712334001378622
+        }
+      }
+    },
+    "duplicate_detection": {
+      "rows": 800,
+      "body_characters": 120,
+      "threshold": 0.85,
+      "seconds": [
+        1.6808739580010297,
+        1.7039886249986012,
+        1.738284166000085
+      ],
+      "median_seconds": 1.7039886249986012,
+      "min_seconds": 1.6808739580010297,
+      "max_seconds": 1.738284166000085
+    }
+  },
+  "optimized": {
+    "schema_version": 1,
+    "data": "synthetic seeded vectors and dissimilar email bodies; temporary SQLite and USearch state only",
+    "environment": {
+      "python": "3.14.7",
+      "system": "Darwin",
+      "machine": "arm64",
+      "packages": {
+        "numpy": "2.4.4",
+        "usearch": "2.26.1",
+        "networkx": "3.6.1"
+      }
+    },
+    "parameters": {
+      "rows": 2000,
+      "dimensions": 64,
+      "batch_size": 100,
+      "queries": 10,
+      "duplicate_rows": 800,
+      "repetitions": 3,
+      "seed": 42
+    },
+    "vector_runs": {
+      "immediate": {
+        "samples": [
+          {
+            "write_seconds": 0.4606852919969242,
+            "query_seconds": 0.0029528329978347756,
+            "warm_query_sql_statements": 20,
+            "warm_query_full_file_hashes": 0,
+            "checkpoint_deferral_available": true
+          },
+          {
+            "write_seconds": 0.3541098330024397,
+            "query_seconds": 0.002831833000527695,
+            "warm_query_sql_statements": 20,
+            "warm_query_full_file_hashes": 0,
+            "checkpoint_deferral_available": true
+          },
+          {
+            "write_seconds": 0.36745287499797996,
+            "query_seconds": 0.0028992080042371526,
+            "warm_query_sql_statements": 20,
+            "warm_query_full_file_hashes": 0,
+            "checkpoint_deferral_available": true
+          }
+        ],
+        "writes": {
+          "seconds": [
+            0.4606852919969242,
+            0.3541098330024397,
+            0.36745287499797996
+          ],
+          "median_seconds": 0.36745287499797996,
+          "min_seconds": 0.3541098330024397,
+          "max_seconds": 0.4606852919969242
+        },
+        "warm_queries": {
+          "seconds": [
+            0.0029528329978347756,
+            0.002831833000527695,
+            0.0028992080042371526
+          ],
+          "median_seconds": 0.0028992080042371526,
+          "min_seconds": 0.002831833000527695,
+          "max_seconds": 0.0029528329978347756
+        }
+      },
+      "deferred": {
+        "samples": [
+          {
+            "write_seconds": 0.08057766599813476,
+            "query_seconds": 0.00286183300340781,
+            "warm_query_sql_statements": 20,
+            "warm_query_full_file_hashes": 0,
+            "checkpoint_deferral_available": true
+          },
+          {
+            "write_seconds": 0.08090658300352516,
+            "query_seconds": 0.0028697910020127892,
+            "warm_query_sql_statements": 20,
+            "warm_query_full_file_hashes": 0,
+            "checkpoint_deferral_available": true
+          },
+          {
+            "write_seconds": 0.08214487499935785,
+            "query_seconds": 0.0028827499991166405,
+            "warm_query_sql_statements": 20,
+            "warm_query_full_file_hashes": 0,
+            "checkpoint_deferral_available": true
+          }
+        ],
+        "writes": {
+          "seconds": [
+            0.08057766599813476,
+            0.08090658300352516,
+            0.08214487499935785
+          ],
+          "median_seconds": 0.08090658300352516,
+          "min_seconds": 0.08057766599813476,
+          "max_seconds": 0.08214487499935785
+        },
+        "warm_queries": {
+          "seconds": [
+            0.00286183300340781,
+            0.0028697910020127892,
+            0.0028827499991166405
+          ],
+          "median_seconds": 0.0028697910020127892,
+          "min_seconds": 0.00286183300340781,
+          "max_seconds": 0.0028827499991166405
+        }
+      }
+    },
+    "duplicate_detection": {
+      "rows": 800,
+      "body_characters": 120,
+      "threshold": 0.85,
+      "seconds": [
+        0.05898262499977136,
+        0.06012437499884982,
+        0.0655275419994723
+      ],
+      "median_seconds": 0.06012437499884982,
+      "min_seconds": 0.05898262499977136,
+      "max_seconds": 0.0655275419994723
+    }
+  }
+}

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from mailarium.model.html_text import clean_text as _clean_text
 from mailarium.model.html_text import html_to_text as _html_to_text
 from mailarium.model.html_text import looks_like_html as _looks_like_html
-from mailarium.model.rfc2822 import _decode_mime_words, _normalize_date
+from mailarium.model.rfc2822 import decode_mime_words, normalize_date
 from mailarium.model.rfc2822 import extract_identity_addresses as _extract_identity_addresses
 
 _RE_REPLY_CONTEXT_LABELS = {
@@ -159,8 +159,8 @@ def _reply_context_from_lines(lines: list[str], source: str) -> ReplyContext | N
             continue
         reply_from = _extract_identity_addresses([block.get("from", "")])
         reply_to = _extract_identity_addresses([block.get("to", "")])
-        subject = _decode_mime_words(block.get("subject", "")).strip()
-        date = _normalize_date(block.get("date", ""))
+        subject = decode_mime_words(block.get("subject", "")).strip()
+        date = normalize_date(block.get("date", ""))
         if reply_from or reply_to or subject or date:
             return ReplyContext(
                 from_email=reply_from[0] if reply_from else "",

@@ -8,7 +8,7 @@ import sys
 import pytest
 
 from mailarium import __version__
-from mailarium.cli import parse_args
+from mailarium.interfaces.cli.main import parse_args
 
 
 def test_cli_search_parser_normalizes_public_options() -> None:

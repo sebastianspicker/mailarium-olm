@@ -4,23 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..mcp_models import EmailScanInput
-from .utils import ToolDepsProto, get_deps, json_error, json_response
-
-# Thread-safety note: _deps is written once during single-threaded module
-# registration at import time, then only read by tool handlers.
-_deps: ToolDepsProto | None = None
-
-
-def _d() -> ToolDepsProto:
-    """Return configured tool dependencies before a tool touches shared state."""
-    return get_deps(_deps)
+from ..models.search import EmailScanInput
+from .utils import ToolDepsProto, json_error, json_response
 
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     """Register scan session tool."""
-    global _deps
-    _deps = deps
 
     @mcp_instance.tool(
         name="email_scan",

@@ -9,24 +9,19 @@ from pathlib import Path
 import pytest
 
 from mailarium.archive import open_archive_database
-from mailarium.archive.storage import get_vector_collection
+from mailarium.archive.vectors import get_vector_collection
 from mailarium.retrieval.embedder import EmailEmbedder
 from mailarium.retrieval.retriever import SearchEngine
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-_PRODUCTION_FILES = (
-    "mailarium/archive/__init__.py",
-    "mailarium/archive/storage.py",
-    "mailarium/runtime.py",
-    "mailarium/retrieval/embedder.py",
-    "mailarium/retrieval/retriever.py",
-    "mailarium/mailbox/mailbox_service.py",
-    "mailarium/ingestion/runtime.py",
-    "mailarium/ingestion/reembedding.py",
-    "mailarium/ingestion/maintenance.py",
-    "mailarium/ingestion/attachment_reprocessing.py",
-    "mailarium/ingestion/reset.py",
-    "scripts/smoke/installed_wheel.py",
+_ARCHIVE_FACTORY = "mailarium/archive/__init__.py"
+# Every production module, so a new module cannot bypass the ownership rules.
+_PRODUCTION_FILES = tuple(
+    sorted(
+        str(path.relative_to(_REPOSITORY_ROOT))
+        for path in (_REPOSITORY_ROOT / "mailarium").rglob("*.py")
+        if "__pycache__" not in path.parts
+    )
 )
 _LAZY_FALLBACK_FIELDS = {
     "_owned_database",
@@ -60,9 +55,28 @@ def _factory_constructor_calls(path: Path) -> list[ast.Call]:
 def test_production_storage_creation_uses_only_the_archive_factory() -> None:
     """Production code has one raw archive constructor: the documented factory."""
     constructors = {relative: _raw_archive_constructor_calls(_REPOSITORY_ROOT / relative) for relative in _PRODUCTION_FILES}
-    assert len(_factory_constructor_calls(_REPOSITORY_ROOT / "mailarium/archive/__init__.py")) == 1
-    assert len(constructors["mailarium/archive/__init__.py"]) == 1
-    assert all(not calls for relative, calls in constructors.items() if relative != "mailarium/archive/__init__.py")
+    assert len(_factory_constructor_calls(_REPOSITORY_ROOT / _ARCHIVE_FACTORY)) == 1
+    assert len(constructors[_ARCHIVE_FACTORY]) == 1
+    assert {relative: calls for relative, calls in constructors.items() if calls and relative != _ARCHIVE_FACTORY} == {}
+
+
+def test_only_the_archive_package_opens_sqlite_connections() -> None:
+    """SQLite connections are archive state; no other package opens its own."""
+    offenders = []
+    for relative in _PRODUCTION_FILES:
+        if relative.startswith("mailarium/archive/"):
+            continue
+        tree = ast.parse((_REPOSITORY_ROOT / relative).read_text(encoding="utf-8"))
+        offenders.extend(
+            (relative, node.lineno)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "connect"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "sqlite3"
+        )
+    assert offenders == []
 
 
 def test_production_storage_has_no_lazy_database_fallback_fields() -> None:

@@ -75,57 +75,6 @@ class _FakeEmbedder:
         """Satisfy pipeline teardown without owning external resources."""
 
 
-@dataclass
-class _FakeEmailDB:
-    """In-memory ingestion ledger used to verify first-run and incremental semantics."""
-
-    inserted_uids: set[str] = field(default_factory=set)
-    completed_uids: set[str] = field(default_factory=set)
-    conn: SimpleNamespace = field(default_factory=lambda: SimpleNamespace(commit=lambda: None))
-    run_counter: int = 0
-
-    def record_ingestion_start(self, olm_path, olm_sha256=None, file_size_bytes=None):
-        """Allocate a monotonically increasing fake ingestion-run identifier."""
-        self.run_counter += 1
-        return self.run_counter
-
-    def insert_emails_batch(self, emails, ingestion_run_id=None):
-        """Record only previously unseen email UIDs and return the newly inserted set."""
-        new_uids = {email.uid for email in emails if email.uid not in self.inserted_uids}
-        self.inserted_uids.update(new_uids)
-        return new_uids
-
-    def completed_ingest_uids(self, attachment_required=False):
-        """Return a copy of completed UIDs so callers cannot mutate fake database state."""
-        return set(self.completed_uids)
-
-    def mark_ingest_batch_pending(self, rows, commit=True):
-        """Accept pending-batch writes; completion state is recorded separately."""
-
-    def mark_ingest_batch_completed(self, rows, commit=True):
-        """Promote non-empty batch UIDs into the fake database's completed set."""
-        for row in rows:
-            email_uid = str(row.get("email_uid") or "")
-            if email_uid:
-                self.completed_uids.add(email_uid)
-
-    def mark_ingest_batch_failed(self, email_uids, *, error_message, commit=True):
-        """Accept failure callbacks without marking affected UIDs complete."""
-
-    def update_analytics_batch(self, rows):
-        """Accept analytics writes and report the number of rows processed."""
-        return len(rows)
-
-    def insert_entities_batch(self, uid, entities, commit=True):
-        """Accept entity writes because this smoke test measures ingest flow, not entity storage."""
-
-    def record_ingestion_complete(self, ingestion_run_id, details):
-        """Accept run-finalization metadata after batch processing succeeds."""
-
-    def close(self) -> None:
-        """Satisfy database teardown for an object with no external handle."""
-
-
 def _run_ingest_with_fake_runtime(
     *,
     olm_path: Path,
@@ -133,15 +82,15 @@ def _run_ingest_with_fake_runtime(
     vector_index_path: Path,
     incremental: bool,
 ) -> dict[str, object]:
-    """Run the public ingestion API against in-memory storage doubles."""
+    """Run the public ingestion API against a real temporary archive and a fake embedder."""
+    from mailarium.archive import open_archive_database
     from mailarium.ingestion import ingest as ingest_archive
     from mailarium.ingestion import production_ingest_dependencies
 
     fake_embedder = _run_ingest_with_fake_runtime.embedder
-    fake_email_db = _run_ingest_with_fake_runtime.email_db
 
     def _fake_build_runtime(*, settings, dry_run, vector_index_path, sqlite_path):
-        return fake_embedder, fake_email_db
+        return fake_embedder, open_archive_database(sqlite_path)
 
     return ingest_archive(
         olm_path=str(olm_path),
@@ -156,18 +105,16 @@ def _run_ingest_with_fake_runtime(
         embed_images=False,
         resume=False,
         timing=True,
-        **production_ingest_dependencies(build_runtime=_fake_build_runtime).as_kwargs(),
+        dependencies=production_ingest_dependencies(build_runtime=_fake_build_runtime),
     )
 
 
 _run_ingest_with_fake_runtime.embedder = _FakeEmbedder()
-_run_ingest_with_fake_runtime.email_db = _FakeEmailDB()
 
 
 def _reset_fake_runtime() -> None:
-    """Replace accumulated fake embedder and database state before an isolated smoke run."""
+    """Replace accumulated fake embedder state before an isolated smoke run."""
     _run_ingest_with_fake_runtime.embedder = _FakeEmbedder()
-    _run_ingest_with_fake_runtime.email_db = _FakeEmailDB()
 
 
 def _configure_offline_runtime() -> None:
@@ -177,7 +124,7 @@ def _configure_offline_runtime() -> None:
     os.environ["EMBEDDING_LOAD_MODE"] = "local_only"
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "1"
 
-    from mailarium.config import get_settings
+    from mailarium.platform.settings import get_settings
 
     get_settings.cache_clear()
 

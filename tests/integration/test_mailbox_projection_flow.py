@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from mailarium.archive import open_archive_database
 from mailarium.ingestion.mailbox_ingest import persist_mailbox_record
-from mailarium.mailbox.mailbox_store import MailboxStore
 from mailarium.model.mailbox_models import MailboxMessageRecord
 
 
@@ -29,20 +28,20 @@ def _record(*, body: str = "Projected local mailbox evidence.", change_key: str 
 def test_mailbox_projection_persists_source_completion_and_update_metadata(tmp_path) -> None:
     """The same EWS identity maps to one canonical SQLite message across an update."""
     database = open_archive_database(str(tmp_path / "archive.db"))
-    store = MailboxStore(database.conn, operation_context=database.operation)
+    store = database.mailbox
     try:
-        first = persist_mailbox_record(_record(), db=database, store=store)
-        source = store.list_sources("synthetic", "inbox")[0]
+        first = persist_mailbox_record(_record(), db=database, store=store.sources)
+        source = store.sources.list_sources("synthetic", "inbox")[0]
         assert first.inserted is True
         assert source["canonical_email_uid"] == first.canonical_email_uid
         assert source["metadata"]["projection_hash"]
         assert "projection_pending" not in source["metadata"]
 
         updated = persist_mailbox_record(
-            _record(body="Updated local mailbox evidence.", change_key="change-2"), db=database, store=store
+            _record(body="Updated local mailbox evidence.", change_key="change-2"), db=database, store=store.sources
         )
         assert updated.content_changed is True
         assert updated.canonical_email_uid == first.canonical_email_uid
-        assert database.get_email_full(first.canonical_email_uid)["body_text"] == "Updated local mailbox evidence."
+        assert database.queries.get_email_full(first.canonical_email_uid)["body_text"] == "Updated local mailbox evidence."
     finally:
         database.close()

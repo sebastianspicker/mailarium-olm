@@ -7,12 +7,12 @@ from typing import cast
 
 import pytest
 
+from mailarium.archive import MailboxRepository
 from mailarium.mailbox.ews.errors import EWSConfigurationError, EWSValidationError
 from mailarium.mailbox.ews.gateway import EWSGateway
 from mailarium.mailbox.ews.transport import EWSTransport
-from mailarium.mailbox.mailbox_runtime import MailboxRuntimePolicy
-from mailarium.mailbox.mailbox_service import MailboxService
-from mailarium.mailbox.mailbox_store import MailboxStore
+from mailarium.mailbox.policy import MailboxRuntimePolicy
+from mailarium.mailbox.service import MailboxService
 
 
 def test_ews_gateway_parses_a_fake_local_transport_and_escapes_identifiers() -> None:
@@ -112,7 +112,7 @@ def test_ews_mutations_escape_identifiers_and_preserve_destructive_guards() -> N
 
 
 def test_ews_remote_operations_require_process_and_account_grants(tmp_path) -> None:
-    store = MailboxStore(tmp_path / "mailbox.db")
+    store = MailboxRepository.open_standalone(tmp_path / "mailbox.db")
     service = MailboxService(store, policy=MailboxRuntimePolicy(read_enabled=False, write_enabled=False))
     service.configure_account(
         account_id="ops",
@@ -142,7 +142,7 @@ def test_ews_remote_operations_require_process_and_account_grants(tmp_path) -> N
     with pytest.raises(PermissionError, match="EWS writes are disabled"):
         write_gated.execute(proposal["proposal_id"])
 
-    store.configure_account(
+    store.accounts.configure_account(
         "ops",
         "ews",
         mailbox_address="ops@example.test",

@@ -3,7 +3,9 @@
 Mailarium is local-first: mailbox content is processed by the local runtime.
 Embedding and reranking model weights may be downloaded or validated on first
 use unless local-only mode is selected. Entity extraction can separately invoke
-spaCy's model downloader unless `SPACY_AUTO_DOWNLOAD_DURING_INGEST=0`.
+spaCy's model downloader. Set both
+`SPACY_AUTO_DOWNLOAD_DURING_INGEST=0` and `SPACY_AUTO_DOWNLOAD=0` to prevent
+an ingestion-triggered model download.
 
 Optional EWS synchronization retrieves selected folders from the one explicit
 HTTPS endpoint configured by the local operator. It does not route mailbox

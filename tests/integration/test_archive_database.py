@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mailarium.archive import open_archive_database
-from mailarium.archive.db_schema import init_schema
+from mailarium.archive.schema.tables import init_schema
 from mailarium.ingestion.records import ParsedMessage
 
 
@@ -36,8 +36,8 @@ def test_sqlite_archive_preserves_one_email_in_a_temporary_database(tmp_path) ->
     database = open_archive_database(str(tmp_path / "archive.db"))
     email = _email()
 
-    assert database.insert_email(email)
-    stored = database.get_email_full(email.uid)
+    assert database.messages.insert_email(email)
+    stored = database.queries.get_email_full(email.uid)
     assert stored is not None and stored["subject"] == "Direct database contract"
     database.close()
 
@@ -54,22 +54,22 @@ def test_archive_related_rows_custody_and_schema_upgrade_stay_transactional(tmp_
     database.conn.execute(
         "CREATE TRIGGER reject_attachment BEFORE INSERT ON attachments BEGIN SELECT RAISE(ABORT, 'attachment rejected'); END"
     )
-    assert not database.insert_email(email)
+    assert not database.messages.insert_email(email)
     tables = ("emails", "recipients", "attachments")
     assert [database.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables] == [0, 0, 0]
     database.conn.execute("DROP TRIGGER reject_attachment")
 
-    assert database.insert_email(email)
-    assert not database.insert_email(email)
-    database.log_custody_event("ingested", "email", email.uid, {"source": "direct"})
+    assert database.messages.insert_email(email)
+    assert not database.messages.insert_email(email)
+    database.custody.log_custody_event("ingested", "email", email.uid, {"source": "direct"})
     assert [database.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables] == [1, 1, 1]
-    assert database.email_provenance(email.uid)["custody_events"][0]["action"] == "ingested"
+    assert database.custody.email_provenance(email.uid)["custody_events"][0]["action"] == "ingested"
 
     database.conn.execute("DELETE FROM schema_version")
     database.conn.execute("INSERT INTO schema_version(version) VALUES (35)")
     database.conn.commit()
     init_schema(database.conn)
-    migrated = database.get_email_full(email.uid)
+    migrated = database.queries.get_email_full(email.uid)
     assert migrated is not None and migrated["subject"] == "Atomic archive contract"
     assert database.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 36
     database.close()

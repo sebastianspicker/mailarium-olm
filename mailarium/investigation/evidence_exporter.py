@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_TEMPLATE_DIR = Path(__file__).parent / "templates"
+_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
 
 class EvidenceExporter:
@@ -64,7 +64,7 @@ class EvidenceExporter:
 
         # Gather full email bodies for the appendix (batch)
         all_uids = list({item["email_uid"] for item in items if item.get("email_uid")})
-        batch = self._db.get_emails_full_batch(all_uids)
+        batch = self._db.queries.get_emails_full_batch(all_uids)
         appendix_emails = []
         for item in items:
             full = batch.get(item.get("email_uid", ""))
@@ -78,7 +78,7 @@ class EvidenceExporter:
                     }
                 )
 
-        stats = self._db.evidence_stats(category=category, min_relevance=min_relevance)
+        stats = self._db.evidence.evidence_stats(category=category, min_relevance=min_relevance)
         verified_count = sum(1 for i in items if i.get("verified"))
         total_count = len(items)
 
@@ -203,7 +203,7 @@ class EvidenceExporter:
         category: str | None = None,
     ) -> list[dict]:
         """Fetch evidence items with optional filters."""
-        result = self._db.list_evidence(
+        result = self._db.evidence.list_evidence(
             min_relevance=min_relevance,
             category=category,
             limit=10000,

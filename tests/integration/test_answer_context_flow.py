@@ -6,9 +6,9 @@ import asyncio
 import json
 from dataclasses import replace
 
-from mailarium.config import Settings
-from mailarium.interfaces.mcp.mcp_models_answer_context import EmailAnswerContextInput
+from mailarium.interfaces.mcp.models.answer_context import EmailAnswerContextInput
 from mailarium.investigation.answer_context import build_answer_context_payload
+from mailarium.platform.settings import Settings
 
 
 class _Retriever:
@@ -35,7 +35,7 @@ def test_answer_context_ranks_synthetic_evidence_and_respects_the_json_budget(mo
         mcp_max_json_response_chars=1_800,
         mcp_model_profile="test",
     )
-    monkeypatch.setattr("mailarium.config.get_settings", lambda: settings)
+    monkeypatch.setattr("mailarium.platform.settings.get_settings", lambda: settings)
     rows = [
         {
             "uid": "mail-low",

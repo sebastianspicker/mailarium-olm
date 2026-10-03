@@ -10,6 +10,8 @@ required fields, limits, and annotations.
 .venv/bin/python -m mailarium.mcp_server
 ```
 
+`.venv/bin/python -m mailarium` is the equivalent package entry point.
+
 Use absolute paths in an MCP client configuration:
 
 ```json

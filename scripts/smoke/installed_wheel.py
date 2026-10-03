@@ -10,9 +10,9 @@ from pathlib import Path
 
 import mailarium
 from mailarium.archive import open_archive_database
-from mailarium.archive.storage import get_vector_collection
-from mailarium.config import Settings
+from mailarium.archive.vectors import get_vector_collection
 from mailarium.mailbox.ews.transport import EWSHTTPSSession
+from mailarium.platform.settings import Settings
 
 
 def main() -> int:
@@ -21,8 +21,8 @@ def main() -> int:
     installed_wheel_root = os.environ.get("MAILARIUM_INSTALLED_WHEEL_ROOT")
     if installed_wheel_root:
         assert package_root.is_relative_to(Path(installed_wheel_root).resolve())
-    assert (package_root / "templates/thread_export.html").is_file()
-    assert (package_root / "templates/dossier/footer.html").is_file()
+    assert (package_root / "investigation/templates/thread_export.html").is_file()
+    assert (package_root / "investigation/templates/dossier/footer.html").is_file()
     EWSHTTPSSession(ntlm_username="synthetic-user", ntlm_password="synthetic-password").preflight()
 
     runtime_home = Path(os.environ["MAILARIUM_RUNTIME_HOME"]).resolve()

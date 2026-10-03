@@ -59,7 +59,7 @@ def _local_display_timezone() -> tzinfo:
 def _resolve_display_timezone(display_timezone: str | tzinfo | None) -> tzinfo:
     """Resolve the configured analytics display timezone."""
     if display_timezone is None:
-        from mailarium.config import get_settings
+        from mailarium.platform.settings import get_settings
 
         display_timezone = get_settings().analytics_timezone
 
@@ -126,7 +126,7 @@ class TemporalAnalyzer:
         except ImportError:
             return [{"error": "pandas not installed. Run: pip install pandas"}]
 
-        dates = self._db.email_dates(sender=sender)
+        dates = self._db.analytics.email_dates(sender=sender)
         if not dates:
             return []
 
@@ -156,7 +156,7 @@ class TemporalAnalyzer:
         except ImportError:
             return [{"error": "pandas not installed. Run: pip install pandas"}]
 
-        dates = self._db.email_dates()
+        dates = self._db.analytics.email_dates()
         if not dates:
             return []
 
@@ -177,7 +177,7 @@ class TemporalAnalyzer:
     def response_times(self, sender: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         """Recent-sample response times per replier (in hours)."""
         pair_limit = 500
-        pairs = self._db.response_pairs(sender=sender, limit=pair_limit)
+        pairs = self._db.analytics.response_pairs(sender=sender, limit=pair_limit)
         if not pairs:
             return []
 

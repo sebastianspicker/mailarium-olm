@@ -1,0 +1,6836 @@
+{
+ "account_configuration_changed": {
+  "attempts": [],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "reason": "account_configuration_changed"
+    },
+    "event_type": "conflicted",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "conflicted",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews-moved.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "execute after reconfiguration",
+    {
+     "detail": {
+      "reason": "account_configuration_changed"
+     },
+     "executed": false,
+     "proposal_id": "<proposal-1>",
+     "state": "conflicted"
+    }
+   ]
+  ]
+ },
+ "account_write_disabled": {
+  "attempts": [],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": false,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "approved",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": false
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": false
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve account write disabled",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "execute account write disabled",
+    {
+     "message": "EWS writes are disabled by process or account policy.",
+     "raises": "PermissionError"
+    }
+   ]
+  ]
+ },
+ "duplicate_execute": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "UpdateItem"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "UpdateItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ],
+   [
+    "update_item",
+    [
+     "remote-1",
+     "change-1"
+    ],
+    {
+     "is_read": true
+    }
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1-updated",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve first",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "execute first",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "UpdateItem"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "execute duplicate",
+    {
+     "executed": false,
+     "proposal_id": "<proposal-1>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "execute duplicate again",
+    {
+     "executed": false,
+     "proposal_id": "<proposal-1>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "approve executed",
+    {
+     "message": "proposal is not pending",
+     "raises": "RuntimeError"
+    }
+   ],
+   [
+    "repropose identical after success",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "succeeded",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ]
+  ]
+ },
+ "execute_without_approval": {
+  "attempts": [],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": null,
+    "created_at": "<timestamp>",
+    "execution_deadline": null,
+    "execution_window_seconds": null,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "pending",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "execute pending",
+    {
+     "executed": false,
+     "proposal_id": "<proposal-1>",
+     "state": "pending"
+    }
+   ],
+   [
+    "pending proposals",
+    [
+     {
+      "account_id": "synthetic",
+      "approved_at": null,
+      "created_at": "<timestamp>",
+      "execution_deadline": null,
+      "expires_at": "<timestamp>",
+      "folder_id": "inbox",
+      "operation": "update_item",
+      "parameters": {
+       "is_read": true
+      },
+      "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+      "proposal_id": "<proposal-1>",
+      "proposer_kind": "assistant",
+      "state": "pending",
+      "target": {
+       "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+       "change_key": "change-1",
+       "item_id": "remote-1"
+      },
+      "target_change_key": "change-1",
+      "target_identity": "remote-1"
+     }
+    ]
+   ]
+  ]
+ },
+ "fault_classification": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "code": "ErrorServerBusy",
+     "reason": "ews_transient"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "retryable"
+   },
+   {
+    "attempt_id": 2,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "UpdateItem"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   },
+   {
+    "attempt_id": 3,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "code": "ErrorInvalidChangeKey",
+     "reason": "ews_conflict"
+    },
+    "proposal_id": "<proposal-2>",
+    "started_at": "<timestamp>",
+    "state": "conflicted"
+   },
+   {
+    "attempt_id": 4,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "code": "ErrorAccessDenied",
+     "reason": "ews_fault"
+    },
+    "proposal_id": "<proposal-3>",
+    "started_at": "<timestamp>",
+    "state": "failed"
+   },
+   {
+    "attempt_id": 5,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "reason": "transport_outcome_unknown"
+    },
+    "proposal_id": "<proposal-4>",
+    "started_at": "<timestamp>",
+    "state": "uncertain"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "code": "ErrorServerBusy",
+     "reason": "ews_transient"
+    },
+    "event_type": "retryable",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 2
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "UpdateItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 3
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "code": "ErrorInvalidChangeKey",
+     "reason": "ews_conflict"
+    },
+    "event_type": "conflicted",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "categories"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-3>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-3>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 4
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-3>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "code": "ErrorAccessDenied",
+     "reason": "ews_fault"
+    },
+    "event_type": "failed",
+    "proposal_id": "<proposal-3>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "importance"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-4>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-4>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 5
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-4>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "reason": "transport_outcome_unknown"
+    },
+    "event_type": "uncertain",
+    "proposal_id": "<proposal-4>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ],
+   [
+    "update_item",
+    [
+     "remote-1",
+     "change-1"
+    ],
+    {
+     "is_read": true
+    }
+   ],
+   [
+    "update_item",
+    [
+     "remote-1",
+     "change-1"
+    ],
+    {
+     "is_read": true
+    }
+   ],
+   [
+    "update_item",
+    [
+     "remote-3",
+     "change-3"
+    ],
+    {
+     "is_read": true
+    }
+   ],
+   [
+    "update_item",
+    [
+     "remote-2",
+     "change-2"
+    ],
+    {
+     "categories": [
+      "Synthetic"
+     ]
+    }
+   ],
+   [
+    "update_item",
+    [
+     "remote-2",
+     "change-2"
+    ],
+    {
+     "importance": "High"
+    }
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "archive",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+    "proposal_id": "<proposal-2>",
+    "proposer_kind": "assistant",
+    "state": "conflicted",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-3",
+     "item_id": "remote-3"
+    },
+    "target_change_key": "change-3",
+    "target_identity": "remote-3"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "categories": [
+      "Synthetic"
+     ]
+    },
+    "proposal_digest": "e72a3325ad4f5f8ff4ee68d9946fff73eb2eca59fc74ae0d3972201be4ca2fd4",
+    "proposal_id": "<proposal-3>",
+    "proposer_kind": "assistant",
+    "state": "failed",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-2",
+     "item_id": "remote-2"
+    },
+    "target_change_key": "change-2",
+    "target_identity": "remote-2"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "importance": "High"
+    },
+    "proposal_digest": "f8c1fdb716848bf10eddd3e225015c19b9861943a9b5853d1e90faf0b90b9975",
+    "proposal_id": "<proposal-4>",
+    "proposer_kind": "assistant",
+    "state": "uncertain",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-2",
+     "item_id": "remote-2"
+    },
+    "target_change_key": "change-2",
+    "target_identity": "remote-2"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1-updated",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose busy update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve busy",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "execute busy",
+    {
+     "detail": {
+      "code": "ErrorServerBusy",
+      "reason": "ews_transient"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "retryable"
+    }
+   ],
+   [
+    "execute retry",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "UpdateItem"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "propose conflicting update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "archive",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-3",
+      "item_id": "remote-3"
+     },
+     "target_change_key": "change-3",
+     "target_identity": "remote-3"
+    }
+   ],
+   [
+    "approve ews conflict",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "archive",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-3",
+      "item_id": "remote-3"
+     },
+     "target_change_key": "change-3",
+     "target_identity": "remote-3"
+    }
+   ],
+   [
+    "execute ews conflict",
+    {
+     "detail": {
+      "code": "ErrorInvalidChangeKey",
+      "reason": "ews_conflict"
+     },
+     "proposal_id": "<proposal-2>",
+     "state": "conflicted"
+    }
+   ],
+   [
+    "propose rejected categories",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "categories": [
+       "Synthetic"
+      ]
+     },
+     "proposal_digest": "e72a3325ad4f5f8ff4ee68d9946fff73eb2eca59fc74ae0d3972201be4ca2fd4",
+     "proposal_id": "<proposal-3>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-2",
+      "item_id": "remote-2"
+     },
+     "target_change_key": "change-2",
+     "target_identity": "remote-2"
+    }
+   ],
+   [
+    "approve ews fault",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "categories": [
+       "Synthetic"
+      ]
+     },
+     "proposal_digest": "e72a3325ad4f5f8ff4ee68d9946fff73eb2eca59fc74ae0d3972201be4ca2fd4",
+     "proposal_id": "<proposal-3>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-2",
+      "item_id": "remote-2"
+     },
+     "target_change_key": "change-2",
+     "target_identity": "remote-2"
+    }
+   ],
+   [
+    "execute ews fault",
+    {
+     "detail": {
+      "code": "ErrorAccessDenied",
+      "reason": "ews_fault"
+     },
+     "proposal_id": "<proposal-3>",
+     "state": "failed"
+    }
+   ],
+   [
+    "propose uncertain importance",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "importance": "High"
+     },
+     "proposal_digest": "f8c1fdb716848bf10eddd3e225015c19b9861943a9b5853d1e90faf0b90b9975",
+     "proposal_id": "<proposal-4>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-2",
+      "item_id": "remote-2"
+     },
+     "target_change_key": "change-2",
+     "target_identity": "remote-2"
+    }
+   ],
+   [
+    "approve transport uncertain",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "importance": "High"
+     },
+     "proposal_digest": "f8c1fdb716848bf10eddd3e225015c19b9861943a9b5853d1e90faf0b90b9975",
+     "proposal_id": "<proposal-4>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-2",
+      "item_id": "remote-2"
+     },
+     "target_change_key": "change-2",
+     "target_identity": "remote-2"
+    }
+   ],
+   [
+    "execute transport uncertain",
+    {
+     "detail": {
+      "operation": "update_item",
+      "reason": "transport_outcome_unknown"
+     },
+     "proposal_id": "<proposal-4>",
+     "state": "uncertain"
+    }
+   ],
+   [
+    "reconcile update not correlatable",
+    {
+     "proposal_id": "<proposal-4>",
+     "reconciled": false,
+     "state": "uncertain"
+    }
+   ]
+  ]
+ },
+ "other_operations": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "MoveItem"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   },
+   {
+    "attempt_id": 2,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "CopyItem"
+    },
+    "proposal_id": "<proposal-2>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   },
+   {
+    "attempt_id": 3,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 0,
+     "operation": "DeleteItem"
+    },
+    "proposal_id": "<proposal-3>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   },
+   {
+    "attempt_id": 4,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "CreateItem"
+    },
+    "proposal_id": "<proposal-4>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   },
+   {
+    "attempt_id": 5,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 0,
+     "operation": "SendItem"
+    },
+    "proposal_id": "<proposal-5>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "move_item",
+     "parameter_keys": [
+      "destination_folder_id"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "MoveItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "copy_item",
+     "parameter_keys": [
+      "destination_folder_id"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 2
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "CopyItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "delete_item",
+     "parameter_keys": []
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-3>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-3>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 3
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-3>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 0,
+     "operation": "DeleteItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-3>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "create_draft",
+     "parameter_keys": [
+      "body_text",
+      "recipients",
+      "subject"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-4>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-4>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 4
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-4>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "CreateItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-4>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "send_item",
+     "parameter_keys": []
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-5>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-5>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 5
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-5>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 0,
+     "operation": "SendItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-5>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ],
+   [
+    "move_item",
+    [
+     "remote-2",
+     "change-2",
+     "archive"
+    ],
+    {}
+   ],
+   [
+    "copy_item",
+    [
+     "remote-3",
+     "change-3",
+     "inbox"
+    ],
+    {}
+   ],
+   [
+    "delete_to_deleted_items",
+    [
+     "remote-1",
+     "change-1"
+    ],
+    {}
+   ],
+   [
+    "create_text_draft",
+    [
+     "Synthetic draft",
+     "Synthetic draft body.",
+     [
+      "recipient@example.test"
+     ]
+    ],
+    {
+     "proposal_id": "<proposal-4>"
+    }
+   ],
+   [
+    "send_existing_draft",
+    [
+     "draft-1",
+     "draft-change-1"
+    ],
+    {
+     "proposal_id": "<proposal-5>"
+    }
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "move_item",
+    "parameters": {
+     "destination_folder_id": "archive"
+    },
+    "proposal_digest": "54460c46298e3b62d10292837069bdae5cf31081faf134cbb3f2c05d5a8fc496",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-2",
+     "item_id": "remote-2"
+    },
+    "target_change_key": "change-2",
+    "target_identity": "remote-2"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "archive",
+    "operation": "copy_item",
+    "parameters": {
+     "destination_folder_id": "inbox"
+    },
+    "proposal_digest": "61715a9b7f2dfc3f2e40660187ff25d301e6b436170248ceb48aaa56be9e87ae",
+    "proposal_id": "<proposal-2>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-3",
+     "item_id": "remote-3"
+    },
+    "target_change_key": "change-3",
+    "target_identity": "remote-3"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "delete_item",
+    "parameters": {},
+    "proposal_digest": "c2eee2d8e98f515c920749dc666bd2602b479b07e1e676880d046a4f2854d8b2",
+    "proposal_id": "<proposal-3>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "drafts",
+    "operation": "create_draft",
+    "parameters": {
+     "body_text": "Synthetic draft body.",
+     "recipients": [
+      "recipient@example.test"
+     ],
+     "subject": "Synthetic draft"
+    },
+    "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+    "proposal_id": "<proposal-4>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "",
+     "item_id": ""
+    },
+    "target_change_key": "new",
+    "target_identity": "drafts"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "drafts",
+    "operation": "send_item",
+    "parameters": {},
+    "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+    "proposal_id": "<proposal-5>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "draft-change-1",
+     "item_id": "draft-1"
+    },
+    "target_change_key": "draft-change-1",
+    "target_identity": "draft-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-2-moved",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2-moved"
+    },
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [
+    {
+     "change_key": "draft-change-1",
+     "has_canonical_email": true,
+     "is_tombstone": true,
+     "metadata": {
+      "proposal_id": "<proposal-4>"
+     },
+     "remote_item_id": "draft-1"
+    }
+   ],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": true,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-3-copy",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3-copy"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose move",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "move_item",
+     "parameters": {
+      "destination_folder_id": "archive"
+     },
+     "proposal_digest": "54460c46298e3b62d10292837069bdae5cf31081faf134cbb3f2c05d5a8fc496",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-2",
+      "item_id": "remote-2"
+     },
+     "target_change_key": "change-2",
+     "target_identity": "remote-2"
+    }
+   ],
+   [
+    "approve move",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "move_item",
+     "parameters": {
+      "destination_folder_id": "archive"
+     },
+     "proposal_digest": "54460c46298e3b62d10292837069bdae5cf31081faf134cbb3f2c05d5a8fc496",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-2",
+      "item_id": "remote-2"
+     },
+     "target_change_key": "change-2",
+     "target_identity": "remote-2"
+    }
+   ],
+   [
+    "execute move",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "MoveItem"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "propose copy",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "archive",
+     "operation": "copy_item",
+     "parameters": {
+      "destination_folder_id": "inbox"
+     },
+     "proposal_digest": "61715a9b7f2dfc3f2e40660187ff25d301e6b436170248ceb48aaa56be9e87ae",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-3",
+      "item_id": "remote-3"
+     },
+     "target_change_key": "change-3",
+     "target_identity": "remote-3"
+    }
+   ],
+   [
+    "approve copy",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "archive",
+     "operation": "copy_item",
+     "parameters": {
+      "destination_folder_id": "inbox"
+     },
+     "proposal_digest": "61715a9b7f2dfc3f2e40660187ff25d301e6b436170248ceb48aaa56be9e87ae",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-3",
+      "item_id": "remote-3"
+     },
+     "target_change_key": "change-3",
+     "target_identity": "remote-3"
+    }
+   ],
+   [
+    "execute copy",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "CopyItem"
+     },
+     "proposal_id": "<proposal-2>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "propose delete",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "delete_item",
+     "parameters": {},
+     "proposal_digest": "c2eee2d8e98f515c920749dc666bd2602b479b07e1e676880d046a4f2854d8b2",
+     "proposal_id": "<proposal-3>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve delete",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "delete_item",
+     "parameters": {},
+     "proposal_digest": "c2eee2d8e98f515c920749dc666bd2602b479b07e1e676880d046a4f2854d8b2",
+     "proposal_id": "<proposal-3>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "execute delete",
+    {
+     "detail": {
+      "item_count": 0,
+      "operation": "DeleteItem"
+     },
+     "proposal_id": "<proposal-3>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "propose draft",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "create_draft",
+     "parameters": {
+      "body_text": "Synthetic draft body.",
+      "recipients": [
+       "recipient@example.test"
+      ],
+      "subject": "Synthetic draft"
+     },
+     "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+     "proposal_id": "<proposal-4>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "",
+      "item_id": ""
+     },
+     "target_change_key": "new",
+     "target_identity": "drafts"
+    }
+   ],
+   [
+    "approve draft",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "create_draft",
+     "parameters": {
+      "body_text": "Synthetic draft body.",
+      "recipients": [
+       "recipient@example.test"
+      ],
+      "subject": "Synthetic draft"
+     },
+     "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+     "proposal_id": "<proposal-4>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "",
+      "item_id": ""
+     },
+     "target_change_key": "new",
+     "target_identity": "drafts"
+    }
+   ],
+   [
+    "execute draft",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "CreateItem"
+     },
+     "proposal_id": "<proposal-4>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "propose send",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "send_item",
+     "parameters": {},
+     "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+     "proposal_id": "<proposal-5>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "draft-change-1",
+      "item_id": "draft-1"
+     },
+     "target_change_key": "draft-change-1",
+     "target_identity": "draft-1"
+    }
+   ],
+   [
+    "approve send",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "send_item",
+     "parameters": {},
+     "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+     "proposal_id": "<proposal-5>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "draft-change-1",
+      "item_id": "draft-1"
+     },
+     "target_change_key": "draft-change-1",
+     "target_identity": "draft-1"
+    }
+   ],
+   [
+    "execute send",
+    {
+     "detail": {
+      "item_count": 0,
+      "operation": "SendItem"
+     },
+     "proposal_id": "<proposal-5>",
+     "state": "succeeded"
+    }
+   ]
+  ]
+ },
+ "process_write_gate_disabled": {
+  "attempts": [],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": false
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "approved",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": false
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve write gate disabled",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "execute write gate disabled",
+    {
+     "message": "EWS writes are disabled by process or account policy.",
+     "raises": "PermissionError"
+    }
+   ],
+   [
+    "reconcile write gate disabled",
+    {
+     "proposal_id": "<proposal-1>",
+     "reconciled": false,
+     "state": "approved"
+    }
+   ]
+  ]
+ },
+ "proposal_validation": {
+  "attempts": [],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": null,
+    "created_at": "<timestamp>",
+    "execution_deadline": null,
+    "execution_window_seconds": null,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "pending",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "propose identical update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "unsupported operation",
+    {
+     "message": "Unsupported mailbox operation: archive_item",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "unknown update field",
+    {
+     "message": "update_item requires only supported update fields.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "empty update",
+    {
+     "message": "update_item requires only supported update fields.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "non-boolean is_read",
+    {
+     "message": "is_read must be a boolean.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "bad importance",
+    {
+     "message": "importance must be Low, Normal, or High.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "folder outside allowlist",
+    {
+     "message": "The proposal folder is outside the configured allowlist.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "destination outside allowlist",
+    {
+     "message": "The destination folder is outside the configured allowlist.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "delete with parameters",
+    {
+     "message": "delete_item accepts no parameters and always moves to Deleted Items.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "send with parameters",
+    {
+     "message": "send_item accepts no parameters.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "draft missing fields",
+    {
+     "message": "create_draft requires subject, body_text, and recipients.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "draft blank subject",
+    {
+     "message": "subject must be a non-empty string.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "draft no recipients",
+    {
+     "message": "recipients must be a list of strings.",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "unknown account",
+    {
+     "message": "'missing'",
+     "raises": "KeyError"
+    }
+   ],
+   [
+    "approve unknown proposal",
+    {
+     "message": "'missing-proposal'",
+     "raises": "KeyError"
+    }
+   ],
+   [
+    "execute unknown proposal",
+    {
+     "message": "'missing-proposal'",
+     "raises": "KeyError"
+    }
+   ],
+   [
+    "proposals bad state",
+    {
+     "message": "'bogus' is not a valid ProposalState",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "approved proposals",
+    []
+   ],
+   [
+    "proposal",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ]
+  ]
+ },
+ "reject": {
+  "attempts": [],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {
+     "reason": "synthetic reviewer declined"
+    },
+    "event_type": "rejected",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {
+     "reason": "withdrawn after approval"
+    },
+    "event_type": "rejected",
+    "proposal_id": "<proposal-2>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": null,
+    "created_at": "<timestamp>",
+    "execution_deadline": null,
+    "execution_window_seconds": null,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "rejected",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "archive",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+    "proposal_id": "<proposal-2>",
+    "proposer_kind": "assistant",
+    "state": "rejected",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-3",
+     "item_id": "remote-3"
+    },
+    "target_change_key": "change-3",
+    "target_identity": "remote-3"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "reject",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "rejected",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve rejected",
+    {
+     "message": "proposal is not pending",
+     "raises": "RuntimeError"
+    }
+   ],
+   [
+    "execute rejected",
+    {
+     "executed": false,
+     "proposal_id": "<proposal-1>",
+     "state": "rejected"
+    }
+   ],
+   [
+    "reject again",
+    {
+     "message": "proposal cannot be rejected",
+     "raises": "RuntimeError"
+    }
+   ],
+   [
+    "propose second update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "archive",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-3",
+      "item_id": "remote-3"
+     },
+     "target_change_key": "change-3",
+     "target_identity": "remote-3"
+    }
+   ],
+   [
+    "approve second",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "archive",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-3",
+      "item_id": "remote-3"
+     },
+     "target_change_key": "change-3",
+     "target_identity": "remote-3"
+    }
+   ],
+   [
+    "reject approved",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "archive",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "rejected",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-3",
+      "item_id": "remote-3"
+     },
+     "target_change_key": "change-3",
+     "target_identity": "remote-3"
+    }
+   ]
+  ]
+ },
+ "source_missing": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "reason": "source_item_missing"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "conflicted"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "reason": "source_item_missing"
+    },
+    "event_type": "conflicted",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "b2bcda6ff20adc28cc3f00d93f5ce0c910fe46829ecbaad6139b63c5d1b998c9",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "conflicted",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-404",
+     "item_id": "remote-404"
+    },
+    "target_change_key": "change-404",
+    "target_identity": "remote-404"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose unknown item",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "b2bcda6ff20adc28cc3f00d93f5ce0c910fe46829ecbaad6139b63c5d1b998c9",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-404",
+      "item_id": "remote-404"
+     },
+     "target_change_key": "change-404",
+     "target_identity": "remote-404"
+    }
+   ],
+   [
+    "approve missing source",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "b2bcda6ff20adc28cc3f00d93f5ce0c910fe46829ecbaad6139b63c5d1b998c9",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-404",
+      "item_id": "remote-404"
+     },
+     "target_change_key": "change-404",
+     "target_identity": "remote-404"
+    }
+   ],
+   [
+    "execute missing source",
+    {
+     "detail": {
+      "reason": "source_item_missing"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "conflicted"
+    }
+   ]
+  ]
+ },
+ "stale_change_key": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "reason": "stale_change_key"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "conflicted"
+   },
+   {
+    "attempt_id": 2,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "UpdateItem"
+    },
+    "proposal_id": "<proposal-2>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "reason": "stale_change_key"
+    },
+    "event_type": "conflicted",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "previous_state": "conflicted"
+    },
+    "event_type": "reproposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 2
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "UpdateItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-2>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": "wm-inbox-1"
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1"
+    ],
+    {}
+   ],
+   [
+    "update_item",
+    [
+     "remote-1",
+     "change-1b"
+    ],
+    {
+     "is_read": true
+    }
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": null,
+    "created_at": "<timestamp>",
+    "execution_deadline": null,
+    "execution_window_seconds": null,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "pending",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "94341e65f2c73fc92b7e3714b2abef4a892a8c5728e8b4c1efed77d4031025d5",
+    "proposal_id": "<proposal-2>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1b",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1b",
+    "target_identity": "remote-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1b-updated",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "sync remote change",
+    {
+     "account_id": "synthetic",
+     "created": 0,
+     "deleted": 0,
+     "folders": {
+      "inbox": {
+       "complete": true,
+       "created": 0,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 1
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 1
+    }
+   ],
+   [
+    "execute stale",
+    {
+     "detail": {
+      "reason": "stale_change_key"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "conflicted"
+    }
+   ],
+   [
+    "repropose identical after conflict",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "propose current change key",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "94341e65f2c73fc92b7e3714b2abef4a892a8c5728e8b4c1efed77d4031025d5",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1b",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1b",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve current change key",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "94341e65f2c73fc92b7e3714b2abef4a892a8c5728e8b4c1efed77d4031025d5",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1b",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1b",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "execute current change key",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "UpdateItem"
+     },
+     "proposal_id": "<proposal-2>",
+     "state": "succeeded"
+    }
+   ]
+  ]
+ },
+ "success_then_reconcile": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "UpdateItem"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "UpdateItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ],
+   [
+    "update_item",
+    [
+     "remote-1",
+     "change-1"
+    ],
+    {
+     "is_read": true
+    }
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "inbox",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-1",
+     "item_id": "remote-1"
+    },
+    "target_change_key": "change-1",
+    "target_identity": "remote-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1-updated",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose update",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "approve update",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ],
+   [
+    "execute update",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "UpdateItem"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "reconcile succeeded",
+    {
+     "proposal_id": "<proposal-1>",
+     "reconciled": false,
+     "state": "succeeded"
+    }
+   ],
+   [
+    "proposal",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "inbox",
+     "operation": "update_item",
+     "parameters": {
+      "is_read": true
+     },
+     "proposal_digest": "1b7e256d1593a709f7b98688597da37a807c1f908c734832df74e5645970e254",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "succeeded",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "change-1",
+      "item_id": "remote-1"
+     },
+     "target_change_key": "change-1",
+     "target_identity": "remote-1"
+    }
+   ]
+  ]
+ },
+ "triage_selected_folders": {
+  "attempts": [],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "update_item",
+     "parameter_keys": [
+      "is_read"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": null,
+    "created_at": "<timestamp>",
+    "execution_deadline": null,
+    "execution_window_seconds": null,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "archive",
+    "operation": "update_item",
+    "parameters": {
+     "is_read": true
+    },
+    "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "pending",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "change-3",
+     "item_id": "remote-3"
+    },
+    "target_change_key": "change-3",
+    "target_identity": "remote-3"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "triage all",
+    [
+     {
+      "account_id": "synthetic",
+      "folder_id": "archive",
+      "operation": "update_item",
+      "parameters": {
+       "is_read": true
+      },
+      "reason": "message is unread",
+      "target_change_key": "change-3",
+      "target_identity": "remote-3"
+     },
+     {
+      "account_id": "synthetic",
+      "folder_id": "inbox",
+      "operation": "update_item",
+      "parameters": {
+       "is_read": true
+      },
+      "reason": "message is unread",
+      "target_change_key": "change-1",
+      "target_identity": "remote-1"
+     }
+    ]
+   ],
+   [
+    "triage archive with proposals",
+    [
+     {
+      "account_id": "synthetic",
+      "folder_id": "archive",
+      "operation": "update_item",
+      "parameters": {
+       "is_read": true
+      },
+      "proposal_id": "<proposal-1>",
+      "reason": "message is unread",
+      "target_change_key": "change-3",
+      "target_identity": "remote-3"
+     }
+    ]
+   ],
+   [
+    "triage archive again",
+    [
+     {
+      "account_id": "synthetic",
+      "folder_id": "archive",
+      "operation": "update_item",
+      "parameters": {
+       "is_read": true
+      },
+      "proposal_id": "<proposal-1>",
+      "reason": "message is unread",
+      "target_change_key": "change-3",
+      "target_identity": "remote-3"
+     }
+    ]
+   ],
+   [
+    "triage outside allowlist",
+    {
+     "message": "Folders are outside the configured allowlist: unknown",
+     "raises": "ValueError"
+    }
+   ],
+   [
+    "proposals",
+    [
+     {
+      "account_id": "synthetic",
+      "approved_at": null,
+      "created_at": "<timestamp>",
+      "execution_deadline": null,
+      "expires_at": "<timestamp>",
+      "folder_id": "archive",
+      "operation": "update_item",
+      "parameters": {
+       "is_read": true
+      },
+      "proposal_digest": "54f95de2d29903076fec677c545abd92a01f5c18a82865ff538de1a8a23f91b4",
+      "proposal_id": "<proposal-1>",
+      "proposer_kind": "assistant",
+      "state": "pending",
+      "target": {
+       "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+       "change_key": "change-3",
+       "item_id": "remote-3"
+      },
+      "target_change_key": "change-3",
+      "target_identity": "remote-3"
+     }
+    ]
+   ]
+  ]
+ },
+ "uncertain_send_duplicate_matches": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "CreateItem"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   },
+   {
+    "attempt_id": 2,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "code": "SOAPFault",
+     "http_status": 504,
+     "operation": "send_item",
+     "reason": "transport_outcome_unknown"
+    },
+    "proposal_id": "<proposal-2>",
+    "started_at": "<timestamp>",
+    "state": "uncertain"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "create_draft",
+     "parameter_keys": [
+      "body_text",
+      "recipients",
+      "subject"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "CreateItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "send_item",
+     "parameter_keys": []
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 2
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "code": "SOAPFault",
+     "http_status": 504,
+     "operation": "send_item",
+     "reason": "transport_outcome_unknown"
+    },
+    "event_type": "uncertain",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "folder_count": 1,
+     "matched": 2,
+     "reason": "duplicate_correlation_matches"
+    },
+    "event_type": "conflicted",
+    "proposal_id": "<proposal-2>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ],
+   [
+    "create_text_draft",
+    [
+     "Synthetic draft",
+     "Synthetic draft body.",
+     [
+      "recipient@example.test"
+     ]
+    ],
+    {
+     "proposal_id": "<proposal-1>"
+    }
+   ],
+   [
+    "send_existing_draft",
+    [
+     "draft-1",
+     "draft-change-1"
+    ],
+    {
+     "proposal_id": "<proposal-2>"
+    }
+   ],
+   [
+    "find_items_by_proposal_id",
+    [
+     "sentitems",
+     "<proposal-2>"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "drafts",
+    "operation": "create_draft",
+    "parameters": {
+     "body_text": "Synthetic draft body.",
+     "recipients": [
+      "recipient@example.test"
+     ],
+     "subject": "Synthetic draft"
+    },
+    "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "",
+     "item_id": ""
+    },
+    "target_change_key": "new",
+    "target_identity": "drafts"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "drafts",
+    "operation": "send_item",
+    "parameters": {},
+    "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+    "proposal_id": "<proposal-2>",
+    "proposer_kind": "assistant",
+    "state": "conflicted",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "draft-change-1",
+     "item_id": "draft-1"
+    },
+    "target_change_key": "draft-change-1",
+    "target_identity": "draft-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [
+    {
+     "change_key": "draft-change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "proposal_id": "<proposal-1>"
+     },
+     "remote_item_id": "draft-1"
+    }
+   ],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose draft",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "create_draft",
+     "parameters": {
+      "body_text": "Synthetic draft body.",
+      "recipients": [
+       "recipient@example.test"
+      ],
+      "subject": "Synthetic draft"
+     },
+     "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "",
+      "item_id": ""
+     },
+     "target_change_key": "new",
+     "target_identity": "drafts"
+    }
+   ],
+   [
+    "approve draft",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "create_draft",
+     "parameters": {
+      "body_text": "Synthetic draft body.",
+      "recipients": [
+       "recipient@example.test"
+      ],
+      "subject": "Synthetic draft"
+     },
+     "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "",
+      "item_id": ""
+     },
+     "target_change_key": "new",
+     "target_identity": "drafts"
+    }
+   ],
+   [
+    "execute draft",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "CreateItem"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "propose send",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "send_item",
+     "parameters": {},
+     "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "draft-change-1",
+      "item_id": "draft-1"
+     },
+     "target_change_key": "draft-change-1",
+     "target_identity": "draft-1"
+    }
+   ],
+   [
+    "approve send uncertain",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "send_item",
+     "parameters": {},
+     "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "draft-change-1",
+      "item_id": "draft-1"
+     },
+     "target_change_key": "draft-change-1",
+     "target_identity": "draft-1"
+    }
+   ],
+   [
+    "execute send uncertain",
+    {
+     "detail": {
+      "code": "SOAPFault",
+      "http_status": 504,
+      "operation": "send_item",
+      "reason": "transport_outcome_unknown"
+     },
+     "proposal_id": "<proposal-2>",
+     "state": "uncertain"
+    }
+   ],
+   [
+    "reconcile duplicate matches",
+    {
+     "detail": {
+      "folder_count": 1,
+      "matched": 2,
+      "reason": "duplicate_correlation_matches"
+     },
+     "proposal_id": "<proposal-2>",
+     "reconciled": false,
+     "state": "conflicted"
+    }
+   ]
+  ]
+ },
+ "uncertain_send_reconciled": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "CreateItem"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "succeeded"
+   },
+   {
+    "attempt_id": 2,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "code": "ErrorInternalServerError",
+     "http_status": 500,
+     "operation": "send_item",
+     "reason": "transport_outcome_unknown"
+    },
+    "proposal_id": "<proposal-2>",
+    "started_at": "<timestamp>",
+    "state": "uncertain"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "create_draft",
+     "parameter_keys": [
+      "body_text",
+      "recipients",
+      "subject"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "item_count": 1,
+     "operation": "CreateItem"
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "send_item",
+     "parameter_keys": []
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 2
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "code": "ErrorInternalServerError",
+     "http_status": 500,
+     "operation": "send_item",
+     "reason": "transport_outcome_unknown"
+    },
+    "event_type": "uncertain",
+    "proposal_id": "<proposal-2>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "folder_count": 1,
+     "matched": 1
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-2>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ],
+   [
+    "create_text_draft",
+    [
+     "Synthetic draft",
+     "Synthetic draft body.",
+     [
+      "recipient@example.test"
+     ]
+    ],
+    {
+     "proposal_id": "<proposal-1>"
+    }
+   ],
+   [
+    "send_existing_draft",
+    [
+     "draft-1",
+     "draft-change-1"
+    ],
+    {
+     "proposal_id": "<proposal-2>"
+    }
+   ],
+   [
+    "find_items_by_proposal_id",
+    [
+     "sentitems",
+     "<proposal-2>"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "drafts",
+    "operation": "create_draft",
+    "parameters": {
+     "body_text": "Synthetic draft body.",
+     "recipients": [
+      "recipient@example.test"
+     ],
+     "subject": "Synthetic draft"
+    },
+    "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "",
+     "item_id": ""
+    },
+    "target_change_key": "new",
+    "target_identity": "drafts"
+   },
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "drafts",
+    "operation": "send_item",
+    "parameters": {},
+    "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+    "proposal_id": "<proposal-2>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "draft-change-1",
+     "item_id": "draft-1"
+    },
+    "target_change_key": "draft-change-1",
+    "target_identity": "draft-1"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [
+    {
+     "change_key": "draft-change-1",
+     "has_canonical_email": true,
+     "is_tombstone": true,
+     "metadata": {
+      "proposal_id": "<proposal-1>"
+     },
+     "remote_item_id": "draft-1"
+    }
+   ],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose draft",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "create_draft",
+     "parameters": {
+      "body_text": "Synthetic draft body.",
+      "recipients": [
+       "recipient@example.test"
+      ],
+      "subject": "Synthetic draft"
+     },
+     "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "",
+      "item_id": ""
+     },
+     "target_change_key": "new",
+     "target_identity": "drafts"
+    }
+   ],
+   [
+    "approve draft",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "create_draft",
+     "parameters": {
+      "body_text": "Synthetic draft body.",
+      "recipients": [
+       "recipient@example.test"
+      ],
+      "subject": "Synthetic draft"
+     },
+     "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "",
+      "item_id": ""
+     },
+     "target_change_key": "new",
+     "target_identity": "drafts"
+    }
+   ],
+   [
+    "execute draft",
+    {
+     "detail": {
+      "item_count": 1,
+      "operation": "CreateItem"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "succeeded"
+    }
+   ],
+   [
+    "propose send",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "send_item",
+     "parameters": {},
+     "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "draft-change-1",
+      "item_id": "draft-1"
+     },
+     "target_change_key": "draft-change-1",
+     "target_identity": "draft-1"
+    }
+   ],
+   [
+    "approve send uncertain",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "send_item",
+     "parameters": {},
+     "proposal_digest": "61fc78520a00abc28c22c8711b5f9593e2c63201cdce41d7f4e7e6facdfbf5a5",
+     "proposal_id": "<proposal-2>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "draft-change-1",
+      "item_id": "draft-1"
+     },
+     "target_change_key": "draft-change-1",
+     "target_identity": "draft-1"
+    }
+   ],
+   [
+    "execute send uncertain",
+    {
+     "detail": {
+      "code": "ErrorInternalServerError",
+      "http_status": 500,
+      "operation": "send_item",
+      "reason": "transport_outcome_unknown"
+     },
+     "proposal_id": "<proposal-2>",
+     "state": "uncertain"
+    }
+   ],
+   [
+    "reconcile single match",
+    {
+     "proposal_id": "<proposal-2>",
+     "reconciled": true,
+     "state": "succeeded"
+    }
+   ]
+  ]
+ },
+ "uncertain_then_reconcile": {
+  "attempts": [
+   {
+    "attempt_id": 1,
+    "completed_at": "<timestamp>",
+    "detail": {
+     "operation": "create_draft",
+     "reason": "transport_outcome_unknown"
+    },
+    "proposal_id": "<proposal-1>",
+    "started_at": "<timestamp>",
+    "state": "uncertain"
+   }
+  ],
+  "events": [
+   {
+    "actor_kind": "assistant",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "create_draft",
+     "parameter_keys": [
+      "body_text",
+      "recipients",
+      "subject"
+     ]
+    },
+    "event_type": "proposed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "human",
+    "created_at": "<timestamp>",
+    "detail": {},
+    "event_type": "approved",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "attempt_id": 1
+    },
+    "event_type": "claimed",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "operation": "create_draft",
+     "reason": "transport_outcome_unknown"
+    },
+    "event_type": "uncertain",
+    "proposal_id": "<proposal-1>"
+   },
+   {
+    "actor_kind": "system",
+    "created_at": "<timestamp>",
+    "detail": {
+     "folder_count": 1,
+     "matched": 1
+    },
+    "event_type": "succeeded",
+    "proposal_id": "<proposal-1>"
+   }
+  ],
+  "gateway_calls": [
+   [
+    "sync_folder_items",
+    [
+     "archive"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-3"
+    ],
+    {}
+   ],
+   [
+    "sync_folder_items",
+    [
+     "inbox"
+    ],
+    {
+     "watermark": null
+    }
+   ],
+   [
+    "get_items",
+    [
+     "remote-1",
+     "remote-2"
+    ],
+    {}
+   ],
+   [
+    "create_text_draft",
+    [
+     "Synthetic draft",
+     "Synthetic draft body.",
+     [
+      "recipient@example.test"
+     ]
+    ],
+    {
+     "proposal_id": "<proposal-1>"
+    }
+   ],
+   [
+    "find_items_by_proposal_id",
+    [
+     "drafts",
+     "<proposal-1>"
+    ],
+    {}
+   ],
+   [
+    "find_items_by_proposal_id",
+    [
+     "drafts",
+     "<proposal-1>"
+    ],
+    {}
+   ]
+  ],
+  "gateway_factory_calls": [
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   },
+   {
+    "account_id": "synthetic",
+    "account_write_enabled": true,
+    "process_write_enabled": true
+   }
+  ],
+  "proposals": [
+   {
+    "account_id": "synthetic",
+    "approved_at": "<timestamp>",
+    "created_at": "<timestamp>",
+    "execution_deadline": "<timestamp>",
+    "execution_window_seconds": 900,
+    "expires_at": "<timestamp>",
+    "expiry_window_seconds": 86400,
+    "folder_id": "drafts",
+    "operation": "create_draft",
+    "parameters": {
+     "body_text": "Synthetic draft body.",
+     "recipients": [
+      "recipient@example.test"
+     ],
+     "subject": "Synthetic draft"
+    },
+    "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+    "proposal_id": "<proposal-1>",
+    "proposer_kind": "assistant",
+    "state": "succeeded",
+    "target": {
+     "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+     "change_key": "",
+     "item_id": ""
+    },
+    "target_change_key": "new",
+    "target_identity": "drafts"
+   }
+  ],
+  "sources": {
+   "archive": [
+    {
+     "change_key": "change-3",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-3"
+    }
+   ],
+   "drafts": [
+    {
+     "change_key": "draft-change-9",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "proposal_id": "<proposal-1>"
+     },
+     "remote_item_id": "draft-9"
+    }
+   ],
+   "inbox": [
+    {
+     "change_key": "change-1",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": false
+     },
+     "remote_item_id": "remote-1"
+    },
+    {
+     "change_key": "change-2",
+     "has_canonical_email": true,
+     "is_tombstone": false,
+     "metadata": {
+      "is_read": true
+     },
+     "remote_item_id": "remote-2"
+    }
+   ],
+   "sentitems": []
+  },
+  "steps": [
+   [
+    "configure_account",
+    {
+     "account_id": "synthetic",
+     "auth_mode": "basic",
+     "created_at": "<timestamp>",
+     "credential_ref": "basic-env:SYNTHETIC_EWS_USER:SYNTHETIC_EWS_PASSWORD",
+     "endpoint": "https://ews.example.test/EWS/Exchange.asmx",
+     "folders": [
+      {
+       "account_id": "synthetic",
+       "display_name": "archive",
+       "folder_id": "archive",
+       "source": "ews"
+      },
+      {
+       "account_id": "synthetic",
+       "display_name": "inbox",
+       "folder_id": "inbox",
+       "source": "ews"
+      }
+     ],
+     "mailbox_address": "archive@example.test",
+     "read_enabled": true,
+     "source": "ews",
+     "write_enabled": true
+    }
+   ],
+   [
+    "readiness",
+    {
+     "account_id": "synthetic",
+     "live_verified": false,
+     "offline_ready": true,
+     "problems": [],
+     "read_ready": true,
+     "status": "Offline verified; live EWS writes unverified.",
+     "write_ready": true
+    }
+   ],
+   [
+    "sync",
+    {
+     "account_id": "synthetic",
+     "created": 3,
+     "deleted": 0,
+     "folders": {
+      "archive": {
+       "complete": true,
+       "created": 1,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      },
+      "inbox": {
+       "complete": true,
+       "created": 2,
+       "deleted": 0,
+       "indexed_chunks": 0,
+       "updated": 0
+      }
+     },
+     "indexed_chunks": 0,
+     "updated": 0
+    }
+   ],
+   [
+    "propose draft",
+    {
+     "account_id": "synthetic",
+     "approved_at": null,
+     "created_at": "<timestamp>",
+     "execution_deadline": null,
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "create_draft",
+     "parameters": {
+      "body_text": "Synthetic draft body.",
+      "recipients": [
+       "recipient@example.test"
+      ],
+      "subject": "Synthetic draft"
+     },
+     "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "pending",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "",
+      "item_id": ""
+     },
+     "target_change_key": "new",
+     "target_identity": "drafts"
+    }
+   ],
+   [
+    "approve draft uncertain",
+    {
+     "account_id": "synthetic",
+     "approved_at": "<timestamp>",
+     "created_at": "<timestamp>",
+     "execution_deadline": "<timestamp>",
+     "expires_at": "<timestamp>",
+     "folder_id": "drafts",
+     "operation": "create_draft",
+     "parameters": {
+      "body_text": "Synthetic draft body.",
+      "recipients": [
+       "recipient@example.test"
+      ],
+      "subject": "Synthetic draft"
+     },
+     "proposal_digest": "4abe46272300eaf4b76d66bf74020c5fd317840c843d839e9e1020b6f2783dfa",
+     "proposal_id": "<proposal-1>",
+     "proposer_kind": "assistant",
+     "state": "approved",
+     "target": {
+      "account_config_fingerprint": "0bd6399ffcc7ca1a70b61d4450ca44196e10c35d088f8a1d1d692609aa758277",
+      "change_key": "",
+      "item_id": ""
+     },
+     "target_change_key": "new",
+     "target_identity": "drafts"
+    }
+   ],
+   [
+    "execute draft uncertain",
+    {
+     "detail": {
+      "operation": "create_draft",
+      "reason": "transport_outcome_unknown"
+     },
+     "proposal_id": "<proposal-1>",
+     "state": "uncertain"
+    }
+   ],
+   [
+    "reconcile without match",
+    {
+     "proposal_id": "<proposal-1>",
+     "reconciled": false,
+     "state": "uncertain"
+    }
+   ],
+   [
+    "execute uncertain",
+    {
+     "executed": false,
+     "proposal_id": "<proposal-1>",
+     "state": "uncertain"
+    }
+   ],
+   [
+    "reconcile with match",
+    {
+     "proposal_id": "<proposal-1>",
+     "reconciled": true,
+     "state": "succeeded"
+    }
+   ],
+   [
+    "reconcile again",
+    {
+     "proposal_id": "<proposal-1>",
+     "reconciled": false,
+     "state": "succeeded"
+    }
+   ]
+  ]
+ }
+}

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from mailarium.config import resolve_device
+from mailarium.platform.settings import resolve_device
 
 TrainingMode = Literal["dense", "sparse"]
 
@@ -237,11 +237,6 @@ def _load_triplets(path: Path) -> list[dict[str, str]]:
                 raise ValueError(f"Training row {line_number} is missing non-empty field(s): {', '.join(missing)}")
             triplets.append(normalized)
     return triplets
-
-
-def _count_lines(path: str) -> int:
-    """Count non-empty JSONL rows without accepting malformed data."""
-    return len(_load_triplets(Path(path)))
 
 
 def _validate_training_options(

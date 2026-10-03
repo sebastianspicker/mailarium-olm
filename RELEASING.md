@@ -15,13 +15,21 @@ publish a package, validate remote CI, or prove live EWS interoperability.
 ## Run the release gate
 
 ```bash
-python scripts/verify.py release
+uv run python scripts/verify.py release
 ```
 
-The release profile validates the lockfile; runs lint, format, architecture,
-contract, type, offline-ingest, security, dependency, and privacy checks; then
-builds artifacts, exports locked runtime requirements, inspects artifacts,
-installs the wheel, and runs entry-point and installed-wheel smoke checks.
+The release profile runs `pr` and then `package`. `pr` validates the lockfile
+and runs lint, format, architecture, and type checks, the complete tests
+(contract and integration) once under critical branch coverage floors,
+offline and native-storage ingest smokes, Bandit, dependency audit, and the publication privacy scan
+(`scripts/release/privacy_scan.py`). `package` runs the Streamlit smoke, builds
+artifacts, exports locked runtime requirements, inspects artifacts, installs
+the wheel, and runs entry-point and installed-wheel smoke checks.
+
+The Linux CI packaging job uses `scripts/verify.py package` only after the
+same revision passes its prerequisite PR job. Continue using `release` for
+local release validation; `package` alone does not run the source, test,
+security, or privacy gates.
 
 Inspect failures instead of bypassing them. The privacy scan and artifact check
 must pass before publication. The dependency audit result is candidate-specific

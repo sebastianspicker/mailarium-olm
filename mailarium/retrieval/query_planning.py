@@ -42,10 +42,6 @@ class QueryExpander:
         self._vocabulary = vocabulary or []
         self._vocab_embeddings: Any = None
 
-    def set_vocabulary(self, vocabulary: list[str]) -> None:
-        self._vocabulary = vocabulary
-        self._vocab_embeddings = None
-
     def _compute_similarities(self, query: str) -> Any:
         import numpy as np
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Mailarium's canonical fast, pull-request, or release verification profile."""
+"""Run Mailarium's source, release, or post-PR packaging verification profiles."""
 
 from __future__ import annotations
 
@@ -13,29 +13,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
 CONTRACT_TARGET = ROOT / "tests" / "contract"
-CRITICAL_INTEGRATION_TARGETS = (
-    "tests/integration/test_archive_database.py",
-    "tests/integration/test_runtime_ownership.py",
-    "tests/integration/test_retrieval_flow.py",
-    "tests/integration/test_answer_context_flow.py",
-    "tests/integration/test_mailbox_sync_flow.py",
-    "tests/integration/test_adapter_wiring.py",
-    "tests/integration/test_native_ingestion_flow.py",
-    "tests/integration/test_archive_migrations_flow.py",
-    "tests/integration/test_mailbox_projection_flow.py",
-    "tests/integration/test_retrieval_channels.py",
-    "tests/integration/test_web_app_flow.py",
-)
-CRITICAL_COVERAGE_MODULES = (
-    "mailarium.runtime",
-    "mailarium.mailbox.sync_service",
-    "mailarium.investigation.answer_context.workflow",
-    "mailarium.interfaces.mcp.tools.search",
-    "mailarium.archive.database",
-    "mailarium.ingestion.ingest_embed_pipeline",
-    "mailarium.ingestion.mailbox_ingest",
-    "mailarium.web_app",
-)
 OFFLINE_INGEST_ENV = {
     "RUNTIME_PROFILE": "offline-test",
     "EMBEDDING_LOAD_MODE": "local_only",
@@ -50,44 +27,32 @@ def _run(label: str, command: list[str], *, cwd: Path = ROOT, env: dict[str, str
     subprocess.run(command, cwd=cwd, env=env, check=True)  # nosec B603
 
 
-def _run_fast() -> None:
-    """Run the fast, deterministic source and contract checks."""
+def _run_static_checks() -> None:
+    """Run deterministic lint, format, and architecture-policy checks."""
     _run("Lint", [sys.executable, "-m", "ruff", "check", "."])
     _run("Format check", [sys.executable, "-m", "ruff", "format", "--check", "."])
     _run("Architecture dependencies", [sys.executable, "scripts/check_architecture.py"])
+
+
+def _run_fast() -> None:
+    """Run the fast, deterministic source and contract checks."""
+    _run_static_checks()
     _run("Contract tests", [sys.executable, "-m", "pytest", "-q", str(CONTRACT_TARGET.relative_to(ROOT))])
 
 
-def _run_complete_test_tree() -> None:
-    """Run every test package so integration behavior is not inferred from contracts alone."""
-    _run("Complete test suite", [sys.executable, "-m", "pytest", "-q", "tests"])
+def _run_test_suite_with_coverage() -> None:
+    """Run every test once under branch coverage, then gate critical modules on independent floors.
 
-
-def _run_critical_integration_coverage() -> None:
-    """Gate high-value composition seams with independent branch floors per module."""
-    source = ",".join(CRITICAL_COVERAGE_MODULES)
+    The floors live in ``scripts/check_critical_coverage.py``; measuring the complete
+    suite keeps one list of critical modules and never runs a test twice.
+    """
     _run(
-        "Critical integration coverage",
-        [
-            sys.executable,
-            "-m",
-            "coverage",
-            "run",
-            "--branch",
-            f"--source={source}",
-            "-m",
-            "pytest",
-            "-q",
-            *CRITICAL_INTEGRATION_TARGETS,
-        ],
+        "Test suite with branch coverage",
+        [sys.executable, "-m", "coverage", "run", "--branch", "--source=mailarium", "-m", "pytest", "-q", "tests"],
     )
-    _run("Critical integration coverage report", [sys.executable, "-m", "coverage", "report"])
     with tempfile.TemporaryDirectory(prefix="mailarium-critical-coverage-") as temporary:
         coverage_json = Path(temporary) / "coverage.json"
-        _run(
-            "Critical integration coverage JSON",
-            [sys.executable, "-m", "coverage", "json", "-o", str(coverage_json)],
-        )
+        _run("Coverage JSON", [sys.executable, "-m", "coverage", "json", "-q", "-o", str(coverage_json)])
         _run(
             "Critical per-module branch coverage",
             [sys.executable, "scripts/check_critical_coverage.py", str(coverage_json)],
@@ -96,14 +61,16 @@ def _run_critical_integration_coverage() -> None:
 
 def _run_pull_request() -> None:
     """Run pull-request checks, including offline and security-sensitive lanes."""
-    _run_fast()
+    _run_static_checks()
     _run("Type check", [sys.executable, "-m", "mypy", "mailarium"])
-    _run_complete_test_tree()
-    _run_critical_integration_coverage()
+    _run_test_suite_with_coverage()
     ingest_env = os.environ | OFFLINE_INGEST_ENV
     _run("Offline ingest smoke", [sys.executable, "scripts/smoke/ingest.py"], env=ingest_env)
     _run("Native SQLite storage ingest smoke", [sys.executable, "scripts/smoke/native_storage_ingest.py"])
-    _run("Security scan", [sys.executable, "-m", "bandit", "-r", "mailarium", "-q", "-ll", "-ii"])
+    _run(
+        "Security scan",
+        [sys.executable, "-m", "bandit", "-r", "mailarium", "scripts/release/privacy", "-q", "-ll", "-ii"],
+    )
     _run("Dependency audit", [sys.executable, "scripts/release/dependency_audit.py"])
     _run("Publication privacy scan", [sys.executable, "scripts/release/privacy_scan.py", "--tracked-only", "--json"])
 
@@ -175,6 +142,11 @@ def _run_installed_wheel_smoke() -> None:
 def _run_release() -> None:
     """Run the complete release-style profile, including an installed-wheel smoke."""
     _run_pull_request()
+    _run_package()
+
+
+def _run_package() -> None:
+    """Verify release artifacts after CI has independently passed the PR profile."""
     _run("Streamlit AppTest smoke", [sys.executable, "scripts/smoke/streamlit.py"])
     _build_release_artifacts()
     _run_installed_wheel_smoke()
@@ -183,7 +155,7 @@ def _run_release() -> None:
 def main(argv: list[str] | None = None) -> int:
     """Select and run one canonical verification profile."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("profile", choices=("fast", "pr", "release"), nargs="?", default="fast")
+    parser.add_argument("profile", choices=("fast", "pr", "release", "package"), nargs="?", default="fast")
     args = parser.parse_args(argv)
 
     try:
@@ -192,6 +164,8 @@ def main(argv: list[str] | None = None) -> int:
             _run_fast()
         elif args.profile == "pr":
             _run_pull_request()
+        elif args.profile == "package":
+            _run_package()
         else:
             _run_release()
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:

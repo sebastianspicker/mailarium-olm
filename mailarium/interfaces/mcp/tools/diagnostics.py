@@ -3,88 +3,20 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
-from contextlib import nullcontext
 from typing import Any
 
-from mailarium.archive._sql_validation import validate_sql_identifier as _validate_sql_identifier
-
-from ..mcp_models import EmailAdminInput
-from . import diagnostics_summary as summary_family
+from ..models.analysis import EmailAdminInput
 from .search import invalidate_mcp_singletons
-from .utils import ToolDepsProto, get_deps, json_error, json_response
+from .utils import ToolDepsProto, json_error, json_response
 
 logger = logging.getLogger(__name__)
-
-# Thread-safety note: _deps is written once during single-threaded module
-# registration at import time, then only read by tool handlers.
-_deps: ToolDepsProto | None = None
-
-
-def _table_columns(db, table: str) -> set[str]:
-    """Return known column names for *table*, or an empty set on failure."""
-    conn = getattr(db, "conn", None)
-    if conn is None:
-        return set()
-    try:
-        safe_table = _validate_sql_identifier(table)
-        rows = conn.execute("SELECT * FROM pragma_table_info(?)", (safe_table,)).fetchall()
-    except sqlite3.Error:
-        logger.debug("Diagnostics PRAGMA failed for table %s", table, exc_info=True)
-        return set()
-    return {str(row["name"] if not isinstance(row, tuple) else row[1]) for row in rows}
-
-
-def _count_rows(db, query: str) -> dict[str, int]:
-    """Calculate rows for bounded response decisions."""
-    try:
-        rows = db.conn.execute(query).fetchall()
-    except sqlite3.Error:
-        logger.debug("Diagnostics counter query failed: %s", query, exc_info=True)
-        return {}
-    return {str(row["label"]): int(row["count"]) for row in rows if row["label"]}
-
-
-def _scalar_count(db, query: str) -> int:
-    """Execute a scalar diagnostics query and degrade database errors or empty rows to zero."""
-    try:
-        row = db.conn.execute(query).fetchone()
-    except sqlite3.Error:
-        logger.debug("Diagnostics scalar query failed: %s", query, exc_info=True)
-        return 0
-    if not row:
-        return 0
-    return int(row[0] or 0)
-
-
-def _rate(count: int, total: int) -> float:
-    """Return a stable float rate, guarding zero denominators."""
-    if total <= 0:
-        return 0.0
-    return count / total
-
-
-def _qa_readiness_summary(db) -> dict[str, Any]:
-    """Measure database-backed QA readiness using schema, row-count, and rate helpers."""
-    return summary_family.qa_readiness_summary_impl(
-        db,
-        table_columns=_table_columns,
-        scalar_count=_scalar_count,
-        count_rows=_count_rows,
-        rate=_rate,
-    )
-
-
-def _d() -> ToolDepsProto:
-    """Return the module-level deps, asserting it was set by ``register()``."""
-    return get_deps(_deps)
 
 
 async def email_diagnostics(deps: ToolDepsProto) -> str:
     """Return resolved runtime settings, embedder backend state, and sparse index status."""
 
     def _run() -> str:
-        from mailarium.config import get_settings, resolve_runtime_summary
+        from mailarium.platform.settings import get_settings, resolve_runtime_summary
 
         retriever = deps.get_retriever()
         settings = get_settings()
@@ -128,55 +60,14 @@ async def email_diagnostics(deps: ToolDepsProto) -> str:
         info["sparse_vector_count"] = 0
         info["sparse_index_built"] = False
         if db:
-            operation = getattr(db, "operation", None)
-            with operation() if callable(operation) else nullcontext():
-                count_method = getattr(db, "sparse_vector_count", None)
-                if count_method:
-                    info["sparse_vector_count"] = count_method()
-                info["body_kind_counts"] = _count_rows(
-                    db,
-                    """SELECT body_kind AS label, COUNT(*) AS count
-                       FROM emails
-                       WHERE body_kind IS NOT NULL AND body_kind != ''
-                       GROUP BY body_kind
-                       ORDER BY count DESC""",
-                )
-                info["body_empty_reason_counts"] = _count_rows(
-                    db,
-                    """SELECT body_empty_reason AS label, COUNT(*) AS count
-                       FROM emails
-                       WHERE body_empty_reason IS NOT NULL AND body_empty_reason != ''
-                       GROUP BY body_empty_reason
-                       ORDER BY count DESC""",
-                )
-                info["recipient_identity_source_counts"] = _count_rows(
-                    db,
-                    """SELECT recipient_identity_source AS label, COUNT(*) AS count
-                       FROM emails
-                       WHERE recipient_identity_source IS NOT NULL AND recipient_identity_source != ''
-                       GROUP BY recipient_identity_source
-                       ORDER BY count DESC""",
-                )
-                info["reply_context_recovered_count"] = _scalar_count(
-                    db,
-                    """SELECT COUNT(*) FROM emails
-                       WHERE reply_context_from IS NOT NULL AND reply_context_from != ''""",
-                )
-                info["message_segment_count"] = _scalar_count(db, "SELECT COUNT(*) FROM message_segments")
-                info["emails_with_segments_count"] = _scalar_count(
-                    db,
-                    "SELECT COUNT(DISTINCT email_uid) FROM message_segments",
-                )
-                info["emails_with_inferred_thread_count"] = _scalar_count(
-                    db,
-                    """SELECT COUNT(*) FROM emails
-                       WHERE inferred_parent_uid IS NOT NULL AND inferred_parent_uid != ''""",
-                )
-                info["qa_readiness"] = _qa_readiness_summary(db)
+            with db.operation():
+                info["sparse_vector_count"] = db.sparse.sparse_vector_count()
+                info.update(db.diagnostics.content_diagnostics())
+                info["qa_readiness"] = db.diagnostics.qa_readiness_summary()
         try:
-            sparse_idx = getattr(retriever, "_sparse_index", None)
+            sparse_idx = retriever.sparse_index
             if sparse_idx:
-                info["sparse_index_built"] = getattr(sparse_idx, "_built", False)
+                info["sparse_index_built"] = sparse_idx.is_built
         except Exception:
             logger.debug("Sparse index diagnostics unavailable", exc_info=True)
         return json_response(info)
@@ -192,7 +83,7 @@ async def email_reingest_bodies(deps: ToolDepsProto, olm_path: str, force: bool 
 
         try:
             result = reingest_bodies(olm_path, force=force)
-            invalidate_mcp_singletons()
+            invalidate_mcp_singletons(deps)
             return json_response(result)
         except FileNotFoundError:
             return json_error(f"OLM file not found: {olm_path}")
@@ -210,7 +101,7 @@ async def email_reembed(deps: ToolDepsProto, batch_size: int = 100) -> str:
 
         try:
             result = reembed(batch_size=batch_size)
-            invalidate_mcp_singletons()
+            invalidate_mcp_singletons(deps)
             return json_response(result)
         except Exception as exc:
             return json_error(f"Re-embedding failed: {type(exc).__name__}")
@@ -226,7 +117,7 @@ async def email_reingest_metadata(deps: ToolDepsProto, olm_path: str) -> str:
 
         try:
             result = reingest_metadata_archive(olm_path)
-            invalidate_mcp_singletons()
+            invalidate_mcp_singletons(deps)
             return json_response(result)
         except FileNotFoundError:
             return json_error(f"OLM file not found: {olm_path}")
@@ -244,7 +135,7 @@ async def email_reingest_analytics(deps: ToolDepsProto) -> str:
 
         try:
             result = reingest_analytics()
-            invalidate_mcp_singletons()
+            invalidate_mcp_singletons(deps)
             return json_response(result)
         except Exception as exc:
             return json_error(f"Analytics reingestion failed: {type(exc).__name__}")
@@ -254,8 +145,6 @@ async def email_reingest_analytics(deps: ToolDepsProto) -> str:
 
 def register(mcp_instance: Any, deps: ToolDepsProto) -> None:
     """Register admin tools."""
-    global _deps
-    _deps = deps
 
     @mcp_instance.tool(
         name="email_admin",

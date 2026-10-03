@@ -11,8 +11,6 @@ from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from mailarium.archive.db_schema import _sql_in_placeholders
-
 from .formatting import format_date, format_file_size, strip_html_tags, write_html_or_pdf
 
 if TYPE_CHECKING:
@@ -65,7 +63,7 @@ class DossierGenerator:
 
         Token-efficient check: returns counts and summary only.
         """
-        evidence = self._db.evidence_timeline(category=category, min_relevance=min_relevance)
+        evidence = self._db.evidence.evidence_timeline(category=category, min_relevance=min_relevance)
 
         email_uids = list({item["email_uid"] for item in evidence if item.get("email_uid")})
         categories = list({item["category"] for item in evidence})
@@ -116,7 +114,7 @@ class DossierGenerator:
             include_relationships,
             persons_of_interest,
         )
-        custody_events = self._db.get_custody_chain(limit=500) if include_custody else []
+        custody_events = self._db.custody.get_custody_chain(limit=500) if include_custody else []
         glossary = GENERAL_CATEGORY_GLOSSARY
         stats = self._compute_summary_stats(enriched_items, source_emails, glossary)
         scope = self._build_scope_data(category, min_relevance)
@@ -163,7 +161,7 @@ class DossierGenerator:
         min_relevance: int | None,
     ) -> list[dict[str, Any]]:
         """Fetch evidence timeline, enrich with full records and display fields."""
-        enriched_items = self._db.evidence_timeline(
+        enriched_items = self._db.evidence.evidence_timeline(
             category=category,
             min_relevance=min_relevance,
         )
@@ -179,12 +177,7 @@ class DossierGenerator:
         uids = list({uid for item in items if isinstance((uid := item.get("email_uid")), str) and uid})
         if not uids:
             return {}
-        placeholders = _sql_in_placeholders(uids)
-        rows = self._db.conn.execute(
-            f"SELECT uid, thread_topic FROM emails WHERE uid IN ({placeholders})",  # nosec B608
-            uids,
-        ).fetchall()
-        return {row["uid"]: row["thread_topic"] or "" for row in rows}
+        return self._db.queries.thread_topics_for_uids(uids)
 
     @staticmethod
     def _enrich_evidence_item(item: dict[str, Any], index: int, topics: dict[str, str]) -> None:
@@ -219,7 +212,7 @@ class DossierGenerator:
     ) -> tuple[list[dict[str, Any]], dict[str, str]]:
         """Deduplicate UIDs, fetch full emails, number appendices, attach quotes."""
         email_uids = list({uid for item in enriched_items if isinstance((uid := item.get("email_uid")), str) and uid})
-        uid_to_full = self._db.get_emails_full_batch(sorted(email_uids))
+        uid_to_full = self._db.queries.get_emails_full_batch(sorted(email_uids))
         source_emails = [self._source_email(full) for uid in sorted(email_uids) if (full := uid_to_full.get(uid))]
         uid_to_appendix = self._number_appendices(source_emails, enriched_items)
         self._enrich_source_emails(source_emails, uid_to_full, self._email_quotes(enriched_items))
@@ -433,9 +426,7 @@ class DossierGenerator:
             if scope_parts
             else "No filters applied \u2014 all evidence items included."
         )
-        archive_row = self._db.conn.execute(
-            "SELECT COUNT(*) as total, MIN(date) as earliest, MAX(date) as latest FROM emails"
-        ).fetchone()
+        archive_row = self._db.queries.archive_totals()
         return {
             "scope_filter_text": scope_filter_text,
             "archive_total": archive_row["total"] if archive_row else 0,

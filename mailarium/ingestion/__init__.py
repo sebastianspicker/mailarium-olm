@@ -27,36 +27,33 @@ __all__ = [
     "reingest_metadata",
     "reingest_metadata_archive",
     "reprocess_degraded_attachments",
-    "reprocess_degraded_attachments_archive",
     "reset_index",
 ]
 
+# Public name -> defining module. Every target is the plain-named function or
+# class itself; ``*_archive`` names bind production services where the core
+# operation accepts an explicit extractor or dependency bundle.
 _PUBLIC_OPERATIONS = {
-    "build_ingest_runtime_resources": (".runtime", "build_ingest_runtime_resources"),
-    "ingest": (".orchestration", "ingest_impl"),
-    "ingest_archive": (".api", "ingest_archive"),
-    "ProductionIngestDependencies": (".api", "ProductionIngestDependencies"),
-    "production_ingest_dependencies": (".api", "production_ingest_dependencies"),
-    "reingest_bodies": (".maintenance", "reingest_bodies_impl"),
-    "reingest_metadata": (".maintenance", "reingest_metadata_impl"),
-    "reingest_metadata_archive": (".api", "reingest_metadata_archive"),
-    "reingest_analytics": (".maintenance", "reingest_analytics_impl"),
-    "reextract_entities": (".maintenance", "reextract_entities_impl"),
-    "reextract_entities_archive": (".api", "reextract_entities_archive"),
-    "reprocess_degraded_attachments": (".attachment_reprocessing", "reprocess_degraded_attachments_impl"),
-    "reprocess_degraded_attachments_archive": (".api", "reprocess_degraded_attachments_archive"),
-    "reembed": (".reembedding", "reembed_impl"),
-    "reset_index": (".reset", "reset_index_impl"),
+    "ParsedMessage": ".records",
+    "build_ingest_runtime_resources": ".runtime",
+    "ingest": ".orchestration",
+    "ingest_archive": ".api",
+    "ProductionIngestDependencies": ".context",
+    "production_ingest_dependencies": ".api",
+    "reingest_bodies": ".maintenance",
+    "reingest_metadata": ".maintenance",
+    "reingest_metadata_archive": ".api",
+    "reingest_analytics": ".maintenance",
+    "reextract_entities": ".maintenance",
+    "reextract_entities_archive": ".api",
+    "reprocess_degraded_attachments": ".attachments.reprocessing",
+    "reembed": ".reembedding",
+    "reset_index": ".reset",
 }
 
 
 def __getattr__(name: str) -> Any:
     """Load parser records and runtime operations only when callers request them."""
-    if name == "ParsedMessage":
-        from .records import ParsedMessage
-
-        return ParsedMessage
-    if operation := _PUBLIC_OPERATIONS.get(name):
-        module_name, attribute = operation
-        return getattr(import_module(module_name, __name__), attribute)
+    if module_name := _PUBLIC_OPERATIONS.get(name):
+        return getattr(import_module(module_name, __name__), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

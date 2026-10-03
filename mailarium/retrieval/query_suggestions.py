@@ -35,7 +35,7 @@ class QuerySuggester:
         }
 
         try:
-            senders = self.db.top_senders(limit=limit)
+            senders = self.db.queries.top_senders(limit=limit)
             suggestions["senders"] = [
                 {"label": f"{s['sender_name']} <{s['sender_email']}>", "value": s["sender_email"]}
                 for s in senders
@@ -45,14 +45,14 @@ class QuerySuggester:
             logger.debug("Failed to get sender suggestions", exc_info=True)
 
         try:
-            folders = self.db.folder_counts()
+            folders = self.db.queries.folder_counts()
             folder_list = sorted(folders.items(), key=lambda x: x[1], reverse=True)[:limit]
             suggestions["folders"] = [{"label": name, "value": name, "count": count} for name, count in folder_list]
         except Exception:
             logger.debug("Failed to get folder suggestions", exc_info=True)
 
         try:
-            entities = self.db.top_entities(limit=limit)
+            entities = self.db.entities.top_entities(limit=limit)
             suggestions["entities"] = [
                 {
                     "label": f"[{e['entity_type']}] {e['entity_text']}",

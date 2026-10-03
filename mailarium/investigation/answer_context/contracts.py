@@ -8,7 +8,10 @@ investigation workflow needs, so it remains usable by other adapters.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 
 class AnswerContextRequest(Protocol):
@@ -39,7 +42,7 @@ class AnswerContextDependencies(Protocol):
         """Return the retriever used for evidence discovery."""
         ...
 
-    def get_archive_database(self) -> Any | None:
+    def get_archive_database(self) -> ArchiveDatabase | None:
         """Return the optional archive database used for enrichment."""
         ...
 

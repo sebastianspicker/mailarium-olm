@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE_ROOT = ROOT / "mailarium" / "templates"
+TEMPLATE_ROOT = ROOT / "mailarium" / "investigation" / "templates"
 PRIVATE_PATH_PREFIXES = (
     ".agents/",
     ".codex/",

@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from mailarium.config import get_settings
+from mailarium.platform.settings import get_settings
 
 from .maintenance import _delete_chunk_ids
 
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
-def reembed_impl(
+
+def reembed(
     vector_index_path: str | None = None,
     sqlite_path: str | None = None,
     batch_size: int = 100,
@@ -36,13 +39,13 @@ def reembed_impl(
             sqlite_path=resolved_sqlite,
         )
         try:
-            all_uids = email_db.all_uids()
+            all_uids = email_db.queries.all_uids()
             if not all_uids:
                 return {"reembedded": 0, "total": 0, "message": "No emails in database."}
 
             progress = _ReembedProgress()
             existing_ids = embedder.get_existing_ids(refresh=False)
-            stored_body_rows = _stored_body_vector_rows(email_db) if resume else {}
+            stored_body_rows = email_db.vector_maintenance.body_vector_provenance() if resume else {}
             body_chunk_ids_by_uid: dict[str, list[str]] = {}
             for chunk_id in existing_ids:
                 if "__att_" in chunk_id or "__img_" in chunk_id:
@@ -51,7 +54,7 @@ def reembed_impl(
                 body_chunk_ids_by_uid.setdefault(uid, []).append(chunk_id)
 
             for uid in sorted(all_uids):
-                email_dict = email_db.get_email_for_reembed(uid)
+                email_dict = email_db.queries.get_email_for_reembed(uid)
                 if email_dict is None:
                     progress.skipped_no_body += 1
                     continue
@@ -132,22 +135,6 @@ class _ReembedProgress:
         self.active = {}
 
 
-def _stored_body_vector_rows(email_db: Any) -> dict[str, tuple[str, str, str]]:
-    """Load body-vector content and model provenance for resumable re-embedding."""
-    rows = email_db.conn.execute(
-        "SELECT chunk_id,content_sha256,model_id,model_revision FROM vector_chunks "
-        "WHERE embedding_space='text' AND chunk_id NOT LIKE '%__att_%' AND chunk_id NOT LIKE '%__img_%'"
-    ).fetchall()
-    return {
-        str(row["chunk_id"]): (
-            str(row["content_sha256"]),
-            str(row["model_id"] or ""),
-            str(row["model_revision"] or ""),
-        )
-        for row in rows
-    }
-
-
 def _body_vectors_are_current(
     chunks: list[Any],
     old_ids: list[str],
@@ -172,7 +159,7 @@ def _body_vectors_are_current(
 
 
 def _queue_reembed_email(
-    email_db: Any,
+    email_db: ArchiveDatabase,
     embedder: Any,
     progress: _ReembedProgress,
     uid: str,
@@ -200,7 +187,7 @@ def _queue_reembed_email(
             _flush_reembed_batch(email_db, embedder, progress, batch_size)
 
 
-def _flush_reembed_batch(email_db: Any, embedder: Any, progress: _ReembedProgress, batch_size: int) -> None:
+def _flush_reembed_batch(email_db: ArchiveDatabase, embedder: Any, progress: _ReembedProgress, batch_size: int) -> None:
     """Upsert one bounded batch, restoring any email that spans a failed batch."""
     if not progress.pending_chunks:
         return
@@ -224,7 +211,7 @@ def _flush_reembed_batch(email_db: Any, embedder: Any, progress: _ReembedProgres
     progress.pending_counts = {}
 
 
-def _complete_reembed_email(email_db: Any, embedder: Any, progress: _ReembedProgress, uid: str) -> None:
+def _complete_reembed_email(email_db: ArchiveDatabase, embedder: Any, progress: _ReembedProgress, uid: str) -> None:
     """Delete obsolete chunks only after every replacement chunk has been written."""
     pending = progress.active.pop(uid)
     progress.chunks_deleted += _delete_chunk_ids(
@@ -244,51 +231,6 @@ def _restore_pending_reembed_emails(embedder: Any, active: dict[str, _PendingRee
                 _restore_vector_chunks(embedder, pending.snapshot, pending.new_ids.difference(pending.old_ids))
     except Exception as rollback_error:
         raise RuntimeError("Re-embedding failed and the prior vector rows could not be restored") from rollback_error
-
-
-def _reembed_email(
-    email_db: Any, embedder: Any, uid: str, ids_by_uid: dict[str, list[str]], batch_size: int, chunker: Any
-) -> tuple[int, int] | None:
-    """Replace one email's vector chunks and delete identifiers no longer produced."""
-    email_dict = email_db.get_email_for_reembed(uid)
-    if email_dict is None:
-        return None
-    chunks = chunker(email_dict)
-    new_ids = {str(chunk.chunk_id) for chunk in chunks if str(getattr(chunk, "chunk_id", "") or "")}
-    old_ids = sorted(ids_by_uid.get(uid, []))
-    obsolete = sorted(chunk_id for chunk_id in old_ids if chunk_id not in new_ids)
-    added = _upsert_reembed_chunks(
-        embedder,
-        chunks,
-        old_ids=old_ids,
-        new_ids=new_ids,
-        batch_size=batch_size,
-    )
-    deleted = _delete_chunk_ids(embedder=embedder, email_db=email_db, chunk_ids=obsolete) if obsolete else 0
-    return added, deleted
-
-
-def _upsert_reembed_chunks(
-    embedder: Any,
-    chunks: list[Any],
-    *,
-    old_ids: list[str],
-    new_ids: set[str],
-    batch_size: int,
-) -> int:
-    """Upsert one email, restoring its prior rows if a later batch fails."""
-    if len(chunks) <= batch_size:
-        return int(embedder.upsert_chunks(chunks, batch_size=batch_size))
-
-    snapshot = _snapshot_vector_chunks(embedder, old_ids)
-    try:
-        return int(embedder.upsert_chunks(chunks, batch_size=batch_size))
-    except Exception:
-        try:
-            _restore_vector_chunks(embedder, snapshot, new_ids.difference(old_ids))
-        except Exception as rollback_error:
-            raise RuntimeError("Re-embedding failed and the prior vector rows could not be restored") from rollback_error
-        raise
 
 
 def _snapshot_vector_chunks(embedder: Any, chunk_ids: list[str]) -> dict[str, Any]:

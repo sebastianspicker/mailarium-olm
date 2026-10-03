@@ -5,6 +5,35 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows semantic versioning principles for public interfaces.
 
+## [Unreleased]
+
+### Changed
+
+- Reorganised internal modules into explicit platform, model, archive,
+  retrieval, ingestion, investigation, mailbox, and interface packages. CLI
+  commands, MCP tool schemas, the archive schema, and environment variables
+  are unchanged.
+- The `mailarium` and `mailarium-ingest` console scripts now target
+  `mailarium.interfaces.cli.main:main` and `mailarium.interfaces.cli.ingest:main`;
+  command names are unchanged.
+- The MCP server loads `.env` inside `main()` instead of at import time. Code
+  that imports `mailarium.mcp_server` without running it no longer loads
+  `.env`.
+- HTML export, report, and dossier templates ship under
+  `mailarium/investigation/templates/`.
+
+### Removed
+
+- The publication privacy scanner is release tooling under
+  `scripts/release/privacy/` and is no longer included in the wheel.
+
+### Fixed
+
+- MCP tools that resolve a runtime dependency no longer fail with `NameError`,
+  a regression since the 0.5 modularization.
+- Thread and email HTML export and dossier generation find their templates
+  again; they previously looked in a non-existent directory.
+
 ## [0.5.0a1] - Unreleased
 
 ### Added

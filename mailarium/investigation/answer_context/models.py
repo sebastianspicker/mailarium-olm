@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .contracts import AnswerContextDependencies, AnswerContextRequest
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 """Typed mutable state shared by answer-context runtime stages."""
 
@@ -20,7 +23,7 @@ class AnswerContextRuntime:
     preloaded_evidence_rows: list[dict[str, Any]] | None = None
     settings: Any = None
     retriever: Any = None
-    db: Any = None
+    db: ArchiveDatabase | None = None
     effective_top_k: int = 0
     search_kwargs: dict[str, Any] = field(default_factory=dict)
     query_lanes: list[str] = field(default_factory=list)
@@ -33,6 +36,8 @@ class AnswerContextRuntime:
     deduped_body: int = 0
     deduped_attachments: int = 0
     full_map: dict[str, Any] = field(default_factory=dict)
+    segments_by_uid: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    candidate_data: Any = None
     conversation_groups: list[dict[str, Any]] = field(default_factory=list)
     answer_quality: dict[str, Any] = field(default_factory=dict)
     timeline: dict[str, Any] = field(default_factory=dict)
@@ -49,3 +54,12 @@ class AnswerContextPayloadState:
     """Inputs needed to render the current public payload snapshot."""
 
     runtime: AnswerContextRuntime
+
+
+@dataclass(frozen=True)
+class _CandidateData:
+    """Request-scoped archive records shared across candidate stages."""
+
+    full_by_uid: dict[str, dict[str, Any]]
+    segments_by_uid: dict[str, list[dict[str, Any]]]
+    attachments_by_uid: dict[str, list[dict[str, Any]]]

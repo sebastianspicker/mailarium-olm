@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from mailarium.archive import ArchiveDatabase
-from mailarium.runtime import ApplicationRuntime
+from mailarium.interfaces.runtime import ApplicationRuntime
 
 
 def _runtime(monkeypatch, tmp_path) -> ApplicationRuntime:

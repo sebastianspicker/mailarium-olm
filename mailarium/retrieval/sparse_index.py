@@ -53,19 +53,11 @@ class SparseIndex:
         # Stream directly from SQLite to avoid materializing the sparse corpus
         # and the inverted index in memory at the same time.
         self.build_from_iterable(
-            db.iter_sparse_vectors(
+            db.sparse.iter_sparse_vectors(
                 model_id=model_id,
                 model_revision=model_revision,
             )
         )
-
-    def build_from_vectors(self, vectors: dict[str, dict[int, float]]) -> None:
-        """Build postings and document norms in temporary maps, then swap them atomically.
-
-        Args:
-            vectors: Mapping from chunk ID to sparse vector.
-        """
-        self._install_vectors(vectors.items())
 
     def build_from_iterable(self, vectors) -> None:
         """Build the sparse index from a streaming iterable without materializing the corpus."""

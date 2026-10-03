@@ -18,13 +18,6 @@ def _trusted_model_codec() -> Any:
     return joblib
 
 
-def _topic_distribution(row: Any) -> list[tuple[int, float]]:
-    """Return topic weights above the noise threshold in descending order."""
-    distribution = [(int(i), round(float(w), 4)) for i, w in enumerate(row) if w > 0.01]
-    distribution.sort(key=lambda item: item[1], reverse=True)
-    return distribution
-
-
 def _validate_cache_version(data: dict[str, Any]) -> None:
     """Reject topic-model caches written with an incompatible schema version."""
     cached_version = data.get("_topic_model_cache_version", data.get("_pickle_cache_version", 0))
@@ -192,31 +185,6 @@ class TopicModeler:
         ]
         results.sort(key=lambda x: x[1], reverse=True)
         return results
-
-    def predict_batch(self, texts: list[str]) -> list[list[tuple[int, float]]]:
-        """Get topic distributions for multiple documents.
-
-        Args:
-            texts: List of document texts.
-
-        Returns:
-            List of topic distribution lists, one per document.
-        """
-        if not texts:
-            return []
-
-        if not _has_prediction_backend(self):
-            return []
-
-        valid_texts = [t if t and t.strip() else " " for t in texts]
-        vectorizer = self._vectorizer
-        nmf_model = self._nmf_model
-        if vectorizer is None or nmf_model is None:
-            return []
-        tfidf_matrix = vectorizer.transform(valid_texts)
-        topic_matrix = nmf_model.transform(tfidf_matrix)
-
-        return [_topic_distribution(row) for row in topic_matrix]
 
     def save(self, path: str) -> None:
         """Save fitted model to disk.

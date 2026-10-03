@@ -6,10 +6,13 @@ import ast
 import importlib
 from pathlib import Path
 from typing import Any
+from zipfile import ZipFile
 
 import pytest
 
-from mailarium.ingestion import api
+from mailarium.archive import open_archive_database
+from mailarium.ingestion import api, maintenance
+from mailarium.ingestion.olm import parse_olm
 
 
 def test_ingest_archive_binds_production_dependencies(monkeypatch) -> None:
@@ -48,37 +51,65 @@ def test_ingest_archive_binds_production_dependencies(monkeypatch) -> None:
     assert captured["embed_images"] is True
     assert captured["resume"] is True
     assert captured["timing"] is True
-    assert captured["get_settings"] is api.get_settings
-    assert captured["resolve_runtime_summary"] is api.resolve_runtime_summary
-    assert captured["should_enable_image_embedding"] is api.should_enable_image_embedding
-    assert captured["parse_olm"] is api.parse_olm
-    assert captured["chunk_email"] is api.chunk_email
-    assert captured["chunk_attachment"] is api.chunk_attachment
-    assert captured["hash_file_sha256"] is api._hash_file_sha256
-    assert captured["resolve_entity_extractor"] is api._resolve_entity_extractor
-    assert captured["resolve_entity_extractor_provenance"] is api._resolve_entity_extractor_provenance
-    assert captured["exchange_entities_from_email"] is api._exchange_entities_from_email
-    assert captured["embed_pipeline_cls"] is api._EmbedPipeline
-    assert captured["make_progress_bar"] is api._make_progress_bar
-    assert captured["build_runtime"] is api.build_ingest_runtime_resources
+    dependencies = captured["dependencies"]
+    assert isinstance(dependencies, api.ProductionIngestDependencies)
+    assert dependencies.get_settings is api.get_settings
+    assert dependencies.resolve_runtime_summary is api.resolve_runtime_summary
+    assert dependencies.should_enable_image_embedding is api.should_enable_image_embedding
+    assert dependencies.parse_olm is api.parse_olm
+    assert dependencies.chunk_email is api.chunk_email
+    assert dependencies.chunk_attachment is api.chunk_attachment
+    assert dependencies.hash_file_sha256 is api._hash_file_sha256
+    assert dependencies.resolve_entity_extractor is api._resolve_entity_extractor
+    assert dependencies.resolve_entity_extractor_provenance is api._resolve_entity_extractor_provenance
+    assert dependencies.exchange_entities_from_email is api._exchange_entities_from_email
+    assert dependencies.embed_pipeline_cls is api._EmbedPipeline
+    assert dependencies.make_progress_bar is api._make_progress_bar
+    assert dependencies.build_runtime is api.build_ingest_runtime_resources
 
 
-def test_reingest_metadata_archive_binds_exchange_entity_extraction(monkeypatch) -> None:
-    """Metadata maintenance retains the Exchange entity extraction contract."""
-    captured: dict[str, Any] = {}
+def _write_exchange_entity_olm(path: Path) -> None:
+    """Write one synthetic OLM message carrying an Exchange-extracted address."""
+    xml = b"""<emails><email>
+    <OPFMessageCopyMessageID>exchange@example.test</OPFMessageCopyMessageID>
+    <OPFMessageCopySubject>Exchange entities</OPFMessageCopySubject>
+    <OPFMessageCopySenderAddress>sender@example.test</OPFMessageCopySenderAddress>
+    <OPFMessageCopySentTime>2026-08-20T10:00:00</OPFMessageCopySentTime>
+    <OPFMessageCopyBody>Local body</OPFMessageCopyBody>
+    <OPFMessageGetExchangeExtractedEmails><item>Contact@Example.test</item></OPFMessageGetExchangeExtractedEmails>
+    </email></emails>"""
+    with ZipFile(path, "w") as archive:
+        archive.writestr("Accounts/a/com.microsoft.__Messages/Inbox/message.xml", xml)
 
-    def fake_reingest_metadata(olm_path: str, **options: Any) -> dict[str, Any]:
-        captured["olm_path"] = olm_path
-        captured.update(options)
-        return {"updated": 2}
 
-    monkeypatch.setattr(api, "reingest_metadata", fake_reingest_metadata)
+def _exchange_mentions(sqlite_path: str) -> list[tuple[str, ...]]:
+    with open_archive_database(sqlite_path) as db:
+        rows = db.conn.execute(
+            """SELECT ent.entity_text, ent.entity_type, ent.normalized_form, em.extractor_key, em.extraction_version
+               FROM entity_mentions em JOIN entities ent ON em.entity_id = ent.id
+               ORDER BY ent.normalized_form"""
+        ).fetchall()
+    return [tuple(row) for row in rows]
 
-    assert api.reingest_metadata_archive("synthetic.olm", sqlite_path="archive.db") == {"updated": 2}
-    assert captured["olm_path"] == "synthetic.olm"
-    assert captured["sqlite_path"] == "archive.db"
-    assert captured["parse_olm_fn"] is api.parse_olm
-    assert captured["exchange_entities_from_email"] is api._exchange_entities_from_email
+
+def test_reingest_metadata_archive_binds_exchange_entity_extraction(tmp_path) -> None:
+    """Metadata maintenance parses the OLM and retains the Exchange entity extraction contract."""
+    olm_path = tmp_path / "mail.olm"
+    sqlite_path = str(tmp_path / "archive.db")
+    _write_exchange_entity_olm(olm_path)
+    with open_archive_database(sqlite_path) as db:
+        db.messages.insert_emails_batch(list(parse_olm(str(olm_path))))
+    assert _exchange_mentions(sqlite_path) == []
+
+    core = maintenance.reingest_metadata(str(olm_path), sqlite_path=sqlite_path)
+    assert (core["total"], core["exchange_entities_inserted"]) == (1, 0)
+    assert _exchange_mentions(sqlite_path) == []
+
+    result = api.reingest_metadata_archive(str(olm_path), sqlite_path=sqlite_path)
+    assert (result["total"], result["exchange_entities_inserted"]) == (1, 1)
+    assert _exchange_mentions(sqlite_path) == [
+        ("Contact@Example.test", "email", "contact@example.test", "exchange_metadata", "1"),
+    ]
 
 
 def test_reextract_entities_archive_binds_production_extractor_and_provenance(monkeypatch) -> None:
@@ -108,7 +139,7 @@ def test_reextract_entities_archive_binds_production_extractor_and_provenance(mo
 
 def test_ingest_cli_maps_public_options_to_the_feature_facade(monkeypatch) -> None:
     """The interface adapter preserves CLI controls while calling the supported library API."""
-    ingest_cli = importlib.import_module("mailarium.interfaces.cli.ingest_cli")
+    ingest_cli = importlib.import_module("mailarium.interfaces.cli.ingest")
     captured: dict[str, Any] = {}
 
     def fake_ingest_archive(**options: Any) -> dict[str, Any]:
@@ -156,7 +187,7 @@ def test_ingest_cli_maps_public_options_to_the_feature_facade(monkeypatch) -> No
 
 def test_ingest_cli_dispatches_metadata_maintenance_to_the_feature_facade(monkeypatch, capsys) -> None:
     """Maintenance dispatch retains its observable CLI completion behavior."""
-    ingest_cli = importlib.import_module("mailarium.interfaces.cli.ingest_cli")
+    ingest_cli = importlib.import_module("mailarium.interfaces.cli.ingest")
     metadata_calls: list[tuple[str, str | None]] = []
 
     monkeypatch.setattr(
@@ -177,7 +208,7 @@ def test_ingest_cli_dispatches_metadata_maintenance_to_the_feature_facade(monkey
 def test_top_level_ingest_module_is_a_main_only_shim() -> None:
     """The console-script module exposes only the callable CLI entry point."""
     ingest_module = importlib.import_module("mailarium.ingest")
-    ingest_cli = importlib.import_module("mailarium.interfaces.cli.ingest_cli")
+    ingest_cli = importlib.import_module("mailarium.interfaces.cli.ingest")
 
     assert ingest_module.main is ingest_cli.main
     assert not any(hasattr(ingest_module, name) for name in ("ingest", "parse_args", "reembed", "reingest_metadata"))

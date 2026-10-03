@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility facade for the repository publication privacy scan."""
+"""Command-line entry point for the repository publication privacy scan."""
 
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from mailarium.privacy.privacy_scan_rules import Finding  # noqa: E402
-from mailarium.privacy.privacy_scan_service import scan as _scan  # noqa: E402
+from scripts.release.privacy.privacy_scan_rules import Finding  # noqa: E402
+from scripts.release.privacy.privacy_scan_service import scan as _scan  # noqa: E402
 
 __all__ = ("Finding", "main", "scan")
 
 
 def scan(*, include_untracked: bool = True, include_history: bool = False) -> list[Finding]:
-    """Scan the live ``REPO_ROOT`` to preserve monkeypatchable facade behavior."""
+    """Scan the repository that contains this script."""
     return _scan(REPO_ROOT, include_untracked=include_untracked, include_history=include_history)
 
 

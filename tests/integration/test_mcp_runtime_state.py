@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
-import mailarium.mcp_server as mcp_server
-from mailarium.mcp_server import McpRuntimeState
-from mailarium.runtime import ApplicationRuntime
+import mailarium.interfaces.mcp.instance_lock as mcp_server
+from mailarium.interfaces.mcp.runtime_state import McpRuntimeState
+from mailarium.interfaces.mcp.server import create_mcp_server
+from mailarium.interfaces.runtime import ApplicationRuntime
 
 
 class _Runtime:
@@ -22,6 +24,70 @@ class _Runtime:
 
     def close(self) -> None:
         self.close_calls += 1
+
+
+class _LabelledSearch:
+    def __init__(self, label: str) -> None:
+        self.label = label
+
+    def stats(self) -> dict[str, str]:
+        return {"label": self.label}
+
+
+class _LabelledMailbox:
+    def __init__(self, label: str) -> None:
+        self.label = label
+
+    def readiness(self, account_id: str) -> dict[str, str]:
+        return {"label": self.label, "account_id": account_id}
+
+
+class _LabelledRuntime(_Runtime):
+    def __init__(self, label: str) -> None:
+        super().__init__()
+        self.search_engine = _LabelledSearch(label)
+        self._mailbox = _LabelledMailbox(label)
+
+    def mailbox_service(self) -> _LabelledMailbox:
+        return self._mailbox
+
+
+def _tool_payload(server, name: str, arguments: dict) -> dict:
+    result = asyncio.run(server.call_tool(name, arguments))
+    content = result[0] if isinstance(result, tuple) else result
+    return json.loads(content[0].text)
+
+
+def test_servers_created_from_different_states_keep_their_own_tool_dependencies() -> None:
+    first_state = McpRuntimeState(runtime_factory=lambda **_kwargs: _LabelledRuntime("first"))  # type: ignore[arg-type]
+    second_state = McpRuntimeState(runtime_factory=lambda **_kwargs: _LabelledRuntime("second"))  # type: ignore[arg-type]
+    try:
+        first = create_mcp_server(first_state)
+        second = create_mcp_server(second_state)
+
+        assert _tool_payload(first, "email_stats", {}) == {"label": "first"}
+        assert _tool_payload(second, "email_stats", {}) == {"label": "second"}
+        status = {"params": {"account_id": "synthetic"}}
+        assert _tool_payload(first, "email_mailbox_status", status)["label"] == "first"
+        assert _tool_payload(second, "email_mailbox_status", status)["label"] == "second"
+    finally:
+        first_state.close()
+        second_state.close()
+
+
+def test_mcp_tool_modules_keep_no_module_level_dependencies() -> None:
+    tools = Path(mcp_server.__file__).parent / "tools"
+    globals_by_module = {
+        path.name: [
+            name
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(node, ast.Global)
+            for name in node.names
+        ]
+        for path in sorted(tools.glob("*.py"))
+    }
+
+    assert {name: names for name, names in globals_by_module.items() if names} == {}
 
 
 def test_runtime_state_reuses_one_runtime_identity_and_close_is_idempotent() -> None:

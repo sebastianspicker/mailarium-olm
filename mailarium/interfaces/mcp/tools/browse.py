@@ -4,18 +4,17 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from mailarium.config import get_settings
 from mailarium.investigation.formatting import resolve_body_for_render, weak_message_semantics
 from mailarium.model.message_formatting import truncate_body
+from mailarium.platform.settings import get_settings
 
-from ..mcp_models import (
-    BrowseInput,
-    EmailDeepContextInput,
-    EmailExportInput,
-)
+from ..models.search import BrowseInput, EmailDeepContextInput, EmailExportInput
 from .utils import ToolDepsProto, json_error, json_response, run_with_db
+
+if TYPE_CHECKING:
+    from mailarium.archive import ArchiveDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +230,7 @@ def _register_export_tool(mcp: Any, deps: ToolDepsProto) -> None:
         if params.format == "pdf" and not params.output_path:
             return json_error("pdf export requires output_path; omit output_path only for in-memory HTML export.")
 
-        def _work(db):
+        def _work(db: ArchiveDatabase) -> str:
             from mailarium.investigation.email_exporter import EmailExporter
 
             exporter = EmailExporter(db)
@@ -276,17 +275,17 @@ def _register_browse_tool(mcp: Any, deps: ToolDepsProto) -> None:
         category counts. Set is_calendar=True to browse calendar/meeting emails.
         """
 
-        def _work(db):
+        def _work(db: ArchiveDatabase) -> str:
             # Category listing mode
             if params.list_categories:
-                cats = db.category_counts()
+                cats = db.queries.category_counts()
                 if not cats:
                     return json_response({"categories": [], "total": 0, "message": "No categories found in the archive."})
                 return json_response({"categories": cats[: params.limit], "total": len(cats)})
 
             # Calendar browsing mode
             if params.is_calendar:
-                emails = db.calendar_emails(
+                emails = db.queries.calendar_emails(
                     date_from=params.date_from,
                     date_to=params.date_to,
                     limit=params.limit,
@@ -294,7 +293,7 @@ def _register_browse_tool(mcp: Any, deps: ToolDepsProto) -> None:
                 return json_response({"emails": emails, "count": len(emails)})
 
             # Standard email browsing
-            page = db.list_emails_paginated(
+            page = db.queries.list_emails_paginated(
                 offset=params.offset,
                 limit=params.limit,
                 folder=params.folder,
@@ -308,7 +307,7 @@ def _register_browse_tool(mcp: Any, deps: ToolDepsProto) -> None:
             if params.include_body:
                 max_chars = get_settings().mcp_max_body_chars
                 uids = [e["uid"] for e in page["emails"]]
-                full_map = db.get_emails_full_batch(uids)
+                full_map = db.queries.get_emails_full_batch(uids)
                 for email in page["emails"]:
                     full = full_map.get(email["uid"])
                     if full:
@@ -342,7 +341,7 @@ def _register_deep_context_tool(mcp: Any, deps: ToolDepsProto) -> None:
         evidence_add to extract exact quotes from the full body text.
         """
 
-        def _work(db):
+        def _work(db: ArchiveDatabase) -> str:
             prepared = _prepare_deep_context_email(db, params, deps)
             if isinstance(prepared, str):
                 return prepared
@@ -364,9 +363,11 @@ def _register_deep_context_tool(mcp: Any, deps: ToolDepsProto) -> None:
         return await run_with_db(deps, _work)
 
 
-def _prepare_deep_context_email(db, params, deps) -> tuple[dict, dict] | str:
+def _prepare_deep_context_email(
+    db: ArchiveDatabase, params: EmailDeepContextInput, deps: ToolDepsProto
+) -> tuple[dict, dict] | str:
     """Load one email and initialize its public deep-context response."""
-    email = db.get_email_full(params.uid)
+    email = db.queries.get_email_full(params.uid)
     if not email:
         return json_error(f"Email not found: {params.uid}. Verify the UID is correct.")
     body_text, body_source = resolve_body_for_render(email, params.render_mode)
@@ -385,13 +386,13 @@ def _prepare_deep_context_email(db, params, deps) -> tuple[dict, dict] | str:
     return email, result
 
 
-def _add_deep_thread(result: dict, email: dict, db, deps) -> None:
+def _add_deep_thread(result: dict, email: dict, db: ArchiveDatabase, deps: ToolDepsProto) -> None:
     """Build standalone or multi-email thread detail for a deep-context response."""
     conversation_id = email.get("conversation_id", "")
     if not conversation_id:
         result["thread"] = {"note": "No conversation_id - standalone email."}
         return
-    emails = db.get_thread_emails(conversation_id)
+    emails = db.queries.get_thread_emails(conversation_id)
     thread = {
         "conversation_id": conversation_id,
         "email_count": len(emails),
@@ -422,9 +423,9 @@ def _thread_timeline_email(email: dict) -> dict[str, str]:
     return {"sender": email.get("sender_email", ""), "date": str(email.get("date", ""))[:10], "subject": email.get("subject", "")}
 
 
-def _add_deep_evidence(result: dict, db, uid: str) -> None:
+def _add_deep_evidence(result: dict, db: ArchiveDatabase, uid: str) -> None:
     """Attach up to 50 public evidence records for the requested email."""
-    items = db.list_evidence(email_uid=uid, limit=50).get("items", [])
+    items = db.evidence.list_evidence(email_uid=uid, limit=50).get("items", [])
     result["evidence"] = {"count": len(items), "items": [_deep_evidence_item(item) for item in items]}
 
 
@@ -440,33 +441,28 @@ def _deep_evidence_item(item: dict) -> dict[str, Any]:
     }
 
 
-def _add_deep_sender(result: dict, email: dict, db) -> None:
+def _add_deep_sender(result: dict, email: dict, db: ArchiveDatabase) -> None:
     """Attach sender contact and sent-email summaries when the sender is known."""
     sender_email = email.get("sender_email", "")
     if not sender_email:
         return
     sender = {"email": sender_email}
     try:
-        sender["top_contacts"] = db.top_contacts(sender_email, limit=5)
+        sender["top_contacts"] = db.analytics.top_contacts(sender_email, limit=5)
     except Exception:
         logger.debug("Failed to fetch top_contacts for %s", sender_email, exc_info=True)
     try:
-        row = db.conn.execute("SELECT COUNT(*) AS c FROM emails WHERE sender_email = ?", (sender_email,)).fetchone()
-        sender["total_emails_sent"] = row["c"]
+        sender["total_emails_sent"] = db.queries.sender_email_count(sender_email)
     except Exception:
         logger.debug("Failed to count emails for sender %s", sender_email, exc_info=True)
     result["sender"] = sender
 
 
-def _add_deep_conversation_debug(result: dict, email: dict, db, uid: str) -> None:
+def _add_deep_conversation_debug(result: dict, email: dict, db: ArchiveDatabase, uid: str) -> None:
     """Attach message segments plus canonical and inferred thread debug data."""
     segments = email.get("segments")
     if segments is None:
-        segments = db.conn.execute(
-            """SELECT ordinal, segment_type, depth, text, source_surface, provenance_json
-               FROM message_segments WHERE email_uid = ? ORDER BY ordinal ASC""",
-            (uid,),
-        ).fetchall()
+        segments = db.queries.message_segments_for_email(uid, include_provenance=True)
     graph = _thread_graph_for_email(email)
     result["conversation_debug"] = {
         "segment_count": len(segments),

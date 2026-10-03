@@ -37,7 +37,7 @@ def _ical_pattern(name: str) -> re.Pattern:
     )
 
 
-def _normalize_date(value: str) -> str:
+def normalize_date(value: str) -> str:
     """Normalize a date string to ISO 8601 format.
 
     Handles both ISO 8601 (from OLM XML) and RFC 2822 (from email headers).
@@ -68,7 +68,7 @@ def _normalize_date(value: str) -> str:
         return ""
 
 
-def _parse_int(value: str, default: int = 0) -> int:
+def parse_int(value: str, default: int = 0) -> int:
     """Safely parse an integer from a string."""
     if not value or not value.strip():
         return default
@@ -78,7 +78,7 @@ def _parse_int(value: str, default: int = 0) -> int:
         return default
 
 
-def _extract_body_from_source(raw_source: str) -> tuple[str, str]:
+def extract_body_from_source(raw_source: str) -> tuple[str, str]:
     """Extract body text and HTML from raw RFC 2822 source.
 
     When OLM has no OPFMessageCopyBody/HTMLBody elements, the full email
@@ -202,7 +202,7 @@ def _calendar_to_text(ical_text: str) -> str:
     return "\n".join(parts) if parts else "[Calendar event]"
 
 
-def _decode_mime_words(value: str) -> str:
+def decode_mime_words(value: str) -> str:
     if "=?" not in value:
         return value
     from email.header import decode_header
@@ -220,7 +220,7 @@ def _decode_mime_words(value: str) -> str:
     return "".join(decoded)
 
 
-def _extract_header(source: str, header_name: str) -> str:
+def extract_header(source: str, header_name: str) -> str:
     """Extract a single header value from raw RFC 2822 source.
 
     Handles continuation lines (lines starting with whitespace).
@@ -240,9 +240,9 @@ def _extract_header(source: str, header_name: str) -> str:
     return value
 
 
-def _extract_email_from_header(source: str, header_name: str) -> str:
+def extract_email_from_header(source: str, header_name: str) -> str:
     """Extract the email address from a From/To header like 'Name <email>'."""
-    raw = _extract_header(source, header_name)
+    raw = extract_header(source, header_name)
     if not raw:
         return ""
     # HTML-encoded angle brackets from OLM: &lt; and &gt;
@@ -255,9 +255,9 @@ def _extract_email_from_header(source: str, header_name: str) -> str:
     return match.group(0) if match else raw
 
 
-def _extract_name_from_header(source: str, header_name: str) -> str:
+def extract_name_from_header(source: str, header_name: str) -> str:
     """Extract the display name from a header like ``"Name" <email>``."""
-    raw = _extract_header(source, header_name)
+    raw = extract_header(source, header_name)
     if not raw:
         return ""
     raw = raw.replace("&lt;", "<").replace("&gt;", ">")
@@ -277,7 +277,7 @@ def _extract_name_from_header(source: str, header_name: str) -> str:
     return ""
 
 
-def _parse_address_list(raw: str) -> list[str]:
+def parse_address_list(raw: str) -> list[str]:
     """Parse a comma/semicolon-separated list of addresses into email strings.
 
     Handles quoted display names (e.g. ``"Last, First" <user@example.com>``)
@@ -320,7 +320,7 @@ def extract_identity_addresses(addresses: list[str]) -> list[str]:
     """Return unique normalized mailbox identities from parsed header values."""
     identities: list[str] = []
     for raw in addresses:
-        for address in _parse_address_list(raw):
+        for address in parse_address_list(raw):
             normalized = address.strip().lower()
             if normalized and normalized not in identities:
                 identities.append(normalized)

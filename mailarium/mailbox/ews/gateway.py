@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from base64 import b64decode
 from binascii import Error as Base64Error
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from xml.etree.ElementTree import Element
 from xml.sax.saxutils import escape
@@ -140,6 +141,12 @@ class EWSGateway:
         self.transport = transport
         self.version = _required(version, "version")
         self.mailbox_address = _required(mailbox_address, "mailbox_address") if mailbox_address is not None else None
+
+    @contextmanager
+    def session(self) -> Iterator[EWSGateway]:
+        """Keep authentication and connections local to one bounded operation."""
+        with self.transport.session():
+            yield self
 
     def find_items(self, folder_id: str, *, page: IndexedPage | None = None) -> tuple[EWSItem, ...]:
         """List shallow message summaries from one bounded EWS folder page."""

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mailarium.archive import open_archive_database
-from mailarium.archive.db_schema import init_schema
+from mailarium.archive.schema.tables import init_schema
 from mailarium.ingestion.records import ParsedMessage
 
 
@@ -26,18 +26,18 @@ def test_schema_upgrade_preserves_email_then_reopens_at_current_version(tmp_path
         has_attachments=False,
     )
     try:
-        assert database.insert_email(email)
+        assert database.messages.insert_email(email)
         database.conn.execute("DELETE FROM schema_version")
         database.conn.execute("INSERT INTO schema_version(version) VALUES (35)")
         database.conn.commit()
         init_schema(database.conn)
-        assert database.get_email_full(email.uid)["subject"] == "Migration evidence"
+        assert database.queries.get_email_full(email.uid)["subject"] == "Migration evidence"
     finally:
         database.close()
 
     reopened = open_archive_database(str(path))
     try:
-        assert reopened.get_email_full(email.uid)["body_text"] == "Schema migration must retain this record."
+        assert reopened.queries.get_email_full(email.uid)["body_text"] == "Schema migration must retain this record."
         assert reopened.conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 36
     finally:
         reopened.close()
