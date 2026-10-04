@@ -139,3 +139,7 @@ GEMINI.md
 /status.md
 /tasks.md
 *.local.md
+
+# Internal design and test material (not published)
+/DESIGN_BRIEF.md
+/tests/

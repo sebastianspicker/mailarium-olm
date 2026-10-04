@@ -74,7 +74,6 @@ declare -a fixed_paths=(
 	".pytest_cache"
 	".ruff_cache"
 	"mailarium/__pycache__"
-	"tests/__pycache__"
 	".tmp"
 	"tmp"
 )

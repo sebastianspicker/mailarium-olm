@@ -168,8 +168,8 @@ uv run python scripts/verify.py pr
 uv run python scripts/verify.py release
 ```
 
-`fast` runs lock, lint, format, architecture, and contract checks. `pr` adds
-typing, the complete tests under critical branch coverage floors, offline and
+`fast` runs lock, lint, format, and architecture checks. `pr` adds
+typing, offline and
 native ingestion smokes, security analysis, dependency audit, and privacy
 scanning. `package` covers the Streamlit smoke, build, artifact inspection,
 and installed-wheel smoke; `release` runs `pr` and then `package`. These

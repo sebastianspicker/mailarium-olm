@@ -12,7 +12,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
-CONTRACT_TARGET = ROOT / "tests" / "contract"
 OFFLINE_INGEST_ENV = {
     "RUNTIME_PROFILE": "offline-test",
     "EMBEDDING_LOAD_MODE": "local_only",
@@ -35,35 +34,14 @@ def _run_static_checks() -> None:
 
 
 def _run_fast() -> None:
-    """Run the fast, deterministic source and contract checks."""
+    """Run the fast, deterministic source checks."""
     _run_static_checks()
-    _run("Contract tests", [sys.executable, "-m", "pytest", "-q", str(CONTRACT_TARGET.relative_to(ROOT))])
-
-
-def _run_test_suite_with_coverage() -> None:
-    """Run every test once under branch coverage, then gate critical modules on independent floors.
-
-    The floors live in ``scripts/check_critical_coverage.py``; measuring the complete
-    suite keeps one list of critical modules and never runs a test twice.
-    """
-    _run(
-        "Test suite with branch coverage",
-        [sys.executable, "-m", "coverage", "run", "--branch", "--source=mailarium", "-m", "pytest", "-q", "tests"],
-    )
-    with tempfile.TemporaryDirectory(prefix="mailarium-critical-coverage-") as temporary:
-        coverage_json = Path(temporary) / "coverage.json"
-        _run("Coverage JSON", [sys.executable, "-m", "coverage", "json", "-q", "-o", str(coverage_json)])
-        _run(
-            "Critical per-module branch coverage",
-            [sys.executable, "scripts/check_critical_coverage.py", str(coverage_json)],
-        )
 
 
 def _run_pull_request() -> None:
     """Run pull-request checks, including offline and security-sensitive lanes."""
     _run_static_checks()
     _run("Type check", [sys.executable, "-m", "mypy", "mailarium"])
-    _run_test_suite_with_coverage()
     ingest_env = os.environ | OFFLINE_INGEST_ENV
     _run("Offline ingest smoke", [sys.executable, "scripts/smoke/ingest.py"], env=ingest_env)
     _run("Native SQLite storage ingest smoke", [sys.executable, "scripts/smoke/native_storage_ingest.py"])

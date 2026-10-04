@@ -19,9 +19,7 @@ uv run python scripts/verify.py release
 ```
 
 The release profile runs `pr` and then `package`. `pr` validates the lockfile
-and runs lint, format, architecture, and type checks, the complete tests
-(contract and integration) once under critical branch coverage floors,
-offline and native-storage ingest smokes, Bandit, dependency audit, and the publication privacy scan
+and runs lint, format, architecture, and type checks, offline and native-storage ingest smokes, Bandit, dependency audit, and the publication privacy scan
 (`scripts/release/privacy_scan.py`). `package` runs the Streamlit smoke, builds
 artifacts, exports locked runtime requirements, inspects artifacts, installs
 the wheel, and runs entry-point and installed-wheel smoke checks.
