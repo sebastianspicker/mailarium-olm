@@ -111,13 +111,18 @@ def _validate_contained_path(value: str, *, field_name: str, roots: tuple[Path, 
     raise ValueError(f"{field_name} must resolve inside allowed {label}: {allowed}")
 
 
-def normalize_local_path(value: str, *, field_name: str = "path") -> Path:
-    """Resolve a local path after rejecting null bytes and parent-directory traversal."""
+def _reject_unsafe_path_text(value: str, *, field_name: str) -> None:
+    """Reject null bytes and parent-directory traversal in a path string."""
     if "\x00" in value:
         raise ValueError(f"{field_name} must not contain null bytes")
     if ".." in Path(value).parts:
         raise ValueError(f"{field_name} must not traverse parent directories with '..'")
-    return Path(value).expanduser().resolve()
+
+
+def normalize_local_path(value: str, *, field_name: str = "path") -> Path:
+    """Resolve a local path after rejecting null bytes and parent-directory traversal."""
+    _reject_unsafe_path_text(value, field_name=field_name)
+    return Path(os.path.realpath(os.path.expanduser(value)))
 
 
 @lru_cache(maxsize=1)
@@ -170,16 +175,19 @@ def allowed_runtime_roots() -> tuple[Path, ...]:
 
 def validate_output_path(value: str, *, field_name: str = "Output path") -> Path:
     """Validate output path containment under configured write roots."""
-    path = Path(value)
-    if path.is_absolute():
-        normalized = normalize_local_path(value, field_name=field_name)
-    else:
-        normalized = normalize_local_path(str(repo_root() / path), field_name=field_name)
+    candidate = value if os.path.isabs(value) else str(repo_root() / value)
+    _reject_unsafe_path_text(candidate, field_name=field_name)
+    normalized = os.path.realpath(os.path.expanduser(candidate))
     roots = allowed_output_roots()
-    if any(normalized.is_relative_to(root) for root in roots):
-        if _is_tracked_repo_path(normalized):
-            raise ValueError(f"{field_name} must not target a tracked repository file: {normalized}")
-        return normalized
+    for root in roots:
+        root_text = str(root)
+        if normalized == root_text:
+            return Path(root_text)
+        if normalized.startswith(root_text.rstrip(os.sep) + os.sep):
+            contained = Path(normalized)
+            if _is_tracked_repo_path(contained):
+                raise ValueError(f"{field_name} must not target a tracked repository file: {contained}")
+            return contained
     allowed = ", ".join(str(root) for root in roots)
     raise ValueError(f"{field_name} must resolve inside allowed output roots: {allowed}")
 
