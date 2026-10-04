@@ -8,8 +8,8 @@ from html import unescape
 from html.parser import HTMLParser
 
 # Pre-compiled regexes for html_to_text() hot path
-_RE_STYLE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
-_RE_SCRIPT = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
+_RE_STYLE = re.compile(r"<style[^>]*>.*?</style[^>]*>", re.DOTALL | re.IGNORECASE)
+_RE_SCRIPT = re.compile(r"<script[^>]*>.*?</script[^>]*>", re.DOTALL | re.IGNORECASE)
 _RE_HEAD = re.compile(r"<head[^>]*>.*?</head>", re.DOTALL | re.IGNORECASE)
 _RE_TITLE = re.compile(r"<title[^>]*>.*?</title>", re.DOTALL | re.IGNORECASE)
 _RE_HEADINGS = {

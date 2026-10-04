@@ -117,7 +117,7 @@ def normalize_local_path(value: str, *, field_name: str = "path") -> Path:
         raise ValueError(f"{field_name} must not contain null bytes")
     if ".." in Path(value).parts:
         raise ValueError(f"{field_name} must not traverse parent directories with '..'")
-    return Path(value).expanduser().resolve()
+    return Path(os.path.realpath(os.path.expanduser(value)))
 
 
 @lru_cache(maxsize=1)
