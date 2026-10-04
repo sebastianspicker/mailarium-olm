@@ -59,12 +59,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sebastianspicker/mailarium"
-Repository = "https://github.com/sebastianspicker/mailarium"
-Issues = "https://github.com/sebastianspicker/mailarium/issues"
-Documentation = "https://github.com/sebastianspicker/mailarium/tree/main/docs"
-Changelog = "https://github.com/sebastianspicker/mailarium/blob/main/CHANGELOG.md"
-Security = "https://github.com/sebastianspicker/mailarium/blob/main/SECURITY.md"
+Homepage = "https://github.com/sebastianspicker/mailarium-olm"
+Repository = "https://github.com/sebastianspicker/mailarium-olm"
+Issues = "https://github.com/sebastianspicker/mailarium-olm/issues"
+Documentation = "https://github.com/sebastianspicker/mailarium-olm/tree/main/docs"
+Changelog = "https://github.com/sebastianspicker/mailarium-olm/blob/main/CHANGELOG.md"
+Security = "https://github.com/sebastianspicker/mailarium-olm/blob/main/SECURITY.md"
 
 [project.optional-dependencies]
 nlp = [

@@ -118,7 +118,7 @@ The source module forms are `python -m mailarium.cli`,
 ## Public synthetic demo
 
 The prepared GitHub Pages URL is
-[https://sebastianspicker.github.io/mailarium/](https://sebastianspicker.github.io/mailarium/).
+[https://sebastianspicker.github.io/mailarium-olm/](https://sebastianspicker.github.io/mailarium-olm/).
 It is a static, synthetic demonstration only: it has no mailbox, archive,
 credentials, runtime paths, or network connection, and it is not a deployed
 Mailarium instance. Preview it locally without installing dependencies:

@@ -5,7 +5,7 @@
 Do not place suspected vulnerabilities, mailbox content, credentials, or
 reproduction data in a public issue, discussion, log, or pull request.
 
-1. Use [GitHub private vulnerability reporting](https://github.com/sebastianspicker/mailarium/security/advisories/new).
+1. Use [GitHub private vulnerability reporting](https://github.com/sebastianspicker/mailarium-olm/security/advisories/new).
 2. Include the affected version or commit, impact, a minimal sanitized
    reproduction, and sanitized diagnostics.
 3. If private reporting is unavailable, open a content-free issue titled
