@@ -90,8 +90,7 @@ selected candidate, and a quote underlined in its source. Machine-derived
 values are never colored. Charts are built in `figures.py` with the same
 palette. Rendering helpers live under `mailarium/interfaces/web/`;
 `.streamlit/config.toml` mirrors the night tokens for Streamlit-rendered
-internals. The static demo in `demo/` uses the same tokens. The design
-rationale is recorded in `DESIGN_BRIEF.md`. Style changes must not weaken the interaction and trust invariants
+internals. The static demo in `demo/` uses the same tokens. Style changes must not weaken the interaction and trust invariants
 above.
 
 Run the existing source smoke after web changes:

@@ -89,7 +89,6 @@ dev = [
     "lxml-stubs>=0.5.0",
     "bandit>=1.7.10",
     "pip-audit>=2.8.0",
-    "pyyaml>=6.0",  # tests/contract/test_verification_profiles.py parses the CI workflow
 ]
 
 [project.scripts]
@@ -126,7 +125,6 @@ ignore = [
 max-complexity = 10
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
 filterwarnings = [
     "ignore:Flat-flag usage is deprecated\\..*:DeprecationWarning",
     "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",

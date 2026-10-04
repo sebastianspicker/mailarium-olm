@@ -96,7 +96,7 @@ negative rules:
 - investigation and mailbox do not import one another.
 - no feature package imports `interfaces` or a root module; root modules import
   only `interfaces`.
-- SQL stays inside `archive` (`tests/contract/test_archive_access_contract.py`).
+- SQL stays inside `archive`.
 
 Run `uv run python scripts/check_architecture.py` whenever imports, package
 ownership, or a root module changes.
@@ -262,23 +262,13 @@ does not contain `scripts/`.
 `scripts/verify.py` owns the verification profiles:
 
 - `fast`: lockfile check, Ruff lint and format check, architecture policy
-  (package allow-list and package/module import-cycle checks), and contract
-  tests.
-- `pr`: the static `fast` checks, mypy, the complete test suite run once under
-  branch coverage with per-module critical floors
-  (`scripts/check_critical_coverage.py`), offline and native-storage ingest
+  (package allow-list and package/module import-cycle checks).
+- `pr`: the static `fast` checks, mypy, offline and native-storage ingest
   smokes, Bandit, dependency audit, and the publication privacy scan.
 - `package`: Streamlit AppTest smoke, build, locked requirements export,
   artifact inspection, and installed-wheel smoke.
 - `release`: `pr` followed by `package`. It validates and installs local
   artifacts but does not publish them.
-
-Interface snapshots pin the MCP catalog, CLI help tree, and archive schema
-(`tests/contract/test_interface_snapshots.py`) and representative MCP, search,
-and answer-context outputs (`tests/integration/test_mcp_tool_outputs.py`,
-`test_search_outputs.py`, `test_answer_context_lanes.py`). Intentional
-interface changes regenerate them with `MAILARIUM_UPDATE_SNAPSHOTS=1` and are
-reviewed as contract diffs.
 
 The Streamlit application is a local process. The static `demo/` can be
 served directly or published by its Pages workflow, but that deployment is

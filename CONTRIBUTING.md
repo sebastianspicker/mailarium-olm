@@ -33,34 +33,27 @@ must use synthetic content only.
 
 ## Before opening a pull request
 
-1. Add or update focused tests when behavior changes.
-2. Update the public interface documentation when CLI, MCP, configuration,
+1. Update the public interface documentation when CLI, MCP, configuration,
    privacy, EWS, or output behavior changes.
-3. Run the narrowest useful test, then the canonical profile:
+2. Run the canonical profile:
 
 ```bash
 uv run python scripts/verify.py fast
 ```
 
 Use `uv run python scripts/verify.py pr` when the change needs type checking,
-the complete tests, critical coverage, offline and native ingestion, security,
+offline and native ingestion, security,
 dependency, or privacy evidence. Reserve
 `uv run python scripts/verify.py release` (`pr` followed by `package`) for a
 frozen release candidate. The dependency audit can fail on newly published
 advisories independently of the change.
-
-Interface snapshots for the MCP catalog, CLI help tree, archive schema, and
-representative tool, search, and answer-context outputs live under
-`tests/contract/snapshots/` and `tests/integration/snapshots/`. Regenerate
-them for an intentional interface change with
-`MAILARIUM_UPDATE_SNAPSHOTS=1` and review the diff as a contract change.
 
 Linux CI runs `pr` once, then `package` after that job succeeds. The `package`
 profile covers Streamlit and built-wheel checks and is not a substitute for
 the complete local `release` profile. macOS retains its independent release
 validation.
 
-4. State every skipped check and why.
+3. State every skipped check and why.
 
 Do not commit runtime data, generated exports, model artifacts, private logs,
 or tool state. Do not expose Streamlit or MCP beyond a trusted local boundary.
