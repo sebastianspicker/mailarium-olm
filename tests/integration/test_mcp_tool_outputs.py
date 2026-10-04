@@ -259,8 +259,14 @@ def _normalize(text: str, root: Path) -> str:
     for pattern in _TIMESTAMP_PATTERNS:
         text = pattern.sub(_timestamp, text)
     text = re.sub(r"(dossier_hash\W+)[0-9a-f]{64}", r"\1<hash>", text)
-    return re.sub(r"\"(elapsed|duration)[a-z_]*\": [0-9.]+", r'"\1": <t>', text)
+    text = re.sub(r"\"(elapsed|duration)[a-z_]*\": [0-9.]+", r'"\1": <t>', text)
+    return re.sub(_HOST_HARDWARE_PATTERN, r'"\1": "<host>"', text)
 
+
+# Diagnostics report the machine's device, memory, and derived batch size.
+_HOST_HARDWARE_PATTERN = re.compile(
+    r"\"(embedder_batch_size|embedder_device|memory_gb|resolved_batch_size|resolved_device)\": (?:\"[^\"]*\"|[0-9.]+)"
+)
 
 _TIMESTAMP_PATTERNS = (
     re.compile(r"(?P<year>\d{4})-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(\+00:00|Z| UTC)?"),
