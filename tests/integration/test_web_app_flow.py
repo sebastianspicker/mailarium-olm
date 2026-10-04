@@ -210,7 +210,7 @@ def test_search_source_handoff_and_archive_switch(isolated_runtime_home: Path, m
     app.text_input(key="web_sqlite_path").input(str(isolated_runtime_home / "another.db")).run()
     assert not app.exception
     assert app.radio(key="web_navigation").value == "Search"
-    state = app.session_state.filtered_state
+    state = app.session_state.to_dict()
     assert "web_capture_uid" not in state
     assert not state.get("web_results")
     assert not any(key.startswith(("quote-", "capture-draft-")) for key in state)
