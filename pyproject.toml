@@ -27,11 +27,11 @@ classifiers = [
 dependencies = [
     "numpy==2.5.3",
     "scikit-learn==1.9.1",
-    "numkong==7.8.3",
-    "usearch==2.26.2",
+    "numkong==7.8.5",
+    "usearch==2.26.4",
     "torch==2.14.1",
     "sentence-transformers==6.1.0",
-    "transformers==5.18.0",
+    "transformers==5.19.0",
     "mcp[cli]>=1.28.1",
     "pydantic>=2.4.0",
     "lxml>=6.1.0",
@@ -71,7 +71,7 @@ nlp = [
     "spacy==3.8.16",
 ]
 training = [
-    "datasets==5.0.1",
+    "datasets==5.1.0",
     "accelerate==1.15.0",
 ]
 ews = [
