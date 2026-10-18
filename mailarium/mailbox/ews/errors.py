@@ -34,3 +34,7 @@ class EWSFaultError(EWSError):
 
 class EWSValidationError(EWSError):
     """Raised before a malformed or unsafe SOAP request is sent."""
+
+
+class EWSDraftCorrelatedError(EWSError):
+    """SendItem failed after the draft was tagged for its proposal, so the draft's change key has moved on."""

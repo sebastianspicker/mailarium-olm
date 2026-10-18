@@ -10,6 +10,7 @@ from mailarium.model.body_normalization import BODY_NORMALIZATION_VERSION
 from ..locking import ArchiveRepository, archive_repository
 from ..session import ArchiveSession
 from .attachments import AttachmentRepository
+from .message_enrichment import backfill_header_threads
 from .message_rows import (
     EMAIL_INSERT_OR_IGNORE_SQL,
     EMAIL_INSERT_SQL,
@@ -214,6 +215,18 @@ class MessageRepository(ArchiveRepository):
         if commit:
             self.conn.commit()
         return True
+
+    def link_header_threads(self, *, commit: bool = True) -> int:
+        """Link stored replies into threads through their In-Reply-To/References headers.
+
+        Applies the insert-time header linking to every stored message in date
+        order and is idempotent. Returns the number of newly linked messages.
+        Pass ``commit=False`` to defer the commit.
+        """
+        linked = backfill_header_threads(self.conn.cursor())
+        if commit:
+            self.conn.commit()
+        return linked
 
     def refresh_mailbox_message(self, email: Message, content_hash: str | None, *, commit: bool = True) -> None:
         """Refresh mutable mailbox content, envelope, segments, and recipients as one unit of work.

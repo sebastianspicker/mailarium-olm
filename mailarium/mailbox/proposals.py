@@ -20,6 +20,9 @@ _MAX_RECIPIENTS = 500
 _MAX_CATEGORIES = 100
 
 
+_MAX_RESOLUTION_NOTE_CHARS = 500
+
+
 class ProposalPolicy:
     """Create immutable, allowlisted proposals and apply the trusted-human approval and rejection rules."""
 
@@ -119,6 +122,19 @@ class ProposalPolicy:
         """Reject as the trusted local human surface; no actor input is accepted."""
         return _proposal_dict(
             self.store.proposals.reject_proposal(proposal_id, actor_kind=ActorKind.HUMAN, detail={"reason": reason})
+        )
+
+    def resolve(self, proposal_id: str, *, executed: bool, note: str) -> dict[str, Any]:
+        """Close an uncertain proposal as the trusted local human after checking the mailbox."""
+        if len(note) > _MAX_RESOLUTION_NOTE_CHARS:
+            raise ValueError(f"resolution note must be at most {_MAX_RESOLUTION_NOTE_CHARS} characters")
+        reason = "operator_verified_executed" if executed else "operator_verified_not_executed"
+        return _proposal_dict(
+            self.store.proposals.resolve_uncertain_by_operator(
+                proposal_id,
+                executed=executed,
+                detail={"reason": reason, "note": note},
+            )
         )
 
 

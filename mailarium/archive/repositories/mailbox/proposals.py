@@ -371,6 +371,26 @@ class MailboxProposalRepository(MailboxSessionRepository):
                 detail or {},
             )
 
+    def resolve_uncertain_by_operator(
+        self,
+        proposal_id: str,
+        *,
+        executed: bool,
+        detail: Mapping[str, Any],
+    ) -> MailboxActionProposal:
+        """Close an uncertain proposal on the local operator's verified account of the mailbox."""
+        with self._write() as cur:
+            proposal = self.get_proposal(proposal_id, cur=cur)
+            if proposal.state != ProposalState.UNCERTAIN:
+                raise RuntimeError("only uncertain proposals can be resolved")
+            return self._transition(
+                cur,
+                proposal,
+                ProposalState.SUCCEEDED if executed else ProposalState.FAILED,
+                ActorKind.HUMAN,
+                detail,
+            )
+
     def conflict_uncertain_proposal(
         self,
         proposal_id: str,

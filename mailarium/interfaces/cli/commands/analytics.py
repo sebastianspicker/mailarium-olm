@@ -36,7 +36,7 @@ def run(args: argparse.Namespace, dependencies: CliDependencies) -> None:
     elif action == "response-times":
         run_response_times(db)
     else:
-        print("Usage: python -m mailarium.cli analytics {stats,senders,suggest,contacts,volume,entities,heatmap,response-times}")
+        print("Usage: mailarium analytics {stats,senders,suggest,contacts,volume,entities,heatmap,response-times}")
         sys.exit(2)
     sys.exit(0)
 

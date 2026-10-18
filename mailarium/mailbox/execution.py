@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import TYPE_CHECKING, Any
+from urllib import error
 
 from mailarium.model.mailbox_models import MailboxMessageRecord, ProposalState
 
@@ -284,6 +286,9 @@ def _classify_execution_error(exc: Exception, *, operation: str) -> tuple[Propos
         )
     except ImportError:
         return ProposalState.FAILED, {"reason": "ews_extra_unavailable"}
+    correlated_outcome = _correlated_send_outcome(exc, operation=operation)
+    if correlated_outcome is not None:
+        return correlated_outcome
     if isinstance(exc, EWSFaultError):
         if exc.code in _CONFLICT_CODES:
             return ProposalState.CONFLICTED, {"reason": "ews_conflict", "code": exc.code}
@@ -308,10 +313,49 @@ def _classify_execution_error(exc: Exception, *, operation: str) -> tuple[Propos
         return ProposalState.RETRYABLE, {"reason": type(exc).__name__}
     if isinstance(exc, EWSValidationError):
         return ProposalState.FAILED, {"reason": type(exc).__name__}
+    return _transport_outcome(exc, operation=operation)
+
+
+def _transport_outcome(exc: Exception, *, operation: str) -> tuple[ProposalState, dict[str, Any]]:
+    """Retry requests that never left this machine; anything else may have reached Exchange."""
+    if _request_never_sent(exc):
+        return ProposalState.RETRYABLE, {"reason": "transport_not_sent", "operation": operation}
     return ProposalState.UNCERTAIN, {
         "reason": "transport_outcome_unknown",
         "operation": operation,
     }
+
+
+def _correlated_send_outcome(exc: Exception, *, operation: str) -> tuple[ProposalState, dict[str, Any]] | None:
+    """Classify a SendItem failure after draft correlation; a retry cannot succeed, so it is a conflict."""
+    from mailarium.mailbox.ews.errors import EWSDraftCorrelatedError
+
+    if not isinstance(exc, EWSDraftCorrelatedError) or not isinstance(exc.__cause__, Exception):
+        return None
+    # The correlation update changed the draft's key, which the immutable proposal cannot follow.
+    state, detail = _classify_execution_error(exc.__cause__, operation=operation)
+    if state == ProposalState.RETRYABLE:
+        return ProposalState.CONFLICTED, {"reason": "draft_changed_before_send", "operation": operation}
+    return state, detail
+
+
+def _request_never_sent(exc: Exception) -> bool:
+    """Return whether a transport error happened before the complete request could reach Exchange."""
+    # urllib raises URLError only while connecting or sending (HTTP errors are converted to responses).
+    if isinstance(exc, error.URLError) and not isinstance(exc, error.HTTPError):
+        return True
+    try:
+        requests_exceptions = import_module("requests.exceptions")
+        urllib3_exceptions = import_module("urllib3.exceptions")
+    except ImportError:
+        return False
+    if isinstance(exc, (requests_exceptions.ConnectTimeout, requests_exceptions.ProxyError)):
+        return True
+    if isinstance(exc, requests_exceptions.ConnectionError):
+        # A refused or unresolvable connection; "Connection aborted" after sending stays uncertain.
+        reason = getattr(exc.args[0], "reason", None) if exc.args else None
+        return isinstance(reason, urllib3_exceptions.NewConnectionError)
+    return False
 
 
 def _outcome_dict(outcome: Any) -> dict[str, Any]:

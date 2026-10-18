@@ -48,6 +48,9 @@ def _run(args: argparse.Namespace, service: Any) -> Any:
     if action == "reject":
         _require_interactive_terminal("Rejection")
         return service.reject(args.proposal_id, reason=args.reason)
+    if action == "resolve":
+        _confirm_resolution(service.proposal(args.proposal_id), args.outcome)
+        return service.resolve(args.proposal_id, executed=args.outcome == "executed", note=args.note)
     if action == "execute":
         return service.execute(args.proposal_id)
     if action == "reconcile":
@@ -114,6 +117,19 @@ def _confirm_approval(proposal: dict[str, Any]) -> None:
     confirmation = input(f"Type proposal ID suffix {suffix} to approve: ").strip()
     if confirmation != suffix:
         raise PermissionError("Approval confirmation did not match the proposal ID.")
+
+
+def _confirm_resolution(proposal: dict[str, Any], outcome: str) -> None:
+    """Show the uncertain intent and require a proposal-bound TTY response for the stated outcome."""
+    _require_interactive_terminal("Resolution")
+    if proposal.get("state") != "uncertain":
+        raise RuntimeError(f"only uncertain proposals can be resolved (state: {proposal.get('state')})")
+    print("Uncertain mailbox action intent:")
+    print(json.dumps(proposal, indent=2, sort_keys=True, default=str))
+    suffix = str(proposal["proposal_id"])[-8:]
+    confirmation = input(f"You checked the mailbox and the action was {outcome}. Type proposal ID suffix {suffix}: ").strip()
+    if confirmation != suffix:
+        raise PermissionError("Resolution confirmation did not match the proposal ID.")
 
 
 def _require_interactive_terminal(action: str) -> None:

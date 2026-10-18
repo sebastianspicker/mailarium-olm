@@ -22,6 +22,7 @@ from mailarium.ingestion.olm.xml_helpers import (
     _find,
     _find_text,
     _new_xml_parser,
+    _parse_address_element,
     _parse_references,
 )
 from mailarium.model.rfc2822 import extract_identity_addresses, normalize_date, parse_int
@@ -170,11 +171,22 @@ def _email_recipient_fields(root: etree._Element, ns: XmlNamespace) -> dict[str,
 
 
 def _sender_fields(root: etree._Element, ns: XmlNamespace) -> tuple[str, str]:
-    sender_email = _element_text(_find(root, "OPFMessageCopySenderAddress", ns))
-    sender_name = _element_text(_find(root, "OPFMessageCopySenderName", ns))
+    address_name, sender_email = _sender_address(_find(root, "OPFMessageCopySenderAddress", ns))
+    sender_name = _element_text(_find(root, "OPFMessageCopySenderName", ns)).strip() or address_name
     pairs = _extract_address_details(root, ns, "OPFMessageCopyFromAddresses")
     fallback_name, fallback_email = pairs[0] if pairs else ("", "")
     return sender_name or fallback_name, sender_email or fallback_email
+
+
+def _sender_address(element: etree._Element | None) -> tuple[str, str]:
+    """Read the sender from plain text or a nested ``emailAddress`` record; whitespace counts as empty."""
+    if element is None:
+        return "", ""
+    for child in element:
+        name, email_addr = _parse_address_element(child)
+        if email_addr:
+            return name, email_addr
+    return "", (element.text or "").strip()
 
 
 def _email_message_fields(root: etree._Element, ns: XmlNamespace) -> dict[str, Any]:

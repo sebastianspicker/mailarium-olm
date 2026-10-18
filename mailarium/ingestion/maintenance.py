@@ -214,14 +214,17 @@ def reingest_metadata(
                 email_db.commit()
                 rows_since_commit = 0
 
+        threads_linked = email_db.messages.link_header_threads(commit=False)
         email_db.commit()
         return {
             "updated": updated,
             "total": len(all_uids),
             "exchange_entities_inserted": exchange_entities_inserted,
+            "threads_linked": threads_linked,
             "message": (
                 f"Updated {updated} of {len(all_uids)} emails with v7 metadata. "
-                f"{exchange_entities_inserted} Exchange entities inserted."
+                f"{exchange_entities_inserted} Exchange entities inserted. "
+                f"{threads_linked} messages linked into reply threads."
             ),
         }
     finally:
@@ -369,21 +372,25 @@ def _reextract_entity_row(
     return len(canonical)
 
 
-def _canonical_entity_rows(sources: tuple[tuple[Any, str, str], ...]) -> dict[tuple[str, str], tuple[str, str, str, str, str]]:
-    """Deduplicate entity rows by normalized value and type while retaining provenance."""
-    canonical: dict[tuple[str, str], tuple[str, str, str, str, str]] = {}
+def _canonical_entity_rows(
+    sources: tuple[tuple[Any, str, str], ...],
+) -> dict[tuple[str, str], tuple[str, str, str, str, str, int]]:
+    """Deduplicate entity rows by normalized value and type, keeping provenance and the occurrence count."""
+    canonical: dict[tuple[str, str], tuple[str, str, str, str, str, int]] = {}
     for entities, key, version in sources:
         for entity in entities:
             text, kind, normalized = _coerce_entity(entity)
-            canonical[(normalized, kind)] = (text, kind, normalized, key, version)
+            previous = canonical.get((normalized, kind))
+            count = previous[5] + 1 if previous else 1
+            canonical[(normalized, kind)] = (text, kind, normalized, key, version, count)
     return canonical
 
 
 def _entities_by_provenance(
-    canonical: dict[tuple[str, str], tuple[str, str, str, str, str]],
+    canonical: dict[tuple[str, str], tuple[str, str, str, str, str, int]],
 ) -> dict[tuple[str, str], list[tuple[str, str, str]]]:
-    """Group entity rows by their extraction provenance."""
+    """Group entity rows by their extraction provenance, one row per occurrence so writers can count them."""
     grouped: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
-    for text, kind, normalized, key, version in canonical.values():
-        grouped.setdefault((key, version), []).append((text, kind, normalized))
+    for text, kind, normalized, key, version, count in canonical.values():
+        grouped.setdefault((key, version), []).extend([(text, kind, normalized)] * count)
     return grouped

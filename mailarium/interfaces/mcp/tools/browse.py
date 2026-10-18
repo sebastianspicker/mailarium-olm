@@ -388,9 +388,9 @@ def _prepare_deep_context_email(
 
 def _add_deep_thread(result: dict, email: dict, db: ArchiveDatabase, deps: ToolDepsProto) -> None:
     """Build standalone or multi-email thread detail for a deep-context response."""
-    conversation_id = email.get("conversation_id", "")
+    conversation_id = email.get("conversation_id", "") or email.get("inferred_thread_id", "")
     if not conversation_id:
-        result["thread"] = {"note": "No conversation_id - standalone email."}
+        result["thread"] = {"note": "No conversation or reply-header thread - standalone email."}
         return
     emails = db.queries.get_thread_emails(conversation_id)
     thread = {

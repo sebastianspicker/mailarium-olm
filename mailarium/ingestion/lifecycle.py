@@ -141,6 +141,8 @@ def initialize_ingest_pipeline(runtime: IngestRuntime) -> None:
         runtime.completed_uids = runtime.bookkeeping_db.ingest_ledger.completed_ingest_uids(
             attachment_required=runtime.request.extract_attachments,
         )
+        if runtime.request.extract_entities and runtime.entity_extractor:
+            runtime.completed_uids &= runtime.bookkeeping_db.entities.email_uids_with_extractor(provenance[0])
 
 
 def checkpoint_ingest(runtime: IngestRuntime, *, status: str, stage: str, allow_locked_skip: bool) -> None:

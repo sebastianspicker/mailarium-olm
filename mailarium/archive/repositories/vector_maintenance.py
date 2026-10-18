@@ -10,10 +10,10 @@ class VectorMaintenanceRepository(ArchiveRepository):
     """Report body-vector provenance and reset all rebuildable vector state."""
 
     def body_vector_provenance(self) -> dict[str, tuple[str, str, str]]:
-        """Return body-vector content hashes and model provenance keyed by chunk id."""
+        """Return body and attachment-text vector content hashes and model provenance keyed by chunk id."""
         rows = self.conn.execute(
             "SELECT chunk_id,content_sha256,model_id,model_revision FROM vector_chunks "
-            "WHERE embedding_space='text' AND chunk_id NOT LIKE '%__att_%' AND chunk_id NOT LIKE '%__img_%'"
+            "WHERE embedding_space='text' AND chunk_id NOT LIKE '%__img_%'"
         ).fetchall()
         return {
             str(row["chunk_id"]): (

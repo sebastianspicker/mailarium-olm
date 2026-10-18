@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import socket
@@ -163,8 +164,15 @@ def _fake_runtime_reason(exc: BaseException) -> str:
     return "native_runtime_error"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Ingest the synthetic archive twice, using the native backend when available and a bounded fake fallback offline."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--require-native",
+        action="store_true",
+        help="Fail unless the real embedding model ran (no fake-embedder fallback); needs the model in the local cache.",
+    )
+    args = parser.parse_args(argv)
     _configure_offline_runtime()
     from mailarium.archive.usearch_loader import import_usearch
     from mailarium.ingestion import ingest_archive
@@ -239,10 +247,11 @@ def main() -> int:
         assert second["skipped_incremental"] == 1
         runtime_kind = "native" if runtime_mode == "native_runtime" else "fallback"
 
+        native_missing = args.require_native and runtime_kind != "native"
         print(
             json.dumps(
                 {
-                    "status": "passed",
+                    "status": "failed" if native_missing else "passed",
                     "runtime_kind": runtime_kind,
                     "runtime_mode": runtime_mode,
                     "first_run": {
@@ -259,6 +268,9 @@ def main() -> int:
                 ensure_ascii=False,
             )
         )
+    if native_missing:
+        print(f"Native embedding runtime required, but the smoke ran in {runtime_mode}.", file=sys.stderr)
+        return 1
     return 0
 
 

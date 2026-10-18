@@ -24,7 +24,7 @@ def run(args: argparse.Namespace, dependencies: CliDependencies) -> None:
             mode=getattr(args, "mode", "dense"),
         )
     else:
-        print("Usage: python -m mailarium.cli training {generate-data,fine-tune}")
+        print("Usage: mailarium training {generate-data,fine-tune}")
         sys.exit(2)
     sys.exit(0)
 

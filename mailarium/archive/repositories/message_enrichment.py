@@ -7,7 +7,7 @@ import re
 import sqlite3
 
 from mailarium.model import Message
-from mailarium.model.thread_inference import infer_parent_candidate
+from mailarium.model.thread_inference import InferredThreadMatch, infer_parent_candidate
 
 _ADDR_RE = re.compile(r"^(.*?)\s*<([^>]+)>$")
 
@@ -265,6 +265,9 @@ def infer_and_persist_match(cur: sqlite3.Cursor, email: Message) -> tuple[str, s
         A tuple of (parent_uid, thread_id, reason, confidence) if a match
         was found and persisted, or None if no match or already inferred.
     """
+    header_match = link_reply_headers(cur, email)
+    if header_match is not None:
+        return (header_match.parent_uid, header_match.thread_id, header_match.reason, header_match.confidence)
     inferred_parent_uid = getattr(email, "inferred_parent_uid", "") or ""
     if inferred_parent_uid:
         return None
@@ -273,7 +276,169 @@ def infer_and_persist_match(cur: sqlite3.Cursor, email: Message) -> tuple[str, s
     if match is None:
         return None
     persist_inferred_match(cur, email.uid, match)
+    _repoint_thread_members(cur, email.uid, match.thread_id)
     return (match.parent_uid, match.thread_id, match.reason, match.confidence)
+
+
+_HEADER_LINK_COLUMNS = (
+    "uid, message_id, conversation_id, thread_topic, in_reply_to, references_json, inferred_parent_uid, inferred_thread_id"
+)
+
+
+def link_reply_headers(cur: sqlite3.Cursor, email: Message) -> InferredThreadMatch | None:
+    """Link a newly stored message into a thread through its In-Reply-To/References headers.
+
+    Messages without an Exchange ``conversation_id`` are linked to the parent
+    their headers name, and already-stored replies that name this message are
+    linked to it. Returns the message's own parent match, if one was found.
+
+    Args:
+        cur: An active sqlite3.Cursor.
+        email: The Message object that was just inserted.
+    """
+    row = cur.execute(f"SELECT {_HEADER_LINK_COLUMNS} FROM emails WHERE uid = ?", (email.uid,)).fetchone()  # nosec B608
+    if row is None:
+        return None
+    match, _linked = _link_header_row(cur, row)
+    return match
+
+
+def backfill_header_threads(cur: sqlite3.Cursor) -> int:
+    """Apply header-based thread linking to every stored message in date order.
+
+    Already linked messages are left untouched, so repeated runs are idempotent.
+
+    Args:
+        cur: An active sqlite3.Cursor.
+
+    Returns:
+        The number of messages that received a new header-based parent link.
+    """
+    uids = [row[0] for row in cur.execute("SELECT uid FROM emails ORDER BY date ASC, uid ASC").fetchall()]
+    linked = 0
+    for uid in uids:
+        row = cur.execute(f"SELECT {_HEADER_LINK_COLUMNS} FROM emails WHERE uid = ?", (uid,)).fetchone()  # nosec B608
+        if row is not None:
+            match, children = _link_header_row(cur, row)
+            linked += children + (1 if match is not None else 0)
+    return linked
+
+
+def _link_header_row(cur: sqlite3.Cursor, row: sqlite3.Row) -> tuple[InferredThreadMatch | None, int]:
+    """Link one stored message to its header parent and adopt its unlinked header children."""
+    match = None
+    if not _row_text(row, "conversation_id") and not _row_text(row, "inferred_parent_uid"):
+        match = _link_to_header_parent(cur, row)
+    thread_id = match.thread_id if match is not None else _row_thread_id(row)
+    children = _link_header_children(cur, row, thread_id)
+    if children and match is None:
+        _claim_thread_root(cur, row, thread_id)
+    return match, children
+
+
+def _normalized_message_id(value: str) -> str:
+    """Strip whitespace and angle brackets so stored Message-ID spellings compare equal."""
+    return (value or "").strip().strip("<>").strip()
+
+
+def _message_id_spellings(value: str) -> tuple[str, str]:
+    """Return the bare and bracketed spellings under which a Message-ID may be stored."""
+    bare = _normalized_message_id(value)
+    return bare, f"<{bare}>"
+
+
+def _row_thread_id(row: sqlite3.Row) -> str:
+    """Choose a header thread id: the row's inferred thread, else its conversation, else its own uid.
+
+    ``thread_topic`` is deliberately skipped: unrelated header threads often share a subject-like topic.
+    """
+    return _row_text(row, "inferred_thread_id") or _row_text(row, "conversation_id") or _row_text(row, "uid")
+
+
+def _row_by_message_id(cur: sqlite3.Cursor, message_id: str, exclude_uid: str) -> sqlite3.Row | None:
+    """Find one stored message by Message-ID, preferring a copy that already belongs to a thread."""
+    bare, bracketed = _message_id_spellings(message_id)
+    if not bare:
+        return None
+    return cur.execute(
+        f"""SELECT {_HEADER_LINK_COLUMNS} FROM emails
+             WHERE message_id IN (?, ?) AND uid != ?
+             ORDER BY (COALESCE(inferred_thread_id, '') = ''), date ASC, uid ASC
+             LIMIT 1""",  # nosec B608
+        (bare, bracketed, exclude_uid),
+    ).fetchone()
+
+
+def _header_parent(cur: sqlite3.Cursor, row: sqlite3.Row) -> tuple[sqlite3.Row, str] | None:
+    """Return the In-Reply-To target, else the last References entry present in the archive."""
+    uid = _row_text(row, "uid")
+    in_reply_to = _row_text(row, "in_reply_to")
+    if in_reply_to:
+        parent = _row_by_message_id(cur, in_reply_to, uid)
+        if parent is not None:
+            return parent, "in_reply_to"
+    for reference in reversed(_row_json_list(row, "references_json")):
+        parent = _row_by_message_id(cur, reference, uid)
+        if parent is not None:
+            return parent, "references"
+    return None
+
+
+def _link_to_header_parent(cur: sqlite3.Cursor, row: sqlite3.Row) -> InferredThreadMatch | None:
+    """Persist the header parent link for one message and pull its thread members along."""
+    found = _header_parent(cur, row)
+    if found is None:
+        return None
+    parent, reason = found
+    match = InferredThreadMatch(
+        parent_uid=_row_text(parent, "uid"), thread_id=_row_thread_id(parent), reason=reason, confidence=1.0
+    )
+    _adopt_header_match(cur, _row_text(row, "uid"), match)
+    _claim_thread_root(cur, parent, match.thread_id)
+    return match
+
+
+def _link_header_children(cur: sqlite3.Cursor, row: sqlite3.Row, thread_id: str) -> int:
+    """Link stored, still unlinked replies whose In-Reply-To names this message."""
+    uid = _row_text(row, "uid")
+    bare, bracketed = _message_id_spellings(_row_text(row, "message_id"))
+    if not bare:
+        return 0
+    children = cur.execute(
+        """SELECT uid FROM emails
+            WHERE in_reply_to IN (?, ?) AND uid != ?
+              AND COALESCE(inferred_parent_uid, '') = '' AND COALESCE(conversation_id, '') = ''""",
+        (bare, bracketed, uid),
+    ).fetchall()
+    for child in children:
+        match = InferredThreadMatch(parent_uid=uid, thread_id=thread_id, reason="in_reply_to", confidence=1.0)
+        _adopt_header_match(cur, str(child[0]), match)
+    return len(children)
+
+
+def _adopt_header_match(cur: sqlite3.Cursor, child_uid: str, match: InferredThreadMatch) -> None:
+    """Persist a header link and move the child's own thread members into the parent thread."""
+    persist_inferred_match(cur, child_uid, match)
+    _repoint_thread_members(cur, child_uid, match.thread_id)
+
+
+def _repoint_thread_members(cur: sqlite3.Cursor, old_thread_id: str, new_thread_id: str) -> None:
+    """Move messages that used a now-linked message's uid as their thread id into its new thread."""
+    if old_thread_id and old_thread_id != new_thread_id:
+        cur.execute(
+            "UPDATE emails SET inferred_thread_id = ? WHERE inferred_thread_id = ?",
+            (new_thread_id, old_thread_id),
+        )
+
+
+def _claim_thread_root(cur: sqlite3.Cursor, row: sqlite3.Row, thread_id: str) -> None:
+    """Give a thread root without an Exchange conversation its own thread id so it joins its thread."""
+    if _row_text(row, "conversation_id"):
+        return
+    cur.execute(
+        "UPDATE emails SET inferred_thread_id = ? WHERE uid = ? AND COALESCE(inferred_thread_id, '') = ''",
+        (thread_id, _row_text(row, "uid")),
+    )
 
 
 def contact_row(email_address: str, display_name: str, date: str, role: str) -> tuple[str, str, str, str, int, int]:

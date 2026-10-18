@@ -13,7 +13,7 @@ from xml.sax.saxutils import escape
 
 from defusedxml import ElementTree
 
-from .errors import EWSFaultError, EWSHTTPError, EWSValidationError
+from .errors import EWSDraftCorrelatedError, EWSFaultError, EWSHTTPError, EWSValidationError
 from .paging import IndexedPage
 from .transport import EWSTransport
 
@@ -325,7 +325,12 @@ class EWSGateway:
             f"{_item_id(item_id, change_key)}</m:ItemIds><m:SavedItemFolderId>"
             f"{self._folder_ref('sentitems', 'folder_id')}</m:SavedItemFolderId></m:SendItem>"
         )
-        return self._mutation("SendItem", body)
+        if proposal_id is None:
+            return self._mutation("SendItem", body)
+        try:
+            return self._mutation("SendItem", body)
+        except Exception as exc:
+            raise EWSDraftCorrelatedError("SendItem failed after the draft was correlated with its proposal") from exc
 
     def sync_folder_items(
         self,

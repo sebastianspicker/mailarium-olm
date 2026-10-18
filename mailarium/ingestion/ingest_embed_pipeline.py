@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 _SENTINEL = object()
 EXCHANGE_ENTITY_EXTRACTOR_KEY = "exchange_metadata"
 EXCHANGE_ENTITY_EXTRACTION_VERSION = "1"
+_ENRICHABLE_ATTACHMENT_STATUSES = frozenset({"", "not_requested", "pending"})
 
 
 @dataclass
@@ -34,6 +35,7 @@ class _BatchState:
     inserted_ingest_rows: list[dict[str, object]] = field(default_factory=list)
     new_chunks: list[EmailChunk] = field(default_factory=list)
     batch_chunk_ids: list[str] = field(default_factory=list)
+    entity_enriched_emails: list[ParsedMessage] = field(default_factory=list)
     email_commit_pending: bool = False
     relational_transaction_open: bool = False
 
@@ -131,6 +133,12 @@ def _completed_ingest_rows(rows: list[dict[str, object]]) -> list[dict[str, obje
             completed["image_status"] = "completed"
         completed_rows.append(completed)
     return completed_rows
+
+
+def _is_attachment_chunk(chunk: Any) -> bool:
+    """Return whether a chunk carries attachment or image content rather than body text."""
+    chunk_id = _chunk_id(chunk)
+    return "__att_" in chunk_id or "__img_" in chunk_id
 
 
 def _chunk_batches(chunks: list[EmailChunk], *, max_chunks: int) -> list[list[EmailChunk]]:
@@ -324,7 +332,8 @@ class _EmbedPipeline:
             try:
                 new_emails, dt_sqlite = self._persist_relational_batch(chunks, emails, state)
                 dt_entity, dt_analytics = self._persist_batch_metadata(new_emails)
-                self.write_seconds += dt_sqlite + dt_entity + dt_analytics
+                dt_enrichment = self._persist_entity_enrichment(state.entity_enriched_emails)
+                self.write_seconds += dt_sqlite + dt_entity + dt_analytics + dt_enrichment
                 self._complete_relational_only_batch(state)
                 self._embed_batch_chunks(state)
             except Exception as exc:
@@ -344,10 +353,14 @@ class _EmbedPipeline:
         started = time.monotonic()
         inserted_uids = self._insert_emails_for_batch(emails, chunks, state)
         self.sqlite_inserted += len(inserted_uids)
-        state.inserted_ingest_rows = [row for row in state.ingest_rows if str(row.get("email_uid") or "") in inserted_uids]
+        stored_emails = [email for email in emails if email.uid not in inserted_uids]
+        attachment_uids = self._enrich_stored_attachments(stored_emails)
+        state.entity_enriched_emails = self._entity_enrichment_candidates(stored_emails, attachment_uids)
+        ledger_uids = inserted_uids | attachment_uids
+        state.inserted_ingest_rows = [row for row in state.ingest_rows if str(row.get("email_uid") or "") in ledger_uids]
         self._mark_batch_pending(state)
         new_emails = [email for email in emails if email.uid in inserted_uids]
-        state.new_chunks = [chunk for chunk in chunks if _chunk_uid(chunk) in inserted_uids]
+        state.new_chunks = [chunk for chunk in chunks if self._is_batch_chunk(chunk, inserted_uids, attachment_uids)]
         state.batch_chunk_ids = [_chunk_id(chunk) for chunk in state.new_chunks if _chunk_id(chunk)]
         self._log_deduplicated_batch(emails, chunks, new_emails, state.new_chunks)
         elapsed = time.monotonic() - started
@@ -376,6 +389,54 @@ class _EmbedPipeline:
             ingestion_run_id=self._ingestion_run_id,
             commit=False,
         )
+
+    @staticmethod
+    def _is_batch_chunk(chunk: EmailChunk, inserted_uids: set[str], attachment_uids: set[str]) -> bool:
+        """Keep chunks of new emails and only attachment chunks of enriched stored emails."""
+        chunk_uid = _chunk_uid(chunk)
+        if chunk_uid in inserted_uids:
+            return True
+        return chunk_uid in attachment_uids and _is_attachment_chunk(chunk)
+
+    def _enrich_stored_attachments(self, stored_emails: list[ParsedMessage]) -> set[str]:
+        """Persist re-extracted attachments for stored emails whose attachments were never extracted."""
+        assert self._email_db is not None
+        candidates = [
+            email
+            for email in stored_emails
+            if getattr(email, "_ingest_attachment_requested", False)
+            and getattr(email, "has_attachments", False)
+            and getattr(email, "attachments", None)
+        ]
+        if not candidates:
+            return set()
+        statuses = self._email_db.ingest_ledger.attachment_statuses([email.uid for email in candidates])
+        enriched: set[str] = set()
+        for email in candidates:
+            if statuses.get(email.uid, "") in _ENRICHABLE_ATTACHMENT_STATUSES:
+                self._email_db.messages.update_v7_metadata(email, commit=False)
+                enriched.add(email.uid)
+        return enriched
+
+    def _entity_enrichment_candidates(self, stored_emails: list[ParsedMessage], attachment_uids: set[str]) -> list[ParsedMessage]:
+        """Select stored emails that lack entities from the active extractor or gained attachment text."""
+        if self._email_db is None or not self._entity_extractor_fn or not stored_emails:
+            return []
+        extracted = self._email_db.entities.email_uids_with_extractor(
+            self._entity_extractor_key,
+            [email.uid for email in stored_emails],
+        )
+        return [email for email in stored_emails if email.uid not in extracted or email.uid in attachment_uids]
+
+    def _persist_entity_enrichment(self, emails: list[ParsedMessage]) -> float:
+        """Add extracted entities to stored emails without repeating first-insert metadata work."""
+        if not emails:
+            return 0.0
+        started = time.monotonic()
+        self._persist_extracted_entities(emails, idempotent=True)
+        elapsed = time.monotonic() - started
+        self.entity_seconds += elapsed
+        return elapsed
 
     def _mark_batch_pending(self, state: _BatchState) -> None:
         """Record pending ingest state before vector writes begin."""
@@ -417,10 +478,12 @@ class _EmbedPipeline:
         if event_rows:
             self._email_db.events.upsert_event_records(event_rows, commit=False)
 
-    def _persist_extracted_entities(self, emails: list[ParsedMessage]) -> None:
+    def _persist_extracted_entities(self, emails: list[ParsedMessage], *, idempotent: bool = False) -> None:
         """Extract body entities and persist their occurrences and canonical rows."""
         if not self._email_db or not self._entity_extractor_fn:
             return
+        entities_repo = self._email_db.entities
+        insert_mentions = entities_repo.insert_entities_batch_idempotent if idempotent else entities_repo.insert_entities_batch
         from mailarium.ingestion.enrichment.language_analytics import select_entity_text_from_email
 
         from .enrichment.entity_occurrence_extractor import extract_entity_occurrence_rows_from_email
@@ -433,7 +496,7 @@ class _EmbedPipeline:
             normalized_entities = [(entity.text, entity.entity_type, entity.normalized_form) for entity in entities]
             if not normalized_entities:
                 continue
-            self._email_db.entities.insert_entities_batch(
+            insert_mentions(
                 email.uid,
                 normalized_entities,
                 extractor_key=self._entity_extractor_key,
@@ -495,7 +558,7 @@ class _EmbedPipeline:
             self._commit_empty_transaction(state)
             return
         assert self._email_db is not None
-        self._email_db.ingest_ledger.mark_ingest_batch_completed(state.inserted_ingest_rows, commit=False)
+        self._email_db.ingest_ledger.mark_ingest_batch_completed(_completed_ingest_rows(state.inserted_ingest_rows), commit=False)
         logger.debug(
             "Committing SQLite ingest transaction without vector write (run_id=%s, emails=%s)",
             self._ingestion_run_id,

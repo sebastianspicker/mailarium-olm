@@ -9,6 +9,11 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
+
+class PathPolicyError(ValueError):
+    """A user-supplied path violates the allowlist, traversal, or no-overwrite policy."""
+
+
 _DEFAULT_OUTPUT_ROOTS = ("private",)
 _DEFAULT_LOCAL_READ_ROOTS = (
     "private",
@@ -94,7 +99,7 @@ def _deduplicated_resolved_roots(roots: list[Path]) -> tuple[Path, ...]:
     normalized: list[Path] = []
     seen: set[Path] = set()
     for candidate in roots:
-        resolved = candidate.resolve()
+        resolved = _on_disk_spelling(candidate.resolve())
         if resolved in seen:
             continue
         normalized.append(resolved)
@@ -108,21 +113,52 @@ def _validate_contained_path(value: str, *, field_name: str, roots: tuple[Path, 
     if any(normalized.is_relative_to(root) for root in roots):
         return normalized
     allowed = ", ".join(str(root) for root in roots)
-    raise ValueError(f"{field_name} must resolve inside allowed {label}: {allowed}")
+    raise PathPolicyError(f"{field_name} must resolve inside allowed {label}: {allowed}")
 
 
 def _reject_unsafe_path_text(value: str, *, field_name: str) -> None:
     """Reject null bytes and parent-directory traversal in a path string."""
     if "\x00" in value:
-        raise ValueError(f"{field_name} must not contain null bytes")
+        raise PathPolicyError(f"{field_name} must not contain null bytes")
     if ".." in Path(value).parts:
-        raise ValueError(f"{field_name} must not traverse parent directories with '..'")
+        raise PathPolicyError(f"{field_name} must not traverse parent directories with '..'")
 
 
 def normalize_local_path(value: str, *, field_name: str = "path") -> Path:
     """Resolve a local path after rejecting null bytes and parent-directory traversal."""
     _reject_unsafe_path_text(value, field_name=field_name)
-    return Path(os.path.realpath(os.path.expanduser(value)))
+    return _on_disk_spelling(Path(os.path.realpath(os.path.expanduser(value))))
+
+
+def _on_disk_spelling(path: Path) -> Path:
+    """Rewrite existing components to their on-disk spelling so case-insensitive volumes compare reliably.
+
+    A component is replaced only when the directory listing holds exactly one case-insensitive match
+    that is the same file as the typed component; from the first missing or ambiguous component on,
+    the typed spelling is kept.
+    """
+    current = Path(path.parts[0])
+    for index, part in enumerate(path.parts[1:], start=1):
+        try:
+            entries = os.listdir(current)
+        except OSError:
+            return current.joinpath(*path.parts[index:])
+        if part in entries:
+            current = current / part
+            continue
+        matches = [entry for entry in entries if entry.casefold() == part.casefold()]
+        if len(matches) != 1 or not _same_entry(current / matches[0], current / part):
+            return current.joinpath(*path.parts[index:])
+        current = current / matches[0]
+    return current
+
+
+def _same_entry(listed: Path, typed: Path) -> bool:
+    """Return whether two spellings name the same existing file or directory."""
+    try:
+        return os.path.samefile(listed, typed)
+    except OSError:
+        return False
 
 
 @lru_cache(maxsize=1)
@@ -142,9 +178,9 @@ def _tracked_repo_paths() -> frozenset[str]:
 
 def _is_tracked_repo_path(path: Path) -> bool:
     """Check if a path is tracked by git in the repository."""
-    root = repo_root()
+    root = _on_disk_spelling(repo_root())
     try:
-        relative = path.resolve().relative_to(root).as_posix()
+        relative = _on_disk_spelling(path.resolve()).relative_to(root).as_posix()
     except ValueError:
         return False
     return relative in _tracked_repo_paths()
@@ -177,7 +213,7 @@ def validate_output_path(value: str, *, field_name: str = "Output path") -> Path
     """Validate output path containment under configured write roots."""
     candidate = value if os.path.isabs(value) else str(repo_root() / value)
     _reject_unsafe_path_text(candidate, field_name=field_name)
-    normalized = os.path.realpath(os.path.expanduser(candidate))
+    normalized = str(_on_disk_spelling(Path(os.path.realpath(os.path.expanduser(candidate)))))
     roots = allowed_output_roots()
     for root in roots:
         root_text = str(root)
@@ -186,17 +222,17 @@ def validate_output_path(value: str, *, field_name: str = "Output path") -> Path
         if normalized.startswith(root_text.rstrip(os.sep) + os.sep):
             contained = Path(normalized)
             if _is_tracked_repo_path(contained):
-                raise ValueError(f"{field_name} must not target a tracked repository file: {contained}")
+                raise PathPolicyError(f"{field_name} must not target a tracked repository file: {contained}")
             return contained
     allowed = ", ".join(str(root) for root in roots)
-    raise ValueError(f"{field_name} must resolve inside allowed output roots: {allowed}")
+    raise PathPolicyError(f"{field_name} must resolve inside allowed output roots: {allowed}")
 
 
 def validate_new_output_path(value: str, *, field_name: str = "Output path") -> Path:
     """Validate an output path and reject overwriting any existing path."""
     normalized = validate_output_path(value, field_name=field_name)
     if normalized.exists():
-        raise ValueError(f"{field_name} already exists and will not be overwritten: {normalized}")
+        raise PathPolicyError(f"{field_name} already exists and will not be overwritten: {normalized}")
     return normalized
 
 

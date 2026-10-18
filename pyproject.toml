@@ -32,7 +32,7 @@ dependencies = [
     "torch==2.14.1",
     "sentence-transformers==6.1.0",
     "transformers==5.18.0",
-    "mcp[cli]>=1.28.1",
+    "mcp[cli]>=1.30.0,<2",  # CVE-2026-59951 fixed in 1.30.0; 2.x is a new major line
     "pydantic>=2.4.0",
     "lxml>=6.1.0",
     "networkx>=3.2",
@@ -56,6 +56,8 @@ dependencies = [
     "requests>=2.33.0",  # CVE-2026-25645 (required by multiple deps)
     "urllib3>=2.8.0",  # Security floor (required by requests)
     "nltk>=3.10.2",  # Security floor for textstat's transitive dependency
+    "fsspec>=2026.6.0",  # PYSEC-2026-4217 (required by torch and huggingface-hub)
+    "multidict>=6.9.1",  # PYSEC-2026-4244 (required by aiohttp)
 ]
 
 [project.urls]

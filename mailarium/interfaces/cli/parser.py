@@ -175,14 +175,14 @@ def _add_search_filters(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     """Build the subcommand-based archive CLI parser."""
     parser = argparse.ArgumentParser(
-        prog="python -m mailarium.cli",
+        prog="mailarium",
         description="Search your email archive.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            '  python -m mailarium.cli search "invoice from vendor" --sender billing@example.test\n'
-            "  python -m mailarium.cli analytics stats\n"
-            "  python -m mailarium.cli export thread CONV_ID --format pdf\n"
+            '  mailarium search "invoice from vendor" --sender billing@example.test\n'
+            "  mailarium analytics stats\n"
+            "  mailarium export thread CONV_ID --format pdf\n"
         ),
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -244,7 +244,10 @@ def _add_search_browse_export_subcommands(subparsers: Any) -> None:
     export_sub = export_parser.add_subparsers(dest="export_action")
 
     export_thread = export_sub.add_parser("thread", help="Export a conversation thread.")
-    export_thread.add_argument("conversation_id", help="Thread conversation ID.")
+    export_thread.add_argument(
+        "conversation_id",
+        help="Thread conversation ID. An email uid or an inferred thread id also selects that email's thread.",
+    )
     export_thread.add_argument("--format", choices=["html", "pdf"], default="html", help="Export format (default: html).")
     export_thread.add_argument("--output", "-o", default=None, help="Output file path.")
 
@@ -484,3 +487,10 @@ def _add_mailbox_subcommands(subparsers: Any) -> None:
     execute.add_argument("proposal_id")
     reconcile = actions.add_parser("reconcile", help="Reconcile an uncertain create or send outcome.")
     reconcile.add_argument("proposal_id")
+    resolve = actions.add_parser(
+        "resolve",
+        help="Close an uncertain proposal after checking the mailbox yourself (local human only).",
+    )
+    resolve.add_argument("proposal_id")
+    resolve.add_argument("--outcome", choices=["executed", "not-executed"], required=True)
+    resolve.add_argument("--note", default="", help="What you checked in the mailbox.")

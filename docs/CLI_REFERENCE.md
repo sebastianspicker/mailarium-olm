@@ -29,6 +29,12 @@ The root command accepts `--vector-index-path`, `--sqlite-path`, and
 subcommand. Output paths must stay in configured allowlisted roots and do not
 overwrite existing files.
 
+`mailarium export thread <ID>` accepts an Exchange conversation id, an inferred
+thread id, or the uid of any email in the thread. Archives without Exchange
+conversation ids (IMAP/POP accounts) are threaded through In-Reply-To and
+References headers; run `mailarium-ingest <archive.olm> --reingest-metadata`
+once to link archives ingested before this existed.
+
 ## Ingestion and maintenance
 
 ```bash
@@ -79,6 +85,11 @@ mailarium mailbox proposals list --state pending
 ```
 
 The local interactive CLI is the only approval and rejection surface. An
-approved proposal can be executed only after `EWS_WRITE_ENABLED=true`; uncertain
-outcomes are handled through `mailarium mailbox reconcile`. These commands do
+approved proposal can be executed only after `EWS_WRITE_ENABLED=true`. A
+connection failure before the request reaches Exchange leaves the proposal
+retryable, so it can be executed again. Uncertain draft and send outcomes are
+handled through `mailarium mailbox reconcile`. For other uncertain operations,
+check the mailbox, then close the proposal with `mailarium mailbox resolve
+<proposal-id> --outcome executed|not-executed` (interactive terminal only;
+run `mailbox sync` afterwards) and create a new proposal if needed. These commands do
 not establish that a live EWS server is reachable or that a write succeeded.

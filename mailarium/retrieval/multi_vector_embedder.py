@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -18,8 +19,9 @@ from mailarium.platform.settings import (
     resolve_embedding_load_mode,
 )
 
-from .sparse_encoder import SparseTextEncoder
+from .sparse_encoder import SparseTextEncoder, hub_offline_flag
 
+_URL_CREDENTIALS = re.compile(r"(://)[^/@\s]+@")
 _MPS_CLEAR_INTERVAL = int(os.environ.get("MPS_CACHE_CLEAR_INTERVAL", "1"))
 _MPS_CACHE_CLEAR_ENABLED = os.environ.get("MPS_CACHE_CLEAR_ENABLED", "0") == "1"
 
@@ -43,7 +45,7 @@ class _BackendInfo:
 
 
 class EmbeddingModelUnavailableError(RuntimeError):
-    """Raised when local-only model loading cannot satisfy a request."""
+    """Raised when the embedding model is not available locally and cannot be loaded or downloaded."""
 
 
 class MultiVectorEmbedder:
@@ -180,6 +182,12 @@ class MultiVectorEmbedder:
         except Exception as exc:
             if self.load_mode == "local_only":
                 raise EmbeddingModelUnavailableError(f"Embedding model {self.model_name!r} is not available locally") from exc
+            if _is_model_fetch_error(exc):
+                raise EmbeddingModelUnavailableError(
+                    f"Embedding model {self.model_name!r} could not be loaded or downloaded. Check network or proxy "
+                    f"access to the Hugging Face Hub, or pre-load the model and set EMBEDDING_LOAD_MODE=local_only. "
+                    f"Details: {_URL_CREDENTIALS.sub(r'\1***@', str(exc))}"
+                ) from exc
             raise
 
     def _encode_dense_batch(self, texts: list[str]) -> Any:
@@ -210,6 +218,11 @@ class MultiVectorEmbedder:
             return
 
 
+def _is_model_fetch_error(exc: Exception) -> bool:
+    """Return whether a load failure comes from reading or downloading model files (OS or HTTP transport)."""
+    return isinstance(exc, OSError) or type(exc).__module__.split(".", 1)[0] in {"httpx", "httpcore"}
+
+
 def _to_list_of_lists(vectors: Any) -> list[list[float]]:
     """Convert NumPy-style encoder outputs into the list contract used by callers."""
     if hasattr(vectors, "tolist"):
@@ -232,7 +245,8 @@ def _offline_model_load(enabled: bool):
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "1"
     try:
-        yield
+        with hub_offline_flag():
+            yield
     finally:
         _restore_environment("HF_HUB_OFFLINE", old_hf)
         _restore_environment("TRANSFORMERS_OFFLINE", old_tx)

@@ -51,6 +51,48 @@ and this project follows semantic versioning principles for public interfaces.
   a regression since the 0.5 modularization.
 - Thread and email HTML export and dossier generation find their templates
   again; they previously looked in a non-existent directory.
+- Sender e-mail addresses are read from the nested `emailAddress` record of
+  OLM sender elements; they were previously stored empty, which left sender,
+  contact, network, and response-time views blank. Rebuild archives ingested
+  before this fix from the `.olm` into a fresh runtime: messages without a
+  Message-ID derive their identifier from the sender and would otherwise be
+  stored twice.
+- Re-running ingestion with `--extract-attachments` or `--extract-entities`
+  now adds attachment text, attachment vectors, and entities to messages that
+  are already stored, with or without `--incremental`.
+- `--reembed` rebuilds attachment-text vectors from SQLite, so
+  `admin reset-index` followed by `--reembed` keeps attachment search.
+- `mailarium topics build` stores clusters instead of failing with
+  `KeyError: 'cluster_id'`.
+- Path-policy violations and a missing `.olm` file are reported as one-line
+  errors before any model is loaded.
+- EWS proposals whose request never reached Exchange (DNS, refused connection,
+  proxy, or connect timeout) become retryable instead of uncertain.
+- Raised security floors for `fsspec`, `multidict`, and `mcp` (kept below 2).
+- A failed first-run model download names the model instead of reporting an
+  unreadable archive, and local-only model loading no longer sends a metadata
+  request to the Hugging Face Hub.
+- `--reembed` also rebuilds attachment text of messages with an empty body.
+- Re-extracted entities keep their per-message occurrence counts, and messages
+  completed without vector writes no longer stay `pending`.
+- A send interrupted after its draft was tagged becomes conflicted instead of
+  offering a retry that could not succeed.
+- Help, usage, and the missing-archive hint use the `mailarium` and
+  `mailarium-ingest` entry points; a fresh archive logs one schema line instead
+  of one per migration; PDF export explains a blocked HTML fallback.
+- The README notes the tri-licensed `pyphen` dependency (via `textstat`).
+- IMAP and POP archives without Exchange conversation ids are threaded through
+  their In-Reply-To and References headers; `export thread` also accepts an
+  email uid, and `--reingest-metadata` links archives ingested earlier.
+- Allowlisted paths typed with different letter case than on disk (on
+  case-insensitive macOS volumes) are accepted when they name the same
+  directory; the tracked-file guard compares the same way.
+
+### Added
+
+- `mailarium mailbox resolve <proposal-id> --outcome executed|not-executed`
+  closes an uncertain EWS proposal after the local operator has checked the
+  mailbox. It requires an interactive terminal and is not exposed over MCP.
 
 ## [0.5.0a1] - Unreleased
 

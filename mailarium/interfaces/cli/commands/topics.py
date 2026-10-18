@@ -26,7 +26,7 @@ def run(args: argparse.Namespace, dependencies: CliDependencies) -> None:
             skip_clusters=getattr(args, "skip_clusters", False),
         )
     else:
-        print("Usage: python -m mailarium.cli topics build [--n-topics N] [--n-clusters N]")
+        print("Usage: mailarium topics build [--n-topics N] [--n-clusters N]")
         sys.exit(2)
     sys.exit(0)
 
@@ -134,7 +134,7 @@ def _build_clusters(db: ArchiveDatabase, uids: list[str], texts: list[str], *, n
         label_str = " / ".join(top_words[:3])
         cluster_info.append(
             {
-                "id": cluster_id,
+                "cluster_id": cluster_id,
                 "label": label_str,
                 "size": len(cluster_labels.get(cluster_id, [])),
                 "top_words": top_words,

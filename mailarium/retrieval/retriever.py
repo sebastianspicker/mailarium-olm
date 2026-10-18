@@ -21,7 +21,7 @@ from .query_expansion import QueryExpansion
 from .reranking import ResultReranker
 from .semantic_filters import SemanticFilterResolver
 from .semantic_search import SemanticSearch
-from .threads import thread_results
+from .threads import thread_results, thread_results_for_uids
 from .visibility import ResultVisibility
 
 if TYPE_CHECKING:
@@ -217,9 +217,15 @@ class SearchEngine:
         """Load one canonical result per email in the requested conversation.
 
         Uses canonical SQLite metadata for ``conversation_id``, then deduplicates
-        by email UID to return one result per email.
+        by email UID to return one result per email. When no chunk carries the
+        id, the archive's shared thread query resolves it (e.g. header-linked
+        threads keyed by ``inferred_thread_id``).
         """
-        return self._visibility.visible(thread_results(self.collection, conversation_id, top_k))
+        results = thread_results(self.collection, conversation_id, top_k)
+        if not results and self._email_db is not None and conversation_id and conversation_id.strip():
+            thread_emails = self._email_db.queries.get_thread_emails(conversation_id.strip())
+            results = thread_results_for_uids(self.collection, [str(email["uid"]) for email in thread_emails], top_k)
+        return self._visibility.visible(results)
 
     def list_senders(self, limit: int = 50) -> list[dict[str, Any]]:
         """List unique senders sorted by message count.

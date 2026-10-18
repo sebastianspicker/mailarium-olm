@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from ..locking import ArchiveRepository, archive_repository
 from ..session import ArchiveSession
+from ..sql import sql_in_placeholders as _sql_in_placeholders
 from .custody import CustodyRepository
 
 logger = logging.getLogger(__name__)
@@ -324,6 +325,17 @@ class IngestLedgerRepository(ArchiveRepository):
             "SELECT email_uid FROM email_ingest_state WHERE attachment_status IN ('degraded', 'unsupported')"
         ).fetchall()
         return {str(row["email_uid"]) for row in rows if str(row["email_uid"] or "")}
+
+    def attachment_statuses(self, email_uids: list[str]) -> dict[str, str]:
+        """Return the recorded attachment status for each selected message that has a ledger row."""
+        selected = [str(uid) for uid in dict.fromkeys(email_uids) if str(uid or "")]
+        if not selected:
+            return {}
+        rows = self.conn.execute(
+            f"SELECT email_uid, attachment_status FROM email_ingest_state WHERE email_uid IN ({_sql_in_placeholders(selected)})",  # nosec B608
+            selected,
+        ).fetchall()
+        return {str(row["email_uid"]): str(row["attachment_status"] or "") for row in rows}
 
     def ingest_state_chunk_counts(self, email_uid: str) -> sqlite3.Row | None:
         """Return the recorded body and image chunk counts for one message, if any."""

@@ -79,6 +79,11 @@ def apply_pending_migrations_impl(
             (schema_version,),
         )
     conn.commit()
+    if current < schema_version:
+        if current:
+            logger.info("Upgraded archive schema from v%d to v%d", current, schema_version)
+        else:
+            logger.info("Initialized archive schema v%d", schema_version)
 
 
 def _migration_steps(
@@ -133,10 +138,10 @@ def _migrate_to_v3(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Curs
     existing = table_columns(cur, "emails")
     if "body_text" not in existing:
         cur.execute("ALTER TABLE emails ADD COLUMN body_text TEXT")
-        logger.info("Schema migration v3: added body_text column")
+        logger.debug("Schema migration v3: added body_text column")
     if "body_html" not in existing:
         cur.execute("ALTER TABLE emails ADD COLUMN body_html TEXT")
-        logger.info("Schema migration v3: added body_html column")
+        logger.debug("Schema migration v3: added body_html column")
 
 
 def _migrate_to_v4(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -146,31 +151,31 @@ def _migrate_to_v4(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Curs
         cur.execute("ALTER TABLE ingestion_runs ADD COLUMN olm_sha256 TEXT")
         cur.execute("ALTER TABLE ingestion_runs ADD COLUMN file_size_bytes INTEGER")
         cur.execute("ALTER TABLE ingestion_runs ADD COLUMN custodian TEXT DEFAULT 'system'")
-        logger.info("Schema migration v4: added ingestion_runs custody columns")
+        logger.debug("Schema migration v4: added ingestion_runs custody columns")
 
     em_cols = table_columns(cur, "emails")
     if "content_sha256" not in em_cols:
         cur.execute("ALTER TABLE emails ADD COLUMN content_sha256 TEXT")
-        logger.info("Schema migration v4: added emails.content_sha256")
+        logger.debug("Schema migration v4: added emails.content_sha256")
 
     ev_cols = table_columns(cur, "evidence_items")
     if "content_hash" not in ev_cols:
         cur.execute("ALTER TABLE evidence_items ADD COLUMN content_hash TEXT")
         cur.execute("ALTER TABLE evidence_items ADD COLUMN ingestion_run_id INTEGER")
-        logger.info("Schema migration v4: added evidence_items custody columns")
+        logger.debug("Schema migration v4: added evidence_items custody columns")
 
 
 def _migrate_to_v5(cur: sqlite3.Cursor, *, sparse_schema_sql: str) -> None:
     """Add sparse_vectors table (schema v5)."""
     cur.executescript(sparse_schema_sql)
-    logger.info("Schema migration v5: created sparse_vectors table")
+    logger.debug("Schema migration v5: created sparse_vectors table")
 
 
 def _migrate_to_v6(cur: sqlite3.Cursor) -> None:
     """Add composite indexes for common query patterns (schema v6)."""
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_sender_date ON emails(sender_email, date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_folder_date ON emails(folder, date)")
-    logger.info("Schema migration v6: added composite indexes (sender_date, folder_date)")
+    logger.debug("Schema migration v6: added composite indexes (sender_date, folder_date)")
 
 
 def _migrate_to_v7(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -187,7 +192,7 @@ def _migrate_to_v7(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Curs
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_calendar ON emails(is_calendar_message, date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_inference ON emails(inference_classification)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_thread_topic ON emails(thread_topic)")
-    logger.info("Schema migration v7: added categories, calendar, thread_topic, references_json columns + tables")
+    logger.debug("Schema migration v7: added categories, calendar, thread_topic, references_json columns + tables")
 
 
 def _migrate_to_v8(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -201,7 +206,7 @@ def _migrate_to_v8(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Curs
     _add_columns_safe(cur, "emails", new_cols, existing=existing)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_language ON emails(detected_language)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_sentiment ON emails(sentiment_label)")
-    logger.info("Schema migration v8: added detected_language, sentiment_label, sentiment_score columns")
+    logger.debug("Schema migration v8: added detected_language, sentiment_label, sentiment_score columns")
 
 
 def _migrate_to_v9(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -209,7 +214,7 @@ def _migrate_to_v9(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Curs
     existing = table_columns(cur, "emails")
     if "ingestion_run_id" not in existing:
         cur.execute("ALTER TABLE emails ADD COLUMN ingestion_run_id INTEGER")
-        logger.info("Schema migration v9: added emails.ingestion_run_id")
+        logger.debug("Schema migration v9: added emails.ingestion_run_id")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_ingestion_run ON emails(ingestion_run_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_evidence_category_relevance ON evidence_items(category, relevance)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_type_date ON emails(email_type, date)")
@@ -223,7 +228,7 @@ def _migrate_to_v10(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         cur.execute("ALTER TABLE emails ADD COLUMN normalized_body_source TEXT DEFAULT 'body_text'")
     if "body_normalization_version" not in existing:
         cur.execute("ALTER TABLE emails ADD COLUMN body_normalization_version INTEGER DEFAULT 10")
-    logger.info("Schema migration v10: added normalized body provenance columns")
+    logger.debug("Schema migration v10: added normalized body provenance columns")
 
 
 def _migrate_to_v11(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -238,7 +243,7 @@ def _migrate_to_v11(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "forensic_body_source": "TEXT DEFAULT ''",
     }
     _add_columns_safe(cur, "emails", new_cols, existing=existing)
-    logger.info("Schema migration v11: added raw and forensic body preservation columns")
+    logger.debug("Schema migration v11: added raw and forensic body preservation columns")
 
 
 def _migrate_to_v12(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -251,7 +256,7 @@ def _migrate_to_v12(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "recovery_confidence": "REAL DEFAULT 0",
     }
     _add_columns_safe(cur, "emails", new_cols, existing=existing)
-    logger.info("Schema migration v12: added empty-body classification and recovery provenance columns")
+    logger.debug("Schema migration v12: added empty-body classification and recovery provenance columns")
 
 
 def _migrate_to_v13(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -264,7 +269,7 @@ def _migrate_to_v13(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "recipient_identity_source": "TEXT DEFAULT ''",
     }
     _add_columns_safe(cur, "emails", new_cols, existing=existing)
-    logger.info("Schema migration v13: added durable recipient identity persistence columns")
+    logger.debug("Schema migration v13: added durable recipient identity persistence columns")
 
 
 def _migrate_to_v14(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -278,7 +283,7 @@ def _migrate_to_v14(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "reply_context_source": "TEXT DEFAULT ''",
     }
     _add_columns_safe(cur, "emails", new_cols, existing=existing)
-    logger.info("Schema migration v14: added inferred quoted reply-context persistence columns")
+    logger.debug("Schema migration v14: added inferred quoted reply-context persistence columns")
 
 
 def _migrate_to_v15(cur: sqlite3.Cursor) -> None:
@@ -296,7 +301,7 @@ def _migrate_to_v15(cur: sqlite3.Cursor) -> None:
         )"""
     )
     cur.execute("CREATE INDEX IF NOT EXISTS idx_message_segments_email_uid ON message_segments(email_uid, ordinal)")
-    logger.info("Schema migration v15: added conversation segment persistence table")
+    logger.debug("Schema migration v15: added conversation segment persistence table")
 
 
 def _migrate_to_v16(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -323,7 +328,7 @@ def _migrate_to_v16(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_inferred_thread_id ON emails(inferred_thread_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_conversation_edges_child ON conversation_edges(child_uid)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_conversation_edges_parent ON conversation_edges(parent_uid)")
-    logger.info("Schema migration v16: added inferred thread persistence columns and edges table")
+    logger.debug("Schema migration v16: added inferred thread persistence columns and edges table")
 
 
 def _migrate_to_v17(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -336,7 +341,7 @@ def _migrate_to_v17(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "failure_reason": "TEXT DEFAULT ''",
     }
     _add_columns_safe(cur, "attachments", new_cols, existing=existing)
-    logger.info("Schema migration v17: added attachment evidence metadata columns")
+    logger.debug("Schema migration v17: added attachment evidence metadata columns")
 
 
 def _migrate_to_v18(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -344,7 +349,7 @@ def _migrate_to_v18(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
     existing = table_columns(cur, "attachments")
     if "text_preview" not in existing:
         cur.execute("ALTER TABLE attachments ADD COLUMN text_preview TEXT DEFAULT ''")
-    logger.info("Schema migration v18: added attachments.text_preview")
+    logger.debug("Schema migration v18: added attachments.text_preview")
 
 
 def _migrate_to_v21(cur: sqlite3.Cursor) -> None:
@@ -375,7 +380,7 @@ def _migrate_to_v21(cur: sqlite3.Cursor) -> None:
     cur.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_edges_unique ON conversation_edges(child_uid, parent_uid, edge_type)"
     )
-    logger.info("Schema migration v21: added ingest completion ledger and inferred-edge uniqueness")
+    logger.debug("Schema migration v21: added ingest completion ledger and inferred-edge uniqueness")
 
 
 def _migrate_to_v22(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -387,7 +392,7 @@ def _migrate_to_v22(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "text_locator_json": "TEXT DEFAULT '{}'",
     }
     _add_columns_safe(cur, "attachments", new_cols, existing=existing)
-    logger.info("Schema migration v22: added durable attachment text and locator persistence columns")
+    logger.debug("Schema migration v22: added durable attachment text and locator persistence columns")
 
 
 def _migrate_to_v23(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -404,7 +409,7 @@ def _migrate_to_v23(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
            SET extracted_at = datetime('now')
          WHERE COALESCE(extracted_at, '') = ''"""
     )
-    logger.info("Schema migration v23: added entity extractor provenance columns")
+    logger.debug("Schema migration v23: added entity extractor provenance columns")
 
 
 def _migrate_to_v24(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -419,7 +424,7 @@ def _migrate_to_v24(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
     }
     _add_columns_safe(cur, "emails", new_cols, existing=existing)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emails_language_confidence ON emails(detected_language_confidence)")
-    logger.info("Schema migration v24: added language analytics provenance and confidence columns")
+    logger.debug("Schema migration v24: added language analytics provenance and confidence columns")
 
 
 def _migrate_to_v25(cur: sqlite3.Cursor) -> None:
@@ -464,7 +469,7 @@ CREATE INDEX IF NOT EXISTS idx_evidence_candidates_status ON evidence_candidates
 CREATE INDEX IF NOT EXISTS idx_evidence_candidates_exact ON evidence_candidates(verified_exact);
 """
     )
-    logger.info("Schema migration v25: added evidence_candidates harvest table")
+    logger.debug("Schema migration v25: added evidence_candidates harvest table")
 
 
 def _migrate_to_v26(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -478,7 +483,7 @@ def _migrate_to_v26(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "exchange_extracted_meetings_json": "TEXT DEFAULT '[]'",
     }
     _add_columns_safe(cur, "emails", new_cols, existing=existing)
-    logger.info("Schema migration v26: added durable meeting and Exchange metadata JSON columns")
+    logger.debug("Schema migration v26: added durable meeting and Exchange metadata JSON columns")
 
 
 def _migrate_to_v27(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -491,7 +496,7 @@ def _migrate_to_v27(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
         "context_json": "TEXT DEFAULT '{}'",
     }
     _add_columns_safe(cur, "evidence_items", new_cols, existing=existing)
-    logger.info("Schema migration v27: added durable evidence provenance columns")
+    logger.debug("Schema migration v27: added durable evidence provenance columns")
 
 
 def _migrate_to_v28(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cursor, str], set[str]]) -> None:
@@ -510,7 +515,7 @@ def _migrate_to_v28(cur: sqlite3.Cursor, *, table_columns: Callable[[sqlite3.Cur
     _add_columns_safe(cur, "attachments", new_cols, existing=existing)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_attachment_id ON attachments(attachment_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_content_sha256 ON attachments(content_sha256)")
-    logger.info("Schema migration v28: added attachment identity and normalization columns")
+    logger.debug("Schema migration v28: added attachment identity and normalization columns")
 
 
 def _migrate_to_v29(cur: sqlite3.Cursor) -> None:
@@ -536,7 +541,7 @@ CREATE INDEX IF NOT EXISTS idx_language_surface_scope ON language_surface_analyt
 CREATE INDEX IF NOT EXISTS idx_language_surface_email ON language_surface_analytics(email_uid);
 """
     )
-    logger.info("Schema migration v29: added per-surface language analytics table")
+    logger.debug("Schema migration v29: added per-surface language analytics table")
 
 
 def _migrate_to_v30(cur: sqlite3.Cursor) -> None:
@@ -566,7 +571,7 @@ CREATE INDEX IF NOT EXISTS idx_event_records_uid ON event_records(email_uid, eve
 CREATE INDEX IF NOT EXISTS idx_event_records_scope ON event_records(source_scope, event_kind);
 """
     )
-    logger.info("Schema migration v30: added event_records table")
+    logger.debug("Schema migration v30: added event_records table")
 
 
 def _migrate_to_v31(cur: sqlite3.Cursor) -> None:
@@ -593,7 +598,7 @@ CREATE INDEX IF NOT EXISTS idx_entity_occurrences_uid ON entity_occurrences(emai
 CREATE INDEX IF NOT EXISTS idx_entity_occurrences_entity_id ON entity_occurrences(entity_id, extracted_at);
 """
     )
-    logger.info("Schema migration v31: added entity_occurrences table")
+    logger.debug("Schema migration v31: added entity_occurrences table")
 
 
 def _migrate_to_v32(cur: sqlite3.Cursor) -> None:
@@ -613,7 +618,7 @@ CREATE TABLE IF NOT EXISTS ingest_checkpoints (
 CREATE INDEX IF NOT EXISTS idx_ingest_checkpoints_olm_path ON ingest_checkpoints(olm_path, status, updated_at);
 """
     )
-    logger.info("Schema migration v32: added ingest_checkpoints table")
+    logger.debug("Schema migration v32: added ingest_checkpoints table")
 
 
 def _migrate_to_v33(cur: sqlite3.Cursor) -> None:
@@ -626,7 +631,7 @@ def _migrate_to_v33(cur: sqlite3.Cursor) -> None:
           AND COALESCE(text_locator_json, '{}') NOT IN ('', '{}')
         """
     )
-    logger.info("Schema migration v33: normalized mailbox locator versions")
+    logger.debug("Schema migration v33: normalized mailbox locator versions")
 
 
 def _migrate_to_v34(cur: sqlite3.Cursor) -> None:
@@ -658,7 +663,7 @@ CREATE INDEX IF NOT EXISTS idx_attachment_surfaces_attachment_id ON attachment_s
 CREATE INDEX IF NOT EXISTS idx_attachment_surfaces_kind ON attachment_surfaces(surface_kind);
 """
     )
-    logger.info("Schema migration v34: added attachment_surfaces table")
+    logger.debug("Schema migration v34: added attachment_surfaces table")
 
 
 def _migrate_to_v35(
@@ -681,11 +686,11 @@ def _migrate_to_v35(
         },
         existing=existing,
     )
-    logger.info("Schema migration v35: added SQLite-authoritative vector storage")
+    logger.debug("Schema migration v35: added SQLite-authoritative vector storage")
 
 
 def _migrate_to_v36(cur: sqlite3.Cursor) -> None:
     """Add canonical mailbox source, synchronization, and action state."""
     cur.executescript(MAILBOX_SCHEMA_SQL)
     ensure_mailbox_schema_compatibility(cur)
-    logger.info("Schema migration v36: added canonical mailbox state")
+    logger.debug("Schema migration v36: added canonical mailbox state")

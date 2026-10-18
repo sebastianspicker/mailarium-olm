@@ -221,8 +221,13 @@ class MessageQueryRepository(ArchiveRepository):
         return emails_full_batch(self.conn, uids)
 
     def get_thread_emails(self, conversation_id: str) -> list[dict]:
-        """Return messages that share an explicit conversation identifier, sorted by date."""
-        return related_thread_emails(self.conn, conversation_id, inferred=False)
+        """Return messages that share an explicit conversation identifier, sorted by date.
+
+        When no message carries that ``conversation_id``, the identifier is
+        looked up as an inferred thread id (header-linked or inferred threads).
+        """
+        emails = related_thread_emails(self.conn, conversation_id, inferred=False)
+        return emails or related_thread_emails(self.conn, conversation_id, inferred=True)
 
     def get_inferred_thread_emails(self, inferred_thread_id: str) -> list[dict]:
         """Return messages grouped by the inferred thread identifier, sorted by date."""
@@ -260,13 +265,17 @@ class MessageQueryRepository(ArchiveRepository):
     # Re-embed helper
     # ------------------------------------------------------------------
 
-    def get_email_for_reembed(self, uid: str) -> dict | None:
-        """Return the stored email fields required to regenerate its embeddings."""
+    def get_email_for_reembed(self, uid: str, *, require_body: bool = True) -> dict | None:
+        """Return the stored email fields required to regenerate its embeddings.
+
+        With ``require_body=False`` an email with an empty body is returned too, so its
+        attachment text can still be re-embedded.
+        """
         full = self.get_email_full(uid)
         if not full:
             return None
         body = full.get("body_text") or ""
-        if not body.strip():
+        if require_body and not body.strip():
             return None
         return reembed_email_payload(full, body)
 

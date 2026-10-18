@@ -24,7 +24,7 @@ def run(args: argparse.Namespace, dependencies: CliDependencies) -> None:
     elif action == "network":
         run_export_network(db, getattr(args, "output", "private/exports/network.graphml"))
     else:
-        print("Usage: python -m mailarium.cli export {thread,email,report,network}")
+        print("Usage: mailarium export {thread,email,report,network}")
         sys.exit(2)
     sys.exit(0)
 
@@ -71,6 +71,7 @@ def run_export_thread(
     """
     from mailarium.investigation.email_exporter import EmailExporter
 
+    conversation_id = _thread_identifier(db, conversation_id)
     exporter = EmailExporter(db)
     if output_path:
         result = exporter.export_thread_file(
@@ -93,6 +94,14 @@ def run_export_thread(
     print(f"Thread exported: {result['output_path']} ({result['email_count']} emails)")
     if "note" in result:
         print(f"  Note: {result['note']}")
+
+
+def _thread_identifier(db: ArchiveDatabase, identifier: str) -> str:
+    """Resolve an email uid to its conversation or inferred thread id; other identifiers pass through."""
+    email = db.queries.get_email_full(identifier) if identifier else None
+    if not email:
+        return identifier
+    return str(email.get("conversation_id") or email.get("inferred_thread_id") or identifier)
 
 
 def run_export_email(

@@ -156,6 +156,10 @@ class MailboxService:
         """Reject as the trusted local human surface; no actor input is accepted."""
         return self._proposal_policy.reject(proposal_id, reason=reason)
 
+    def resolve(self, proposal_id: str, *, executed: bool, note: str = "") -> dict[str, Any]:
+        """Close an uncertain proposal as the trusted local human; no remote call is made."""
+        return self._proposal_policy.resolve(proposal_id, executed=executed, note=note)
+
     def execute(self, proposal_id: str) -> dict[str, Any]:
         """Claim and execute one previously approved immutable proposal."""
         return self._executor.execute(proposal_id)

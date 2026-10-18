@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from contextlib import contextmanager
 from typing import Any
 
@@ -161,6 +162,35 @@ def _positive_weights(weights: dict[Any, Any]) -> dict[int, float]:
     return {int(token_id): float(weight) for token_id, weight in weights.items() if float(weight) > 0}
 
 
+_HUB_OFFLINE_LOCK = threading.Lock()
+_hub_offline_state = {"depth": 0, "previous": False}
+
+
+@contextmanager
+def hub_offline_flag():
+    """Set huggingface_hub's offline flag, which it reads from the environment only once at import.
+
+    Overlapping loads share the flag: the first entry saves the original value and the last exit restores it.
+    """
+    try:
+        from huggingface_hub import constants
+    except ImportError:
+        yield
+        return
+    with _HUB_OFFLINE_LOCK:
+        if _hub_offline_state["depth"] == 0:
+            _hub_offline_state["previous"] = constants.HF_HUB_OFFLINE
+        _hub_offline_state["depth"] += 1
+        constants.HF_HUB_OFFLINE = True
+    try:
+        yield
+    finally:
+        with _HUB_OFFLINE_LOCK:
+            _hub_offline_state["depth"] -= 1
+            if _hub_offline_state["depth"] == 0:
+                constants.HF_HUB_OFFLINE = bool(_hub_offline_state["previous"])
+
+
 @contextmanager
 def _offline_model_load(enabled: bool):
     """Temporarily force Hugging Face and Transformers offline mode, then restore the environment."""
@@ -172,7 +202,8 @@ def _offline_model_load(enabled: bool):
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     try:
-        yield
+        with hub_offline_flag():
+            yield
     finally:
         if old_hf is None:
             os.environ.pop("HF_HUB_OFFLINE", None)

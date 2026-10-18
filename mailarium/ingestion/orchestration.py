@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -208,6 +209,9 @@ def ingest(
         resume=resume,
         timing=timing,
     )
+    # Check the source first: a mistyped path must not load or download models or create stores.
+    if not os.path.exists(olm_path):
+        raise FileNotFoundError(f"OLM file not found: {olm_path}")
     runtime = initialize_ingest_runtime(request, dependencies)
     try:
         _run_ingest_parser(runtime)

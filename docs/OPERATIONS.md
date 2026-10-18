@@ -86,7 +86,9 @@ mailarium-ingest private/ingest/archive.olm --incremental
 `--incremental` skips source records already committed to SQLite. Attachment
 and entity extraction are optional ingest stages; see
 [attachment support](ATTACHMENT_SUPPORT.md) before enabling rich-format parsing
-or OCR.
+or OCR. Re-running with `--extract-attachments` or `--extract-entities`, with
+or without `--incremental`, adds attachment text and entities to messages that
+were stored without them; existing body vectors are kept.
 
 ## Offline operation
 
@@ -130,7 +132,10 @@ mailarium admin reset-index --yes
 `--reembed --resume` reconstructs vector state from stored corrected text
 while retaining matching committed vectors. `reset-index` removes derived
 vector state for the configured runtime; confirm the resolved paths before
-accepting it.
+accepting it. `--reembed` rebuilds body and attachment-text vectors from
+SQLite. Image-embedding vectors need the original image bytes, so restore them
+with `--reprocess-degraded-attachments --force` against the original `.olm`, or
+re-ingest.
 
 Analytics backfills read at most 256 candidate messages per page and aggregate
 their attachment and segment surfaces together. Completed pages remain durable

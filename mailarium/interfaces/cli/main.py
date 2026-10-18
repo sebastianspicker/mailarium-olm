@@ -13,6 +13,7 @@ from mailarium.interfaces.cli.commands import admin, analytics, browse, evidence
 from mailarium.interfaces.cli.dependencies import CliDependencies
 from mailarium.interfaces.cli.parser import build_parser
 from mailarium.interfaces.runtime import ApplicationRuntime
+from mailarium.platform.repo_paths import PathPolicyError
 from mailarium.platform.settings import configure_logging
 from mailarium.platform.validation import validate_date_window
 
@@ -63,6 +64,15 @@ def main(argv: list[str] | None = None) -> None:
     Args:
         argv: Command-line arguments. If None, uses sys.argv[1:].
     """
+    try:
+        _main(argv)
+    except PathPolicyError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+
+def _main(argv: list[str] | None) -> None:
+    """Load configuration, compose the runtime, and dispatch one subcommand."""
     load_dotenv()
     args = parse_args(argv)
     configure_logging(getattr(args, "log_level", None))
@@ -86,7 +96,7 @@ def main(argv: list[str] | None = None) -> None:
             )
             command = COMMANDS.get(args.subcommand)
             if command is None:
-                print("A subcommand is required. Run `python -m mailarium.cli --help` for usage.")
+                print("A subcommand is required. Run `mailarium --help` for usage.")
                 sys.exit(2)
             command(args, dependencies)
     except ModuleNotFoundError as exc:
@@ -99,5 +109,5 @@ def main(argv: list[str] | None = None) -> None:
 def _missing_archive_error() -> NoReturn:
     """Exit without creating a database when the configured archive is absent."""
     print("SQLite database not found. Run ingestion first:")
-    print("  python -m mailarium.ingest data/your-export.olm --extract-entities")
+    print("  mailarium-ingest private/ingest/archive.olm")
     sys.exit(1)

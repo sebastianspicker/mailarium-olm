@@ -45,7 +45,7 @@ def run(args: argparse.Namespace, dependencies: CliDependencies) -> None:
     elif action == "provenance":
         run_provenance(db, args.uid)
     else:
-        print("Usage: python -m mailarium.cli evidence {list,export,stats,verify,dossier,custody,provenance}")
+        print("Usage: mailarium evidence {list,export,stats,verify,dossier,custody,provenance}")
         sys.exit(2)
     sys.exit(0)
 

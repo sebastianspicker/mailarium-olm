@@ -60,7 +60,7 @@ mailarium search "project handoff" --hybrid
 ```
 
 Place the real archive at `private/ingest/archive.olm` or substitute another
-allowed local path. The tracked `.env.example` uses source-checkout runtime
+local path; the MCP `email_ingest` tool additionally requires an allowed read root. The tracked `.env.example` uses source-checkout runtime
 paths below `private/`. Keep archives, databases, exports, model artifacts, and
 credentials out of version control.
 
@@ -170,7 +170,7 @@ uv run python scripts/verify.py release
 
 `fast` runs lock, lint, format, and architecture checks. `pr` adds
 typing, offline and
-native ingestion smokes, security analysis, dependency audit, and privacy
+native ingestion smokes, a core-workflow smoke, security analysis, dependency audit, and privacy
 scanning. `package` covers the Streamlit smoke, build, artifact inspection,
 and installed-wheel smoke; `release` runs `pr` and then `package`. These
 local profiles do not prove live EWS, real model downloads, a manual browser
@@ -194,4 +194,8 @@ Support requests must use synthetic examples and sanitized diagnostics. Use
 the repository issue forms for questions, defects, and feature proposals, and
 follow [SECURITY.md](SECURITY.md) for suspected vulnerabilities.
 
-Mailarium is licensed under the [MIT License](LICENSE).
+Mailarium is licensed under the [MIT License](LICENSE). It does not bundle
+third-party code. One runtime dependency, `pyphen` (installed through
+`textstat`), is offered under GPL-2.0-or-later, LGPL-2.1-or-later, or MPL-1.1
+at the recipient's choice; check each installed package's metadata for its
+licence.

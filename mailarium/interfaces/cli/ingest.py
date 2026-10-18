@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import zipfile
 from typing import Any
 
@@ -18,6 +19,7 @@ from mailarium.ingestion import (
     reprocess_degraded_attachments,
     reset_index,
 )
+from mailarium.platform.repo_paths import PathPolicyError
 from mailarium.platform.settings import configure_logging
 from mailarium.platform.validation import positive_int
 
@@ -39,11 +41,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     """Run the public ingestion command against the feature-level library API."""
     load_dotenv()
-    args = parse_args(argv)
-    configure_logging(args.log_level)
-    if _run_maintenance_command(args):
-        return
-    stats = _run_ingest_command(args)
+    try:
+        args = parse_args(argv)
+        configure_logging(args.log_level)
+        if _run_maintenance_command(args):
+            return
+        stats = _run_ingest_command(args)
+    except PathPolicyError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
     print("\n" + "\n".join(format_ingestion_summary(stats)))
 
 

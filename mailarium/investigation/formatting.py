@@ -8,7 +8,7 @@ from datetime import datetime
 from html import unescape
 from typing import Any
 
-from mailarium.platform.repo_paths import validate_new_output_path
+from mailarium.platform.repo_paths import PathPolicyError, validate_new_output_path
 
 
 def resolve_body_for_render(email_dict: Mapping[str, Any], render_mode: str = "retrieval") -> tuple[str, str]:
@@ -165,7 +165,12 @@ def write_html_or_pdf(html: str, output_path: str, fmt: str) -> dict[str, Any]:
             return {"output_path": output_path, "format": "pdf"}
         except ImportError:
             fallback_output_path = str(output.with_suffix(".html"))
-            output = validate_new_output_path(str(output.with_suffix(".html")))
+            try:
+                output = validate_new_output_path(fallback_output_path)
+            except PathPolicyError as exc:
+                raise PathPolicyError(
+                    f"PDF export needs WeasyPrint, which is not installed, so it falls back to HTML. {exc}"
+                ) from exc
             output.write_text(html, encoding="utf-8")
             return {
                 "output_path": fallback_output_path,

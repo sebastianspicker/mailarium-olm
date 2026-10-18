@@ -20,6 +20,6 @@ def run(args: argparse.Namespace, dependencies: CliDependencies) -> None:
         dependencies.search_engine.reset_index()
         print("Index has been reset.")
     else:
-        print("Usage: python -m mailarium.cli admin {reset-index}")
+        print("Usage: mailarium admin {reset-index}")
         sys.exit(2)
     sys.exit(0)

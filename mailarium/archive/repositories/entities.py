@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,7 +24,7 @@ _ENTITY_MENTION_INCREMENT_SQL = """INSERT INTO entity_mentions(
 _ENTITY_MENTION_IDEMPOTENT_SQL = """INSERT INTO entity_mentions(
        entity_id, email_uid, mention_count, extractor_key, extraction_version, extracted_at
    )
-   VALUES(?, ?, 1, ?, ?, datetime('now'))
+   VALUES(?, ?, ?, ?, ?, datetime('now'))
    ON CONFLICT(entity_id, email_uid) DO UPDATE SET
      mention_count = MAX(entity_mentions.mention_count, excluded.mention_count),
      extractor_key = excluded.extractor_key,
@@ -208,6 +209,19 @@ class EntityRepository(ArchiveRepository):
             commit=commit,
         )
 
+    @staticmethod
+    def _upsert_entity(cur: sqlite3.Cursor, entity_row: tuple[str, str, str]) -> int:
+        """Insert or refresh one canonical entity and return its id."""
+        row = cur.execute(
+            """INSERT INTO entities(entity_text, entity_type, normalized_form)
+               VALUES(?, ?, ?)
+               ON CONFLICT(normalized_form, entity_type) DO UPDATE SET
+                 entity_text = excluded.entity_text
+               RETURNING id""",
+            entity_row,
+        ).fetchone()
+        return int(row[0])
+
     def _insert_entity_mentions(
         self,
         email_uid: str,
@@ -220,21 +234,17 @@ class EntityRepository(ArchiveRepository):
     ) -> None:
         """Upsert entities and persist mentions with the selected count policy."""
         cur = self.conn.cursor()
-        for entity in entities:
-            text, etype, norm = self._coerce_entity_row(entity)
-            row = cur.execute(
-                """INSERT INTO entities(entity_text, entity_type, normalized_form)
-                   VALUES(?, ?, ?)
-                   ON CONFLICT(normalized_form, entity_type) DO UPDATE SET
-                     entity_text = excluded.entity_text
-                   RETURNING id""",
-                (text, etype, norm),
-            ).fetchone()
-            entity_id = row[0]
-            cur.execute(
-                mention_sql,
-                (entity_id, email_uid, str(extractor_key or ""), str(extraction_version or "")),
-            )
+        provenance = (str(extractor_key or ""), str(extraction_version or ""))
+        rows = [self._coerce_entity_row(entity) for entity in entities]
+        if mention_sql is _ENTITY_MENTION_IDEMPOTENT_SQL:
+            # Count occurrences per canonical entity, then keep the larger of stored and extracted counts.
+            counts = Counter((norm, etype) for _text, etype, norm in rows)
+            last_rows = {(norm, etype): (text, etype, norm) for text, etype, norm in rows}
+            for key, count in counts.items():
+                cur.execute(mention_sql, (self._upsert_entity(cur, last_rows[key]), email_uid, count, *provenance))
+        else:
+            for entity_row in rows:
+                cur.execute(mention_sql, (self._upsert_entity(cur, entity_row), email_uid, *provenance))
         if commit:
             self.conn.commit()
 
@@ -300,6 +310,18 @@ class EntityRepository(ArchiveRepository):
                 continue
             bucket.append(dict(row))
         return result
+
+    def email_uids_with_extractor(self, extractor_key: str, email_uids: list[str] | None = None) -> set[str]:
+        """Return messages holding entity mentions from *extractor_key*, optionally limited to *email_uids*."""
+        query = "SELECT DISTINCT email_uid FROM entity_mentions WHERE COALESCE(extractor_key, '') = ?"
+        params: list[str] = [str(extractor_key or "")]
+        if email_uids is not None:
+            selected = [str(uid) for uid in dict.fromkeys(email_uids) if str(uid or "")]
+            if not selected:
+                return set()
+            query += f" AND email_uid IN ({_sql_in_placeholders(selected)})"  # nosec B608
+            params.extend(selected)
+        return {str(row["email_uid"]) for row in self.conn.execute(query, params).fetchall() if str(row["email_uid"] or "")}
 
     def delete_entity_mentions_for_email(self, email_uid: str, *, commit: bool = True) -> int:
         """Delete entity mentions for one email and prune now-orphaned entities."""

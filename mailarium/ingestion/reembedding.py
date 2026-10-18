@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from mailarium.platform.settings import get_settings
@@ -20,7 +21,7 @@ def reembed(
     batch_size: int = 100,
     resume: bool = False,
 ) -> dict[str, Any]:
-    """Re-chunk and re-embed all emails from corrected SQLite body text."""
+    """Re-chunk and re-embed all emails from corrected SQLite body and attachment text."""
     from mailarium.archive import open_archive_database
     from mailarium.retrieval.embedder import EmailEmbedder
 
@@ -48,7 +49,7 @@ def reembed(
             stored_body_rows = email_db.vector_maintenance.body_vector_provenance() if resume else {}
             body_chunk_ids_by_uid: dict[str, list[str]] = {}
             for chunk_id in existing_ids:
-                if "__att_" in chunk_id or "__img_" in chunk_id:
+                if "__img_" in chunk_id:
                     continue
                 uid = chunk_id.split("__", 1)[0]
                 body_chunk_ids_by_uid.setdefault(uid, []).append(chunk_id)
@@ -56,10 +57,18 @@ def reembed(
             for uid in sorted(all_uids):
                 email_dict = email_db.queries.get_email_for_reembed(uid)
                 if email_dict is None:
-                    progress.skipped_no_body += 1
-                    continue
-                chunks = [*chunk_email(email_dict), *_chunk_forensic_email_surface(email_dict)]
-                old_ids = body_chunk_ids_by_uid.get(uid, [])
+                    attachment_only = _attachment_only_reembed(email_db, uid, body_chunk_ids_by_uid.get(uid, []))
+                    if attachment_only is None:
+                        progress.skipped_no_body += 1
+                        continue
+                    chunks, old_ids = attachment_only
+                else:
+                    chunks = [
+                        *chunk_email(email_dict),
+                        *_chunk_forensic_email_surface(email_dict),
+                        *_stored_attachment_chunks(uid, email_dict),
+                    ]
+                    old_ids = body_chunk_ids_by_uid.get(uid, [])
                 if resume and _body_vectors_are_current(
                     chunks,
                     old_ids,
@@ -112,7 +121,7 @@ class _PendingReembedEmail:
 
     @property
     def obsolete_ids(self) -> list[str]:
-        """Return prior body chunks no longer represented by this email."""
+        """Return prior body and attachment-text chunks no longer represented by this email."""
         return sorted(chunk_id for chunk_id in self.old_ids if chunk_id not in self.new_ids)
 
 
@@ -143,7 +152,7 @@ def _body_vectors_are_current(
     model_id: str,
     model_revision: str,
 ) -> bool:
-    """Return whether one email already has the exact requested body-vector projection."""
+    """Return whether one email already has the exact requested body and attachment-text vector projection."""
     expected_ids = {str(chunk.chunk_id) for chunk in chunks}
     if not expected_ids or expected_ids != set(old_ids):
         return False
@@ -156,6 +165,57 @@ def _body_vectors_are_current(
         if stored_rows.get(str(chunk.chunk_id)) != expected:
             return False
     return True
+
+
+def _attachment_only_reembed(email_db: ArchiveDatabase, uid: str, existing_ids: list[str]) -> tuple[list[Any], list[str]] | None:
+    """Rebuild attachment-text chunks of an empty-body email, leaving any of its other vectors untouched."""
+    email_dict = email_db.queries.get_email_for_reembed(uid, require_body=False)
+    chunks = _stored_attachment_chunks(uid, email_dict) if email_dict is not None else []
+    old_ids = [chunk_id for chunk_id in existing_ids if "__att_" in chunk_id]
+    if not chunks and not old_ids:
+        return None
+    return chunks, old_ids
+
+
+def _stored_attachment_chunks(uid: str, email_dict: dict[str, Any]) -> list[Any]:
+    """Rebuild ingest-identical attachment-text chunks from every stored attachment row that carries text."""
+    from mailarium.model.attachment_surfaces import primary_surface_payload
+
+    from .attachments.processing import _attachment_parent_metadata
+    from .chunker import chunk_attachment
+
+    parent_metadata = _attachment_parent_metadata(SimpleNamespace(uid=uid), email_dict)
+    chunks: list[Any] = []
+    for position, attachment in enumerate(email_dict.get("attachments") or []):
+        text = str(attachment.get("extracted_text") or "")
+        # OLM ingest stores text only for strong_text rows; EWS sync chunks any stored text, unlabelled or not.
+        if not text.strip():
+            continue
+        locator_index = (attachment.get("text_locator") or {}).get("attachment_index")
+        surface = primary_surface_payload(attachment.get("surfaces"))
+        surface_locator = surface.get("locator") if isinstance(surface.get("locator"), dict) else {}
+        chunks.extend(
+            chunk_attachment(
+                email_uid=uid,
+                filename=str(attachment.get("name") or ""),
+                text=text,
+                normalized_text=str(attachment.get("normalized_text") or ""),
+                parent_metadata=parent_metadata,
+                att_index=locator_index if isinstance(locator_index, int) else position,
+                attachment_id=str(attachment.get("attachment_id") or ""),
+                content_sha256=str(attachment.get("content_sha256") or ""),
+                extraction_state=str(attachment.get("extraction_state") or ""),
+                evidence_strength=str(attachment.get("evidence_strength") or "strong_text"),
+                ocr_used=bool(attachment.get("ocr_used")),
+                failure_reason=None,
+                surface_id=str(surface.get("surface_id") or ""),
+                surface_kind=str(surface.get("surface_kind") or "verbatim"),
+                surface_origin_kind=str(surface.get("origin_kind") or "native"),
+                surface_locator=surface_locator,
+                surface_ocr_confidence=float(surface.get("ocr_confidence") or 0.0),
+            )
+        )
+    return chunks
 
 
 def _queue_reembed_email(

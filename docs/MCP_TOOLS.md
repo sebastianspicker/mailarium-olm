@@ -45,6 +45,10 @@ Use `email_search_structured` to find candidates, then
 Use evidence tools to retain exact, reviewable material rather than treating a
 ranking score as proof.
 
+Thread tools that take a `conversation_id` also accept an inferred thread id,
+which is how archives without Exchange conversation ids (IMAP/POP accounts)
+group replies linked through In-Reply-To and References headers.
+
 ## Mutation and privacy boundaries
 
 Ingestion, evidence mutation, export, and maintenance tools are write

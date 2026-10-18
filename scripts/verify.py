@@ -44,6 +44,7 @@ def _run_pull_request() -> None:
     _run("Type check", [sys.executable, "-m", "mypy", "mailarium"])
     ingest_env = os.environ | OFFLINE_INGEST_ENV
     _run("Offline ingest smoke", [sys.executable, "scripts/smoke/ingest.py"], env=ingest_env)
+    _run("Workflow smoke", [sys.executable, "scripts/smoke/workflows.py"], env=ingest_env)
     _run("Native SQLite storage ingest smoke", [sys.executable, "scripts/smoke/native_storage_ingest.py"])
     _run(
         "Security scan",

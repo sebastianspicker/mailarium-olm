@@ -32,7 +32,24 @@ def thread_results(collection: Any, conversation_id: str, top_k: int = 50) -> li
     if top_k <= 0:
         raise ValueError("top_k must be a positive integer.")
 
-    all_ids, all_docs, all_metas = _thread_rows(collection, conversation_id.strip(), top_k)
+    conv_filter: dict[str, Any] = {"conversation_id": {"$eq": conversation_id.strip()}}
+    return _ordered_thread_results(*_thread_rows(collection, conv_filter, top_k), top_k=top_k)
+
+
+def thread_results_for_uids(collection: Any, uids: list[str], top_k: int = 50) -> list[SearchResult]:
+    """Retrieve the given emails' messages in thread date order, validating the requested limit."""
+    if not uids:
+        return []
+    if top_k <= 0:
+        raise ValueError("top_k must be a positive integer.")
+    uid_filter: dict[str, Any] = {"uid": {"$in": list(uids)}}
+    return _ordered_thread_results(*_thread_rows(collection, uid_filter, top_k), top_k=top_k)
+
+
+def _ordered_thread_results(
+    all_ids: list[str], all_docs: list[str | None], all_metas: list[dict[str, Any]], *, top_k: int
+) -> list[SearchResult]:
+    """Deduplicate collection rows per email and order them by thread date."""
     results = [
         SearchResult(chunk_id=doc_id, text=all_docs[index] or "", metadata=all_metas[index] or {}, distance=0.0)
         for index, doc_id in enumerate(all_ids)
@@ -69,16 +86,15 @@ def _deduplicate_thread_emails(results: list[SearchResult]) -> list[SearchResult
     return deduped
 
 
-def _thread_rows(collection: Any, conversation_id: str, top_k: int) -> tuple[list[str], list[str | None], list[dict[str, Any]]]:
-    """Fetch and normalize all collection rows for one conversation identifier."""
-    conv_filter: dict[str, dict[str, str]] = {"conversation_id": {"$eq": conversation_id}}
+def _thread_rows(collection: Any, where: dict[str, Any], top_k: int) -> tuple[list[str], list[str | None], list[dict[str, Any]]]:
+    """Fetch and normalize all collection rows matching one thread filter."""
     fetch_limit = max(top_k * 5, 500)
     all_ids: list[str] = []
     all_docs: list[str | None] = []
     all_metas: list[dict[str, Any]] = []
     offset = 0
     while True:
-        raw = collection.get(where=cast(Any, conv_filter), include=["documents", "metadatas"], limit=fetch_limit, offset=offset)
+        raw = collection.get(where=cast(Any, where), include=["documents", "metadatas"], limit=fetch_limit, offset=offset)
         batch_ids = raw.get("ids", []) if raw else []
         if not batch_ids:
             return all_ids, all_docs, all_metas
