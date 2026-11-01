@@ -8,10 +8,6 @@ from html import unescape
 from html.parser import HTMLParser
 
 # Pre-compiled regexes for html_to_text() hot path
-_RE_STYLE = re.compile(r"<style[^>]*>.*?</style[^>]*>", re.DOTALL | re.IGNORECASE)
-_RE_SCRIPT = re.compile(r"<script[^>]*>.*?</script[^>]*>", re.DOTALL | re.IGNORECASE)
-_RE_HEAD = re.compile(r"<head[^>]*>.*?</head>", re.DOTALL | re.IGNORECASE)
-_RE_TITLE = re.compile(r"<title[^>]*>.*?</title>", re.DOTALL | re.IGNORECASE)
 _RE_HEADINGS = {
     level: (
         re.compile(rf"<h{level}[^>]*>(.*?)</h{level}>", re.DOTALL | re.IGNORECASE),
@@ -37,47 +33,6 @@ _RE_ALL_TAGS = re.compile(r"<[^>]+>")
 _RE_WHITESPACE_COLLAPSE = re.compile(r"\s+")
 _RE_ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\ufeff]")
 _RE_HTML_BLANK_LINE_RUN = re.compile(r"\n{3,}")
-_RE_GMAIL_QUOTE_BLOCK = re.compile(
-    r"<(?P<tag>div|blockquote)\b(?=[^>]*\bclass\s*=\s*(['\"])[^>]*\bgmail_quote\b[^>]*\2)[^>]*>.*?</(?P=tag)>",
-    re.DOTALL | re.IGNORECASE,
-)
-_RE_APPLE_MAIL_QUOTE_BLOCK = re.compile(
-    r"<blockquote\b(?=[^>]*\bclass\s*=\s*(['\"])[^>]*\bAppleMailQuote\b[^>]*\1)[^>]*>.*?</blockquote>",
-    re.DOTALL | re.IGNORECASE,
-)
-_RE_YAHOO_QUOTED_BLOCK = re.compile(
-    r"<div\b(?=[^>]*\bclass\s*=\s*(['\"])[^>]*\byahoo_quoted\b[^>]*\1)[^>]*>.*?</div>",
-    re.DOTALL | re.IGNORECASE,
-)
-_RE_MOZ_CITE_PREFIX = re.compile(
-    r"<div\b(?=[^>]*\bclass\s*=\s*(['\"])[^>]*\bmoz-cite-prefix\b[^>]*\1)[^>]*>.*?</div>",
-    re.DOTALL | re.IGNORECASE,
-)
-_RE_OUTLOOK_REPLY_TAIL = re.compile(
-    r"<div\b(?=[^>]*\bid\s*=\s*(['\"])divRplyFwdMsg\1)[^>]*>[\s\S]*$",
-    re.IGNORECASE,
-)
-_RE_OUTLOOK_MESSAGE_HEADER = re.compile(
-    r"<div\b(?=[^>]*\bclass\s*=\s*(['\"])[^>]*\bOutlookMessageHeader\b[^>]*\1)[^>]*>.*?</div>",
-    re.DOTALL | re.IGNORECASE,
-)
-_RE_CITE_BLOCKQUOTE = re.compile(
-    r"<blockquote\b(?=[^>]*\btype\s*=\s*(['\"])cite\1)[^>]*>.*?</blockquote>",
-    re.DOTALL | re.IGNORECASE,
-)
-_RE_HIDDEN_ATTR_BLOCK = re.compile(
-    r"<(?P<tag>[a-z0-9]+)\b(?=[^>]*\b(?:hidden|aria-hidden\s*=\s*(['\"])true\2))[^>]*>.*?</(?P=tag)>",
-    re.DOTALL | re.IGNORECASE,
-)
-_RE_HIDDEN_STYLE_BLOCK = re.compile(
-    r"<(?P<tag>[a-z0-9]+)\b"
-    r"(?=[^>]*\bstyle\s*=\s*(['\"])[^>]*?"
-    r"(?:display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?:px|pt|em|rem|%)?"
-    r"|max-height\s*:\s*0(?:px|pt|em|rem|%)?|max-width\s*:\s*0(?:px|pt|em|rem|%)?"
-    r"|opacity\s*:\s*0|mso-hide\s*:\s*all)[^>]*?\2)"
-    r"[^>]*>.*?</(?P=tag)>",
-    re.DOTALL | re.IGNORECASE,
-)
 
 _NON_RENDERED_TAGS = frozenset({"head", "title", "style", "script"})
 _VOID_TAGS = frozenset(
@@ -86,9 +41,9 @@ _VOID_TAGS = frozenset(
 _QUOTED_CLASSES = frozenset({"gmail_quote", "applemailquote", "yahoo_quoted", "moz-cite-prefix", "outlookmessageheader"})
 _SEMANTIC_PAIRED_TAGS = frozenset({"a", "blockquote", *(f"h{level}" for level in range(1, 7))})
 _HIDDEN_STYLE = re.compile(
-    r"(?:display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?:px|pt|em|rem|%)?"
-    r"|max-height\s*:\s*0(?:px|pt|em|rem|%)?|max-width\s*:\s*0(?:px|pt|em|rem|%)?"
-    r"|opacity\s*:\s*0|mso-hide\s*:\s*all)",
+    r"(?:display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?:\.0+)?(?![\d.])(?:px|pt|em|rem|%)?"
+    r"|max-height\s*:\s*0(?:\.0+)?(?![\d.])(?:px|pt|em|rem|%)?|max-width\s*:\s*0(?:\.0+)?(?![\d.])(?:px|pt|em|rem|%)?"
+    r"|opacity\s*:\s*0(?:\.0+)?(?![\d.])|mso-hide\s*:\s*all)",
     re.IGNORECASE,
 )
 
@@ -270,37 +225,6 @@ def html_to_text(html: str) -> str:
     text = _RE_HTML_BLANK_LINE_RUN.sub("\n\n", text)
     text = _strip_newsletter_boilerplate_tail(text)
     return strip_legal_disclaimer_tail(text)
-
-
-def _strip_hidden_email_html(text: str) -> str:
-    """Remove hidden email-markup blocks such as preheaders.
-
-    Email templates commonly include hidden preview text and client-specific
-    assistive markup inside elements styled with ``display:none`` or related
-    non-visible CSS. Strip only strong hidden signals here so visible content
-    is preserved.
-    """
-    previous = None
-    while text != previous:
-        previous = text
-        text = _RE_HIDDEN_ATTR_BLOCK.sub("", text)
-        text = _RE_HIDDEN_STYLE_BLOCK.sub("", text)
-    return text
-
-
-def _strip_client_quote_html(text: str) -> str:
-    """Remove exact email-client quote wrapper blocks before text extraction."""
-    previous = None
-    while text != previous:
-        previous = text
-        text = _RE_GMAIL_QUOTE_BLOCK.sub("", text)
-        text = _RE_APPLE_MAIL_QUOTE_BLOCK.sub("", text)
-        text = _RE_YAHOO_QUOTED_BLOCK.sub("", text)
-        text = _RE_MOZ_CITE_PREFIX.sub("", text)
-        text = _RE_OUTLOOK_REPLY_TAIL.sub("", text)
-        text = _RE_OUTLOOK_MESSAGE_HEADER.sub("", text)
-        text = _RE_CITE_BLOCKQUOTE.sub("", text)
-    return text
 
 
 def _strip_newsletter_boilerplate_tail(text: str) -> str:

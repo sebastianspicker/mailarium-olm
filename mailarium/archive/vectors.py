@@ -22,6 +22,8 @@ from .usearch_loader import import_index
 
 DEFAULT_PAGE_SIZE = 1000
 _OVERFETCH_MULTIPLIER = 4
+# shortcut: a writer silent this long is treated as dead; raise it if one embedding batch can take longer.
+_STALE_JOURNAL_MINUTES = 10
 _INSERT_VECTOR_ROW_SQL = """INSERT INTO vector_chunks(
        chunk_id, email_uid, embedding_space, kind, document,
        metadata_json, content_sha256, model_id, model_revision, updated_at
@@ -285,15 +287,22 @@ class SQLiteVectorCollection:
     ) -> dict[str, Any]:
         """Hydrate canonical rows using the established collection response shape."""
         requested = set(include or ())
+        # Filtering must precede pagination: applying SQL LIMIT first can
+        # make a later matching row invisible to callers, so only unfiltered reads page in SQL.
+        paged = where is None and limit is not None
         with self._database_operation():
             self._assert_active_generation()
-            # Filtering must precede pagination: applying SQL LIMIT first can
-            # make a later matching row invisible to callers.
-            rows = self._select_records(ids=ids)
-        records = [record for record in rows if _metadata_matches(record.metadata, where)]
-        start = max(int(offset), 0)
-        stop = None if limit is None else start + max(int(limit), 0)
-        records = records[start:stop]
+            records = self._select_records(
+                ids=ids,
+                limit=limit if paged else None,
+                offset=offset if paged else 0,
+                with_embeddings="embeddings" in requested,
+            )
+        if not paged:
+            records = [record for record in records if _metadata_matches(record.metadata, where)]
+            start = max(int(offset), 0)
+            stop = None if limit is None else start + max(int(limit), 0)
+            records = records[start:stop]
         payload: dict[str, Any] = {"ids": [record.chunk_id for record in records]}
         if "documents" in requested:
             payload["documents"] = [record.document for record in records]
@@ -372,21 +381,27 @@ class SQLiteVectorCollection:
             self._assert_active_generation()
             for _attempt in range(2):
                 records, applied_seq, dimensions, index = self._checkpoint_snapshot(conn)
-
-                # This transaction excludes writers through the file publish and
-                # state update.  If the snapshot is stale, release it and retry.
-                conn.execute("BEGIN IMMEDIATE")
-                current_seq = self._pending_sequence()
-                if current_seq != applied_seq:
-                    conn.rollback()
-                    continue
-                status = self._publish_checkpoint(
-                    conn,
-                    records=records,
-                    applied_seq=applied_seq,
-                    dimensions=dimensions,
-                    index=index,
-                )
+                # Save and hash outside the write lock so writers only wait for the rename and state update.
+                staged = self._stage_index_file(index) if index is not None else None
+                try:
+                    # This transaction excludes writers through the file publish and
+                    # state update.  If the snapshot is stale, release it and retry.
+                    conn.execute("BEGIN IMMEDIATE")
+                    current_seq = self._pending_sequence()
+                    if current_seq != applied_seq:
+                        conn.rollback()
+                        continue
+                    status = self._publish_checkpoint(
+                        conn,
+                        records=records,
+                        applied_seq=applied_seq,
+                        dimensions=dimensions,
+                        index=index,
+                        staged=staged,
+                    )
+                finally:
+                    if staged is not None:
+                        staged[0].unlink(missing_ok=True)
                 if status == "usearch_unavailable":
                     logger.warning(
                         "USearch is unavailable; using exact SQLite vector search for %s vectors",
@@ -422,10 +437,11 @@ class SQLiteVectorCollection:
         applied_seq: int,
         dimensions: int,
         index: Any | None,
+        staged: tuple[Path, str] | None,
     ) -> str:
         """Publish a current snapshot and consume its journal rows atomically."""
         try:
-            file_sha256, status = self._publish_index_file(records, index, dimensions)
+            file_sha256, status = self._publish_index_file(records, index, dimensions, staged)
             self._record_state(
                 dimensions=dimensions,
                 applied_seq=applied_seq,
@@ -451,17 +467,19 @@ class SQLiteVectorCollection:
         records: Sequence[VectorRecord],
         index: Any | None,
         dimensions: int,
+        staged: tuple[Path, str] | None,
     ) -> tuple[str, str]:
-        """Replace derived index state for one already-validated snapshot."""
+        """Replace derived index state for one already-validated snapshot and its staged file."""
         if not records:
             self._remove_index_file()
             self._index = None
             self._index_dimensions = None
             self._cached_index_state = None
             return "", "healthy"
-        if index is None:
+        if index is None or staged is None:
             return "", "usearch_unavailable"
-        file_sha256 = self._save_index_atomically(index)
+        temporary, file_sha256 = staged
+        self._replace_index_file(temporary)
         self._index = index
         self._index_dimensions = dimensions
         self._accelerator_error = ""
@@ -598,33 +616,57 @@ class SQLiteVectorCollection:
         except Exception:
             logger.warning("USearch query failed; using exact SQLite scan", exc_info=True)
             return self._filtered_records(where)
+        if snapshot.has_pending_operations:
+            vector_ids = list(dict.fromkeys([*vector_ids, *self._pending_upsert_ids()]))
         records = self._select_records(vector_ids=vector_ids)
         filtered = [record for record in records if _metadata_matches(record.metadata, where)]
         if len(filtered) >= min(n_results, snapshot.item_count):
             return filtered
         return self._filtered_records(where)
 
+    def _recent_journal_activity(self) -> bool:
+        """Return whether the newest pending journal write is recent enough that its writer may still publish it."""
+        row = (
+            self._connection()
+            .execute(
+                "SELECT created_at > datetime('now', ?) FROM vector_index_ops "
+                "WHERE embedding_space = ? ORDER BY sequence DESC LIMIT 1",
+                (f"-{_STALE_JOURNAL_MINUTES} minutes", self.embedding_space),
+            )
+            .fetchone()
+        )
+        return bool(row and row[0])
+
+    def _pending_upsert_ids(self) -> list[int]:
+        """Return vector IDs written since the last published index, which ANN cannot find yet."""
+        rows = self._connection().execute(
+            "SELECT DISTINCT vector_id FROM vector_index_ops WHERE embedding_space = ? AND operation = 'upsert'",
+            (self.embedding_space,),
+        )
+        return [int(row[0]) for row in rows]
+
     def _filtered_records(self, where: Mapping[str, Any] | None) -> list[VectorRecord]:
         """Return all canonical records that satisfy one metadata predicate."""
         return [record for record in self._select_records() if _metadata_matches(record.metadata, where)]
 
     def _ensure_index(self, snapshot: _StorageSnapshot) -> _StorageSnapshot:
-        """Checkpoint pending operations and restore or rebuild the cached USearch accelerator when stale."""
+        """Restore or keep the published USearch accelerator; rebuild it only when no writer has pending work.
+
+        While journal operations are pending, a writer owns publication, so reads never checkpoint.
+        They search the last published index when it still matches storage, otherwise exact-scan.
+        """
         if self._accelerator_error:
             return snapshot
         self._assert_active_generation(snapshot)
-        if snapshot.has_pending_operations:
+        if snapshot.has_pending_operations and not self._recent_journal_activity():
+            # The writer that deferred these operations is gone (crash or kill); publish them once.
             self.checkpoint()
             snapshot = self._storage_snapshot(force=True)
-            self._assert_active_generation(snapshot)
-            if snapshot.has_pending_operations:
-                self._index = None
-                self._index_dimensions = None
-                self._cached_index_state = None
-                return snapshot
         path = self._index_file
         state = snapshot.index_state
         if self._index is not None:
+            # Deleted rows drop out in _select_records, rows written since the last publish join the
+            # candidates from the journal (_pending_upsert_ids), and _exact_hits re-scores from SQLite.
             if self._cached_index_state == state and self._index_state_matches_storage(path, snapshot):
                 return snapshot
             # Another process may have checkpointed after this collection loaded
@@ -634,8 +676,14 @@ class SQLiteVectorCollection:
             self._index_dimensions = None
             self._cached_index_state = None
         if not self._index_state_matches_storage(path, snapshot):
+            if snapshot.has_pending_operations:
+                return snapshot
             self.checkpoint()
             return self._storage_snapshot(force=True)
+        return self._restore_index(path, snapshot)
+
+    def _restore_index(self, path: Path, snapshot: _StorageSnapshot) -> _StorageSnapshot:
+        """Load the published USearch file, rebuilding it after a failure only when no writer has pending work."""
         try:
             Index = import_index()
             index = Index.restore(str(path), view=False)
@@ -643,16 +691,17 @@ class SQLiteVectorCollection:
                 raise RuntimeError("USearch index restore returned no index")
             self._index = index
             self._index_dimensions = int(index.ndim)
-            self._cached_index_state = state
+            self._cached_index_state = snapshot.index_state
         except ImportError as exc:
             self._accelerator_error = str(exc)
         except Exception:
-            logger.warning("USearch index restore failed; rebuilding from SQLite", exc_info=True)
+            logger.warning("USearch index restore failed; using exact SQLite search until it is rebuilt", exc_info=True)
             self._index = None
             self._index_dimensions = None
             self._cached_index_state = None
-            self.checkpoint()
-            snapshot = self._storage_snapshot(force=True)
+            if not snapshot.has_pending_operations:
+                self.checkpoint()
+                snapshot = self._storage_snapshot(force=True)
         return snapshot
 
     def _select_records(
@@ -662,25 +711,31 @@ class SQLiteVectorCollection:
         vector_ids: Sequence[int] | None = None,
         limit: int | None = None,
         offset: int = 0,
+        with_embeddings: bool = True,
     ) -> list[VectorRecord]:
-        """Load vector records by chunk or vector ID while preserving accelerator rank order."""
+        """Load vector records by chunk or vector ID while preserving accelerator rank order.
+
+        Without ``with_embeddings`` the vector blobs are not read and records carry empty embeddings.
+        """
         where_parts = ["vc.embedding_space = ?"]
         params: list[Any] = [self.embedding_space]
+        # ID lists travel as one JSON parameter so large lists stay below SQLite's variable limit.
         if ids is not None:
             filtered_ids = [str(chunk_id) for chunk_id in ids if str(chunk_id)]
             if not filtered_ids:
                 return []
-            where_parts.append(f"vc.chunk_id IN ({','.join('?' for _ in filtered_ids)})")
-            params.extend(filtered_ids)
+            where_parts.append("vc.chunk_id IN (SELECT value FROM json_each(?))")
+            params.append(json.dumps(filtered_ids))
         if vector_ids is not None:
             filtered_vector_ids = [int(vector_id) for vector_id in vector_ids]
             if not filtered_vector_ids:
                 return []
-            where_parts.append(f"vc.vector_id IN ({','.join('?' for _ in filtered_vector_ids)})")
-            params.extend(filtered_vector_ids)
+            where_parts.append("vc.vector_id IN (SELECT value FROM json_each(?))")
+            params.append(json.dumps(filtered_vector_ids))
+        vector_columns = "dv.dimensions, dv.vector_f32" if with_embeddings else "0 AS dimensions, X'' AS vector_f32"
         sql = f"""SELECT vc.vector_id, vc.chunk_id, vc.email_uid, vc.embedding_space,
                          vc.kind, vc.document, vc.metadata_json,
-                         dv.dimensions, dv.vector_f32
+                         {vector_columns}
                     FROM vector_chunks AS vc
                     JOIN dense_vectors AS dv ON dv.vector_id = vc.vector_id
                    WHERE {" AND ".join(where_parts)}
@@ -738,7 +793,11 @@ class SQLiteVectorCollection:
             )
 
     def _index_state_matches_storage(self, path: Path, snapshot: _StorageSnapshot) -> bool:
-        """Verify index status, model generation, checksum, and item count against SQLite."""
+        """Verify index status, model generation, checksum, and item count against SQLite.
+
+        While journal operations are pending the live row count is expected to differ from the
+        published one, so only the published file's identity is checked.
+        """
         state = snapshot.index_state
         if state is None:
             return False
@@ -747,7 +806,7 @@ class SQLiteVectorCollection:
             return False
         if (model_id, model_revision) != (self.model_id, self.model_revision):
             return False
-        if item_count != snapshot.item_count:
+        if item_count != snapshot.item_count and not snapshot.has_pending_operations:
             return False
         return self._index_file_matches_checksum(path, file_sha256)
 
@@ -854,21 +913,29 @@ class SQLiteVectorCollection:
         )
         return int(row["sequence"]) if row else 0
 
-    def _save_index_atomically(self, index: Any) -> str:
-        """Fsync a temporary USearch file, atomically publish it, and return its checksum."""
+    def _stage_index_file(self, index: Any) -> tuple[Path, str]:
+        """Save and fsync a temporary USearch file and return it with its checksum."""
         self.vector_index_path.mkdir(parents=True, exist_ok=True)
         target = self._index_file
         temporary = target.with_name(f".{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
-        index.save(str(temporary))
-        with temporary.open("rb") as handle:
-            os.fsync(handle.fileno())
+        try:
+            index.save(str(temporary))
+            with temporary.open("rb") as handle:
+                os.fsync(handle.fileno())
+            return temporary, _sha256_file(temporary)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+
+    def _replace_index_file(self, temporary: Path) -> None:
+        """Atomically publish a staged USearch file so readers never see a half-written index."""
+        target = self._index_file
         os.replace(temporary, target)
         directory_fd = os.open(str(target.parent), os.O_RDONLY)
         try:
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
-        return _sha256_file(target)
 
     def _remove_index_file(self) -> None:
         """Delete the derived accelerator file without failing when it is absent."""
@@ -1135,12 +1202,9 @@ def _email_uid_from_chunk_id(chunk_id: str) -> str:
 
 
 def _sha256_file(path: Path) -> str:
-    """Hash a file incrementally in one-megabyte blocks."""
-    digest = hashlib.sha256()
+    """Hash a file incrementally without loading it into memory."""
     with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+        return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
 def _validated_query_vector(

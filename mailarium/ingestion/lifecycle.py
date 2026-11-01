@@ -131,6 +131,7 @@ def initialize_ingest_pipeline(runtime: IngestRuntime) -> None:
             batch_size=runtime.request.batch_size,
             ingestion_run_id=runtime.run_id,
         )
+        runtime.pipeline.committed_parsed = runtime.resume_skip
         runtime.pipeline.start()
     runtime.progress = runtime.dependencies.make_progress_bar(
         runtime.request.max_emails,
@@ -152,7 +153,9 @@ def checkpoint_ingest(runtime: IngestRuntime, *, status: str, stage: str, allow_
         run_id=runtime.run_id,
         olm_path=runtime.request.olm_path,
         last_batch_ordinal=runtime.batch_ordinal,
-        emails_parsed=runtime.counters.emails,
+        emails_parsed=(
+            runtime.pipeline.committed_parsed if runtime.pipeline else max(runtime.counters.emails, runtime.resume_skip)
+        ),
         emails_inserted=int(getattr(runtime.pipeline, "sqlite_inserted", 0) or 0),
         last_email_uid=runtime.last_uid,
         status=status,
@@ -176,7 +179,7 @@ def complete_ingest(runtime: IngestRuntime, stats: dict[str, Any]) -> None:
     runtime.dependencies.resolve_runtime_summary(runtime.settings)
 
 
-def fail_ingest(runtime: IngestRuntime, exc: Exception) -> None:
+def fail_ingest(runtime: IngestRuntime, exc: BaseException) -> None:
     """Close progress and propagate an ingest failure after recording elapsed time."""
     if runtime.pipeline:
         try:

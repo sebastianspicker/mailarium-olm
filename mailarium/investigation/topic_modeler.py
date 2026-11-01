@@ -3,54 +3,9 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
-
-_TOPIC_MODEL_CACHE_VERSION = 1
-_ALLOWED_CACHE_SUFFIXES = frozenset({".pkl", ".pickle"})
-
-
-def _trusted_model_codec() -> Any:
-    import joblib
-
-    return joblib
-
-
-def _validate_cache_version(data: dict[str, Any]) -> None:
-    """Reject topic-model caches written with an incompatible schema version."""
-    cached_version = data.get("_topic_model_cache_version", data.get("_pickle_cache_version", 0))
-    if cached_version != _TOPIC_MODEL_CACHE_VERSION:
-        raise ValueError(
-            f"Topic model cache version mismatch: "
-            f"expected {_TOPIC_MODEL_CACHE_VERSION}, got {cached_version}. "
-            f"Retrain the model with the current code version."
-        )
-
-
-def _validate_sklearn_version(saved_version: str) -> None:
-    """Reject major sklearn mismatches and warn about minor-version drift."""
-    try:
-        import sklearn
-    except ImportError:
-        logger.warning("scikit-learn not installed - cannot validate model version")
-        return
-
-    current_major = sklearn.__version__.split(".", maxsplit=1)[0]
-    saved_major = saved_version.split(".", maxsplit=1)[0] if saved_version != "unknown" else None
-    if saved_major and current_major != saved_major:
-        raise ValueError(
-            f"Topic model was saved with scikit-learn {saved_version} "
-            f"but current version is {sklearn.__version__}. "
-            f"Major version mismatch - please retrain the model."
-        )
-    if saved_version != "unknown" and saved_version != sklearn.__version__:
-        logger.warning(
-            "Topic model was saved with scikit-learn %s, current is %s. Minor version differences may cause subtle issues.",
-            saved_version,
-            sklearn.__version__,
-        )
 
 
 def _has_prediction_backend(modeler: TopicModeler) -> bool:
@@ -185,67 +140,3 @@ class TopicModeler:
         ]
         results.sort(key=lambda x: x[1], reverse=True)
         return results
-
-    def save(self, path: str) -> None:
-        """Save fitted model to disk.
-
-        Args:
-            path: File path to save the model.
-        """
-        if not self._is_fitted:
-            raise ValueError("Model must be fitted before saving")
-
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-
-        import sklearn
-
-        data = {
-            "vectorizer": self._vectorizer,
-            "nmf_model": self._nmf_model,
-            "feature_names": self._feature_names,
-            "n_topics": self.n_topics,
-            "max_features": self.max_features,
-            "ngram_range": self.ngram_range,
-            "sklearn_version": sklearn.__version__,
-            "_topic_model_cache_version": _TOPIC_MODEL_CACHE_VERSION,
-        }
-        _trusted_model_codec().dump(data, path)
-        logger.info("Topic model saved to %s", path)
-
-    @classmethod
-    def load(cls, path: str) -> TopicModeler:
-        """Load only trusted pickle cache suffixes, validate compatibility, and restore fitted model state.
-
-        Args:
-            path: File path to load the model from.
-
-        Returns:
-            Fitted TopicModeler instance.
-
-        Raises:
-            ValueError: If the saved model was built with a different major
-                version of scikit-learn (deserialization may produce wrong results).
-        """
-        p = Path(path)
-        if p.suffix not in _ALLOWED_CACHE_SUFFIXES:
-            raise ValueError(f"Topic model file must be .pkl or .pickle, got: {p.suffix!r}")
-        if not p.is_file():
-            raise FileNotFoundError(f"Topic model file not found: {path}")
-        logger.warning("Loading topic model from trusted cache %s. Only load controlled runtime cache files.", path)
-        data = _trusted_model_codec().load(path)
-
-        _validate_cache_version(data)
-
-        # Validate scikit-learn version compatibility
-        _validate_sklearn_version(data.get("sklearn_version", "unknown"))
-
-        instance = cls(
-            n_topics=data["n_topics"],
-            max_features=data["max_features"],
-            ngram_range=data["ngram_range"],
-        )
-        instance._vectorizer = data["vectorizer"]
-        instance._nmf_model = data["nmf_model"]
-        instance._feature_names = data["feature_names"]
-        instance._is_fitted = True
-        return instance

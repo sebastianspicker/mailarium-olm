@@ -10,31 +10,10 @@ from mailarium.model.data_shapes import as_dict
 from .lane_execution import _lane_runtime_results, _record_lane_match
 from .lanes import _lane_recovered_expansion_terms
 from .ranking import (
-    _build_evidence_bank,
-    _compute_support_type_counts,
-    _evidence_bank_keys_with_lane_diversity,
-    _evidence_bank_keys_with_support_diversity,
     _remember_best_result,
     _result_competition_key,
     _result_identity_key,
 )
-from .text import _nonblank_strings
-
-
-@dataclass(slots=True)
-class MultiLanePayloadInput:
-    """Collect merged lane results and selection limits for payload construction."""
-
-    ranked: list[tuple[str, Any]]
-    combined: dict[str, Any]
-    lane_hits: dict[str, list[str]]
-    lane_queries_by_key: dict[str, list[str]]
-    lane_diagnostics: list[dict[str, Any]]
-    bank_limit: int
-    reserve_per_lane: int
-    lane_search_top_k: int
-    reserved_keys: list[str]
-    merged: list[Any]
 
 
 @dataclass(slots=True)
@@ -410,94 +389,6 @@ def _annotate_merged_results(
         metadata["matched_query_queries"] = lane_queries_by_key.get(key, [])
 
 
-def _expansion_attribution_item(item: dict[str, Any]) -> dict[str, Any]:
-    """Extract expansion attribution fields from a lane diagnostics item.
-
-    Creates a compact dictionary with the most relevant expansion
-    attribution information.
-
-    Args:
-        item: A lane diagnostics dictionary.
-
-    Returns:
-        A dictionary with lane_id, query, new_key_count, expansion_terms,
-        recovered_expansion_terms, and recovered_expansion_key_count.
-    """
-    return {
-        "lane_id": str(item.get("lane_id") or ""),
-        "query": str(item.get("query") or ""),
-        "new_key_count": int(item.get("new_key_count") or 0),
-        "expansion_terms": _nonblank_strings(item.get("expansion_terms")),
-        "recovered_expansion_terms": _nonblank_strings(item.get("recovered_expansion_terms")),
-        "recovered_expansion_key_count": int(item.get("recovered_expansion_key_count") or 0),
-    }
-
-
-def _expansion_attribution(lane_diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Extract expansion attribution from all lane diagnostics.
-
-    Converts each lane diagnostics item to an expansion attribution item.
-
-    Args:
-        lane_diagnostics: List of lane diagnostics dictionaries.
-
-    Returns:
-        List of expansion attribution dictionaries.
-    """
-    return [_expansion_attribution_item(item) for item in lane_diagnostics if isinstance(item, dict)]
-
-
-def _multi_lane_payload(context: MultiLanePayloadInput) -> dict[str, Any]:
-    """Build the multi-lane payload from collected results.
-
-    Constructs the evidence bank, computes support diversity metrics,
-    and assembles the final payload with all diagnostic information.
-
-    Args:
-        context: Input containing all collected lane results and parameters.
-
-    Returns:
-        A dictionary with candidate pool stats, selected results, lane
-        parameters, support diversity info, expansion attribution, evidence
-        bank, and evidence results.
-    """
-    bank_keys = _evidence_bank_keys_with_lane_diversity(
-        ranked=context.ranked,
-        lane_hits=context.lane_hits,
-        bank_limit=context.bank_limit,
-        reserve_per_lane=context.reserve_per_lane,
-    )
-    bank_keys = _evidence_bank_keys_with_support_diversity(
-        ranked=context.ranked,
-        selected_keys=bank_keys,
-        bank_limit=context.bank_limit,
-    )
-    support_type_counts = _compute_support_type_counts(
-        bank_keys=bank_keys,
-        combined=context.combined,
-    )
-    return {
-        "candidate_pool_count": len(context.ranked),
-        "selected_result_count": len(context.merged),
-        "lane_top_k": context.lane_search_top_k,
-        "merge_budget": context.bank_limit,
-        "reserved_per_lane": context.reserve_per_lane,
-        "reserved_key_count": len(context.reserved_keys),
-        "support_diversity": {
-            "selected_support_types": sorted(support_type_counts.keys()),
-            "counts_by_support_type": support_type_counts,
-        },
-        "expansion_attribution": _expansion_attribution(context.lane_diagnostics),
-        "evidence_bank": _build_evidence_bank(
-            bank_keys=bank_keys,
-            combined=context.combined,
-            lane_hits=context.lane_hits,
-            lane_queries_by_key=context.lane_queries_by_key,
-        ),
-        "evidence_results": [context.combined[key] for key in bank_keys],
-    }
-
-
 def _search_multi_lane(
     *,
     retriever: Any,
@@ -513,7 +404,7 @@ def _search_multi_lane(
 
     Orchestrates the complete multi-lane search process: collects results
     from all lanes, ranks them, selects the top k, annotates with lane info,
-    and builds the payload.
+    and returns an empty retrieval payload.
 
     Args:
         retriever: The retriever instance to use for search.
@@ -526,7 +417,7 @@ def _search_multi_lane(
         reserve_per_lane: Maximum number of keys to reserve per lane.
 
     Returns:
-        A tuple of (merged_results, lane_diagnostics, multi_lane_payload).
+        A tuple of (merged_results, lane_diagnostics, empty payload).
     """
     exact_wording = bool(search_kwargs.get("_exact_wording_requested"))
     combined, lane_hits, lane_queries_by_key, reserved_keys, lane_diagnostics = _collect_lane_results(
@@ -545,21 +436,4 @@ def _search_multi_lane(
     merged_keys = _select_merged_keys(combined=combined, ranked=ranked, reserved_keys=reserved_keys, top_k=top_k)
     merged = [combined[key] for key in merged_keys[:top_k]]
     _annotate_merged_results(merged=merged, lane_hits=lane_hits, lane_queries_by_key=lane_queries_by_key)
-    return (
-        merged,
-        lane_diagnostics,
-        _multi_lane_payload(
-            MultiLanePayloadInput(
-                ranked=ranked,
-                combined=combined,
-                lane_hits=lane_hits,
-                lane_queries_by_key=lane_queries_by_key,
-                lane_diagnostics=lane_diagnostics,
-                bank_limit=bank_limit,
-                reserve_per_lane=reserve_per_lane,
-                lane_search_top_k=lane_search_top_k,
-                reserved_keys=reserved_keys,
-                merged=merged,
-            )
-        ),
-    )
+    return merged, lane_diagnostics, {}

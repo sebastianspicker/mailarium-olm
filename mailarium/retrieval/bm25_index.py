@@ -5,24 +5,11 @@ from __future__ import annotations
 import logging
 import math
 import re
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    pass
+from .query_planning import _ASCII_FALLBACK_MAP
 
 logger = logging.getLogger(__name__)
-
-_ASCII_FALLBACK_MAP = str.maketrans(
-    {
-        "ä": "ae",
-        "ö": "oe",
-        "ü": "ue",
-        "ß": "ss",
-        "Ä": "Ae",
-        "Ö": "Oe",
-        "Ü": "Ue",
-    }
-)
 
 _GERMAN_COMPOUND_MAP: dict[str, tuple[str, ...]] = {
     "stufenvorweggewährung": ("stufen", "vorweg", "gewaehrung"),

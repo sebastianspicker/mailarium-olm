@@ -305,8 +305,5 @@ def _artifact_checksums(output_dir: Path) -> dict[str, str]:
 
 def _sha256(path: Path) -> str:
     """Stream a file into a SHA-256 digest without loading it wholly into memory."""
-    digest = hashlib.sha256()
     with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+        return hashlib.file_digest(handle, "sha256").hexdigest()

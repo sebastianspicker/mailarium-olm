@@ -63,11 +63,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - exercised in interprete
 
 from mailarium.interfaces.mcp.instance_lock import acquire_instance_lock, release_instance_lock
 from mailarium.interfaces.mcp.runtime_state import McpRuntimeState
-from mailarium.platform.sanitization import (
-    apply_privacy_guardrails,
-    privacy_mode_policy,
-    sanitize_untrusted_text,
-)
+from mailarium.platform.sanitization import sanitize_untrusted_text
 from mailarium.platform.settings import clear_settings_cache, get_settings
 
 logger = logging.getLogger(__name__)
@@ -227,8 +223,6 @@ class ToolDeps:
     remote_execute_annotations = staticmethod(_remote_execute_annotations)
     DB_UNAVAILABLE = _DB_UNAVAILABLE
     sanitize = staticmethod(_sanitize_tool_text)
-    apply_privacy_guardrails = staticmethod(apply_privacy_guardrails)
-    privacy_mode_policy = staticmethod(privacy_mode_policy)
 
 
 def create_mcp_server(state: McpRuntimeState) -> Any:

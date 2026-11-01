@@ -8,7 +8,7 @@ import logging
 import sys
 from typing import TYPE_CHECKING, Any, Literal
 
-from mailarium.interfaces.cli.console import print_rich_or_plain
+from mailarium.interfaces.cli.console import print_rich_or_plain, rich_text
 from mailarium.interfaces.presentation import serialize_results
 from mailarium.platform.sanitization import sanitize_untrusted_text
 
@@ -126,7 +126,7 @@ def render_rich(console, query: str, results) -> None:
     avg = sum(scores) / len(scores) if scores else 0.0
     console.print(
         Panel(
-            f'[bold]{len(results)}[/] results for [cyan]"{query}"[/]  |  '
+            f'[bold]{len(results)}[/] results for [cyan]"{rich_text(query)}"[/]  |  '
             f"Best: [green]{max(scores):.0%}[/]  Avg: {avg:.0%}  Lowest: {min(scores):.0%}",
             title="[bold]Search Results[/]",
             border_style="blue",
@@ -161,10 +161,10 @@ def _rich_result_row(index: int, result: Any, text_cls: Any) -> tuple[Any, ...]:
     return (
         str(index),
         text_cls(f"{score:.0%}", style=score_style),
-        sanitize_untrusted_text(str(metadata.get("date", "?"))[:10]),
-        sanitize_untrusted_text(str(metadata.get("sender_name") or metadata.get("sender_email", "?"))),
-        sanitize_untrusted_text(str(metadata.get("subject", "(no subject)"))),
-        sanitize_untrusted_text(str(metadata.get("folder", ""))),
+        rich_text(str(metadata.get("date", "?"))[:10]),
+        rich_text(str(metadata.get("sender_name") or metadata.get("sender_email", "?"))),
+        rich_text(str(metadata.get("subject", "(no subject)"))),
+        rich_text(str(metadata.get("folder", ""))),
     )
 
 
@@ -174,15 +174,15 @@ def _render_rich_detail_panels(console: Any, results: list[Any], panel_cls: Any)
         metadata = result.metadata
         score_val = float(result.score)
         score_style = "green" if score_val >= 0.75 else ("yellow" if score_val >= 0.45 else "red")
-        subject = sanitize_untrusted_text(str(metadata.get("subject", "(no subject)")))
-        sender = sanitize_untrusted_text(str(metadata.get("sender_name") or metadata.get("sender_email", "?")))
-        date_val = sanitize_untrusted_text(str(metadata.get("date", "?"))[:10])
-        uid_short = str(metadata.get("uid", ""))[:12]
+        subject = rich_text(str(metadata.get("subject", "(no subject)")))
+        sender = rich_text(str(metadata.get("sender_name") or metadata.get("sender_email", "?")))
+        date_val = rich_text(str(metadata.get("date", "?"))[:10])
+        uid_short = rich_text(str(metadata.get("uid", ""))[:12])
         email_type = metadata.get("email_type", "")
-        type_label = f"  [dim]\\[{email_type}][/]" if email_type and email_type != "original" else ""
+        type_label = f"  [dim]\\[{rich_text(email_type)}][/]" if email_type and email_type != "original" else ""
 
         body = sanitize_untrusted_text(str(result.text or ""))
-        preview = body[:800] + "..." if len(body) > 800 else body
+        preview = rich_text(body[:800] + "..." if len(body) > 800 else body)
         console.print(
             panel_cls(
                 preview,

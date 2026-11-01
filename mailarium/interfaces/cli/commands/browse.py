@@ -6,6 +6,7 @@ import argparse
 import sys
 from typing import TYPE_CHECKING
 
+from mailarium.interfaces.cli.console import rich_text
 from mailarium.platform.sanitization import sanitize_untrusted_text
 
 if TYPE_CHECKING:
@@ -71,10 +72,10 @@ def browse(
         table.add_column("UID", width=14, style="dim")
 
         for i, email in enumerate(emails, start=offset + 1):
-            subject = sanitize_untrusted_text(str(email.get("subject", "(no subject)")))
-            sender_val = sanitize_untrusted_text(str(email.get("sender_email", "?")))
-            date_val = str(email.get("date", "?"))[:10]
-            uid = email.get("uid", "?")[:12]
+            subject = rich_text(email.get("subject", "(no subject)"))
+            sender_val = rich_text(email.get("sender_email", "?"))
+            date_val = rich_text(str(email.get("date", "?"))[:10])
+            uid = rich_text(email.get("uid", "?")[:12])
             table.add_row(str(i), date_val, sender_val, subject, uid)
 
         console.print(table)

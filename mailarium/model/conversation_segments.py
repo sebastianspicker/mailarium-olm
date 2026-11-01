@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from lxml import html as lxml_html
 
-from .body_boundaries import strip_signature
+from .body_boundaries import _line_spans, strip_signature
 from .email_quote_parsing import (
     FORWARD_SEPARATOR_LABELS as _FORWARD_SEPARATOR_LABELS,
 )
@@ -49,15 +49,6 @@ _HEADER_LABELS = frozenset(
 )
 
 
-def _line_spans(text: str):
-    """Yield source lines together with absolute character offsets."""
-    offset = 0
-    for line in text.splitlines(keepends=True):
-        content = line.rstrip("\r\n")
-        yield offset, offset + len(content), content
-        offset += len(line)
-
-
 def _find_forward_separator(text: str) -> tuple[int, int, str] | None:
     """Locate the first localized forwarded-message separator and its offsets."""
     for start, end, line in _line_spans(text):
@@ -68,8 +59,10 @@ def _find_forward_separator(text: str) -> tuple[int, int, str] | None:
 
 def _find_wrote_line(text: str) -> tuple[int, int, str] | None:
     """Locate the first localized reply-attribution line and its offsets."""
-    for start, end, line in _line_spans(text):
-        if _is_wrote_line_value(line, markers=_WROTE_MARKERS):
+    spans = list(_line_spans(text))
+    for index, (start, end, line) in enumerate(spans):
+        next_line = spans[index + 1][2] if index + 1 < len(spans) else ""
+        if _is_wrote_line_value(line, markers=_WROTE_MARKERS, next_line=next_line):
             return start, end, line
     return None
 

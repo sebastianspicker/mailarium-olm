@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -99,3 +99,4 @@ class IngestRuntime:
     queue_seconds: float = 0.0
     batch_ordinal: int = 0
     last_uid: str = ""
+    parse_report: dict[str, Any] = field(default_factory=dict)

@@ -38,8 +38,40 @@ and this project follows semantic versioning principles for public interfaces.
 
 - The publication privacy scanner is release tooling under
   `scripts/release/privacy/` and is no longer included in the wheel.
+- Removed unused code: the never-returned answer-context evidence bank, topic
+  model save/load (pickle), and superseded HTML regexes. The unused coverage
+  floor script `scripts/check_critical_coverage.py` is gone; `verify.py pr`
+  runs a local `tests/` suite when one is present.
 
 ### Fixed
+
+- `--reset-index` deletes only derived `*.usearch` index files and validates
+  both paths first. A vector path that pointed at a data root could previously
+  delete the archive and the original `.olm`.
+- `--resume` resumes from the last committed batch instead of the last queued
+  one, so a crash or Ctrl-C no longer skips unsaved messages.
+- A failed ingest batch no longer deletes vectors of messages stored earlier.
+- Searches during an ingest no longer rebuild the vector index or hold the
+  SQLite write lock; they search the last published index plus not-yet-published
+  rows. Paged vector reads load one page instead of the whole table, and large
+  filtered searches no longer fail with "too many SQL variables".
+- Body cleaning keeps text after an early "Thanks" or a `--` divider, keeps
+  replies containing "… wrote …" mid-sentence, and keeps small-print text
+  (`font-size:0.9em`, `opacity:0.7`). Existing archives keep the old cleaned
+  text until `mailarium-ingest <olm> --reingest-bodies --force` and `--reembed`.
+- Dossier and evidence-report appendices no longer strip `<addresses>` and
+  `<`/`>` comparisons from plain-text bodies.
+- Time charts and reports count dates in every ISO form.
+- CLI output escapes Rich markup in email text, so `[/quote]` and similar no
+  longer crash `search`, `browse`, `analytics` or `evidence`.
+- MCP `email_admin` validates `olm_path` like `email_ingest`; MCP ingest and
+  admin actions use the server's `--sqlite-path`/`--vector-index-path`.
+- Date filters normalise compact forms such as `20240101` to `2024-01-01`.
+- A broken PDF or Office attachment no longer aborts an ingest.
+- Ingest no longer keeps raw attachment bytes for queued batches.
+- Hitting `OLM_MAX_XML_FILES` or the new `OLM_MAX_TOTAL_XML_BYTES` is reported
+  as an incomplete ingest (exit code 1) instead of passing silently.
+- `scripts/ops/clean_workspace.sh` no longer deletes files under `private/`.
 
 - Updated the locked dependency graph and security floors for the November
   dependency alerts, including Pillow 13 and its compatible Streamlit release.

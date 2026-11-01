@@ -6,7 +6,7 @@ import copy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .limits import DEDUP_OVERFETCH, FILTER_OVERFETCH, MAX_TOP_K, RERANK_OVERFETCH
+from .limits import DEDUP_OVERFETCH, FILTER_OVERFETCH, MAX_FETCH_SIZE, MAX_TOP_K, RERANK_OVERFETCH
 from .models import SearchPlan, SearchResponse
 from .result_filters import SearchFilters, _deduplicate_by_email, _normalize_filter
 from .retrieval_policy import RetrievalPolicy, apply_scope_context, resolve_retrieval_policy
@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .semantic_search import SemanticSearch
     from .visibility import ResultVisibility
 
-_MAX_FETCH_SIZE = 10_000
 _MAX_FETCH_ATTEMPTS = 6
 
 
@@ -214,9 +213,9 @@ class FilteredSearch:
             deduped = self._post_process_candidates(plan, filters, raw_candidates)
             if len(deduped) >= plan.top_k:
                 return deduped[: plan.top_k]
-            if raw_count < fetch_size or fetch_size >= _MAX_FETCH_SIZE:
+            if raw_count < fetch_size or fetch_size >= MAX_FETCH_SIZE:
                 return deduped[: plan.top_k]
-            fetch_size = min(fetch_size * 2, _MAX_FETCH_SIZE)
+            fetch_size = min(fetch_size * 2, MAX_FETCH_SIZE)
         return deduped[: plan.top_k]
 
     def _collect_candidates(

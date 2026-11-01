@@ -43,6 +43,7 @@ def _process_ingest_email(runtime: IngestRuntime, email: Any) -> None:
     email._ingest_image_chunk_count = image_count
     email._ingest_attachment_requested = runtime.request.extract_attachments
     email._ingest_image_requested = runtime.request.embed_images
+    email.attachment_contents = []  # raw bytes are not needed downstream; do not hold them in queued batches
 
 
 def _skip_ingest_email(runtime: IngestRuntime, email: Any) -> bool:
@@ -63,7 +64,11 @@ def _submit_ingest_batch(runtime: IngestRuntime, *, stage: str) -> None:
     if not runtime.pipeline or not (runtime.pending_chunks or runtime.pending_emails):
         return
     started = time.monotonic()
-    runtime.pipeline.submit(runtime.pending_chunks, runtime.pending_emails)
+    runtime.pipeline.submit(
+        runtime.pending_chunks,
+        runtime.pending_emails,
+        parsed_through=runtime.counters.emails,
+    )
     runtime.queue_seconds += time.monotonic() - started
     runtime.pending_chunks = []
     runtime.pending_emails = []
@@ -85,6 +90,7 @@ def _run_ingest_parser(runtime: IngestRuntime) -> None:
         runtime.dependencies.parse_olm(
             runtime.request.olm_path,
             extract_attachments=runtime.request.extract_attachments,
+            report=runtime.parse_report,
         )
     )
     while True:
@@ -154,6 +160,8 @@ def _ingest_result(runtime: IngestRuntime) -> dict[str, Any]:
     chunks_added = pipeline.chunks_added if pipeline else 0
     return {
         "emails_parsed": counters.emails,
+        "truncated": runtime.parse_report.get("truncated", ""),
+        "skipped_members": runtime.parse_report.get("skipped_members", 0),
         "chunks_created": counters.chunks,
         "attachment_chunks": counters.attachment_chunks,
         "image_embeddings": counters.image_embeddings,
@@ -218,7 +226,7 @@ def ingest(
         stats = _ingest_result(runtime)
         complete_ingest(runtime, stats)
         return stats
-    except Exception as exc:
+    except (Exception, KeyboardInterrupt) as exc:
         fail_ingest(runtime, exc)
         raise
     finally:

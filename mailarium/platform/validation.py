@@ -14,8 +14,7 @@ _WHITESPACE = re.compile(r"\s+")
 
 def parse_iso_date(value: str) -> str:
     """Validate and return a YYYY-MM-DD date string."""
-    date.fromisoformat(value)
-    return value
+    return date.fromisoformat(value).isoformat()
 
 
 def normalize_optional_iso_date(value: str | None) -> str | None:

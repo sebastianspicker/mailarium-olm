@@ -211,11 +211,12 @@ async def _ingest(deps: ToolDepsProto, params: EmailIngestInput) -> str:
     def _run() -> str:
         from mailarium.ingestion import ingest_archive
 
+        active_vector, active_sqlite = deps.resolved_runtime_paths()
         try:
             stats = ingest_archive(
                 olm_path=params.olm_path,
-                vector_index_path=params.vector_index_path,
-                sqlite_path=params.sqlite_path,
+                vector_index_path=params.vector_index_path or active_vector,
+                sqlite_path=params.sqlite_path or active_sqlite,
                 batch_size=params.batch_size,
                 max_emails=params.max_emails,
                 dry_run=params.dry_run,

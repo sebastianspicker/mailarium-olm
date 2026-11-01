@@ -74,12 +74,6 @@ class McpRuntimeState:
         """Return the active generation's proposal-gated mailbox service."""
         return self.get_application_runtime().mailbox_service()
 
-    @property
-    def in_flight_leases(self) -> int:
-        """Expose the current lease count for lifecycle diagnostics and tests."""
-        with self._condition:
-            return self._in_flight_leases
-
     @contextmanager
     def lease(self) -> Generator:
         """Keep the active generation open for one blocking operation."""
@@ -109,27 +103,6 @@ class McpRuntimeState:
                 return fn(*args, **kwargs)
 
         return await asyncio.to_thread(_run)
-
-    def set_archive_paths(
-        self,
-        *,
-        vector_index_path: str | None = None,
-        sqlite_path: str | None = None,
-    ) -> bool:
-        """Set validated overrides and replace the runtime after leases drain."""
-        vector_override = self._validated_override(vector_index_path, field_name="vector_index_path")
-        sqlite_override = self._validated_override(sqlite_path, field_name="sqlite_path")
-        with self._condition:
-            self._ensure_open()
-            next_vector = self._vector_index_path if vector_index_path is None else vector_override
-            next_sqlite = self._sqlite_path if sqlite_path is None else sqlite_override
-            if next_vector == self._vector_index_path and next_sqlite == self._sqlite_path:
-                return False
-            runtime = self._detach_runtime_after_leases_locked()
-            self._vector_index_path = next_vector
-            self._sqlite_path = next_sqlite
-        self._close_runtime(runtime)
-        return True
 
     def reset_runtime_clients(self) -> None:
         """Discard the active runtime only after all offloaded calls complete."""

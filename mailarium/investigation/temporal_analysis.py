@@ -107,7 +107,7 @@ class TemporalAnalyzer:
         """Parse timestamps as UTC, convert to the display timezone, and drop invalid values."""
         import pandas as pd
 
-        dt_series = pd.to_datetime(dates, errors="coerce", utc=True).dropna()
+        dt_series = pd.to_datetime(dates, errors="coerce", utc=True, format="ISO8601").dropna()
         if dt_series.empty:
             return dt_series
         localized = dt_series.tz_convert(self._display_timezone)

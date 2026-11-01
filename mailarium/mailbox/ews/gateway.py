@@ -150,26 +150,6 @@ class EWSGateway:
         with self.transport.session():
             yield self
 
-    def find_items(self, folder_id: str, *, page: IndexedPage | None = None) -> tuple[EWSItem, ...]:
-        """List shallow message summaries from one bounded EWS folder page."""
-        page = page or IndexedPage()
-        body = (
-            '<m:FindItem Traversal="Shallow"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape>'
-            '<t:AdditionalProperties><t:FieldURI FieldURI="item:Subject"/>'
-            '<t:FieldURI FieldURI="message:From"/></t:AdditionalProperties></m:ItemShape>'
-            f'<m:IndexedPageItemView MaxEntriesReturned="{page.size}" Offset="{page.offset}" BasePoint="Beginning"/>'
-            f"<m:ParentFolderIds>{self._folder_ref(folder_id, 'folder_id')}"
-            "</m:ParentFolderIds></m:FindItem>"
-        )
-        root = self._execute("FindItem", body)
-        items: list[EWSItem] = []
-        for node in root.findall(".//t:Message", _NS):
-            identifier = node.find("t:ItemId", _NS)
-            if identifier is None or not identifier.get("Id"):
-                continue
-            items.append(_parse_item(node))
-        return tuple(items)
-
     def find_items_by_proposal_id(self, folder_id: str, proposal_id: str) -> tuple[EWSItemRef, ...]:
         """Find draft/sent items carrying the durable proposal correlation value."""
         body = (

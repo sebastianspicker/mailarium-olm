@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -14,8 +13,8 @@ from .base import (
     MessageSearchFilterInput,
     PlainInput,
     StrictInput,
+    _validate_olm_path,
     _validate_output_path,
-    _validate_readable_file_path,
     _validate_runtime_path,
 )
 
@@ -264,11 +263,9 @@ class EmailIngestInput(StrictInput):
     @classmethod
     def validate_olm_path(cls, value: str) -> str:
         """Require a readable local file whose extension identifies an OLM archive."""
-        validated = _validate_readable_file_path(value, field_name="olm_path")
+        validated = _validate_olm_path(value)
         if validated is None:
             raise ValueError("olm_path is required")
-        if Path(validated).suffix.lower() != ".olm":
-            raise ValueError("olm_path must point to a .olm archive")
         return validated
 
     @field_validator("vector_index_path")

@@ -82,7 +82,7 @@ async def email_reingest_bodies(deps: ToolDepsProto, olm_path: str, force: bool 
         from mailarium.ingestion import reingest_bodies
 
         try:
-            result = reingest_bodies(olm_path, force=force)
+            result = reingest_bodies(olm_path, sqlite_path=deps.resolved_runtime_paths()[1], force=force)
             invalidate_mcp_singletons(deps)
             return json_response(result)
         except FileNotFoundError:
@@ -100,7 +100,8 @@ async def email_reembed(deps: ToolDepsProto, batch_size: int = 100) -> str:
         from mailarium.ingestion import reembed
 
         try:
-            result = reembed(batch_size=batch_size)
+            vector_index_path, sqlite_path = deps.resolved_runtime_paths()
+            result = reembed(vector_index_path=vector_index_path, sqlite_path=sqlite_path, batch_size=batch_size)
             invalidate_mcp_singletons(deps)
             return json_response(result)
         except Exception as exc:
@@ -116,7 +117,7 @@ async def email_reingest_metadata(deps: ToolDepsProto, olm_path: str) -> str:
         from mailarium.ingestion import reingest_metadata_archive
 
         try:
-            result = reingest_metadata_archive(olm_path)
+            result = reingest_metadata_archive(olm_path, sqlite_path=deps.resolved_runtime_paths()[1])
             invalidate_mcp_singletons(deps)
             return json_response(result)
         except FileNotFoundError:
@@ -134,7 +135,7 @@ async def email_reingest_analytics(deps: ToolDepsProto) -> str:
         from mailarium.ingestion import reingest_analytics
 
         try:
-            result = reingest_analytics()
+            result = reingest_analytics(sqlite_path=deps.resolved_runtime_paths()[1])
             invalidate_mcp_singletons(deps)
             return json_response(result)
         except Exception as exc:

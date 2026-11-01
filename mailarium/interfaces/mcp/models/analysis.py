@@ -10,6 +10,7 @@ from .base import (
     DateRangeInput,
     PlainInput,
     StrictInput,
+    _validate_olm_path,
     _validate_output_path,
 )
 
@@ -427,6 +428,13 @@ class EmailAdminInput(StrictInput):
         description="Path to .olm file (required for reingest_bodies and reingest_metadata).",
         min_length=1,
     )
+
+    @field_validator("olm_path")
+    @classmethod
+    def validate_olm_path(cls, value: str | None) -> str | None:
+        """Require a readable local .olm file when a path is given."""
+        return _validate_olm_path(value)
+
     force: bool = Field(
         default=False,
         description="Force re-parse all emails (for reingest_bodies only).",

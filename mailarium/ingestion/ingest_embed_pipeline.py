@@ -199,6 +199,7 @@ class _EmbedPipeline:
         self._cooldown = float(os.environ.get("INGEST_BATCH_COOLDOWN", "0"))
         self._wal_checkpoint_interval = int(os.environ.get("INGEST_WAL_CHECKPOINT_INTERVAL", "10"))
 
+        self.committed_parsed = 0
         self.chunks_added = 0
         self.sqlite_inserted = 0
         self.batches_written = 0
@@ -213,13 +214,13 @@ class _EmbedPipeline:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def submit(self, chunks: list[EmailChunk], emails: list[ParsedMessage]) -> None:
+    def submit(self, chunks: list[EmailChunk], emails: list[ParsedMessage], parsed_through: int | None = None) -> None:
         """Enqueue a batch for the consumer. Blocks if queue is full."""
         if not chunks and not emails:
             return
         if self._error is not None:
             raise self._error
-        self._queue.put((chunks, emails))
+        self._queue.put((chunks, emails, parsed_through))
 
     def finish(self) -> None:
         """Signal end-of-input and wait for consumer to drain."""
@@ -250,8 +251,10 @@ class _EmbedPipeline:
                     item = self._queue.get()
                     if item is _SENTINEL:
                         break
-                    chunks, emails = item
+                    chunks, emails, parsed_through = item
                     self._process_batch(chunks, emails)
+                    if parsed_through is not None:
+                        self.committed_parsed = parsed_through
         except BaseException as exc:
             self._error = exc
             self._discard_queued_batches_after_consumer_error()
@@ -327,7 +330,8 @@ class _EmbedPipeline:
             state = _BatchState(
                 ingest_rows=_ingest_state_rows(emails),
                 new_chunks=list(chunks),
-                batch_chunk_ids=[_chunk_id(chunk) for chunk in chunks if _chunk_id(chunk)],
+                # With a database, ids are set once new chunks are known so an early failure cannot delete stored vectors.
+                batch_chunk_ids=[] if self._email_db is not None else [_chunk_id(chunk) for chunk in chunks if _chunk_id(chunk)],
             )
             try:
                 new_emails, dt_sqlite = self._persist_relational_batch(chunks, emails, state)

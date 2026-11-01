@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from html import escape
 from typing import Any
 
+from mailarium.platform.sanitization import csv_safe_cell
+
 
 def build_active_filter_labels(filters: Mapping[str, Any]) -> list[str]:
     """Convert active search filters into concise human-readable labels."""
@@ -89,16 +91,6 @@ def build_export_payload(
     }
 
 
-_CSV_FORMULA_CHARS = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _csv_safe_cell(value: str) -> str:
-    """Make a cell value safe for CSV export by prefixing with quote if it starts with formula characters."""
-    if value and value[0] in _CSV_FORMULA_CHARS:
-        return f"'{value}"
-    return value
-
-
 def build_csv_export(results: list[Any]) -> str:
     """Serialize result summaries to formula-safe CSV text."""
     output = io.StringIO()
@@ -111,11 +103,11 @@ def build_csv_export(results: list[Any]) -> str:
         writer.writerow(
             {
                 "date": str(meta.get("date", ""))[:10],
-                "sender": _csv_safe_cell(meta.get("sender_name") or meta.get("sender_email", "")),
-                "subject": _csv_safe_cell(meta.get("subject", "")),
-                "folder": _csv_safe_cell(meta.get("folder", "")),
+                "sender": csv_safe_cell(meta.get("sender_name") or meta.get("sender_email", "")),
+                "subject": csv_safe_cell(meta.get("subject", "")),
+                "folder": csv_safe_cell(meta.get("folder", "")),
                 "score": f"{result.score:.2f}",
-                "text_preview": _csv_safe_cell(text[:300]),
+                "text_preview": csv_safe_cell(text[:300]),
             }
         )
     return output.getvalue()

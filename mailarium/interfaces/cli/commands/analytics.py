@@ -7,6 +7,7 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
+from mailarium.interfaces.cli.console import rich_text
 from mailarium.platform.sanitization import sanitize_untrusted_text
 
 if TYPE_CHECKING:
@@ -66,8 +67,8 @@ def print_sender_lines(senders: list[dict[str, Any]]) -> None:
         table.add_column("Email", style="dim")
 
         for i, sender in enumerate(senders, 1):
-            safe_name = sanitize_untrusted_text(str(sender["name"] or "(unknown)"))
-            safe_email = sanitize_untrusted_text(str(sender["email"]))
+            safe_name = rich_text(sender["name"] or "(unknown)")
+            safe_email = rich_text(sender["email"])
             table.add_row(str(i), f"{sender['count']:,}", safe_name, safe_email)
         console.print(table)
     except ImportError:
@@ -94,7 +95,7 @@ def run_top_contacts(db: ArchiveDatabase, email_address: str) -> None:
         from rich.table import Table
 
         console = Console()
-        table = Table(title=f"[bold]Top Contacts for {email_address}[/]", border_style="dim")
+        table = Table(title=f"[bold]Top Contacts for {rich_text(email_address)}[/]", border_style="dim")
         table.add_column("#", style="dim", width=3, justify="right")
         table.add_column("Emails", width=8, justify="right", style="cyan bold")
         table.add_column("Contact", min_width=30)
@@ -103,7 +104,7 @@ def run_top_contacts(db: ArchiveDatabase, email_address: str) -> None:
         for i, contact in enumerate(contacts, 1):
             bar_len = int((contact["total"] / max_count) * 20) if max_count else 0
             volume_bar = "\u2588" * bar_len
-            table.add_row(str(i), f"{contact['total']:,}", f"{contact['partner']}  [dim]{volume_bar}[/]")
+            table.add_row(str(i), f"{contact['total']:,}", f"{rich_text(contact['partner'])}  [dim]{volume_bar}[/]")
         console.print(table)
     except ImportError:
         print(f"\nTop contacts for {email_address}:\n")
@@ -176,7 +177,7 @@ def run_entities(db: ArchiveDatabase, entity_type: str | None) -> None:
         from rich.table import Table
 
         console = Console()
-        table = Table(title=f"[bold]Top Entities ({label})[/]", border_style="dim")
+        table = Table(title=f"[bold]Top Entities ({rich_text(label)})[/]", border_style="dim")
         table.add_column("#", style="dim", width=3, justify="right")
         table.add_column("Mentions", width=9, justify="right", style="cyan bold")
         table.add_column("Type", width=14)
@@ -191,13 +192,13 @@ def run_entities(db: ArchiveDatabase, entity_type: str | None) -> None:
             "event": "red",
         }
         for i, ent in enumerate(entities, 1):
-            etype = ent["entity_type"]
+            etype = rich_text(ent["entity_type"])
             style = type_styles.get(etype, "")
             table.add_row(
                 str(i),
                 f"{ent['total_mentions']:,}",
                 f"[{style}]{etype}[/{style}]" if style else etype,
-                ent["entity_text"],
+                rich_text(ent["entity_text"]),
             )
         console.print(table)
     except ImportError:
@@ -331,7 +332,7 @@ def run_response_times(db: ArchiveDatabase) -> None:
                 str(i),
                 f"[{time_style}]{time_str}[/{time_style}]",
                 f"{row['response_count']:,}",
-                row["replier"],
+                rich_text(row["replier"]),
             )
         console.print(table)
         console.print("[dim]Based on up to the 500 most recent canonical reply pairs.[/]")
@@ -361,7 +362,7 @@ def run_suggest(db: ArchiveDatabase) -> None:
         from rich.panel import Panel
 
         console = Console()
-        lines = [f"  [cyan]\u2022[/] {s}" for s in suggestions]
+        lines = [f"  [cyan]\u2022[/] {rich_text(s)}" for s in suggestions]
         console.print(
             Panel(
                 "\n".join(lines),

@@ -23,3 +23,12 @@ def print_rich_or_plain(rich: Callable[[Any], Any], plain: Callable[[], Any]) ->
         rich(console)
     except ImportError:
         plain()
+
+
+def rich_text(value: object) -> str:
+    """Sanitize untrusted text and escape Rich markup so brackets render literally."""
+    from rich.markup import escape
+
+    from mailarium.platform.sanitization import sanitize_untrusted_text
+
+    return escape(sanitize_untrusted_text(str(value)))

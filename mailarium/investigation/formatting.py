@@ -8,6 +8,7 @@ from datetime import datetime
 from html import unescape
 from typing import Any
 
+from mailarium.model.html_text import looks_like_html
 from mailarium.platform.repo_paths import PathPolicyError, validate_new_output_path
 
 
@@ -117,6 +118,8 @@ def strip_html_tags(text: str | None) -> str:
     """
     if not text:
         return ""
+    if not looks_like_html(text):
+        return text
     # Quick check: if there are no HTML tags or entities, return as-is
     if "<" not in text and "&" not in text:
         return text

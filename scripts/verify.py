@@ -38,11 +38,20 @@ def _run_fast() -> None:
     _run_static_checks()
 
 
+def _run_private_tests(env: dict[str, str]) -> None:
+    """Run the private regression suite when this checkout has one; the public repository ships without tests/."""
+    if not (ROOT / "tests").is_dir():
+        print("\n==> Private tests: tests/ not present; skipped", flush=True)
+        return
+    _run("Private tests", [sys.executable, "-m", "pytest", "-q", "tests", "-p", "no:cacheprovider"], env=env)
+
+
 def _run_pull_request() -> None:
     """Run pull-request checks, including offline and security-sensitive lanes."""
     _run_static_checks()
     _run("Type check", [sys.executable, "-m", "mypy", "mailarium"])
     ingest_env = os.environ | OFFLINE_INGEST_ENV
+    _run_private_tests(ingest_env | {"SPACY_AUTO_DOWNLOAD": "0"})
     _run("Offline ingest smoke", [sys.executable, "scripts/smoke/ingest.py"], env=ingest_env)
     _run("Workflow smoke", [sys.executable, "scripts/smoke/workflows.py"], env=ingest_env)
     _run("Native SQLite storage ingest smoke", [sys.executable, "scripts/smoke/native_storage_ingest.py"])

@@ -63,7 +63,16 @@ def is_forward_separator(
     )
 
 
-def is_wrote_line(line: str, *, markers: tuple[tuple[str, str], ...] = WROTE_MARKERS) -> bool:
-    """Return whether a line is a localized reply-attribution line."""
-    normalized = line.rstrip().removesuffix(":").rstrip().casefold()
-    return any(normalized.startswith(prefix) and marker in normalized[len(prefix) :] for prefix, marker in markers)
+def is_wrote_line(line: str, *, markers: tuple[tuple[str, str], ...] = WROTE_MARKERS, next_line: str = "") -> bool:
+    """Return whether a line (alone or joined with the next one) is a localized reply-attribution ending in a colon."""
+    head = line.rstrip()
+    # A wrapped header line carries a date or address and does not end a sentence.
+    joinable = next_line.strip() and not head.endswith((".", "!", "?")) and any(ch.isdigit() or ch in "@<" for ch in head)
+    for candidate in (line, f"{head} {next_line.strip()}" if joinable else ""):
+        stripped = candidate.rstrip()
+        normalized = stripped.removesuffix(":").rstrip().casefold()
+        if stripped.endswith(":") and any(
+            normalized.startswith(prefix) and marker in normalized[len(prefix) :] for prefix, marker in markers
+        ):
+            return True
+    return False

@@ -6,8 +6,7 @@ import argparse
 import sys
 from typing import TYPE_CHECKING
 
-from mailarium.interfaces.cli.console import print_rich_or_plain
-from mailarium.platform.sanitization import sanitize_untrusted_text
+from mailarium.interfaces.cli.console import print_rich_or_plain, rich_text
 
 if TYPE_CHECKING:
     from mailarium.archive import ArchiveDatabase
@@ -132,13 +131,13 @@ def _rich_evidence_row(item: dict, category_styles: dict[str, str]) -> tuple[str
     preview = quote[:80] + ("..." if len(quote) > 80 else "")
     return (
         str(item["id"]),
-        str(item.get("date", ""))[:10],
+        rich_text(str(item.get("date", ""))[:10]),
         "[green bold]VERIFIED[/]" if item.get("verified") else "[dim]PENDING[/]",
         "[yellow]" + "\u2605" * relevance + "\u2606" * (5 - relevance) + "[/]",
-        f"[{style}]{category}[/{style}]" if style else category,
-        sanitize_untrusted_text(str(item.get("sender_name") or item.get("sender_email", "?"))),
-        sanitize_untrusted_text(str(item.get("subject", ""))[:25]),
-        f'[dim italic]"{sanitize_untrusted_text(preview)}"[/]',
+        f"[{style}]{rich_text(category)}[/{style}]" if style else rich_text(category),
+        rich_text(item.get("sender_name") or item.get("sender_email", "?")),
+        rich_text(str(item.get("subject", ""))[:25]),
+        f'[dim italic]"{rich_text(preview)}"[/]',
     )
 
 
@@ -266,7 +265,7 @@ def _render_category_stats(console, categories) -> None:
     max_cat_count = max((count for _, count in cat_pairs), default=1)
     for category_name, category_count in cat_pairs:
         bar_len = int((category_count / max_cat_count) * 20) if max_cat_count else 0
-        cat_table.add_row(str(category_name), str(category_count), "[cyan]" + "\u2588" * bar_len + "[/]")
+        cat_table.add_row(rich_text(category_name), str(category_count), "[cyan]" + "\u2588" * bar_len + "[/]")
     console.print(cat_table)
 
 
@@ -349,9 +348,9 @@ def _render_evidence_verification_failures(console, failures) -> None:
     table.add_column("Quote Preview", min_width=40)
     for failure in failures:
         table.add_row(
-            str(failure.get("evidence_id", "?")),
-            str(failure.get("email_uid", ""))[:12],
-            f'[italic]"{sanitize_untrusted_text(failure.get("key_quote_preview", ""))}"[/]',
+            rich_text(failure.get("evidence_id", "?")),
+            rich_text(str(failure.get("email_uid", ""))[:12]),
+            f'[italic]"{rich_text(failure.get("key_quote_preview", ""))}"[/]',
         )
     console.print(table)
     console.print(
@@ -465,12 +464,12 @@ def _rich_custody_row(event: dict, styles: dict[str, str]) -> tuple[str, ...]:
     target_id = str(event.get("target_id", "") or "")
     content_hash = event.get("content_hash") or ""
     return (
-        event["timestamp"],
-        f"[{style}]{action}[/{style}]" if style else action,
-        event.get("actor", "system"),
-        event.get("target_type", "") or "",
-        target_id[:12] + "..." if len(target_id) > 12 else target_id,
-        content_hash[:16] + "..." if content_hash else "[dim]--[/]",
+        rich_text(event["timestamp"]),
+        f"[{style}]{rich_text(action)}[/{style}]" if style else rich_text(action),
+        rich_text(event.get("actor", "system")),
+        rich_text(event.get("target_type", "") or ""),
+        rich_text(target_id[:12] + "..." if len(target_id) > 12 else target_id),
+        rich_text(content_hash[:16] + "...") if content_hash else "[dim]--[/]",
     )
 
 
@@ -515,10 +514,10 @@ def _render_provenance(result: dict, email_uid: str) -> None:
 def _provenance_email_details(email: dict, email_uid: str) -> str:
     """Return the stable Rich email-details content for provenance output."""
     return (
-        f"  [bold]Subject:[/] {email.get('subject', '(unknown)')}\n"
-        f"  [bold]From:[/] {email.get('sender_email', '?')}\n"
-        f"  [bold]Date:[/] {str(email.get('date', '?'))[:10]}\n"
-        f"  [bold]UID:[/] [dim]{email_uid}[/]"
+        f"  [bold]Subject:[/] {rich_text(email.get('subject', '(unknown)'))}\n"
+        f"  [bold]From:[/] {rich_text(email.get('sender_email', '?'))}\n"
+        f"  [bold]Date:[/] {rich_text(str(email.get('date', '?'))[:10])}\n"
+        f"  [bold]UID:[/] [dim]{rich_text(email_uid)}[/]"
     )
 
 
@@ -531,7 +530,8 @@ def _render_provenance_source(console, panel_cls, source: dict) -> None:
     ingested_at = source.get("ingested_at", "")
     console.print(
         panel_cls(
-            f"  [bold]OLM Source Hash:[/] [dim]{olm_hash or 'N/A'}[/]\n  [bold]Ingested At:[/] {ingested_at or 'N/A'}",
+            f"  [bold]OLM Source Hash:[/] [dim]{rich_text(olm_hash or 'N/A')}[/]\n"
+            f"  [bold]Ingested At:[/] {rich_text(ingested_at or 'N/A')}",
             title="[bold]Source Tracing[/]",
             border_style="cyan",
         )
@@ -553,11 +553,11 @@ def _render_provenance_custody(console, custody) -> None:
     table.add_column("SHA-256 (prefix)", width=20, style="dim")
     for event in custody:
         content_hash = event.get("content_hash") or ""
-        hash_display = content_hash[:16] + "..." if content_hash else "[dim]--[/]"
+        hash_display = rich_text(content_hash[:16] + "...") if content_hash else "[dim]--[/]"
         table.add_row(
-            event.get("timestamp", ""),
-            event.get("action", ""),
-            event.get("actor", "system"),
+            rich_text(event.get("timestamp", "")),
+            rich_text(event.get("action", "")),
+            rich_text(event.get("actor", "system")),
             hash_display,
         )
     console.print(table)

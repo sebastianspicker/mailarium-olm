@@ -29,6 +29,7 @@ from mailarium.platform.sanitization import sanitize_untrusted_text
 
 from ..records import ParsedMessage
 from .xml_helpers import (
+    _SAFE_ZIP_COMPRESSION,
     _apply_attachment_payload_metadata,
     _extract_attachment_contents,
     _extract_attachment_payloads,
@@ -39,11 +40,14 @@ from .xml_parser import parse_email_xml
 logger = logging.getLogger(__name__)
 MAX_XML_BYTES = int(os.environ.get("OLM_MAX_XML_BYTES", 50_000_000))  # 50 MB default
 MAX_XML_FILES = int(os.environ.get("OLM_MAX_XML_FILES", 500_000))
-MAX_TOTAL_XML_BYTES = 20_000_000_000  # 20 GB - safe because parse_olm is a generator
-_SAFE_ZIP_COMPRESSION = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
+MAX_TOTAL_XML_BYTES = int(os.environ.get("OLM_MAX_TOTAL_XML_BYTES", 20_000_000_000))  # 20 GB default
 
 
-def parse_olm(olm_path: str, extract_attachments: bool = False) -> Iterator[ParsedMessage]:
+def parse_olm(
+    olm_path: str,
+    extract_attachments: bool = False,
+    report: dict[str, Any] | None = None,
+) -> Iterator[ParsedMessage]:
     """Yield parseable messages from a resource-bounded OLM archive scan.
 
     Args:
@@ -51,6 +55,8 @@ def parse_olm(olm_path: str, extract_attachments: bool = False) -> Iterator[Pars
         extract_attachments: If True, extract binary attachment content
             and populate ``ParsedMessage.attachment_contents``. Default False
             to avoid memory bloat.
+        report: Optional dict that receives ``truncated`` (the environment variable of the limit that
+            stopped the scan early) and ``skipped_members`` (oversized, unsupported or malformed messages).
 
     Yields:
         ParsedMessage objects for valid message XML entries encountered before archive
@@ -64,13 +70,15 @@ def parse_olm(olm_path: str, extract_attachments: bool = False) -> Iterator[Pars
     if not os.path.exists(olm_path):
         raise FileNotFoundError(f"OLM file not found: {olm_path}")
 
+    report = {} if report is None else report
     with zipfile.ZipFile(olm_path, "r") as zf:
         limits = _ArchiveLimits(MAX_XML_FILES, MAX_TOTAL_XML_BYTES, MAX_XML_BYTES)
         processed = _ArchiveProgress()
         for info in zf.infolist():
             if not _is_message_xml(info.filename):
                 continue
-            if _should_stop_archive_parse(info, processed, limits):
+            if limit := _archive_limit_hit(info, processed, limits):
+                report["truncated"] = limit
                 break
             # Charge attempted work before opening the member so malformed or
             # checksum-failing entries cannot evade the archive-wide budgets.
@@ -78,6 +86,7 @@ def parse_olm(olm_path: str, extract_attachments: bool = False) -> Iterator[Pars
             processed.bytes += info.file_size
             email, size, xml_bytes = _parse_archive_member(zf, info, limits)
             if size is None:
+                report["skipped_members"] = report.get("skipped_members", 0) + 1
                 continue
             if email:
                 if extract_attachments:
@@ -108,14 +117,15 @@ def _is_message_xml(path: str) -> bool:
     return normalized.endswith(".xml") and "com.microsoft.__messages" in normalized
 
 
-def _should_stop_archive_parse(info: zipfile.ZipInfo, progress: _ArchiveProgress, limits: _ArchiveLimits) -> bool:
+def _archive_limit_hit(info: zipfile.ZipInfo, progress: _ArchiveProgress, limits: _ArchiveLimits) -> str:
+    """Return the environment variable of the archive-wide limit this member would exceed, or ''."""
     if progress.files >= limits.max_files:
-        logger.warning("Stopping parse due to MAX_XML_FILES limit (%s).", limits.max_files)
-        return True
+        logger.warning("Stopping parse due to OLM_MAX_XML_FILES limit (%s).", limits.max_files)
+        return "OLM_MAX_XML_FILES"
     if progress.bytes + info.file_size > limits.max_total_bytes:
-        logger.warning("Stopping parse due to MAX_TOTAL_XML_BYTES limit (%s).", limits.max_total_bytes)
-        return True
-    return False
+        logger.warning("Stopping parse due to OLM_MAX_TOTAL_XML_BYTES limit (%s).", limits.max_total_bytes)
+        return "OLM_MAX_TOTAL_XML_BYTES"
+    return ""
 
 
 def _parse_archive_member(
@@ -133,9 +143,6 @@ def _parse_archive_member(
     try:
         with zf.open(info) as file_obj:
             xml_bytes = _read_limited_bytes(file_obj, byte_limit=limits.max_bytes)
-        if len(xml_bytes) > limits.max_total_bytes:
-            logger.warning("Skipping XML payload exceeding MAX_TOTAL_XML_BYTES limit: %s", safe_name)
-            return None, None, b""
         return parse_email_xml(xml_bytes, info.filename), len(xml_bytes), xml_bytes
     except Exception as exc:  # pragma: no cover - defensive branch
         logger.warning("Failed to parse %s: %s", safe_name, sanitize_untrusted_text(str(exc)))

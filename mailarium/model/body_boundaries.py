@@ -66,14 +66,24 @@ def _find_line(text: str, predicate: Callable[[str], bool]) -> tuple[int, int] |
     return None
 
 
+def _find_last_line(text: str, predicate: Callable[[str], bool]) -> tuple[int, int] | None:
+    """Return the bounds of the last line accepted by *predicate*."""
+    return next(((start, end) for start, end, line in reversed(list(_line_spans(text))) if predicate(line)), None)
+
+
+def _find_wrote_line(text: str) -> tuple[int, int] | None:
+    """Return the bounds of the first reply-attribution line, including headers wrapped over two lines."""
+    spans = list(_line_spans(text))
+    for index, (start, end, line) in enumerate(spans):
+        next_line = spans[index + 1][2] if index + 1 < len(spans) else ""
+        if is_wrote_line(line, markers=WROTE_MARKERS, next_line=next_line):
+            return start, end
+    return None
+
+
 def _is_forward_separator(line: str) -> bool:
     """Recognize localized forwarded-message separators bounded by dashes."""
     return is_forward_separator(line, min_dash_count=3, labels=FORWARD_SEPARATOR_LABELS)
-
-
-def _is_wrote_line(line: str) -> bool:
-    """Recognize localized reply-attribution lines such as “On … wrote:”."""
-    return is_wrote_line(line, markers=WROTE_MARKERS)
 
 
 def strip_signature(body: str) -> tuple[str, bool]:
@@ -89,13 +99,26 @@ def strip_signature(body: str) -> tuple[str, bool]:
 
 
 def _separator_signature(body: str) -> str:
-    """Return body text before a compact RFC-style signature separator."""
-    match = _find_line(body, lambda line: line in {"--", "-- "})
+    """Return body text before the last compact signature separator."""
+    match = _find_last_line(body, lambda line: line in {"--", "-- "})
     if not match:
         return ""
     start, end = match
     before = body[:start].rstrip()
-    return before if before and body[end:].strip().count("\n") < 15 else ""
+    tail = body[end:].strip()
+    if body[start:end] == "-- ":
+        return before if before and tail.count("\n") < 15 else ""
+    return before if before and _is_signature_tail(tail) else ""
+
+
+def _is_signature_tail(tail: str) -> bool:
+    """Accept a bare ``--`` tail only when it is short and has no sentence-like line."""
+    lines = [line.strip() for line in tail.splitlines() if line.strip()]
+    return len(lines) <= 6 and all(len(line) <= 80 and not _is_sentence_like(line) for line in lines)
+
+
+def _is_sentence_like(line: str) -> bool:
+    return len(line.split()) >= 3 and line.endswith((".", "!", "?"))
 
 
 def _device_signature(body: str) -> str:
@@ -109,8 +132,11 @@ def _device_signature(body: str) -> str:
 
 def _closing_signature(body: str) -> str:
     """Return body text before a short closing-and-signature block."""
-    match = _find_line(body, lambda line: line.strip().removesuffix(",").casefold() in _CLOSING_PHRASES)
-    if not match or len([line for line in body[match[1] :].splitlines() if line.strip()]) > 8:
+    match = _find_last_line(body, lambda line: line.strip().removesuffix(",").casefold() in _CLOSING_PHRASES)
+    if not match:
+        return ""
+    tail = [line.strip() for line in body[match[1] :].splitlines() if line.strip()]
+    if len(tail) > 8 or any(_is_sentence_like(line) for line in tail):
         return ""
     return body[: match[0]].rstrip()
 
@@ -120,8 +146,8 @@ def strip_quoted_content(body: str, email_type: str = "original") -> tuple[str, 
     if not body or email_type == "original":
         return body, 0
 
-    for predicate in (_is_forward_separator, _is_wrote_line):
-        if result := _strip_at_match(body, _find_line(body, predicate)):
+    for find in (lambda text: _find_line(text, _is_forward_separator), _find_wrote_line):
+        if result := _strip_at_match(body, find(body)):
             return result
     return _strip_trailing_quoted_block(body)
 

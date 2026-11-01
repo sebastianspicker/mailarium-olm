@@ -21,18 +21,7 @@ def _search_across_query_lanes(
 ) -> tuple[list[Any], list[dict[str, Any]], dict[str, Any]]:
     """Route empty, single-lane, and multi-lane searches while enforcing lane and merge budgets."""
     if not query_lanes:
-        return (
-            [],
-            [],
-            {
-                "candidate_pool_count": 0,
-                "selected_result_count": 0,
-                "lane_top_k": 0,
-                "merge_budget": bank_limit,
-                "evidence_bank": [],
-                "evidence_results": [],
-            },
-        )
+        return [], [], {}
     lane_search_top_k = max(top_k, int(lane_top_k or top_k))
     if len(query_lanes) == 1:
         return _search_single_lane(

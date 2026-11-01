@@ -51,6 +51,8 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
     print("\n" + "\n".join(format_ingestion_summary(stats)))
+    if stats.get("truncated"):
+        raise SystemExit(1)
 
 
 def _add_ingest_arguments(parser: argparse.ArgumentParser) -> None:
@@ -261,6 +263,10 @@ def format_ingestion_summary(stats: dict[str, Any]) -> list[str]:
             lines.append(f"SQLite rows inserted: {stats['sqlite_inserted']}")
         if stats.get("skipped_incremental", 0) > 0:
             lines.append(f"Skipped (incremental): {stats['skipped_incremental']}")
+    if stats.get("skipped_members", 0) > 0:
+        lines.append(f"Skipped unreadable messages: {stats['skipped_members']} (see warnings above)")
+    if stats.get("truncated"):
+        lines.append(f"INCOMPLETE: parsing stopped at the {stats['truncated']} limit. Raise it and re-run with --incremental.")
     _append_timing_summary(lines, stats.get("timing"))
     lines.append(f"Elapsed: {stats['elapsed_seconds']}s")
     return lines

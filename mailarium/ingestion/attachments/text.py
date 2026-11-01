@@ -12,7 +12,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
-from mailarium.model.attachment_profiles import IMAGE_EXTENSIONS
+from mailarium.ingestion.olm.xml_helpers import _SAFE_ZIP_COMPRESSION
+from mailarium.model.attachment_profiles import IMAGE_EXTENSIONS, _get_extension
 from mailarium.model.rfc2822 import extract_body_from_source, extract_header
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,6 @@ _ARCHIVE_TEXT_HEADER = "[Archive extracted member text]"
 _ARCHIVE_INVENTORY_HEADER = "[Archive member inventory]"
 _MAX_ARCHIVE_MEMBERS = 20
 _MAX_ARCHIVE_MEMBER_BYTES = 2_000_000
-_SAFE_ZIP_COMPRESSION = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
 
 
 @dataclass(frozen=True)
@@ -108,21 +108,6 @@ class _OptionalExtractionRequest:
     import_from: str
     extractor: Callable[[Any, io.BytesIO], str | None]
     fmt_label: str
-
-
-def _get_extension(filename: str) -> str:
-    """Extract the file extension from a filename.
-
-    Args:
-        filename: The filename to extract the extension from.
-
-    Returns:
-        The lowercase file extension including the dot, or empty string if no extension.
-    """
-    dot_pos = filename.rfind(".")
-    if dot_pos == -1:
-        return ""
-    return filename[dot_pos:].lower()
 
 
 def is_image_attachment(filename: str) -> bool:
@@ -380,7 +365,7 @@ def _optional_extract_request(
         if text:
             return _truncate(text)
         return None
-    except (RuntimeError, ValueError, OSError, TypeError) as exc:
+    except Exception as exc:  # PDF/Office parsers raise their own Exception subclasses on broken files
         logger.debug("Failed to extract %s text from attachment.", request.fmt_label, exc_info=True)
         if failure_recorder:
             failure_recorder(f"text_extraction_failed:{request.fmt_label}:{type(exc).__name__}")

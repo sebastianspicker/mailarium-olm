@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -36,6 +37,14 @@ def _validate_readable_file_path(v: str | None, *, field_name: str = "path") -> 
     if not os.access(resolved, os.R_OK):
         raise ValueError(f"{field_name} must be readable")
     return str(resolved)
+
+
+def _validate_olm_path(v: str | None, *, field_name: str = "olm_path") -> str | None:
+    """Validate a readable local file with a .olm extension, or return None."""
+    validated = _validate_readable_file_path(v, field_name=field_name)
+    if validated is not None and Path(validated).suffix.lower() != ".olm":
+        raise ValueError(f"{field_name} must point to a .olm archive")
+    return validated
 
 
 def _validate_runtime_path(v: str | None, *, field_name: str = "path") -> str | None:
