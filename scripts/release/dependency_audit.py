@@ -12,10 +12,6 @@ import tempfile
 from pathlib import Path
 
 DEFAULT_TIMEOUT_SECONDS = 180
-# nltk GHSA-8mgp-746c-j5xp / PYSEC-2026-3740: no patched release exists
-# (latest PyPI 3.10.3 is the vulnerable version); documented ignore so the
-# audit gate stays green. Re-check when nltk ships a fix.
-IGNORED_VULNS: tuple[str, ...] = ("PYSEC-2026-3740", "GHSA-8mgp-746c-j5xp")
 AUDITED_EXTRAS = ("nlp", "training", "ews-ntlm")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -77,8 +73,6 @@ def _audit_command(requirements_path: str) -> list[str]:
     """Build a pip-audit command for a fully resolved lockfile export."""
     command = [sys.executable, "-m", "pip_audit", "-r", requirements_path]
     command.extend(("--no-deps", "--disable-pip"))
-    for vulnerability_id in IGNORED_VULNS:
-        command.extend(("--ignore-vuln", vulnerability_id))
     return command
 
 

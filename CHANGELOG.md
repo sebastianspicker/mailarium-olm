@@ -9,6 +9,9 @@ and this project follows semantic versioning principles for public interfaces.
 
 ### Changed
 
+- General CI runs automatically for Dependabot-authored pull requests and
+  remains manually dispatchable. Read-only security checks run independently
+  on pushes, pull requests and a weekly schedule; Pages deployment is manual.
 - Redesigned the Streamlit interface and the synthetic Pages demo around one
   token system that separates stored message text, analyst input, and
   machine-derived values typographically. Fonts are local; nothing is fetched.
@@ -38,6 +41,10 @@ and this project follows semantic versioning principles for public interfaces.
 
 ### Fixed
 
+- Updated the locked dependency graph and security floors for the November
+  dependency alerts, including Pillow 13 and its compatible Streamlit release.
+  The dependency audit no longer suppresses the former NLTK advisory.
+- Updated NumKong to 7.8.6, which fixes loading its SME kernels on macOS 14.
 - Hardened untrusted archive, attachment, image, HTML, address, and body-tail
   processing with pre-decode size checks, aggregate budgets, safe ZIP-method
   restrictions, and bounded traversal. EWS response, pagination, folder
@@ -45,8 +52,7 @@ and this project follows semantic versioning principles for public interfaces.
   respective protocol boundaries.
 - Closed report-redaction, plain-terminal, maintenance-path, local-only
   reranker, and publication privacy-scan gaps. Security floors were raised for
-  dependencies with fixed releases; the audit still reports the upstream
-  `accelerate` and `nltk` advisories for which no fixed release is available.
+  dependencies with fixed releases.
 - MCP tools that resolve a runtime dependency no longer fail with `NameError`,
   a regression since the 0.5 modularization.
 - Thread and email HTML export and dossier generation find their templates

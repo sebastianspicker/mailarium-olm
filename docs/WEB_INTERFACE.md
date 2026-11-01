@@ -123,6 +123,9 @@ with:
 python3 scripts/smoke/pages_demo.py
 ```
 
-The Pages workflow publishes only `demo/` after that static check. A
-successful local check does not prove that GitHub Pages is configured or that a
-remote deployment completed.
+The Pages workflow publishes only `demo/` after that static check, through manual
+dispatch on `main`. The repository's Pages source must be **GitHub Actions**;
+legacy branch publishing can deploy on a push without running this workflow.
+Switch that setting before an approved push if it is still using a branch.
+A successful local check does not prove that GitHub Pages is configured or that
+a remote deployment completed.

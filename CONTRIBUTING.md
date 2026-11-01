@@ -53,6 +53,15 @@ profile covers Streamlit and built-wheel checks and is not a substitute for
 the complete local `release` profile. macOS retains its independent release
 validation.
 
+These general CI jobs run automatically only for pull requests authored by
+`dependabot[bot]`; maintainers can run them for other changes with the CI
+workflow's manual dispatch. Read-only dependency and source security checks
+also run on ordinary pull requests, main-branch pushes, and a weekly schedule.
+The synthetic Pages demo is deployed only by manual workflow dispatch on `main`.
+Set the repository's Pages source to **GitHub Actions** before publishing these
+workflow changes. Legacy branch-based Pages publishing bypasses workflow gates
+and can still deploy on a push; changing the workflow alone does not disable it.
+
 3. State every skipped check and why.
 
 Do not commit runtime data, generated exports, model artifacts, private logs,

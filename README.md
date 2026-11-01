@@ -7,8 +7,29 @@ archives. It normalizes messages and selected attachments into a local SQLite
 archive, builds rebuildable search acceleration, and exposes the same archive
 through CLI, MCP, and trusted-local Streamlit interfaces.
 
+<details>
+<summary>Status and limitations</summary>
+
+**Project status:** Mailarium is an independent experimental project for local Outlook archive search and optional Exchange EWS workflows. Developed independently alongside my main professional work. The alpha is a starting point for evaluation and adaptation, not a finished investigation product. Original archives remain the recovery source; extracted text, rankings and summaries need source verification.
+
+**Disclaimer.** Search results and generated findings are not legal advice or evidentiary certification. You are responsible for authorized mailbox access, privacy, backups and reviewing optional EWS actions before they affect a live mailbox.
+
+</details>
+
 Mailarium is alpha software. Commands, storage details, and defaults can change
 within the `0.5.x` line.
+
+The core archive flow is local. Optional Exchange reads and writes use separate opt-ins.
+
+```mermaid
+flowchart LR
+    Original["Original Outlook .olm archive"] --> Ingest["Bounded ingestion"]
+    Ingest --> Archive["Local archive: SQLite"]
+    Archive --> Tools["Search and evidence tools"]
+    Archive --> Indexes["Rebuildable search indexes"]
+    Indexes --> Tools
+    Tools --> Interfaces["CLI, MCP or trusted-local Streamlit"]
+```
 
 ## Capabilities and limits
 
