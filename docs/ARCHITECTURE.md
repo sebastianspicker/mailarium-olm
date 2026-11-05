@@ -6,36 +6,66 @@ canonical application state; USearch, BM25, sparse, and other retrieval indexes
 are rebuildable acceleration. Optional EWS support projects selected remote
 items into the same archive rather than maintaining a second source of truth.
 
+New to the code? Read [System context](#system-context), then
+[Search a query](#user-journey-search-the-archive), then the
+[Components](#components) table as the code map.
+
 ## System context
+
+What runs, and what does it read and write? Everything below runs in local
+Python processes on the operator's machine; only EWS is remote.
 
 ```mermaid
 flowchart LR
-    OLM["Outlook .olm archive"] --> Ingest["mailarium-ingest"]
-    EWS["On-premises EWS<br/>explicit HTTPS endpoint"] --> Mailbox["Mailbox service"]
-    Ingest --> SQLite[("Canonical SQLite archive")]
-    Mailbox --> Ingest
+    OLM["Outlook .olm file"]
+    EWS["On-premises EWS"]
+    subgraph proc [Local Python process]
+        Ingest["mailarium-ingest"]
+        subgraph ifaces [Interfaces]
+            CLI["mailarium CLI"]
+            MCP["stdio MCP server"]
+            Web["Streamlit app"]
+        end
+        Runtime["ApplicationRuntime"]
+        Search["SearchEngine"]
+        Investigation["investigation"]
+        Mailbox["MailboxService"]
+    end
+    SQLite[("SQLite archive")]
+    Derived[("Derived indexes")]
 
-    CLI["mailarium CLI"] --> Runtime["ApplicationRuntime"]
-    MCP["stdio MCP server"] --> Runtime
-    Web["trusted-local Streamlit"] --> Runtime
-    Runtime --> Search["Retrieval"]
+    OLM -->|parse records| Ingest
+    Ingest -->|"INSERT messages, vectors"| SQLite
+    Ingest -.->|rebuild accelerator| Derived
+    ifaces -->|compose once| Runtime
+    Runtime --> Search
     Runtime --> Mailbox
-    CLI --> Investigation["Investigation"]
-    MCP --> Investigation
-    Web --> Investigation
-    Search --> SQLite
-    Investigation --> SQLite
-    Investigation --> Search
-    Search --> Derived[("Derived indexes")]
-    Ingest --> Derived
+    ifaces -->|"reports, evidence"| Investigation
+    Investigation -->|ranked chunks| Search
+    Search -->|"query USearch, BM25"| Derived
+    Search -->|SELECT| SQLite
+    Mailbox <-->|"SOAP over HTTPS"| EWS
+    Mailbox -->|project via ingestion| SQLite
 
-    Demo["Static synthetic demo"] -. "no runtime or data connection" .-> Web
+    classDef focus fill:#fde68a,stroke:#b45309,color:#1f2937
+    class SQLite focus
 ```
 
-The CLI, MCP server, and Streamlit application are independently started
-interfaces over the same feature packages. They are not separately published
-or deployed services. The files in `demo/` are a dependency-free interface
-demonstration and never connect to Mailarium, a mailbox, or a runtime archive.
+SQLite is highlighted because it is the only source of truth: `Derived`
+indexes can be deleted and rebuilt from it. The three interfaces are
+independently started processes over the same feature packages; each builds
+its own `ApplicationRuntime`, and none is a separately deployed service.
+`Investigation` reads the archive directly as well as through `SearchEngine`
+(edge omitted for readability). The files in `demo/` are a dependency-free
+interface demonstration and never connect to Mailarium, a mailbox, or a
+runtime archive.
+
+Where in the code:
+[mailarium/interfaces/runtime.py](../mailarium/interfaces/runtime.py),
+[mailarium/interfaces/cli/main.py](../mailarium/interfaces/cli/main.py),
+[mailarium/interfaces/cli/ingest.py](../mailarium/interfaces/cli/ingest.py),
+[mailarium/interfaces/mcp/server.py](../mailarium/interfaces/mcp/server.py),
+[mailarium/interfaces/web/app.py](../mailarium/interfaces/web/app.py).
 
 ## Components
 
@@ -125,22 +155,47 @@ runtime only for the selected command.
 
 ### OLM ingestion
 
+What happens when the operator runs `mailarium-ingest archive.olm`?
+
 ```mermaid
 sequenceDiagram
-    participant Source as .olm source
-    participant CLI as ingest CLI
+    autonumber
+    actor U as Operator
+    participant CLI as mailarium-ingest
+    participant Orch as orchestration.ingest
     participant Parser as OLM parser
-    participant Pipeline as ingestion pipeline
+    participant Pipeline as embed pipeline
     participant DB as SQLite archive
-    participant Index as derived indexes
+    participant Index as Derived indexes
 
-    CLI->>DB: open caller-owned archive
-    CLI->>Parser: parse bounded source records
-    Parser->>Pipeline: normalized messages and attachments
-    Pipeline->>DB: write messages, chunks, provenance, and vectors
-    Pipeline->>Index: update available acceleration
-    CLI->>DB: checkpoint and close
+    U->>CLI: mailarium-ingest archive.olm
+    CLI->>Orch: ingest_archive(...)
+    Orch->>DB: open caller-owned archive
+    loop each bounded batch
+        Orch->>Parser: next parsed message
+        Parser-->>Orch: ParsedMessage + attachments
+        Orch->>Pipeline: submit batch
+        Pipeline->>DB: INSERT messages, chunks, vectors
+    end
+    Pipeline-)Index: rebuild USearch once per space
+    Orch->>DB: checkpoint and close
+    Orch-->>CLI: result summary
 ```
+
+Steps 4–7 repeat per batch; `--incremental` skips messages the ingest ledger
+already marks complete. Step 8 happens once per changed embedding space at
+the end of the job, so an interrupted ingest leaves committed SQLite rows and
+a stale accelerator; queries then fall back to the canonical vectors (see
+below).
+
+Where in the code:
+[mailarium/interfaces/cli/ingest.py](../mailarium/interfaces/cli/ingest.py)
+(`_run_ingest_command`),
+[mailarium/ingestion/orchestration.py](../mailarium/ingestion/orchestration.py)
+(`ingest`, `_run_ingest_parser`),
+[mailarium/ingestion/olm/parser.py](../mailarium/ingestion/olm/parser.py),
+[mailarium/ingestion/ingest_embed_pipeline.py](../mailarium/ingestion/ingest_embed_pipeline.py),
+[mailarium/archive/vectors.py](../mailarium/archive/vectors.py).
 
 Ingestion and maintenance are bounded jobs. They open one caller-owned archive
 through `mailarium.archive.open_archive_database`, inject it into embedding
@@ -165,6 +220,58 @@ filters, and returns ranked chunks. Investigation consumes stored archive
 records and retrieval results to produce evidence and derived analyses.
 Answer-context assembly exposes ambiguity and insufficient-evidence states
 instead of converting a ranking into proof.
+
+### User journey: search the archive
+
+What happens when the operator runs `mailarium search "project handoff" --hybrid`?
+The MCP search tools and the Streamlit search page reach the same
+`SearchEngine.execute` call.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Operator
+    participant CLI as mailarium CLI
+    participant Engine as SearchEngine
+    participant FS as FilteredSearch
+    participant Hybrid as HybridFusion
+    participant Store as Vector store
+
+    U->>CLI: mailarium search "..." --hybrid
+    CLI->>Engine: search_filtered(query, filters)
+    Engine->>FS: execute(SearchRequest)
+    FS->>Store: dense top-k for query embedding
+    Store-->>FS: candidate chunks
+    opt hybrid enabled
+        FS->>Hybrid: merge(query, candidates)
+        Hybrid-->>FS: weighted RRF of dense + sparse or BM25
+    end
+    FS->>FS: visibility, filters, one hit per email
+    opt rerank enabled
+        FS->>FS: ResultReranker.rerank
+    end
+    FS-->>CLI: SearchResponse
+    CLI-->>U: Rich table or JSON
+```
+
+Step 2 is the only place the CLI touches retrieval; `ApplicationRuntime`
+built the `SearchEngine` before the command ran. If steps 4–9 leave fewer
+than `top_k` emails (filters and per-email deduplication drop candidates),
+`FilteredSearch` doubles the fetch size and repeats, up to a fixed ceiling.
+`HybridFusion` prefers learned sparse vectors and falls back to BM25; if
+keyword retrieval fails it returns the dense results unchanged.
+
+Where in the code:
+[mailarium/interfaces/cli/commands/search.py](../mailarium/interfaces/cli/commands/search.py)
+(`run`, `run_query`),
+[mailarium/retrieval/retriever.py](../mailarium/retrieval/retriever.py)
+(`SearchEngine.search_filtered`),
+[mailarium/retrieval/filtered_search.py](../mailarium/retrieval/filtered_search.py)
+(`_execute`, `_collect_candidates`, `_post_process_candidates`),
+[mailarium/retrieval/hybrid.py](../mailarium/retrieval/hybrid.py)
+(`HybridFusion.merge`),
+[mailarium/retrieval/dense.py](../mailarium/retrieval/dense.py),
+[mailarium/retrieval/reranking.py](../mailarium/retrieval/reranking.py).
 
 Vector storage caches metadata snapshots against the connection's change count
 and SQLite's external-commit version. Warm queries reuse verified index files
@@ -195,6 +302,49 @@ Execution claims the proposal, validates the expected remote item state and
 change key, calls the EWS gateway, and records or reconciles the outcome. It
 does not silently rebase a stale proposal.
 
+Which states does a write proposal go through?
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: create_proposal
+    pending --> approved: approve (CLI)
+    pending --> rejected: reject (CLI)
+    approved --> rejected: reject (CLI)
+    pending --> expired: deadline passed
+    approved --> executing: claim_execution
+    retryable --> executing: claim_execution
+    approved --> conflicted: remote item changed
+    executing --> succeeded
+    executing --> retryable
+    executing --> failed
+    executing --> conflicted
+    executing --> uncertain: outcome unknown or lease expired
+    uncertain --> succeeded: reconcile
+    uncertain --> failed: operator resolves
+    uncertain --> conflicted
+    expired --> pending: same proposal re-created
+    failed --> pending: same proposal re-created
+    conflicted --> pending: same proposal re-created
+    succeeded --> [*]
+    rejected --> [*]
+```
+
+Only `approved` and `retryable` proposals can be claimed, and a claim moves
+the proposal to `executing` inside one SQLite write so two processes cannot
+execute it twice. `uncertain` exists because a network failure after the EWS
+call leaves the remote result unknown; it is reconciled against the remote
+item or resolved by the operator, never retried blindly. Re-creating a
+proposal with the same digest reopens an `expired`, `failed` or `conflicted`
+row instead of inserting a duplicate.
+
+Where in the code:
+[mailarium/model/mailbox_models.py](../mailarium/model/mailbox_models.py)
+(`ProposalState`),
+[mailarium/archive/repositories/mailbox/proposals.py](../mailarium/archive/repositories/mailbox/proposals.py)
+(transitions),
+[mailarium/mailbox/execution.py](../mailarium/mailbox/execution.py)
+(`ProposalExecutor`).
+
 ## State ownership and recovery
 
 - The original `.olm` is the external recovery source for archive imports.
@@ -207,6 +357,38 @@ does not silently rebase a stale proposal.
 - Exports are derived disclosure artifacts. They must remain inside allowed
   output roots, never overwrite an existing path, and require review before
   sharing.
+
+### Data model
+
+How are the main tables related? This shows the core of about 40 tables;
+analytics, topic, keyword, and ingest-bookkeeping tables hang off `emails`
+the same way.
+
+```mermaid
+erDiagram
+    emails ||--o{ attachments : "email_uid"
+    emails ||--o{ message_segments : "email_uid"
+    emails ||--o{ entity_mentions : "email_uid"
+    entities ||--o{ entity_mentions : "entity_id"
+    emails ||--o{ evidence_items : "email_uid"
+    emails ||..o{ vector_chunks : "email_uid (no FK)"
+    vector_chunks ||--o| dense_vectors : "vector_id"
+    mailbox_accounts ||--o{ mailbox_folders : "account_id"
+    mailbox_folders ||--o{ email_sources : "folder_id"
+    email_sources }o..|| emails : "canonical_email_uid"
+    mailbox_folders ||--o{ mailbox_action_proposals : "folder_id"
+```
+
+`emails.uid` is the key nearly everything joins on. Vectors link to emails
+only by value (dotted), because a vector row belongs to an embedding space
+and is deleted and rebuilt independently of the message. EWS items never get
+their own message table: an `email_sources` row maps a remote item to the
+same `emails` row an OLM import would create.
+
+Where in the code:
+[mailarium/archive/schema/tables.py](../mailarium/archive/schema/tables.py),
+[mailarium/archive/schema/mailbox.py](../mailarium/archive/schema/mailbox.py),
+[mailarium/archive/schema/migrations.py](../mailarium/archive/schema/migrations.py).
 
 Back up both the original source and SQLite before destructive maintenance.
 The repository does not provide automated backup, retention, encryption at
@@ -269,6 +451,44 @@ does not contain `scripts/`.
   artifact inspection, and installed-wheel smoke.
 - `release`: `pr` followed by `package`. It validates and installs local
   artifacts but does not publish them.
+
+Which of these run in GitHub Actions, and when?
+
+```mermaid
+flowchart LR
+    dispatch["Manual dispatch<br/>or Dependabot PR"]
+    push["Push or PR to main,<br/>weekly cron"]
+    manual["Manual dispatch on main"]
+    subgraph ci [ci.yml]
+        pr["verify.py pr"]
+        pkg["verify.py package"]
+        mac["verify.py release<br/>macOS 14 arm64"]
+    end
+    subgraph sec [security.yml]
+        audit["dependency_audit.py<br/>+ Bandit"]
+    end
+    subgraph pages [pages-demo.yml]
+        smoke["pages_demo.py smoke"]
+        deploy["Deploy demo/ to Pages"]
+    end
+    dispatch --> pr
+    dispatch --> pkg
+    dispatch --> mac
+    push --> audit
+    manual --> smoke -->|artifact| deploy
+```
+
+General CI does not run on every contributor PR; it runs on manual dispatch
+and Dependabot PRs only, so run `scripts/verify.py pr` locally before
+proposing a change. Only `pages-demo.yml` deploys anything, and what it
+deploys is the static synthetic `demo/`, never the application. No workflow
+publishes a package.
+
+Where in the code:
+[.github/workflows/ci.yml](../.github/workflows/ci.yml),
+[.github/workflows/security.yml](../.github/workflows/security.yml),
+[.github/workflows/pages-demo.yml](../.github/workflows/pages-demo.yml),
+[scripts/verify.py](../scripts/verify.py).
 
 The Streamlit application is a local process. The static `demo/` can be
 served directly or published by its Pages workflow, but that deployment is

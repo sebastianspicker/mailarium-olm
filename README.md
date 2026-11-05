@@ -7,6 +7,8 @@ archives. It normalizes messages and selected attachments into a local SQLite
 archive, builds rebuildable search acceleration, and exposes the same archive
 through CLI, MCP, and trusted-local Streamlit interfaces.
 
+> _Claude was used to polish and proof-read the code and documentation of this repository._
+
 <details>
 <summary>Status and limitations</summary>
 
