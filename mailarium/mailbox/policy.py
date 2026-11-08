@@ -121,12 +121,16 @@ def _validated_auth_mode(auth_mode: str) -> str:
 
 
 def _validated_credential_reference(credential_ref: str) -> str:
-    ref = credential_ref.strip()
-    parts = ref.split(":")
-    valid = len(parts) == 3 and parts[0] == "basic-env" and all(_valid_env_name(part) for part in parts[1:])
-    if not valid:
+    _parse_credential_reference(credential_ref)
+    return credential_ref.strip()
+
+
+def _parse_credential_reference(credential_ref: str) -> tuple[str, str]:
+    """Return the user and password environment variable names of a basic-env reference."""
+    parts = credential_ref.strip().split(":")
+    if len(parts) != 3 or parts[0] != "basic-env" or not all(_valid_env_name(part) for part in parts[1:]):
         raise ValueError("Credential reference must use basic-env:USER_ENV:PASSWORD_ENV.")
-    return ref
+    return parts[1], parts[2]
 
 
 def _normalized_folders(folders: list[str] | tuple[str, ...]) -> tuple[str, ...]:
@@ -136,11 +140,9 @@ def _normalized_folders(folders: list[str] | tuple[str, ...]) -> tuple[str, ...]
 
 def resolve_external_credentials(credential_ref: str) -> tuple[str, str]:
     """Resolve a validated credential reference without storing or logging values."""
-    parts = credential_ref.split(":")
-    if len(parts) != 3 or parts[0] != "basic-env" or not all(_valid_env_name(part) for part in parts[1:]):
-        raise ValueError("Credential reference must use basic-env:USER_ENV:PASSWORD_ENV.")
-    username = os.getenv(parts[1])
-    password = os.getenv(parts[2])
+    user_env, password_env = _parse_credential_reference(credential_ref)
+    username = os.getenv(user_env)
+    password = os.getenv(password_env)
     if not username or not password:
         raise RuntimeError("Referenced EWS credential environment variables are not both available.")
     return username, password

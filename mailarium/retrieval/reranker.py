@@ -80,7 +80,8 @@ class CrossEncoderReranker:
                 SearchResultModel(
                     chunk_id=result.chunk_id,
                     text=result.text,
-                    metadata=result.metadata,
+                    # Every reranked row now carries the same cross-encoder scale, so pre-rerank calibration no longer applies.
+                    metadata={**result.metadata, "score_calibration": "calibrated", "reranked": True},
                     distance=distance,
                 )
             )

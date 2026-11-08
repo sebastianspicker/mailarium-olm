@@ -89,7 +89,7 @@ def _matches_required_path(member: str, required_path: str) -> bool:
 
 def _is_private_or_workspace_path(member: str) -> bool:
     """Reject private data and local-workspace paths from release artifacts."""
-    normalized = member.lstrip("./")
+    normalized = member.removeprefix("./").lstrip("/")
     parts = normalized.split("/")
     relative = "/".join(parts[1:]) if len(parts) > 1 and parts[0] else normalized
     candidate_paths = (normalized, relative)

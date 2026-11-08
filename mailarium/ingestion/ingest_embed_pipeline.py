@@ -334,6 +334,7 @@ class _EmbedPipeline:
                 batch_chunk_ids=[] if self._email_db is not None else [_chunk_id(chunk) for chunk in chunks if _chunk_id(chunk)],
             )
             try:
+                self._pre_encode_chunks(chunks)
                 new_emails, dt_sqlite = self._persist_relational_batch(chunks, emails, state)
                 dt_entity, dt_analytics = self._persist_batch_metadata(new_emails)
                 dt_enrichment = self._persist_entity_enrichment(state.entity_enriched_emails)
@@ -344,6 +345,27 @@ class _EmbedPipeline:
                 self._rollback_failed_batch(state, exc)
                 raise
             self._apply_batch_maintenance()
+
+    def _pre_encode_chunks(self, chunks: list[EmailChunk]) -> None:
+        """Encode chunks that will likely be stored before the write lock, so MCP writers are not blocked."""
+        encode_chunks = getattr(self._embedder, "encode_chunks", None)
+        if not callable(encode_chunks) or self._email_db is None:
+            return
+        uids = [_chunk_uid(chunk) for chunk in chunks]
+        stored = self._email_db.messages.stored_uids(uids)
+        statuses = self._email_db.ingest_ledger.attachment_statuses([uid for uid in uids if uid in stored])
+        # Mirrors _is_batch_chunk; chunks the transaction then dedupes keep an unused vector, and misses encode in add_chunks.
+        encode_chunks(
+            [
+                chunk
+                for chunk, uid in zip(chunks, uids, strict=True)
+                if isinstance(chunk, EmailChunk)
+                and (
+                    uid not in stored
+                    or (_is_attachment_chunk(chunk) and statuses.get(uid, "") in _ENRICHABLE_ATTACHMENT_STATUSES)
+                )
+            ]
+        )
 
     def _persist_relational_batch(
         self,
@@ -363,7 +385,10 @@ class _EmbedPipeline:
         ledger_uids = inserted_uids | attachment_uids
         state.inserted_ingest_rows = [row for row in state.ingest_rows if str(row.get("email_uid") or "") in ledger_uids]
         self._mark_batch_pending(state)
-        new_emails = [email for email in emails if email.uid in inserted_uids]
+        first_by_uid: dict[str, ParsedMessage] = {}
+        for email in emails:
+            first_by_uid.setdefault(email.uid, email)
+        new_emails = [email for uid, email in first_by_uid.items() if uid in inserted_uids]
         state.new_chunks = [chunk for chunk in chunks if self._is_batch_chunk(chunk, inserted_uids, attachment_uids)]
         state.batch_chunk_ids = [_chunk_id(chunk) for chunk in state.new_chunks if _chunk_id(chunk)]
         self._log_deduplicated_batch(emails, chunks, new_emails, state.new_chunks)

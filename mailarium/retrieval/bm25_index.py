@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+import threading
 from typing import Any
 
 from .query_planning import _ASCII_FALLBACK_MAP
@@ -72,16 +73,18 @@ class BM25Index:
 
     Provides complementary keyword-based retrieval for hybrid search.
     The index is built lazily on first query and cached in memory.
+    Rebuilds tokenize into locals and publish the snapshot in one swap under a
+    lock, so concurrent searches never see an index from one corpus with ids
+    from another.
     """
 
     def __init__(self) -> None:
         self._index = None
-        self._raw_index = None
         self._chunk_ids: list[str] = []
         self._built = False
         self._token_path_stats: dict[str, int] = {}
-        self._raw_token_sets: list[set[str]] = []
         self._morph_token_sets: list[set[str]] = []
+        self._lock = threading.Lock()
 
     @staticmethod
     def _rank_indices(
@@ -121,31 +124,22 @@ class BM25Index:
             chunk_ids: Parallel list of chunk IDs.
             documents: Parallel list of document texts.
         """
-        if not chunk_ids:
-            self._index = None
-            self._raw_index = None
-            self._chunk_ids = []
-            self._token_path_stats = {}
-            self._raw_token_sets = []
-            self._morph_token_sets = []
+        index = None
+        token_sets: list[set[str]] = []
+        stats: dict[str, int] = {}
+        if chunk_ids:
+            from rank_bm25 import BM25Okapi
+
+            tokenized = [_tokenize_with_morphology(doc) for doc in documents]
+            index = BM25Okapi(tokenized)
+            token_sets = [set(tokens) for tokens in tokenized]
+            stats = {"morph_token_count": int(sum(len(tokens) for tokens in tokenized)), "doc_count": len(chunk_ids)}
+        with self._lock:
+            self._index = index
+            self._chunk_ids = list(chunk_ids)
+            self._morph_token_sets = token_sets
+            self._token_path_stats = stats
             self._built = True
-            return
-
-        from rank_bm25 import BM25Okapi
-
-        tokenized_raw = [_tokenize(doc) for doc in documents]
-        tokenized_morph = [_tokenize_with_morphology(doc) for doc in documents]
-        self._raw_index = BM25Okapi(tokenized_raw)
-        self._index = BM25Okapi(tokenized_morph)
-        self._raw_token_sets = [set(tokens) for tokens in tokenized_raw]
-        self._morph_token_sets = [set(tokens) for tokens in tokenized_morph]
-        self._chunk_ids = list(chunk_ids)
-        self._built = True
-        self._token_path_stats = {
-            "raw_token_count": int(sum(len(tokens) for tokens in tokenized_raw)),
-            "morph_token_count": int(sum(len(tokens) for tokens in tokenized_morph)),
-            "doc_count": len(chunk_ids),
-        }
         logger.info("BM25 index built with %d documents", len(chunk_ids))
 
     def build_from_collection(self, collection: Any) -> None:
@@ -154,11 +148,6 @@ class BM25Index:
         Fetches all documents from the collection and tokenizes them.
         """
         total = collection.count()
-        if total == 0:
-            self._chunk_ids = []
-            self._built = True
-            return
-
         batch_size = 5000
         all_ids: list[str] = []
         all_docs: list[str] = []
@@ -176,6 +165,10 @@ class BM25Index:
 
         self.build_from_documents(all_ids, all_docs)
 
+    def _snapshot(self) -> tuple[Any, list[str], list[set[str]], dict[str, int]]:
+        with self._lock:
+            return self._index, self._chunk_ids, self._morph_token_sets, self._token_path_stats
+
     def search(self, query: str, top_k: int = 10) -> list[tuple[str, float]]:
         """Search the BM25 index.
 
@@ -186,33 +179,13 @@ class BM25Index:
         Returns:
             List of (chunk_id, bm25_score) tuples, highest score first.
         """
-        if not self._built or self._index is None or not self._chunk_ids:
-            return []
-
-        if top_k <= 0:
-            return []
-
-        tokens = _tokenize_with_morphology(query)
-        if not tokens:
-            return []
-
-        scores = self._index.get_scores(tokens)
-        ranked_scores = self._rank_indices(
-            scores=scores,
-            token_sets=self._morph_token_sets,
-            query_tokens=tokens,
-            top_k=top_k,
-        )
-
-        results = []
-        for idx, score in ranked_scores:
-            results.append((self._chunk_ids[idx], score))
-
-        return results
+        rows, _diagnostics = self.search_with_diagnostics(query, top_k=top_k)
+        return rows
 
     def search_with_diagnostics(self, query: str, top_k: int = 10) -> tuple[list[tuple[str, float]], dict[str, Any]]:
-        """Search BM25 and report raw-vs-morphology retrieval diagnostics."""
-        if not self._built or self._index is None or self._raw_index is None or not self._chunk_ids:
+        """Search BM25 and report raw-vs-morphology diagnostics for the returned hits."""
+        index, chunk_ids, token_sets, stats = self._snapshot()
+        if index is None or not chunk_ids:
             return [], {"status": "empty_index"}
         if top_k <= 0:
             return [], {"status": "invalid_top_k"}
@@ -221,43 +194,22 @@ class BM25Index:
         morph_tokens = _tokenize_with_morphology(query)
         if not morph_tokens:
             return [], {"status": "empty_query"}
-        raw_ranked, morph_ranked = self._diagnostic_rankings(raw_tokens, morph_tokens, top_k)
-        return self._diagnostic_result(raw_tokens, morph_tokens, raw_ranked, morph_ranked)
-
-    def _diagnostic_rankings(
-        self, raw_tokens: list[str], morph_tokens: list[str], top_k: int
-    ) -> tuple[list[tuple[int, float]], list[tuple[int, float]]]:
-        """Rank raw and morphology token paths with the same requested limit."""
-        assert self._raw_index is not None and self._index is not None
-        raw_scores = self._raw_index.get_scores(raw_tokens) if raw_tokens else []
-        morph_scores = self._index.get_scores(morph_tokens)
-        raw_ranked = self._rank_indices(scores=raw_scores, token_sets=self._raw_token_sets, query_tokens=raw_tokens, top_k=top_k)
-        morph_ranked = self._rank_indices(
-            scores=morph_scores, token_sets=self._morph_token_sets, query_tokens=morph_tokens, top_k=top_k
+        ranked = self._rank_indices(
+            scores=index.get_scores(morph_tokens), token_sets=token_sets, query_tokens=morph_tokens, top_k=top_k
         )
-        return raw_ranked, morph_ranked
-
-    def _diagnostic_result(
-        self,
-        raw_tokens: list[str],
-        morph_tokens: list[str],
-        raw_ranked: list[tuple[int, float]],
-        morph_ranked: list[tuple[int, float]],
-    ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
-        """Build stable diagnostic payloads from two already-ranked paths."""
-        raw_ids = [self._chunk_ids[index] for index, _score in raw_ranked]
-        morph_ids = [self._chunk_ids[index] for index, _score in morph_ranked]
-        rows = [(self._chunk_ids[index], score) for index, score in morph_ranked]
+        # Raw tokens are a subset of each document's morph tokens, so raw matches are checked on the hits only.
+        raw_set = set(raw_tokens)
+        raw_hit_count = sum(1 for i, _score in ranked if raw_set & token_sets[i])
         diagnostics = {
             "status": "ok",
             "raw_query_tokens": raw_tokens,
             "morph_query_tokens": morph_tokens,
-            "raw_hit_count": len(raw_ids),
-            "morph_hit_count": len(morph_ids),
-            "morph_only_hit_count": len(set(morph_ids).difference(raw_ids)),
-            "token_path_stats": dict(self._token_path_stats),
+            "raw_hit_count": raw_hit_count,
+            "morph_hit_count": len(ranked),
+            "morph_only_hit_count": len(ranked) - raw_hit_count,
+            "token_path_stats": dict(stats),
         }
-        return rows, diagnostics
+        return [(chunk_ids[i], score) for i, score in ranked], diagnostics
 
 
 def reciprocal_rank_fusion(

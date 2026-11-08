@@ -9,7 +9,12 @@ from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from typing import TYPE_CHECKING, Any
 
-from .policy import MailboxRuntimePolicy, resolve_external_credentials, validate_account_configuration
+from .policy import (
+    MailboxRuntimePolicy,
+    _parse_credential_reference,
+    resolve_external_credentials,
+    validate_account_configuration,
+)
 
 if TYPE_CHECKING:
     from mailarium.archive import MailboxRepository
@@ -250,8 +255,11 @@ def build_ews_gateway(account: Mapping[str, Any], policy: MailboxRuntimePolicy) 
 
 
 def _credential_environment_available(credential_ref: str) -> bool:
-    parts = credential_ref.split(":")
-    return len(parts) == 3 and parts[0] == "basic-env" and all(os.getenv(name) for name in parts[1:])
+    try:
+        names = _parse_credential_reference(credential_ref)
+    except ValueError:
+        return False
+    return all(os.getenv(name) for name in names)
 
 
 def _discovered_mail_folders(values: Iterable[Any]) -> list[dict[str, Any]]:

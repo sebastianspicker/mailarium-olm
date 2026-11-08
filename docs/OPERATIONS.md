@@ -155,6 +155,10 @@ The helper preserves `private/files/`, `private/context.md`,
 stores, ledgers, run history, stale `data/` databases and indexes, and common
 workspace caches. The dry run is the required way to confirm the exact
 candidate paths before using `--yes`.
+It refuses while an MCP server holds `mcp_server.lock`, and while a metadata
+database holds evidence items or mailbox (EWS) state; deleting that database
+also deletes the custody chain. Export what you need first, then pass
+`--discard-evidence` to purge it.
 
 The repository does not automate backup, restore, retention, encryption at
 rest, or disaster recovery. Copy the original archive and a quiescent SQLite
@@ -190,6 +194,12 @@ appropriate:
 - `EWS_MAX_ATTACHMENT_TOTAL_BYTES_PER_ITEM`;
 - `EWS_MAX_ATTACHMENT_TOTAL_BYTES_PER_SYNC`; and
 - `EWS_REQUEST_TIMEOUT_SECONDS`.
+
+An attachment over a size, count, or per-sync byte limit is stored as metadata
+only (`extraction_state=binary_only`, `failure_reason` names the limit) and
+counted as `attachments_metadata_only`. Calendar, contact, and task items in
+mail folders are skipped and counted as `skipped_items`; selecting the
+`calendar`, `contacts`, or `tasks` folder still fails the sync.
 
 Use the local interactive CLI to approve or reject proposals. MCP may inspect
 and execute an already approved proposal, but cannot approve one. See the

@@ -21,8 +21,9 @@ _M = "http://schemas.microsoft.com/exchange/services/2006/messages"
 _T = "http://schemas.microsoft.com/exchange/services/2006/types"
 _NS = {"m": _M, "t": _T}
 _NUMERIC_CHARACTER_REFERENCE = re.compile(rb"&#(?:(?P<decimal>[0-9]+)|[xX](?P<hexadecimal>[0-9A-Fa-f]+));")
-# These mail-message types can occur in physical IPF.Note folders. CalendarItem
-# is intentionally excluded so calendar reads continue to fail closed.
+# These mail-message types can occur in physical IPF.Note folders. Other item
+# types (CalendarItem, Contact, Task, ...) are skipped and counted in mail
+# folders, and fail closed in the non-mail distinguished folders below.
 _MAIL_ITEM_TYPES = frozenset(
     {
         "Message",
@@ -32,6 +33,7 @@ _MAIL_ITEM_TYPES = frozenset(
         "MeetingCancellation",
     }
 )
+_NON_MAIL_FOLDER_IDS = frozenset({"calendar", "contacts", "tasks"})
 _DISTINGUISHED_FOLDER_IDS = frozenset(
     {
         "archivemsgfolderroot",
@@ -128,6 +130,7 @@ class EWSSyncDelta:
     watermark: str | None
     has_more: bool
     raw_change_count: int | None = None
+    skipped_count: int = 0
 
 
 class EWSGateway:
@@ -333,11 +336,14 @@ class EWSGateway:
         changes = root.find(".//m:Changes", _NS)
         if changes is None:
             raise EWSFaultError("MalformedResponse", "missing EWS sync changes")
-        created, updated, deleted = _parse_sync_changes(changes)
+        created, updated, deleted, skipped = _parse_sync_changes(
+            changes, skip_non_mail=folder_id.casefold() not in _NON_MAIL_FOLDER_IDS
+        )
         return EWSSyncDelta(
             created=created,
             updated=updated,
             deleted=deleted,
+            skipped_count=skipped,
             watermark=root.findtext(".//m:SyncState", default=None, namespaces=_NS),
             has_more=root.findtext(".//m:IncludesLastItemInRange", default="true", namespaces=_NS).casefold() != "true",
             raw_change_count=len(changes),
@@ -438,18 +444,25 @@ def _refs(nodes: Iterable[Element]) -> tuple[EWSItemRef, ...]:
 
 def _parse_sync_changes(
     changes: Iterable[Element],
+    *,
+    skip_non_mail: bool = False,
 ) -> tuple[
     tuple[EWSItemRef, ...],
     tuple[EWSItemRef, ...],
     tuple[EWSItemRef, ...],
+    int,
 ]:
     created: list[EWSItemRef] = []
     updated: list[EWSItemRef] = []
     deleted: list[EWSItemRef] = []
+    skipped = 0
     for change in changes:
         change_type = str(change.tag).rsplit("}", 1)[-1]
         if change_type in {"Create", "Update"}:
             identifier = _sync_mail_item_id(change)
+            if identifier is None and skip_non_mail and any(item.find("t:ItemId", _NS) is not None for item in change):
+                skipped += 1
+                continue
         elif change_type in {"Delete", "ReadFlagChange"}:
             identifier = change.find("t:ItemId", _NS)
         else:
@@ -469,7 +482,7 @@ def _parse_sync_changes(
             deleted.append(ref)
         else:
             updated.append(ref)
-    return tuple(created), tuple(updated), tuple(deleted)
+    return tuple(created), tuple(updated), tuple(deleted), skipped
 
 
 def _mail_item_nodes(root: Element) -> tuple[Element, ...]:

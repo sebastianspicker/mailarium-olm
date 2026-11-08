@@ -61,8 +61,7 @@ def normalize_date(value: str) -> str:
     try:
         dt = parsedate_to_datetime(value)
         # Normalize to UTC so all stored dates use a consistent timezone
-        if dt.tzinfo is not None:
-            dt = dt.astimezone(UTC)
+        dt = dt.astimezone(UTC) if dt.tzinfo is not None else dt.replace(tzinfo=UTC)  # "-0000" parses naive
         return dt.isoformat()
     except ValueError, TypeError, OverflowError:
         logger.debug("Failed to parse date: %s", value[:80])
@@ -215,7 +214,10 @@ def decode_mime_words(value: str) -> str:
     decoded: list[str] = []
     for part, charset in parts:
         if isinstance(part, bytes):
-            decoded.append(part.decode(charset or "utf-8", errors="replace"))
+            try:
+                decoded.append(part.decode(charset or "utf-8", errors="replace"))
+            except LookupError:
+                decoded.append(part.decode("utf-8", errors="replace"))
         else:
             decoded.append(part)
     return "".join(decoded)

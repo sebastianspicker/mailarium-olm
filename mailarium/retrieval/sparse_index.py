@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import threading
 from typing import TYPE_CHECKING
 
@@ -27,7 +26,6 @@ class SparseIndex:
     def __init__(self) -> None:
         """Initialize empty postings guarded for atomic rebuilds."""
         self._inverted: dict[int, list[tuple[str, float]]] = {}
-        self._doc_norms: dict[str, float] = {}
         self._built = False
         self._doc_count = 0
         self._lock = threading.Lock()
@@ -66,22 +64,17 @@ class SparseIndex:
     def _install_vectors(self, vectors) -> None:
         """Build temporary postings from an iterable and atomically publish them."""
         new_inverted: dict[int, list[tuple[str, float]]] = {}
-        new_norms: dict[str, float] = {}
         doc_count = 0
 
         for chunk_id, sv in vectors:
             doc_count += 1
-            norm = 0.0
             for token_id, weight in sv.items():
                 if weight <= 0:
                     continue
                 new_inverted.setdefault(token_id, []).append((chunk_id, weight))
-                norm += weight * weight
-            new_norms[chunk_id] = math.sqrt(norm) if norm > 0 else 0.0
 
         with self._lock:
             self._inverted = new_inverted
-            self._doc_norms = new_norms
             self._doc_count = doc_count
             self._built = True
 
@@ -95,17 +88,12 @@ class SparseIndex:
         self,
         query_sparse: dict[int, float],
         top_k: int = 10,
-        normalize: bool = False,
     ) -> list[tuple[str, float]]:
         """Search using dot-product scoring against query sparse vector.
 
         Args:
             query_sparse: Query sparse vector {token_id: weight}.
             top_k: Number of results to return.
-            normalize: If True, divide each document score by its L2 norm
-                to reduce bias toward longer documents. Default False
-                because BGE-M3 learned sparse vectors are designed for
-                raw dot-product scoring.
 
         Returns:
             List of (chunk_id, score) tuples, highest score first.
@@ -118,7 +106,6 @@ class SparseIndex:
         # during build and never mutated in-place.
         with self._lock:
             inverted = self._inverted
-            doc_norms = self._doc_norms
 
         scores: dict[str, float] = {}
 
@@ -133,12 +120,6 @@ class SparseIndex:
 
         if not scores:
             return []
-
-        if normalize:
-            for chunk_id in scores:
-                norm = doc_norms.get(chunk_id, 0.0)
-                if norm > 0:
-                    scores[chunk_id] /= norm
 
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         return ranked[:top_k]

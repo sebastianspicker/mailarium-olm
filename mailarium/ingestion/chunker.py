@@ -249,6 +249,7 @@ def _split_text_with_offsets(text: str, max_len: int, overlap: int) -> list[tupl
     if len(text) <= max_len:
         return [(text, 0, len(text))]
 
+    overlap = min(overlap, max_len // 4)
     segments: list[tuple[str, int, int]] = []
     start = 0
 

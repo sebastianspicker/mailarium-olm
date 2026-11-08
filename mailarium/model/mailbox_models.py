@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+MAILBOX_OPERATIONS = frozenset({"update_item", "move_item", "copy_item", "delete_item", "create_draft", "send_item"})
+
 
 class ProposalState(StrEnum):
     """Enumerate the durable lifecycle states for a mailbox action proposal."""

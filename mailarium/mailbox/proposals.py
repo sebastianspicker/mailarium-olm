@@ -6,14 +6,14 @@ from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
-from mailarium.model.mailbox_models import ActorKind, ProposalState
+from mailarium.model.mailbox_models import MAILBOX_OPERATIONS, ActorKind, ProposalState
 
 from .accounts import MailboxAccounts, account_config_fingerprint
+from .ews.gateway import _is_xml_10_character
 
 if TYPE_CHECKING:
     from mailarium.archive import MailboxRepository
 
-_OPERATIONS = frozenset({"update_item", "move_item", "copy_item", "delete_item", "create_draft", "send_item"})
 _UPDATE_FIELDS = frozenset({"is_read", "categories", "importance", "follow_up", "subject", "body_text", "recipients"})
 _MAX_DRAFT_BODY_CHARS = 1_000_000
 _MAX_RECIPIENTS = 500
@@ -183,7 +183,7 @@ def _tracked_draft_source(
 
 
 def _validate_operation(operation: str, parameters: Mapping[str, Any]) -> dict[str, Any]:
-    if operation not in _OPERATIONS:
+    if operation not in MAILBOX_OPERATIONS:
         raise ValueError(f"Unsupported mailbox operation: {operation}")
     values = dict(parameters)
     if operation == "update_item":
@@ -232,7 +232,14 @@ def _validated_text(value: Any, *, name: str) -> str:
     maximum = 998 if name == "subject" else _MAX_DRAFT_BODY_CHARS
     if len(value) > maximum:
         raise ValueError(f"{name} exceeds the supported size limit.")
+    _reject_non_xml_characters(value, name=name)
     return value
+
+
+def _reject_non_xml_characters(value: str, *, name: str) -> None:
+    # EWS rejects these in SOAP, which would leave an executed proposal UNCERTAIN forever.
+    if not all(_is_xml_10_character(ord(character)) for character in value):
+        raise ValueError(f"{name} contains characters that are not allowed in XML 1.0.")
 
 
 def _validated_string_list(
@@ -248,6 +255,8 @@ def _validated_string_list(
         raise ValueError(f"{name} exceeds the supported item limit.")
     if any(not isinstance(item, str) or not item.strip() for item in value):
         raise ValueError(f"{name} must contain only non-empty strings.")
+    for item in value:
+        _reject_non_xml_characters(item, name=name)
     return list(value)
 
 

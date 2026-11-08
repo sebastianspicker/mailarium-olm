@@ -43,7 +43,8 @@ class SemanticFilterResolver:
         uid_sets: list[set[str]] = []
         if topic_id is not None:
             try:
-                rows = db.analytics.emails_by_topic(topic_id, limit=10_000)
+                # SQLite LIMIT -1 means no limit: a filter must admit every member, not the top 10k.
+                rows = db.analytics.emails_by_topic(topic_id, limit=-1)
                 uid_sets.append({r["uid"] for r in rows})
             except Exception as exc:
                 logger.debug("topic_id filter failed", exc_info=True)
@@ -59,7 +60,7 @@ class SemanticFilterResolver:
 
         if cluster_id is not None:
             try:
-                rows = db.analytics.emails_in_cluster(cluster_id, limit=10_000)
+                rows = db.analytics.emails_in_cluster(cluster_id, limit=-1)
                 uid_sets.append({r["uid"] for r in rows})
             except Exception as exc:
                 logger.debug("cluster_id filter failed", exc_info=True)

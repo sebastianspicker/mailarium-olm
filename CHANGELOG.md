@@ -45,6 +45,30 @@ and this project follows semantic versioning principles for public interfaces.
 
 ### Fixed
 
+- Ingest no longer splits one email into thousands of chunks when long
+  attachment names shrink the chunk window, keeps emails whose MIME words use
+  an unknown charset, counts entities once for a message stored twice in one
+  batch, and embeds before taking the SQLite write lock.
+- EWS sync no longer stalls on one refused item: non-mail items in mail
+  folders are skipped and counted, and over-limit attachments are stored as
+  metadata only (`skipped_items`, `attachments_metadata_only`). Calendar,
+  contacts and tasks folders still fail closed.
+- `scripts/ops/clean_ingest_reset.sh` refuses while an MCP server holds its
+  lock, or while a database holds evidence, custody or mailbox state, unless
+  `--discard-evidence` is given.
+- Search: `min_score` compares similarity, not fused rank, when image search
+  is on; reranking with `min_score` no longer refetches; topic and cluster
+  filters no longer stop at 10,000 emails; keyword indexes rebuild only when
+  the published index revision changes and keep one BM25 index instead of two.
+- `topics build` replaces earlier topics; the MCP network graph refreshes
+  after archive changes; near-duplicate detection is no longer quadratic per
+  subject group; PDF dossiers report the hash of the PDF; custody records
+  exports, dossiers and verification.
+- MCP: `evidence_remove` is marked destructive and its custody record keeps
+  the full item; reembed `batch_size` is capped at 5,000; mailbox proposals
+  reject text Exchange cannot accept; diagnostics report the server's own
+  paths. Installed (non-checkout) packages no longer write exports into
+  site-packages. The release artifact check flags root-level dot files.
 - `--reset-index` deletes only derived `*.usearch` index files and validates
   both paths first. A vector path that pointed at a data root could previously
   delete the archive and the original `.olm`.

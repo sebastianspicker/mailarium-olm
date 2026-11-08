@@ -447,10 +447,21 @@ class DossierGenerator:
         """
         result = self.generate(**kwargs)
         result_meta = write_html_or_pdf(result["html"], output_path, fmt)
+        # The HTML hash does not describe a rendered PDF; hash the written bytes instead.
+        dossier_hash = result["dossier_hash"]
+        if result_meta["format"] == "pdf":
+            dossier_hash = hashlib.sha256(Path(result_meta["output_path"]).read_bytes()).hexdigest()
         result_meta.update(
             evidence_count=result["evidence_count"],
             email_count=result["email_count"],
-            dossier_hash=result["dossier_hash"],
+            dossier_hash=dossier_hash,
+        )
+        self._db.custody.log_custody_event(
+            "dossier_generate",
+            target_type="export",
+            target_id=result_meta["output_path"],
+            details={"format": result_meta["format"], "evidence_count": result["evidence_count"]},
+            content_hash=dossier_hash,
         )
         return result_meta
 

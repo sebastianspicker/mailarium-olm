@@ -295,30 +295,32 @@ def reextract_entities(
 
     resolved_sqlite = _maintenance_sqlite_path(sqlite_path)
     email_db = open_archive_database(resolved_sqlite)
-    rows = email_db.entities.entity_reextraction_candidates(force=force)
-    rows = [row for row in rows if select_entity_text_from_row(row)[0] or _exchange_entities_from_row(row)]
-    total_candidates = len(rows)
-    if not rows:
+    progress = _EntityReextractProgress()
+    try:
+        after_uid = ""
+        while page := email_db.entities.entity_reextraction_candidates(force=force, after_uid=after_uid):
+            after_uid = str(page[-1]["uid"])
+            for row in page:
+                if not (select_entity_text_from_row(row)[0] or _exchange_entities_from_row(row)):
+                    continue
+                progress.inserted += _reextract_entity_row(email_db, row, entity_extractor_fn, extractor_key, extraction_version)
+                progress.updated += 1
+                progress.rows_since_commit += 1
+                if progress.rows_since_commit >= 200:
+                    email_db.commit()
+                    progress.rows_since_commit = 0
+        email_db.commit()
+    finally:
         email_db.close()
+    if not progress.updated:
         return {
             "updated": 0,
             "total_candidates": 0,
             "message": "All emails already have entity provenance metadata.",
         }
-
-    progress = _EntityReextractProgress()
-    for row in rows:
-        progress.inserted += _reextract_entity_row(email_db, row, entity_extractor_fn, extractor_key, extraction_version)
-        progress.updated += 1
-        progress.rows_since_commit += 1
-        if progress.rows_since_commit >= 200:
-            email_db.commit()
-            progress.rows_since_commit = 0
-    email_db.commit()
-    email_db.close()
     return {
         "updated": progress.updated,
-        "total_candidates": total_candidates,
+        "total_candidates": progress.updated,
         "inserted_mentions": progress.inserted,
         "extractor_key": extractor_key,
         "extraction_version": extraction_version,

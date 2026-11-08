@@ -32,7 +32,7 @@ def _jaccard_similarity(set_a: set[str], set_b: set[str]) -> float:
     if not set_a or not set_b:
         return 0.0
     intersection = len(set_a & set_b)
-    union = len(set_a | set_b)
+    union = len(set_a) + len(set_b) - intersection
     return intersection / union if union > 0 else 0.0
 
 
@@ -99,51 +99,40 @@ def _can_reach_jaccard(size_a: int, size_b: int, overlap: int, threshold: float)
     return overlap / union >= threshold
 
 
-def _candidate_overlap_counts(
-    index: int,
-    ngrams: set[str],
-    sizes: list[int],
-    postings: dict[str, list[int]],
-    threshold: float,
-) -> dict[int, int]:
-    """Count shared n-grams only for later rows with viable cardinality."""
-    overlap_counts: dict[int, int] = {}
-    size_a = sizes[index]
-    for ngram in ngrams:
-        for other in postings.get(ngram, ()):
-            if other <= index:
-                continue
-            if not _can_reach_jaccard(size_a, sizes[other], min(size_a, sizes[other]), threshold):
-                continue
-            overlap_counts[other] = overlap_counts.get(other, 0) + 1
-    return overlap_counts
-
-
-def _ngram_postings(ngram_cache: list[tuple[str, str, set[str]]]) -> dict[str, list[int]]:
-    """Build a compact inverted index without materializing candidate pairs."""
-    postings: dict[str, list[int]] = {}
-    for index, (_uid, _body, ngrams) in enumerate(ngram_cache):
+def _prefixes(ngram_cache: list[tuple[str, str, set[str]]], threshold: float) -> list[list[str]]:
+    """Return each row's rarest `|A| - ceil(t*|A|) + 1` n-grams (exact Jaccard prefix filter)."""
+    freq: dict[str, int] = {}
+    for _uid, _body, ngrams in ngram_cache:
         for ngram in ngrams:
-            postings.setdefault(ngram, []).append(index)
-    return postings
+            freq[ngram] = freq.get(ngram, 0) + 1
+    prefixes = []
+    for _uid, _body, ngrams in ngram_cache:
+        # The epsilon only lengthens the prefix, which stays exact.
+        length = len(ngrams) - math.ceil(threshold * len(ngrams) - 1e-9) + 1
+        prefixes.append(sorted(ngrams, key=lambda g: (freq[g], g))[:length])
+    return prefixes
 
 
 def _overlap_candidate_rows(
     ngram_cache: list[tuple[str, str, set[str]]], threshold: float
 ) -> Iterator[tuple[int, Iterable[int]]]:
-    """Yield exact overlap-qualified later indexes one input row at a time."""
-    postings = _ngram_postings(ngram_cache)
+    """Yield later indexes sharing a rare prefix n-gram and viable in size, one row at a time."""
+    prefixes = _prefixes(ngram_cache, threshold)
+    postings: dict[str, list[int]] = {}
+    for index, prefix in enumerate(prefixes):
+        for ngram in prefix:
+            postings.setdefault(ngram, []).append(index)
     sizes = [len(item[2]) for item in ngram_cache]
-    for index, (_uid, _body, ngrams) in enumerate(ngram_cache):
+    for index, prefix in enumerate(prefixes):
         size_a = sizes[index]
         if size_a == 0:
             yield index, (other for other in range(index + 1, len(sizes)) if sizes[other] == 0)
             continue
-        overlap_counts = _candidate_overlap_counts(index, ngrams, sizes, postings, threshold)
+        candidates = {other for ngram in prefix for other in postings[ngram] if other > index}
         yield (
             index,
             sorted(
-                other for other, overlap in overlap_counts.items() if _can_reach_jaccard(size_a, sizes[other], overlap, threshold)
+                other for other in candidates if _can_reach_jaccard(size_a, sizes[other], min(size_a, sizes[other]), threshold)
             ),
         )
 

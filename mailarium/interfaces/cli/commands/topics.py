@@ -83,6 +83,7 @@ def _build_topics(db: ArchiveDatabase, uids: list[str], texts: list[str], *, n_t
     topics = modeler.get_topics(top_words=10)
     print(f"  Discovered {len(topics)} topics.")
 
+    db.analytics.clear_topics()
     db.analytics.insert_topics(topics)
 
     inserted = 0

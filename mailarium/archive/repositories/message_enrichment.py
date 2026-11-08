@@ -241,7 +241,9 @@ def _candidate_parent_rows(cur: sqlite3.Cursor, email: Message) -> list[sqlite3.
         manageres.append("(date = '' OR date < ?)")
         params.append(email_date)
 
-    query = f"""SELECT uid, message_id, subject, sender_name, sender_email, date, body_text, body_html, folder,
+    # Scoring reads only a 120-char snippet of clean_body; a stored plain-text prefix avoids re-parsing large HTML.
+    query = f"""SELECT uid, message_id, subject, sender_name, sender_email, date,
+                       substr(body_text, 1, 2000) AS body_text, '' AS body_html, folder,
                        has_attachments, conversation_id, in_reply_to, references_json, thread_topic,
                        to_identities_json, cc_identities_json, bcc_identities_json
                 FROM emails

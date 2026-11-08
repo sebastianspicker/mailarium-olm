@@ -154,6 +154,7 @@ class EmailEmbedder:
         self._sparse_db: ArchiveDatabase | None = database
         self.sparse_store_failures = 0
         self.sparse_vectors_stored = 0
+        self._pre_encoded_sparse: dict[str, dict[int, float]] = {}
 
         self.collection = get_vector_collection(
             database=database,
@@ -240,6 +241,18 @@ class EmailEmbedder:
         """Checkpoint committed writes; active SQLite transactions defer safely."""
         self.checkpoint()
 
+    def encode_chunks(self, chunks: list[EmailChunk]) -> None:
+        """Encode chunks lacking vectors ahead of add_chunks so writers can encode outside transactions."""
+        needs_encoding, embeddings, result, _elapsed = _encode_new_chunks(self.embedder, chunks)
+        for chunk, embedding in zip(needs_encoding, embeddings, strict=True):
+            chunk.embedding = embedding
+        if not needs_encoding:
+            return  # chunks already carry vectors from an earlier call; keep their sparse entries
+        # Replaced per encoding call: sparse vectors of chunks never added (dedupe discards) do not accumulate.
+        self._pre_encoded_sparse = {}
+        if result is not None and result.sparse is not None:
+            self._pre_encoded_sparse = dict(zip((chunk.chunk_id for chunk in needs_encoding), result.sparse, strict=True))
+
     def add_chunks(
         self,
         chunks: list[EmailChunk],
@@ -301,10 +314,14 @@ class EmailEmbedder:
                 added += _store_chunk_batches(collection, values, batch_size, skip_existing_check, existing)
         dt_write = time.monotonic() - t_write_start
 
-        if result is not None and result.sparse is not None:
+        sparse = result.sparse if result is not None else None
+        sparse_rows = list(zip([c.chunk_id for c in needs_encoding], sparse, strict=True)) if sparse is not None else []
+        pre_encoded = self._pre_encoded_sparse
+        sparse_rows += [(c.chunk_id, pre_encoded.pop(c.chunk_id)) for c in new_chunks if c.chunk_id in pre_encoded]
+        if sparse_rows:
             self.sparse_vectors_stored += self._store_sparse(
-                [c.chunk_id for c in needs_encoding],
-                result.sparse,
+                [chunk_id for chunk_id, _vector in sparse_rows],
+                [vector for _chunk_id, vector in sparse_rows],
             )
         self._touch_collection_revision()
 

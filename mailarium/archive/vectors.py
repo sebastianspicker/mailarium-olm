@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 import uuid
@@ -22,6 +24,7 @@ from .usearch_loader import import_index
 
 DEFAULT_PAGE_SIZE = 1000
 _OVERFETCH_MULTIPLIER = 4
+_SAFE_METADATA_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # shortcut: a writer silent this long is treated as dead; raise it if one embedding batch can take longer.
 _STALE_JOURNAL_MINUTES = 10
 _INSERT_VECTOR_ROW_SQL = """INSERT INTO vector_chunks(
@@ -288,12 +291,14 @@ class SQLiteVectorCollection:
         """Hydrate canonical rows using the established collection response shape."""
         requested = set(include or ())
         # Filtering must precede pagination: applying SQL LIMIT first can
-        # make a later matching row invisible to callers, so only unfiltered reads page in SQL.
-        paged = where is None and limit is not None
+        # make a later matching row invisible to callers, so only fully SQL-filtered reads page in SQL.
+        metadata_filter = _sql_metadata_filter(where)
+        paged = metadata_filter.complete and limit is not None
         with self._database_operation():
             self._assert_active_generation()
             records = self._select_records(
                 ids=ids,
+                metadata_filter=metadata_filter,
                 limit=limit if paged else None,
                 offset=offset if paged else 0,
                 with_embeddings="embeddings" in requested,
@@ -379,6 +384,9 @@ class SQLiteVectorCollection:
             if conn.in_transaction:
                 return
             self._assert_active_generation()
+            # Staging happens under the file lock, so any matching temp file is a leftover from a killed process.
+            for stale in self.vector_index_path.glob(f".{glob.escape(self.embedding_space)}.usearch.*.tmp"):
+                stale.unlink(missing_ok=True)
             for _attempt in range(2):
                 records, applied_seq, dimensions, index = self._checkpoint_snapshot(conn)
                 # Save and hash outside the write lock so writers only wait for the rename and state update.
@@ -529,8 +537,8 @@ class SQLiteVectorCollection:
                 ):
                     metadata = dict(metadata_value)
                     embedding = np.asarray(embedding_value, dtype=np.float32)
-                    if embedding.ndim != 1 or embedding.size == 0:
-                        raise ValueError(f"Embedding for {chunk_id!r} must be a non-empty 1-D vector")
+                    if embedding.ndim != 1 or embedding.size == 0 or not np.isfinite(embedding).all():
+                        raise ValueError(f"Embedding for {chunk_id!r} must be a non-empty, finite 1-D vector")
                     self._write_record(
                         conn,
                         chunk_id=str(chunk_id),
@@ -647,7 +655,8 @@ class SQLiteVectorCollection:
 
     def _filtered_records(self, where: Mapping[str, Any] | None) -> list[VectorRecord]:
         """Return all canonical records that satisfy one metadata predicate."""
-        return [record for record in self._select_records() if _metadata_matches(record.metadata, where)]
+        records = self._select_records(metadata_filter=_sql_metadata_filter(where))
+        return [record for record in records if _metadata_matches(record.metadata, where)]
 
     def _ensure_index(self, snapshot: _StorageSnapshot) -> _StorageSnapshot:
         """Restore or keep the published USearch accelerator; rebuild it only when no writer has pending work.
@@ -709,6 +718,7 @@ class SQLiteVectorCollection:
         *,
         ids: Sequence[str] | None = None,
         vector_ids: Sequence[int] | None = None,
+        metadata_filter: _SQLMetadataFilter | None = None,
         limit: int | None = None,
         offset: int = 0,
         with_embeddings: bool = True,
@@ -732,6 +742,9 @@ class SQLiteVectorCollection:
                 return []
             where_parts.append("vc.vector_id IN (SELECT value FROM json_each(?))")
             params.append(json.dumps(filtered_vector_ids))
+        if metadata_filter is not None:
+            where_parts.extend(metadata_filter.clauses)
+            params.extend(metadata_filter.params)
         vector_columns = "dv.dimensions, dv.vector_f32" if with_embeddings else "0 AS dimensions, X'' AS vector_f32"
         sql = f"""SELECT vc.vector_id, vc.chunk_id, vc.email_uid, vc.embedding_space,
                          vc.kind, vc.document, vc.metadata_json,
@@ -1127,13 +1140,50 @@ def _exact_hits(query: np.ndarray, records: Sequence[VectorRecord], n_results: i
     ]
 
 
+@dataclass(frozen=True)
+class _SQLMetadataFilter:
+    """SQL clauses for the pushable part of a metadata predicate; complete when nothing is left for Python."""
+
+    clauses: list[str]
+    params: list[Any]
+    complete: bool
+
+
+def _sql_metadata_filter(where: Mapping[str, Any] | None) -> _SQLMetadataFilter:
+    """Translate top-level scalar equality filters to SQL with the same match semantics as _metadata_matches."""
+    clauses: list[str] = []
+    params: list[Any] = []
+    complete = True
+    for key, expected in (where or {}).items():
+        # None matches missing keys in Python, and huge ints do not bind, so those stay in Python.
+        scalar = isinstance(expected, str | float) or (isinstance(expected, int) and abs(expected) < 2**63)
+        if not scalar or not _SAFE_METADATA_KEY.fullmatch(key):
+            complete = False
+            continue
+        if key == "uid" and isinstance(expected, str) and expected:  # empty metadata uid falls back to the id prefix
+            # The email_uid column equals a string metadata uid, so the indexed column narrows the scan.
+            clauses.append("vc.email_uid = ?")
+            params.append(expected)
+        # Rows whose JSON Python cannot decode read as {}, so they must not match here either.
+        # shortcut: metadata holding NaN/Infinity fails json_valid and never matches; use json_valid(x, 2) if that occurs.
+        # json_extract returns objects/arrays as JSON text, which Python never equates with a scalar.
+        clauses.append(
+            f"CASE WHEN json_valid(vc.metadata_json) AND json_type(vc.metadata_json, '$.{key}') NOT IN ('object', 'array') "
+            f"THEN json_extract(vc.metadata_json, '$.{key}') END = ?"
+        )
+        params.append(expected)
+    return _SQLMetadataFilter(clauses, params, complete)
+
+
 def _metadata_matches(metadata: Mapping[str, Any], where: Mapping[str, Any] | None) -> bool:
     """Evaluate equality, logical, and operator metadata filters against one record."""
     if not where:
         return True
     for key, expected in where.items():
         if key in {"$and", "$or"}:
-            return _logical_metadata_matches(metadata, key, expected)
+            if not _logical_metadata_matches(metadata, key, expected):
+                return False
+            continue
         if not _field_metadata_matches(metadata.get(key), expected):
             return False
     return True
@@ -1219,6 +1269,8 @@ def _validated_query_vector(
     query = np.asarray(query_embeddings[0], dtype=np.float32)
     if query.ndim != 1 or query.size == 0:
         return None
+    if not np.isfinite(query).all():
+        raise ValueError("Query embedding must be finite")
     return query
 
 

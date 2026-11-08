@@ -145,6 +145,17 @@ def _write_tool_annotations(title: str) -> Any:
     )
 
 
+def _destructive_write_annotations(title: str) -> Any:
+    """Tool annotations for local writes that delete data."""
+    return ToolAnnotations(
+        title=title,
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    )
+
+
 def _idempotent_write_annotations(title: str) -> Any:
     """Tool annotations for idempotent write operations (report/export/ingest)."""
     return ToolAnnotations(
@@ -218,6 +229,7 @@ class ToolDeps:
 
     tool_annotations = staticmethod(_tool_annotations)
     write_tool_annotations = staticmethod(_write_tool_annotations)
+    destructive_write_annotations = staticmethod(_destructive_write_annotations)
     idempotent_write_annotations = staticmethod(_idempotent_write_annotations)
     remote_sync_annotations = staticmethod(_remote_sync_annotations)
     remote_execute_annotations = staticmethod(_remote_execute_annotations)

@@ -213,6 +213,10 @@ class ToolDepsProto(Protocol):
         """Describe a mutating MCP operation so clients can surface its side effects."""
         ...
 
+    def destructive_write_annotations(self, title: str) -> ToolAnnotations:
+        """Describe a local write that deletes data so clients can ask before running it."""
+        ...
+
     def idempotent_write_annotations(self, title: str) -> ToolAnnotations:
         """Describe a repeat-safe write operation for client retry behavior."""
         ...
@@ -383,7 +387,9 @@ def json_error(message: str) -> str:
 
 
 _network_lock = threading.Lock()
-_comm_network_cache: weakref.WeakKeyDictionary[ArchiveDatabase, CommunicationNetwork] = weakref.WeakKeyDictionary()
+_comm_network_cache: weakref.WeakKeyDictionary[ArchiveDatabase, tuple[tuple[int, int], CommunicationNetwork]] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 async def run_with_network(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
@@ -399,11 +405,14 @@ async def run_with_network(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
         db = deps.get_archive_database()
         if not db:
             return deps.DB_UNAVAILABLE
-        net = _comm_network_cache.get(db)
+        revision = db.change_revision()
+        entry = _comm_network_cache.get(db)
+        net = entry[1] if entry and entry[0] == revision else None
         if net is None:
             with _network_lock:
                 # Double-check under lock - another thread may have created it.
-                net = _comm_network_cache.get(db)
+                entry = _comm_network_cache.get(db)
+                net = entry[1] if entry and entry[0] == revision else None
                 if net is None:
                     from mailarium.investigation.network_analysis import CommunicationNetwork
 
@@ -411,7 +420,7 @@ async def run_with_network(deps: ToolDepsProto, fn: Callable[..., str]) -> str:
                         net = CommunicationNetwork(db)
                     except Exception as exc:
                         return json_error(f"Network analysis unavailable: {type(exc).__name__}")
-                    _comm_network_cache[db] = net
+                    _comm_network_cache[db] = (revision, net)
         return fn(db, net)
 
     return await deps.offload(_run)

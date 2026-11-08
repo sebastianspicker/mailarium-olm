@@ -211,11 +211,12 @@ class FilteredSearch:
         for _ in range(_MAX_FETCH_ATTEMPTS):
             raw_candidates, raw_count, query_embedding = self._collect_candidates(plan, fetch_size, query_embedding)
             deduped = self._post_process_candidates(plan, filters, raw_candidates)
-            if len(deduped) >= plan.top_k:
-                return deduped[: plan.top_k]
-            if raw_count < fetch_size or fetch_size >= MAX_FETCH_SIZE:
-                return deduped[: plan.top_k]
+            # Rows dropped by post-rerank min_score are no shortfall: a larger fetch reranks to the same top rows.
+            if len(deduped) >= plan.top_k or raw_count < fetch_size or fetch_size >= MAX_FETCH_SIZE:
+                break
             fetch_size = min(fetch_size * 2, MAX_FETCH_SIZE)
+        if plan.use_rerank and filters.min_score is not None:
+            deduped = [result for result in deduped if (1.0 - result.distance) >= filters.min_score]
         return deduped[: plan.top_k]
 
     def _collect_candidates(
@@ -247,13 +248,11 @@ class FilteredSearch:
         filters: SearchFilters,
         raw_candidates: list[SearchResult],
     ) -> list[SearchResult]:
-        """Apply visibility, filters, deduplication, reranking, and post-rerank score trimming."""
+        """Apply visibility, filters, deduplication, and reranking."""
         filtered = filters.apply(self._visibility.visible(raw_candidates), use_rerank=plan.use_rerank)
         deduped = _deduplicate_by_email(filtered)
         if plan.use_rerank and deduped:
             deduped = self._reranker.rerank(plan.query, deduped, plan.top_k)
-            if filters.min_score is not None:
-                deduped = [result for result in deduped if (1.0 - result.distance) >= filters.min_score]
         return deduped
 
 

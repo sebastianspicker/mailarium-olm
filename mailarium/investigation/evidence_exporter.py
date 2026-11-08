@@ -183,16 +183,17 @@ class EvidenceExporter:
             output = validate_new_output_path(output_path)
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(result["csv"], encoding="utf-8")
-            return {
-                "output_path": output_path,
-                "format": "csv",
-                "item_count": result["item_count"],
-            }
-
-        # HTML or PDF
-        result = self.export_html(min_relevance=min_relevance, category=category)
-        result_meta = write_html_or_pdf(result["html"], output_path, fmt)
-        result_meta["item_count"] = result["item_count"]
+            result_meta = {"output_path": output_path, "format": "csv", "item_count": result["item_count"]}
+        else:  # HTML or PDF
+            result = self.export_html(min_relevance=min_relevance, category=category)
+            result_meta = write_html_or_pdf(result["html"], output_path, fmt)
+            result_meta["item_count"] = result["item_count"]
+        self._db.custody.log_custody_event(
+            "export",
+            target_type="export",
+            target_id=result_meta["output_path"],
+            details={"format": result_meta["format"], "item_count": result["item_count"]},
+        )
         return result_meta
 
     # ── Internal ──────────────────────────────────────────────
@@ -206,6 +207,6 @@ class EvidenceExporter:
         result = self._db.evidence.list_evidence(
             min_relevance=min_relevance,
             category=category,
-            limit=10000,
+            limit=-1,  # SQLite LIMIT -1 returns every matching row; exports must not drop items
         )
         return result["items"]

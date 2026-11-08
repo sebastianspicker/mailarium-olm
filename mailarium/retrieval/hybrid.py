@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -33,6 +34,12 @@ def collection_revision(collection: Any) -> tuple[int, str]:
     return (count, str(metadata.get("index_revision") or ""))
 
 
+def _index_revision(collection: Any) -> str:
+    """Key derived-index staleness on the published revision, not the live count (AU-04: unpublished rows wait)."""
+    metadata = dict(getattr(collection, "metadata", {}) or {}) if collection is not None else {}
+    return str(metadata.get("index_revision") or "")
+
+
 class SparseRetriever:
     """Own the learned-sparse index and rebuild it when the text collection revision changes."""
 
@@ -52,7 +59,7 @@ class SparseRetriever:
         self._settings = settings
         self._diagnostics = diagnostics
         self._index: SparseIndex | None = None
-        self._build_revision: tuple[int, str] | None = None
+        self._build_revision: str | None = None
 
     @property
     def index(self) -> SparseIndex | None:
@@ -88,15 +95,17 @@ class SparseRetriever:
             from .sparse_index import SparseIndex
 
             self._index = SparseIndex()
+            # Read the revision before building so a checkpoint during the build triggers a rebuild.
+            revision = _index_revision(self._collection)
             self._index.build_from_db(
                 db,
                 model_id=self._settings.sparse_model,
                 model_revision=self._settings.sparse_model_revision,
             )
-            self._build_revision = collection_revision(self._collection)
+            self._build_revision = revision
             return self._index
         try:
-            revision = collection_revision(self._collection)
+            revision = _index_revision(self._collection)
             if self._build_revision != revision:
                 self._index.build_from_db(
                     db,
@@ -149,7 +158,8 @@ class BM25Retriever:
         self._collection = collection
         self._diagnostics = diagnostics
         self._index: BM25Index | None = None
-        self._build_revision: tuple[int, str] | None = None
+        self._build_revision: str | None = None
+        self._build_lock = threading.Lock()
 
     def ranked_ids(self, query: str, top_k: int) -> list[str] | None:
         """BM25 keyword retrieval fallback."""
@@ -172,21 +182,31 @@ class BM25Retriever:
 
     def _current_index(self) -> Any:
         """Create or refresh BM25 only when the collection revision changes."""
-        if self._index is None:
-            from .bm25_index import BM25Index
+        index = self._index
+        if index is None:
+            # Concurrent first searches wait for one cold build instead of each building.
+            with self._build_lock:
+                if self._index is None:
+                    from .bm25_index import BM25Index
 
-            self._index = BM25Index()
-            self._index.build_from_collection(self._collection)
-            self._build_revision = collection_revision(self._collection)
-            return self._index
+                    built = BM25Index()
+                    revision = _index_revision(self._collection)
+                    built.build_from_collection(self._collection)
+                    self._build_revision = revision
+                    self._index = built
+                return self._index
         try:
-            revision = collection_revision(self._collection)
-            if self._build_revision != revision:
-                self._index.build_from_collection(self._collection)
-                self._build_revision = revision
+            revision = _index_revision(self._collection)
+            # A rebuild already in progress keeps serving the published snapshot.
+            if self._build_revision != revision and self._build_lock.acquire(blocking=False):
+                try:
+                    index.build_from_collection(self._collection)
+                    self._build_revision = revision
+                finally:
+                    self._build_lock.release()
         except Exception:
             logger.debug("Skipping BM25 staleness check", exc_info=True)
-        return self._index
+        return index
 
     def _search_results(self, bm25_index: Any, query: str, top_k: int) -> Any:
         """Use diagnostic search when available, retaining fallback search semantics."""

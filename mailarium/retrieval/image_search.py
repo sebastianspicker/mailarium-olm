@@ -114,7 +114,7 @@ def rank_fuse_results(
     image_results: list[SearchResult],
     top_k: int,
 ) -> list[SearchResult]:
-    """Fuse incompatible vector spaces by reciprocal rank only."""
+    """Order incompatible vector spaces by reciprocal rank; each row keeps its own distance."""
     scores: dict[str, float] = {}
     rows: dict[str, SearchResult] = {}
     sources: dict[str, set[str]] = {}
@@ -125,7 +125,6 @@ def rank_fuse_results(
             sources.setdefault(result.chunk_id, set()).add(source)
     if not scores:
         return []
-    maximum = max(scores.values())
     ranked_ids = sorted(scores, key=lambda chunk_id: (-scores[chunk_id], chunk_id))
     return [
         SearchResult(
@@ -135,8 +134,10 @@ def rank_fuse_results(
                 **rows[chunk_id].metadata,
                 "retrieval_spaces": sorted(sources[chunk_id]),
                 "score_kind": "rank_fused",
+                # Image-space distances are not comparable to text similarity thresholds.
+                "score_calibration": rows[chunk_id].score_calibration if "text" in sources[chunk_id] else "synthetic",
             },
-            distance=max(0.0, 1.0 - (scores[chunk_id] / maximum)),
+            distance=rows[chunk_id].distance,
         )
         for chunk_id in ranked_ids[:top_k]
     ]

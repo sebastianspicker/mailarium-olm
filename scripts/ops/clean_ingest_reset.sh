@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
 	cat <<'EOF'
-Usage: bash scripts/ops/clean_ingest_reset.sh [--dry-run] [--yes]
+Usage: bash scripts/ops/clean_ingest_reset.sh [--dry-run] [--yes] [--discard-evidence]
 
 Reset the workspace for a fresh private ingestion run while preserving source
 inputs.
@@ -17,14 +17,22 @@ Preserved by default:
 
 Purged by default:
   - private/runtime/ runtime stores, lock files, ledgers, and run history
+  - the metadata databases, including evidence items, the custody chain,
+    mailbox (EWS) accounts, synchronized mail, sync cursors, and proposals
   - stale runtime database/vector-index leftovers under data/
   - repo-local scratch files like tmp_*.txt and .DS_Store
   - generic caches handled by scripts/ops/clean_workspace.sh
 
+Refused (also with --dry-run):
+  - while an MCP server holds mcp_server.lock
+  - while a metadata database holds evidence items or mailbox state,
+    unless --discard-evidence is given
+
 Options:
-  --dry-run  Print planned removals without deleting files
-  --yes      Confirm destructive cleanup
-  -h, --help Show this help message
+  --dry-run           Print planned removals without deleting files
+  --yes               Confirm destructive cleanup
+  --discard-evidence  Also purge databases holding evidence, custody, and mailbox state
+  -h, --help          Show this help message
 EOF
 }
 
@@ -33,6 +41,7 @@ repo_root="$(cd "${script_dir}/../.." && pwd)"
 
 dry_run=0
 confirmed=0
+discard_evidence=0
 
 for arg in "$@"; do
 	case "$arg" in
@@ -41,6 +50,9 @@ for arg in "$@"; do
 		;;
 	--yes)
 		confirmed=1
+		;;
+	--discard-evidence)
+		discard_evidence=1
 		;;
 	-h | --help)
 		usage
@@ -110,6 +122,54 @@ declare -a purge_paths=(
 	"${repo_root}/data/email_index.db-wal"
 	"${repo_root}/data/mcp_server.lock"
 )
+
+# Refuse before deleting anything: a running server or irreplaceable evidence/mailbox state.
+python3 - "$discard_evidence" "${purge_paths[@]}" <<'PY'
+import fcntl
+import sqlite3
+import sys
+from pathlib import Path
+
+discard_evidence = sys.argv[1] == "1"
+files = []
+for raw in sys.argv[2:]:
+    path = Path(raw)
+    files.extend(sorted(path.rglob("*")) if path.is_dir() else [path])
+for lock in (path for path in files if path.name == "mcp_server.lock" and path.is_file()):
+    with open(lock, "rb") as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError:
+            sys.exit(f"Refusing reset: an MCP server holds {lock}. Stop the server first.")
+if discard_evidence:
+    sys.exit(0)
+tables = (
+    "evidence_items",
+    "evidence_candidates",
+    "custody_chain",
+    "mailbox_accounts",
+    "mailbox_folders",
+    "mailbox_sync_cursors",
+    "mailbox_action_proposals",
+    "mailbox_action_events",
+    "mailbox_action_attempts",
+)
+for db in (path for path in files if path.suffix == ".db" and path.is_file()):
+    try:
+        conn = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            held = [table for table in tables if table in names and conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()]
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as exc:
+        held = [f"unreadable database ({exc})"]
+    if held:
+        sys.exit(
+            f"Refusing reset: {db} holds {', '.join(held)} (evidence, custody, or mailbox state). "
+            "Export what you need, then rerun with --discard-evidence to purge it."
+        )
+PY
 
 for path in "${purge_paths[@]}"; do
 	remove_path "$path"

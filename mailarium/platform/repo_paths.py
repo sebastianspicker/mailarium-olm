@@ -81,10 +81,15 @@ def runtime_home() -> Path:
     return _platform_runtime_home().resolve()
 
 
+def _default_roots_base() -> Path:
+    """Anchor default roots and relative paths; an installed package's repo_root() is site-packages."""
+    return repo_root() if _is_repository_checkout() else runtime_home()
+
+
 def _normalized_roots(default_roots: tuple[str, ...], *, env_var: str) -> tuple[Path, ...]:
     """Get normalized path roots from defaults and environment variable."""
     _reject_legacy_environment()
-    root = repo_root()
+    root = _default_roots_base()
     configured = _split_env_path_list(os.getenv(env_var, ""))
     relative = [item for item in configured if not Path(item).expanduser().is_absolute()]
     if relative:
@@ -211,7 +216,7 @@ def allowed_runtime_roots() -> tuple[Path, ...]:
 
 def validate_output_path(value: str, *, field_name: str = "Output path") -> Path:
     """Validate output path containment under configured write roots."""
-    candidate = value if os.path.isabs(value) else str(repo_root() / value)
+    candidate = value if os.path.isabs(value) else str(_default_roots_base() / value)
     _reject_unsafe_path_text(candidate, field_name=field_name)
     normalized = str(_on_disk_spelling(Path(os.path.realpath(os.path.expanduser(candidate)))))
     roots = allowed_output_roots()

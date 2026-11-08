@@ -22,6 +22,7 @@ async def email_diagnostics(deps: ToolDepsProto) -> str:
         settings = get_settings()
         db = deps.get_archive_database()
         info: dict = resolve_runtime_summary(settings)
+        info["vector_index_path"], info["sqlite_path"] = deps.resolved_runtime_paths()
         info["batch_size_setting"] = info["embedding_batch_size_setting"]
         multi = getattr(retriever, "embedder", None)
         if multi:

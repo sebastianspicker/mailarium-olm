@@ -161,9 +161,10 @@ class CommunicationNetwork:
             return None
 
         if self._graph is None:
-            self._graph = nx.DiGraph()
+            graph = nx.DiGraph()
             for sender, recipient, count in self._db.analytics.all_edges():
-                self._graph.add_edge(sender, recipient, weight=count)
+                graph.add_edge(sender, recipient, weight=count)
+            self._graph = graph  # publish only when complete so parallel callers never see a half-built graph
         return nx
 
     def find_paths(self, source: str, target: str, max_hops: int = 3, top_k: int = 5) -> list[dict[str, Any]]:

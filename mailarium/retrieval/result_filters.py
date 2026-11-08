@@ -143,8 +143,7 @@ def _matches_min_score(result: SearchResult, min_score: float | None) -> bool:
     """Check if result score is at least the minimum score."""
     if min_score is None:
         return True
-    calibration = str(result.metadata.get("score_calibration") or "").strip().lower()
-    if calibration == "synthetic":
+    if result.score_calibration == "synthetic":
         return True
     return result.score >= min_score
 

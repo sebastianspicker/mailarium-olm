@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import collections
+import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -22,6 +23,8 @@ class QueryEncoder:
         self._embedder: MultiVectorEmbedder | None = None
         # Bounded LRU cache - evicts the oldest entry when len > _QUERY_CACHE_MAX.
         self._query_cache: collections.OrderedDict[str, list[list[float]]] = collections.OrderedDict()
+        # Concurrent MCP searches share this cache; check-then-move/evict must not interleave.
+        self._cache_lock = threading.Lock()
 
     @property
     def embedder(self) -> MultiVectorEmbedder:
@@ -50,13 +53,15 @@ class QueryEncoder:
     def encode(self, query: str) -> list[list[float]]:
         """Encode a query string, using a bounded cache to avoid re-encoding."""
         cache = self._query_cache
-        if query in cache:
-            cache.move_to_end(query)
-            return cache[query]
+        with self._cache_lock:
+            if query in cache:
+                cache.move_to_end(query)
+                return cache[query]
         embedding = self.embedder.encode_dense([query])
-        cache[query] = embedding
-        if len(cache) > _QUERY_CACHE_MAX:
-            cache.popitem(last=False)
+        with self._cache_lock:
+            cache[query] = embedding
+            if len(cache) > _QUERY_CACHE_MAX:
+                cache.popitem(last=False)
         return embedding
 
     def release(self) -> list[Any]:

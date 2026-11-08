@@ -11,7 +11,7 @@ from pathlib import Path
 from mailarium.platform.repo_paths import validate_runtime_path
 from mailarium.platform.settings import get_settings
 
-# Names must match mailarium/archive/vectors.py (_index_file and _save_index_atomically); lock files are kept.
+# Names must match mailarium/archive/vectors.py (_index_file and _stage_index_file); lock files are kept.
 _DERIVED_INDEX_FILE = re.compile(r"\.[^/]+\.usearch\.\d+\.[0-9a-f]+\.tmp|[^./][^/]*\.usearch")
 
 

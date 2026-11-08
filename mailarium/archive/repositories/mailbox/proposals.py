@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from mailarium.model.mailbox_models import (
+    MAILBOX_OPERATIONS,
     ActorKind,
     MailboxActionClaim,
     MailboxActionOutcome,
@@ -27,7 +28,6 @@ _OUTCOME_STATES = {
     ProposalState.FAILED,
     ProposalState.UNCERTAIN,
 }
-_ALLOWED_OPERATIONS = frozenset({"update_item", "move_item", "copy_item", "delete_item", "create_draft", "send_item"})
 
 
 class MailboxProposalRepository(MailboxSessionRepository):
@@ -47,7 +47,7 @@ class MailboxProposalRepository(MailboxSessionRepository):
         now: datetime | None = None,
     ) -> MailboxActionProposal:
         """Create or reuse the durable proposal for an identical mailbox action request."""
-        if operation not in _ALLOWED_OPERATIONS:
+        if operation not in MAILBOX_OPERATIONS:
             raise ValueError(f"unsupported mailbox operation: {operation}")
         if not all((account_id, folder_id, operation, target_identity, target_change_key)):
             raise ValueError("account, folder, operation, target identity, and change key are required")

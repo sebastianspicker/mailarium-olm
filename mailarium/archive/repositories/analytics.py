@@ -94,6 +94,11 @@ class AnalyticsRepository(ArchiveRepository):
     # Keyword / Topic operations
     # ------------------------------------------------------------------
 
+    def clear_topics(self) -> None:
+        """Delete all topics and assignments; the caller's next commit makes it atomic with the new rows."""
+        self.conn.execute("DELETE FROM email_topics")
+        self.conn.execute("DELETE FROM topics")
+
     def insert_topics(self, topics: list[dict]) -> None:
         """Insert topic definitions.
 

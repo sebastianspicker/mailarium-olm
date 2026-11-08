@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING, Any
 from mailarium.model.mailbox_models import MailboxMessageRecord
 
 from .accounts import MailboxAccounts, gateway_session
+from .ews.errors import EWSValidationError
 from .policy import MailboxRuntimePolicy
 
 if TYPE_CHECKING:
     from mailarium.archive import ArchiveDatabase, MailboxRepository
 
 _GET_ITEM_BATCH_SIZE = 20
+_COUNTERS = ("created", "updated", "deleted", "indexed_chunks", "skipped_items", "attachments_metadata_only")
 
 PersistRecords = Callable[..., Any]
 
@@ -71,7 +73,7 @@ class MailboxSynchronizer:
         attachment_budget = (
             _AttachmentContentBudget(self.policy.max_attachment_total_bytes_per_sync) if include_attachment_content else None
         )
-        totals = {"created": 0, "updated": 0, "deleted": 0, "indexed_chunks": 0}
+        totals = dict.fromkeys(_COUNTERS, 0)
         folder_totals: dict[str, dict[str, Any]] = {}
         pending = selected
         passes = 0
@@ -130,11 +132,8 @@ class MailboxSynchronizer:
                 include_attachment_content=include_attachment_content,
                 attachment_budget=attachment_budget,
             )
-            aggregate = folder_totals.setdefault(
-                folder_id,
-                {"created": 0, "updated": 0, "deleted": 0, "indexed_chunks": 0, "complete": False},
-            )
-            for name in ("created", "updated", "deleted", "indexed_chunks"):
+            aggregate = folder_totals.setdefault(folder_id, {**dict.fromkeys(_COUNTERS, 0), "complete": False})
+            for name in _COUNTERS:
                 aggregate[name] += int(pass_totals[name])
                 totals[name] += int(pass_totals[name])
             aggregate["complete"] = bool(pass_totals["complete"])
@@ -153,7 +152,7 @@ class MailboxSynchronizer:
         attachment_budget: _AttachmentContentBudget | None,
     ) -> dict[str, Any]:
         generation, watermark, full_refresh = self._sync_cursor_state(account_id, folder_id)
-        result = {"created": 0, "updated": 0, "deleted": 0, "indexed_chunks": 0, "complete": False}
+        result: dict[str, Any] = {**dict.fromkeys(_COUNTERS, 0), "complete": False}
         reset_attempted = False
         pages_requested = 0
         while True:
@@ -168,6 +167,7 @@ class MailboxSynchronizer:
             if delta is None:
                 continue
             next_watermark = _validate_sync_delta(delta, watermark, remaining)
+            result["skipped_items"] += int(getattr(delta, "skipped_count", 0))
             items = _synchronized_items(gateway, delta)
             self._persist_sync_items(
                 result,
@@ -247,6 +247,9 @@ class MailboxSynchronizer:
             )
             for item in items
         ]
+        result["attachments_metadata_only"] += sum(
+            "failure_reason" in attachment for record in records for attachment in record.attachments
+        )
         persisted_records = self._persist_records(records, db=self.db, store=self.store.sources, embedder=embedder)
         for item, persisted in zip(items, persisted_records, strict=True):
             result["created" if item.item_id in created_ids else "updated"] += 1
@@ -337,16 +340,22 @@ class MailboxSynchronizer:
         attachment_budget: _AttachmentContentBudget | None,
     ) -> tuple[list[dict[str, Any]], list[tuple[str, bytes]]]:
         attachments = [_attachment_metadata(attachment) for attachment in item.attachments]
-        file_attachments = tuple(attachment for attachment in item.attachments if attachment.attachment_type == "file")
-        if include_attachment_content and len(file_attachments) > self.policy.max_attachments_per_item:
-            raise ValueError("EWS item exceeds the configured attachment-count limit.")
         if not include_attachment_content:
+            return attachments, []
+        file_attachments = tuple(
+            (attachment, metadata)
+            for attachment, metadata in zip(item.attachments, attachments, strict=True)
+            if attachment.attachment_type == "file"
+        )
+        if len(file_attachments) > self.policy.max_attachments_per_item:
+            for _attachment, metadata in file_attachments:
+                _mark_metadata_only(metadata, "attachment_count_exceeds_item_limit")
             return attachments, []
         return attachments, self._load_attachment_contents(file_attachments, gateway, attachment_budget)
 
     def _load_attachment_contents(
         self,
-        attachments: tuple[Any, ...],
+        attachments: tuple[tuple[Any, dict[str, Any]], ...],
         gateway: Any,
         attachment_budget: _AttachmentContentBudget | None,
     ) -> list[tuple[str, bytes]]:
@@ -354,13 +363,22 @@ class MailboxSynchronizer:
             raise RuntimeError("Attachment content budget is unavailable.")
         contents: list[tuple[str, bytes]] = []
         item_remaining_bytes = self.policy.max_attachment_total_bytes_per_item
-        for attachment in attachments:
-            allowed_bytes = _allowed_attachment_bytes(self.policy, attachment, item_remaining_bytes, attachment_budget)
-            loaded = gateway.get_attachment(attachment.attachment_id, max_content_bytes=allowed_bytes)
+        for attachment, metadata in attachments:
+            reason = _content_limit_reason(self.policy, attachment, item_remaining_bytes, attachment_budget)
+            if reason:
+                _mark_metadata_only(metadata, reason)
+                continue
+            allowed_bytes = min(self.policy.max_attachment_bytes, item_remaining_bytes, attachment_budget.remaining_bytes)
+            try:
+                loaded = gateway.get_attachment(attachment.attachment_id, max_content_bytes=allowed_bytes)
+            except EWSValidationError:  # the declared size understated the content
+                _mark_metadata_only(metadata, "attachment_content_exceeds_max_bytes")
+                continue
             if loaded.content is not None:
                 loaded_size = len(loaded.content)
                 if loaded_size > allowed_bytes:
-                    raise ValueError("EWS attachment content exceeds an aggregate byte limit.")
+                    _mark_metadata_only(metadata, "attachment_content_exceeds_max_bytes")
+                    continue
                 item_remaining_bytes -= loaded_size
                 attachment_budget.consume(loaded_size)
                 contents.append((loaded.name or attachment.name or "attachment", loaded.content))
@@ -390,7 +408,8 @@ def _cursor_progress_state(store: MailboxRepository, account_id: str, folder_id:
 def _validate_sync_delta(delta: Any, watermark: str, remaining: int) -> str:
     returned_changes = len(delta.created) + len(delta.updated) + len(delta.deleted)
     raw_change_count = getattr(delta, "raw_change_count", None)
-    if raw_change_count is not None and returned_changes != int(raw_change_count):
+    skipped = int(getattr(delta, "skipped_count", 0))
+    if raw_change_count is not None and returned_changes + skipped != int(raw_change_count):
         raise RuntimeError("EWS sync response contained unsupported or unparsed changes.")
     if returned_changes > min(100, remaining):
         raise RuntimeError("EWS sync response exceeded the requested change limit.")
@@ -423,19 +442,26 @@ def _attachment_metadata(attachment: Any) -> dict[str, Any]:
     }
 
 
-def _allowed_attachment_bytes(
+def _content_limit_reason(
     policy: MailboxRuntimePolicy,
     attachment: Any,
     item_remaining_bytes: int,
     attachment_budget: _AttachmentContentBudget,
-) -> int:
-    declared_size = max(0, int(attachment.size or 0))
-    if declared_size > policy.max_attachment_bytes:
-        raise ValueError("EWS attachment exceeds the configured content limit.")
-    allowed_bytes = min(policy.max_attachment_bytes, item_remaining_bytes, attachment_budget.remaining_bytes)
-    if allowed_bytes < 1 or declared_size > allowed_bytes:
-        raise ValueError("EWS attachment content exceeds an aggregate byte limit.")
-    return allowed_bytes
+) -> str:
+    """Name the limit that keeps this attachment's content out of the sync, or return an empty string."""
+    needed = max(1, int(attachment.size or 0))
+    if needed > policy.max_attachment_bytes:
+        return "attachment_content_exceeds_max_bytes"
+    if needed > item_remaining_bytes:
+        return "attachment_content_exceeds_message_budget"
+    if needed > attachment_budget.remaining_bytes:
+        return "attachment_content_exceeds_sync_budget"
+    return ""
+
+
+def _mark_metadata_only(metadata: dict[str, Any], reason: str) -> None:
+    """Keep an attachment as a metadata row without content, flagged like OLM's oversized attachments."""
+    metadata.update({"extraction_state": "binary_only", "failure_reason": reason})
 
 
 def _is_expired_watermark(exc: Exception) -> bool:

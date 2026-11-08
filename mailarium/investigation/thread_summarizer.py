@@ -202,12 +202,15 @@ def _diverse_sentence_indices(scores: list[float], limit: int) -> list[int]:
     """Select top-scoring sentences while avoiding adjacent selections when possible."""
     selected: list[int] = []
     used: set[int] = set()
-    for index in sorted(range(len(scores)), key=lambda item: scores[item], reverse=True):
+    ranked = sorted(range(len(scores)), key=lambda item: scores[item], reverse=True)
+    for index in ranked:
         if len(selected) >= limit:
             break
-        if index - 1 not in used or index + 1 not in used:
+        if index - 1 not in used and index + 1 not in used:
             selected.append(index)
             used.add(index)
+    # Fewer non-adjacent sentences than the limit: fill the rest from the top scores.
+    selected.extend([index for index in ranked if index not in used][: limit - len(selected)])
     return sorted(selected)
 
 

@@ -301,9 +301,10 @@ class EvidenceRepository(ArchiveRepository):
                     details={
                         "email_uid": snapshot.get("email_uid"),
                         "category": snapshot.get("category"),
-                        "key_quote": snapshot.get("key_quote", "")[:200],
+                        "key_quote": snapshot.get("key_quote", ""),
                         "relevance": snapshot.get("relevance"),
-                        "summary": snapshot.get("summary", "")[:200],
+                        "summary": snapshot.get("summary", ""),
+                        "notes": snapshot.get("notes", ""),
                     },
                     content_hash=snapshot.get("content_hash"),
                     commit=False,
@@ -323,7 +324,13 @@ class EvidenceRepository(ArchiveRepository):
         Returns:
             {"verified": int, "failed": int, "failures": [{"evidence_id": ..., "key_quote_preview": ..., "email_uid": ...}, ...]}
         """
-        return _verify_evidence_quotes(self.conn)
+        result = _verify_evidence_quotes(self.conn)
+        self._custody.log_custody_event(
+            "verify",
+            target_type="evidence",
+            details={"verified": result.get("verified"), "failed": result.get("failed")},
+        )
+        return result
 
     def evidence_stats(
         self,

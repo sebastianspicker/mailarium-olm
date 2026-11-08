@@ -161,8 +161,8 @@ def _normalized_vector(features: Any) -> list[float]:
         features = features.detach().cpu().float().numpy()
     array = np.asarray(features, dtype=np.float32).reshape(-1)
     norm = float(np.linalg.norm(array))
-    if norm <= 1e-12:
-        raise ValueError("image embedding has zero norm")
+    if not np.isfinite(norm) or norm <= 1e-12:
+        raise ValueError("image embedding has zero or non-finite norm")
     return (array / norm).tolist()
 
 

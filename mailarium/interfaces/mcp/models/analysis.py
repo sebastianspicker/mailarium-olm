@@ -355,7 +355,7 @@ class EmailReportInput(StrictInput):
     )
     output_path: str = Field(
         default="private/exports/report.html",
-        description="Output file path (for archive/network types).",
+        description="Output file path (for archive/network types; network defaults to private/exports/network.graphml).",
     )
     title: str = Field(
         default="Email Archive Report",
@@ -384,6 +384,13 @@ class EmailReportInput(StrictInput):
     def validate_output_path(cls, v: str | None) -> str | None:
         """Reject report destinations outside the configured local output boundary."""
         return _validate_output_path(v)
+
+    @model_validator(mode="after")
+    def network_default_extension(self):
+        """Give the GraphML network export a .graphml default instead of the HTML report name."""
+        if self.type == "network" and "output_path" not in self.model_fields_set:
+            self.output_path = "private/exports/network.graphml"
+        return self
 
 
 class EmailAttachmentsInput(StrictInput):
@@ -442,5 +449,6 @@ class EmailAdminInput(StrictInput):
     batch_size: int = Field(
         default=100,
         ge=1,
+        le=5000,
         description="Chunks per embedding batch (for reembed only).",
     )

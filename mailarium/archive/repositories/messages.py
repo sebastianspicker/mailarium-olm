@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from mailarium.model import Message
@@ -34,6 +35,14 @@ class MessageRepository(ArchiveRepository):
     def __init__(self, session: ArchiveSession, *, attachments: AttachmentRepository) -> None:
         super().__init__(session)
         self._attachments = attachments
+
+    def stored_uids(self, uids: list[str]) -> set[str]:
+        """Return the subset of UIDs that already have a canonical email row."""
+        selected = list(dict.fromkeys(uid for uid in uids if uid))
+        if not selected:
+            return set()
+        rows = self.conn.execute("SELECT uid FROM emails WHERE uid IN (SELECT value FROM json_each(?))", (json.dumps(selected),))
+        return {str(row[0]) for row in rows}
 
     def insert_email(self, email: Message, *, ingestion_run_id: int | None = None) -> bool:
         """Insert a single email and update contacts/edges.

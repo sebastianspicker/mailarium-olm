@@ -339,7 +339,7 @@ def _register_evidence_mutation_tools(mcp: Any, deps: ToolDepsProto) -> None:
 
     @mcp.tool(
         name="evidence_remove",
-        annotations=deps.write_tool_annotations("Remove Evidence Item"),
+        annotations=deps.destructive_write_annotations("Remove Evidence Item"),
     )
     async def evidence_remove(params: EvidenceRemoveInput) -> str:
         """Remove an evidence item by ID."""

@@ -335,8 +335,12 @@ class EntityRepository(ArchiveRepository):
             self.conn.commit()
         return deleted
 
-    def entity_reextraction_candidates(self, *, force: bool = False) -> list[dict[str, Any]]:
-        """Return stored message surfaces whose entity mentions should be (re)extracted.
+    def entity_reextraction_candidates(
+        self, *, force: bool = False, after_uid: str = "", limit: int = 500
+    ) -> list[dict[str, Any]]:
+        """Return one uid-ordered page of stored message surfaces whose entity mentions should be (re)extracted.
+
+        Pass the last returned uid as ``after_uid`` to fetch the next page.
 
         Without ``force`` only messages lacking entity mentions, or holding
         mentions without extractor provenance, are returned.
@@ -348,7 +352,7 @@ class EntityRepository(ArchiveRepository):
             "(SELECT GROUP_CONCAT(COALESCE(extracted_text, text_preview, name), '\n') "
             "   FROM attachments a WHERE a.email_uid = emails.uid) AS attachment_text "
             "FROM emails "
-            "WHERE 1=1"
+            "WHERE uid > ?"
         )
         if not force:
             query += (
@@ -357,7 +361,8 @@ class EntityRepository(ArchiveRepository):
                 " OR uid IN (SELECT DISTINCT email_uid FROM entity_mentions WHERE COALESCE(extractor_key, '') = '')"
                 " )"
             )
-        return [dict(row) for row in self.conn.execute(query).fetchall()]
+        query += " ORDER BY uid LIMIT ?"
+        return [dict(row) for row in self.conn.execute(query, (after_uid, limit)).fetchall()]
 
     def search_by_entity(self, entity_text: str, entity_type: str | None = None, limit: int = 20) -> list[dict]:
         """Find emails mentioning an entity (LIKE match)."""

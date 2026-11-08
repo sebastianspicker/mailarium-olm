@@ -431,13 +431,14 @@ def run_custody_chain(db: ArchiveDatabase) -> None:
         )
 
         action_styles = {
-            "evidence_added": "green",
-            "evidence_updated": "yellow",
-            "evidence_removed": "red",
-            "evidence_verified": "cyan",
-            "dossier_generated": "magenta",
-            "ingestion_started": "blue",
-            "ingestion_completed": "blue",
+            "evidence_add": "green",
+            "evidence_update": "yellow",
+            "evidence_remove": "red",
+            "verify": "cyan",
+            "export": "cyan",
+            "dossier_generate": "magenta",
+            "ingest_start": "blue",
+            "ingest_failed": "red",
         }
 
         table = Table(border_style="dim", show_lines=True)

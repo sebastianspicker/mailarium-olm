@@ -97,7 +97,7 @@ def _register_discovery_tool(mcp: Any, deps: ToolDepsProto) -> None:
             if params.mode == "keywords":
                 results = db.analytics.top_keywords(sender=params.sender, folder=params.folder, limit=params.limit)
                 if not results:
-                    return json_error("No keywords available. Run ingestion with --extract-keywords.")
+                    return json_error("No keywords available: no ingest step builds keywords. Use mode='suggestions'.")
                 return json_response(results)
             if params.mode == "suggestions":
                 from mailarium.retrieval.query_suggestions import QuerySuggester

@@ -186,10 +186,23 @@ class CustodyChainInput(PlainInput):
         default=None,
         description="Filter by target ID (e.g., email UID, evidence ID).",
     )
-    action: Literal["ingest_start", "evidence_add", "evidence_update", "evidence_remove", "export", "verify"] | None = Field(
+    action: (
+        Literal[
+            "ingest_start",
+            "ingest_failed",
+            "evidence_add",
+            "evidence_update",
+            "evidence_remove",
+            "export",
+            "dossier_generate",
+            "verify",
+        ]
+        | None
+    ) = Field(
         default=None,
         description=(
-            "Filter by action type: 'ingest_start', 'evidence_add', 'evidence_update', 'evidence_remove', 'export', 'verify'."
+            "Filter by action type: 'ingest_start', 'ingest_failed', 'evidence_add', 'evidence_update', "
+            "'evidence_remove', 'export', 'dossier_generate', 'verify'."
         ),
     )
     limit: int = Field(default=50, ge=1, le=200, description="Max events to return.")

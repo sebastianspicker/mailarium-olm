@@ -8,3 +8,13 @@ exclude_paths:
   - ".serena/**"
   - ".venv/**"
   - "private/**"
+  - "scripts/smoke/**"
+  - "scripts/verify.py"
+engines:
+  # uv.lock stays analyzed for Trivy (dependency CVEs); only the linters skip it.
+  ruff:
+    exclude_paths:
+      - "uv.lock"
+  lizard:
+    exclude_paths:
+      - "uv.lock"
